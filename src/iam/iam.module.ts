@@ -9,6 +9,7 @@ import { JwtModule } from '@nestjs/jwt';
 import jwtConfig from './config/jwt.config';
 import { ConfigModule } from '@nestjs/config';
 import { TokenService } from './token/token.service';
+import { RefreshTokenIdsStorage } from './authentication/refresh-token-ids.storage/refresh-token-ids.storage';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { TokenService } from './token/token.service';
     { provide: HashingService, useClass: BcryptService },
     AuthenticationService,
     TokenService,
+    RefreshTokenIdsStorage,
   ],
   controllers: [AuthenticationController],
 })
