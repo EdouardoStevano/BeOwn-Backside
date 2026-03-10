@@ -9,12 +9,14 @@ import { Repository } from 'typeorm';
 import { HashingService } from '../hashing/hashing.service';
 import { SignUpDto } from './dto/sign-up.dto/sign-up.dto';
 import { SignInDto } from './dto/sign-in.dto/sign-in.dto';
+import { TokenService } from '../token/token.service';
 
 @Injectable()
 export class AuthenticationService {
   constructor(
     @InjectRepository(User) private readonly usersRepository: Repository<User>,
     private readonly hashingService: HashingService,
+    private readonly tokenService: TokenService,
   ) {}
 
   async signUp(signUpDto: SignUpDto) {
@@ -51,6 +53,8 @@ export class AuthenticationService {
       throw new UnauthorizedException('Invalid user credential');
     }
 
-    return true;
+    const accessToken = await this.tokenService.generateToken(user);
+
+    return { accessToken };
   }
 }
