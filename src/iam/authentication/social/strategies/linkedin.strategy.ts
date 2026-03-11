@@ -25,7 +25,6 @@ export class LinkedinStrategy extends PassportStrategy(
       lastname: profile.name.familyName,
       picture: profile.photos[0]?.value,
       socialId: profile.id,
-      accessToken,
     } as SocialInterface;
   }
 }

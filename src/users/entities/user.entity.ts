@@ -20,6 +20,6 @@ export class User {
   @Column({ nullable: true })
   socialId: string;
 
-  @Column()
+  @Column({ nullable: true })
   password: string;
 }

@@ -10,6 +10,13 @@ import jwtConfig from './config/jwt.config';
 import { ConfigModule } from '@nestjs/config';
 import { TokenService } from './token/token.service';
 import { RefreshTokenIdsStorage } from './authentication/refresh-token-ids.storage/refresh-token-ids.storage';
+import { GoogleAuthController } from './authentication/social/controllers/google-auth.controller';
+import { FacebookAuthController } from './authentication/social/controllers/facebook-auth.controller';
+import { LinkedinAuthController } from './authentication/social/controllers/linkedin-auth.controller';
+import { GoogleStrategy } from './authentication/social/strategies/google.strategy';
+import { FacebookStrategy } from './authentication/social/strategies/facebook.strategy';
+import { LinkedinStrategy } from './authentication/social/strategies/linkedin.strategy';
+import { SocialAuthService } from './authentication/social/social-authentication.service';
 
 @Module({
   imports: [
@@ -22,7 +29,16 @@ import { RefreshTokenIdsStorage } from './authentication/refresh-token-ids.stora
     AuthenticationService,
     TokenService,
     RefreshTokenIdsStorage,
+    GoogleStrategy,
+    FacebookStrategy,
+    LinkedinStrategy,
+    SocialAuthService,
   ],
-  controllers: [AuthenticationController],
+  controllers: [
+    AuthenticationController,
+    GoogleAuthController,
+    FacebookAuthController,
+    LinkedinAuthController,
+  ],
 })
 export class IamModule {}

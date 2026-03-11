@@ -4,5 +4,4 @@ export interface SocialInterface {
   lastname?: string;
   picture?: string;
   socialId: string;
-  accessToken: string;
 }
