@@ -7,11 +7,11 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { User } from 'src/users/entities/user.entity';
 import { Repository } from 'typeorm';
 import { HashingService } from '../hashing/hashing.service';
-import { SignUpDto } from './dto/sign-up.dto/sign-up.dto';
-import { SignInDto } from './dto/sign-in.dto/sign-in.dto';
 import { TokenService } from '../token/token.service';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
-import { RefreshTokenIdsStorage } from './refresh-token-ids.storage/refresh-token-ids.storage';
+import { OtpAuthenticationService } from './otp-authentication.service';
+import { SignInDto } from './dto/sign-in.dto';
+import { SignUpDto } from './dto/sign-up.dto';
 
 @Injectable()
 export class AuthenticationService {
@@ -19,6 +19,7 @@ export class AuthenticationService {
     @InjectRepository(User) private readonly usersRepository: Repository<User>,
     private readonly hashingService: HashingService,
     private readonly tokenService: TokenService,
+    private readonly otpAuthService: OtpAuthenticationService,
   ) {}
 
   async signUp(signUpDto: SignUpDto) {
@@ -53,6 +54,17 @@ export class AuthenticationService {
 
     if (!isEqual) {
       throw new UnauthorizedException('Invalid user credential');
+    }
+
+    if (user.isTfaEnabled) {
+      const isValid = await this.otpAuthService.verifyCode(
+        signInDto.tfaCode?.toString() ?? '0',
+        user.tfaSecret,
+      );
+
+      if (!isValid.valid) {
+        throw new UnauthorizedException('Invalid 2FA code');
+      }
     }
 
     const [accessToken, refreshToken] =

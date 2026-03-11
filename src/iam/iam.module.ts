@@ -17,6 +17,7 @@ import { GoogleStrategy } from './authentication/social/strategies/google.strate
 import { FacebookStrategy } from './authentication/social/strategies/facebook.strategy';
 import { LinkedinStrategy } from './authentication/social/strategies/linkedin.strategy';
 import { SocialAuthService } from './authentication/social/social-authentication.service';
+import { OtpAuthenticationService } from './authentication/otp-authentication.service';
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { SocialAuthService } from './authentication/social/social-authentication
     FacebookStrategy,
     LinkedinStrategy,
     SocialAuthService,
+    OtpAuthenticationService,
   ],
   controllers: [
     AuthenticationController,
