@@ -4,7 +4,6 @@ import {
   HttpCode,
   HttpStatus,
   Post,
-  Req,
   Res,
   UseGuards,
 } from '@nestjs/common';
@@ -18,6 +17,7 @@ import { Auth } from './decorators/auth.decorator';
 import { AuthType } from './enums/auth-type.enum';
 import { ValidatePasswordGuard } from './guards/password/password.guard';
 import { OtpAuthGuard } from './guards/otp-auth-guard/otp-auth-guard.guard';
+import { ActiveUser } from '../decorators/active-user.decorator';
 
 @Auth(AuthType.None)
 @Controller('auth')
@@ -31,8 +31,7 @@ export class AuthenticationController {
 
   @HttpCode(HttpStatus.OK)
   @Post('sign-in')
-  @UseGuards(ValidatePasswordGuard)
-  @UseGuards(OtpAuthGuard)
+  @UseGuards(ValidatePasswordGuard, OtpAuthGuard)
   signIn(@Body() signInDto: SignInDto) {
     return this.authService.signIn(signInDto);
   }
@@ -46,8 +45,10 @@ export class AuthenticationController {
   @Auth(AuthType.Bearer)
   @HttpCode(HttpStatus.OK)
   @Post('2fa/generate')
-  async generateQrCode(@Req() req, @Res() response: Response) {
-    const email = req.user.email;
+  async generateQrCode(
+    @ActiveUser('email') email: string,
+    @Res() response: Response,
+  ) {
     const uri = await this.authService.otpAuthenticate(email);
     response.type('png');
     return toFileStream(response, uri);

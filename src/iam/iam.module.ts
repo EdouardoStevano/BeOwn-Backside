@@ -44,14 +44,8 @@ import { ValidatePasswordGuard } from './authentication/guards/password/password
       provide: APP_GUARD,
       useClass: AuthenticationGuard,
     },
-    {
-      provide: APP_GUARD,
-      useClass: ValidatePasswordGuard,
-    },
-    {
-      provide: APP_GUARD,
-      useClass: OtpAuthGuard,
-    },
+    ValidatePasswordGuard,
+    OtpAuthGuard,
     AccessTokenGuard,
   ],
   controllers: [
