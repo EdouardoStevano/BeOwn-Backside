@@ -82,4 +82,8 @@ export class TokenService {
 
     return this.generateToken(user);
   }
+
+  async verifyToken(token: string) {
+    return this.jwtService.verifyAsync(token, this.jwtConfiguration);
+  }
 }

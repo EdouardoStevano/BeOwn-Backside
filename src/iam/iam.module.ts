@@ -18,6 +18,11 @@ import { FacebookStrategy } from './authentication/social/strategies/facebook.st
 import { LinkedinStrategy } from './authentication/social/strategies/linkedin.strategy';
 import { SocialAuthService } from './authentication/social/social-authentication.service';
 import { OtpAuthenticationService } from './authentication/otp-authentication.service';
+import { APP_GUARD } from '@nestjs/core';
+import { AuthenticationGuard } from './authentication/guards/authentication/authentication.guard';
+import { AccessTokenGuard } from './authentication/guards/access-token/access-token.guard';
+import { OtpAuthGuard } from './authentication/guards/otp-auth-guard/otp-auth-guard.guard';
+import { ValidatePasswordGuard } from './authentication/guards/password/password.guard';
 
 @Module({
   imports: [
@@ -35,6 +40,19 @@ import { OtpAuthenticationService } from './authentication/otp-authentication.se
     LinkedinStrategy,
     SocialAuthService,
     OtpAuthenticationService,
+    {
+      provide: APP_GUARD,
+      useClass: AuthenticationGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: ValidatePasswordGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: OtpAuthGuard,
+    },
+    AccessTokenGuard,
   ],
   controllers: [
     AuthenticationController,

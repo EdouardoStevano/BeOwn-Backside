@@ -43,32 +43,9 @@ export class AuthenticationService {
       email: signInDto.email,
     });
 
-    if (!user) {
-      throw new UnauthorizedException('Invalid user credential');
-    }
-
-    const isEqual = await this.hashingService.compare(
-      signInDto.password,
-      user.password,
+    const [accessToken, refreshToken] = await this.tokenService.generateToken(
+      user!,
     );
-
-    if (!isEqual) {
-      throw new UnauthorizedException('Invalid user credential');
-    }
-
-    if (user.isTfaEnabled) {
-      const isValid = await this.otpAuthService.verifyCode(
-        signInDto.tfaCode?.toString() ?? '0',
-        user.tfaSecret,
-      );
-
-      if (!isValid.valid) {
-        throw new UnauthorizedException('Invalid 2FA code');
-      }
-    }
-
-    const [accessToken, refreshToken] =
-      await this.tokenService.generateToken(user);
 
     return { accessToken, refreshToken };
   }
@@ -82,5 +59,13 @@ export class AuthenticationService {
     } catch (err) {
       throw new UnauthorizedException();
     }
+  }
+
+  async otpAuthenticate(email: string) {
+    const { secret, uri } = await this.otpAuthService.generateSecret(email);
+
+    await this.otpAuthService.enableTfaForUser(email, secret);
+
+    return uri;
   }
 }
