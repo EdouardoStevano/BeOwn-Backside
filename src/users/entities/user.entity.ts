@@ -1,5 +1,6 @@
-import { Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
+import { Column, Entity, Index, PrimaryGeneratedColumn } from 'typeorm';
 
+@Index(['email', 'socialId'])
 @Entity('users')
 export class User {
   @PrimaryGeneratedColumn()
@@ -7,6 +8,9 @@ export class User {
 
   @Column({ unique: true })
   email: string;
+
+  @Column({ default: false })
+  isEmailVerify: boolean;
 
   @Column({ nullable: true })
   firstname: string;

@@ -23,6 +23,8 @@ import { AuthenticationGuard } from './authentication/guards/authentication/auth
 import { AccessTokenGuard } from './authentication/guards/access-token/access-token.guard';
 import { OtpAuthGuard } from './authentication/guards/otp-auth-guard/otp-auth-guard.guard';
 import { ValidatePasswordGuard } from './authentication/guards/password/password.guard';
+import { MailVerificationController } from './authentication/mail-verification/mail-verification.controller';
+import { MailVerificationService } from './authentication/mail-verification/mail-verification.service';
 
 @Module({
   imports: [
@@ -47,12 +49,14 @@ import { ValidatePasswordGuard } from './authentication/guards/password/password
     ValidatePasswordGuard,
     OtpAuthGuard,
     AccessTokenGuard,
+    MailVerificationService,
   ],
   controllers: [
     AuthenticationController,
     GoogleAuthController,
     FacebookAuthController,
     LinkedinAuthController,
+    MailVerificationController,
   ],
 })
 export class IamModule {}

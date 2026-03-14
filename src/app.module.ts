@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule } from '@nestjs/config';
 import { UsersModule } from './users/users.module';
 import { IamModule } from './iam/iam.module';
+import { MailerModule } from '@nestjs-modules/mailer';
 
 @Module({
   imports: [
@@ -16,6 +17,22 @@ import { IamModule } from './iam/iam.module';
       database: process.env.DATABASE_DB || 'postgres',
       autoLoadEntities: true,
       synchronize: true,
+    }),
+    MailerModule.forRootAsync({
+      useFactory: () => ({
+        transport: {
+          host: process.env.MAIL_HOST || 'smtp.gmail.com',
+          port: Number(process.env.MAIL_PORT) || 587,
+          secure: false,
+          auth: {
+            user: process.env.MAIL_USER,
+            pass: process.env.MAIL_USER_PASSWORD,
+          },
+        },
+        defaults: {
+          from: `"Beown" <${process.env.MAIL_FROM}>`,
+        },
+      }),
     }),
     UsersModule,
     IamModule,
