@@ -1,5 +1,8 @@
 import {
+  BadRequestException,
   ConflictException,
+  HttpException,
+  HttpStatus,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -12,6 +15,8 @@ import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { OtpAuthenticationService } from './otp-authentication.service';
 import { SignInDto } from './dto/sign-in.dto';
 import { SignUpDto } from './dto/sign-up.dto';
+import { OtpService } from './otp/otp.service';
+import { MailService } from 'src/mail/mail.service';
 
 @Injectable()
 export class AuthenticationService {
@@ -20,6 +25,8 @@ export class AuthenticationService {
     private readonly hashingService: HashingService,
     private readonly tokenService: TokenService,
     private readonly otpAuthService: OtpAuthenticationService,
+    private readonly otpMailService: OtpService,
+    private readonly mailService: MailService,
   ) {}
 
   async signUp(signUpDto: SignUpDto) {
@@ -67,5 +74,40 @@ export class AuthenticationService {
     await this.otpAuthService.enableTfaForUser(email, secret);
 
     return uri;
+  }
+
+  async requestOtpEmail(email: string): Promise<{ message: string }> {
+    const hasActive = await this.otpMailService.hasActiveOtp(email);
+    if (hasActive) {
+      throw new HttpException(
+        'Un code OTP a déjà été envoyé. Attendez 5 minutes.',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+
+    const otp = this.otpMailService.generateOtp();
+    await this.otpMailService.saveOtp(email, otp);
+    await this.mailService.sentOtpEmail(email, otp);
+
+    return { message: 'Code OTP envoyé à votre adresse email.' };
+  }
+
+  async verifyOtp(
+    email: string,
+    otp: string,
+  ): Promise<{ message: string; token?: string }> {
+    let isValid: boolean;
+
+    try {
+      isValid = await this.otpMailService.verifyOtp(email, otp);
+    } catch (e) {
+      throw new BadRequestException(e.message);
+    }
+
+    if (!isValid) {
+      throw new UnauthorizedException('Code OTP invalide ou expiré.');
+    }
+
+    return { message: 'Email vérifié avec succées.' };
   }
 }

@@ -4,9 +4,19 @@ import { ConfigModule } from '@nestjs/config';
 import { UsersModule } from './users/users.module';
 import { IamModule } from './iam/iam.module';
 import { MailerModule } from '@nestjs-modules/mailer';
+import { MailModule } from './mail/mail.module';
+import { CacheModule } from '@nestjs/cache-manager';
+import * as redisStore from 'cache-manager-ioredis';
 
 @Module({
   imports: [
+    CacheModule.register({
+      isGlobal: true,
+      store: redisStore,
+      host: process.env.REDIS_HOST,
+      prort: Number(process.env.REDIS_PORT),
+    }),
+
     ConfigModule.forRoot({ envFilePath: '.env' }),
     TypeOrmModule.forRoot({
       type: 'postgres',
@@ -36,6 +46,7 @@ import { MailerModule } from '@nestjs-modules/mailer';
     }),
     UsersModule,
     IamModule,
+    MailModule,
   ],
 })
 export class AppModule {}

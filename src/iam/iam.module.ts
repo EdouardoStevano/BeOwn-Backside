@@ -25,12 +25,17 @@ import { OtpAuthGuard } from './authentication/guards/otp-auth-guard/otp-auth-gu
 import { ValidatePasswordGuard } from './authentication/guards/password/password.guard';
 import { MailVerificationController } from './authentication/mail-verification/mail-verification.controller';
 import { MailVerificationService } from './authentication/mail-verification/mail-verification.service';
+import { OtpModule } from './authentication/otp/otp.module';
+import { OtpService } from './authentication/otp/otp.service';
+import { MailModule } from 'src/mail/mail.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([User]),
     JwtModule.registerAsync(jwtConfig.asProvider()),
     ConfigModule.forFeature(jwtConfig),
+    OtpModule,
+    MailModule,
   ],
   providers: [
     { provide: HashingService, useClass: BcryptService },

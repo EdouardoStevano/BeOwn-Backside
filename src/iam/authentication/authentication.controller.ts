@@ -18,6 +18,8 @@ import { AuthType } from './enums/auth-type.enum';
 import { ValidatePasswordGuard } from './guards/password/password.guard';
 import { OtpAuthGuard } from './guards/otp-auth-guard/otp-auth-guard.guard';
 import { ActiveUser } from '../decorators/active-user.decorator';
+import { RequestOtpDto } from './dto/request-otp.dto';
+import { VerifyOtpDto } from './dto/verify-otp.dto';
 
 @Auth(AuthType.None)
 @Controller('auth')
@@ -52,5 +54,16 @@ export class AuthenticationController {
     const uri = await this.authService.otpAuthenticate(email);
     response.type('png');
     return toFileStream(response, uri);
+  }
+
+  @Post('request-otp')
+  async requestOtp(@Body() dto: RequestOtpDto) {
+    return this.authService.requestOtpEmail(dto.email);
+  }
+
+  @Post('verify-otp')
+  @HttpCode(200)
+  async verifyOtp(@Body() dto: VerifyOtpDto) {
+    return this.authService.verifyOtp(dto.email, dto.otp);
   }
 }
