@@ -1,9 +1,4 @@
-import {
-  Inject,
-  Injectable,
-  NotFoundException,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
 import {
   HASHING_SERVICE,
   type HashingService,
@@ -34,6 +29,10 @@ export class SignInUsecase {
       throw new UnauthorizedException('Invalid credential');
     }
 
+    if (!user.userEmail.isVerified) {
+      throw new UnauthorizedException('Invalid credential');
+    }
+
     const isValidPassword = this.hashingService.compare(
       signInDto.password,
       user.password!,
@@ -48,6 +47,6 @@ export class SignInUsecase {
       email: user.userEmail.email,
     } as TokenPayload);
 
-    return { user, tokenPayload };
+    return { ...tokenPayload };
   }
 }

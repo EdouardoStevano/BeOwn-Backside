@@ -5,6 +5,7 @@ import { UsersModule } from './users/applications/users.module';
 import { IamModule } from './iam/iam.module';
 import { MailerModule } from '@nestjs-modules/mailer';
 import { CacheModule } from '@nestjs/cache-manager';
+import * as redisStore from 'cache-manager-ioredis';
 
 @Module({
   imports: [
@@ -12,7 +13,7 @@ import { CacheModule } from '@nestjs/cache-manager';
       isGlobal: true,
       store: redisStore,
       host: process.env.REDIS_HOST,
-      prort: Number(process.env.REDIS_PORT),
+      port: Number(process.env.REDIS_PORT),
     }),
 
     ConfigModule.forRoot({ envFilePath: '.env' }),

@@ -8,14 +8,11 @@ import jwtConfig from './config/jwt.config';
 import { type ConfigType } from '@nestjs/config';
 import {
   AuthTokens,
+  EmailTokenPayload,
   TokenPayload,
   TokenService,
 } from '../domain/ports/token.service';
 import { randomUUID } from 'crypto';
-import {
-  USER_REPOSITORY,
-  type UserRepository,
-} from 'src/users/applications/ports/repositories/user.repository';
 
 export class JwtTokenService implements TokenService {
   constructor(
@@ -26,8 +23,6 @@ export class JwtTokenService implements TokenService {
 
     @Inject(jwtConfig.KEY)
     private readonly jwtConfiguration: ConfigType<typeof jwtConfig>,
-
-    @Inject(USER_REPOSITORY) private readonly usersRepository: UserRepository,
   ) {}
 
   async generateTokens(payload: TokenPayload): Promise<AuthTokens> {
@@ -42,6 +37,7 @@ export class JwtTokenService implements TokenService {
 
       this.signToken(payload.sub, this.jwtConfiguration.refreshTokenTtl, {
         refreshTokenId,
+        email: payload.email,
       }),
     ]);
 
@@ -67,32 +63,26 @@ export class JwtTokenService implements TokenService {
   }
 
   async refreshTokens(token: string): Promise<AuthTokens> {
-    const { sub, refreshTokenId } = await this.jwtService.verifyAsync(token, {
-      secret: this.jwtConfiguration.secret,
-      audience: this.jwtConfiguration.audience,
-      issuer: this.jwtConfiguration.issuer,
-    });
-
-    const user = await this.usersRepository.findById(sub);
-
-    if (!user) {
-      throw new Error('Refresh token is invalid');
-    }
-
-    const isValidToken = await this.validateRefreshToken(
-      user.userEmail.email!,
-      refreshTokenId,
+    const { sub, email, refreshTokenId } = await this.jwtService.verifyAsync(
+      token,
+      {
+        secret: this.jwtConfiguration.secret,
+        audience: this.jwtConfiguration.audience,
+        issuer: this.jwtConfiguration.issuer,
+      },
     );
 
+    const isValidToken = await this.validateRefreshToken(email, refreshTokenId);
+
     if (isValidToken) {
-      await this.cacheManagerService.remove(user.userEmail.email!);
+      await this.cacheManagerService.remove(email);
     } else {
       throw new Error('Refresh token is no longer available!');
     }
 
     return this.generateTokens({
-      sub: user.userId,
-      email: user.userEmail.email!,
+      sub,
+      email,
     } as TokenPayload);
   }
 
@@ -103,5 +93,23 @@ export class JwtTokenService implements TokenService {
 
   verifyAccessToken(token: string): Promise<TokenPayload> {
     return this.jwtService.verifyAsync(token, this.jwtConfiguration);
+  }
+
+  async generateEmailToken(
+    emailTokenPayload: EmailTokenPayload,
+  ): Promise<string> {
+    return this.signToken<EmailTokenPayload>(
+      emailTokenPayload.sub,
+      this.jwtConfiguration.emailTokenTtl,
+      emailTokenPayload,
+    );
+  }
+
+  verifyEmailToken(token: string): Promise<EmailTokenPayload> {
+    return this.jwtService.verifyAsync(token, {
+      secret: this.jwtConfiguration.secret,
+      audience: this.jwtConfiguration.audience,
+      issuer: this.jwtConfiguration.issuer,
+    });
   }
 }

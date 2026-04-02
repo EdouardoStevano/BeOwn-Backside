@@ -5,8 +5,7 @@ import { ConfigModule } from '@nestjs/config';
 import { CACHE_MANAGER_SERVICE } from '../domain/ports/cahe-manager.service';
 import { TOKEN_SERVICE } from '../domain/ports/token.service';
 import { RedisCacheService } from './redis-cache.service';
-import { USER_REPOSITORY } from 'src/users/applications/ports/repositories/user.repository';
-import { UserTypeOrmRepository } from 'src/users/infrastructures/persistences/repositories/user.repository';
+import { JwtTokenService } from './jwt-token.service';
 
 @Module({
   imports: [
@@ -15,7 +14,7 @@ import { UserTypeOrmRepository } from 'src/users/infrastructures/persistences/re
   ],
   providers: [
     { provide: CACHE_MANAGER_SERVICE, useClass: RedisCacheService },
-    { provide: USER_REPOSITORY, useClass: UserTypeOrmRepository },
+    { provide: TOKEN_SERVICE, useClass: JwtTokenService },
   ],
   exports: [CACHE_MANAGER_SERVICE, TOKEN_SERVICE],
 })

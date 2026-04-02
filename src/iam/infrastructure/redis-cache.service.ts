@@ -6,7 +6,7 @@ export class RedisCacheService implements CacheManagerService {
   constructor(@Inject(CACHE_MANAGER) private readonly cacheManager: Cache) {}
 
   async insert<T>(key: string, data: T): Promise<void> {
-    await this.cacheManager.set(key, data);
+    await this.cacheManager.set(this.getKey(key), data);
   }
 
   async get<T>(key: string): Promise<T | undefined> {
@@ -19,5 +19,13 @@ export class RedisCacheService implements CacheManagerService {
 
   private getKey(email: string) {
     return `user-${email}`;
+  }
+
+  async validateEmailToken(
+    email: string,
+    emailTokenId: string,
+  ): Promise<boolean> {
+    const storedId = await this.cacheManager.get<string>(this.getKey(email));
+    return storedId === emailTokenId;
   }
 }

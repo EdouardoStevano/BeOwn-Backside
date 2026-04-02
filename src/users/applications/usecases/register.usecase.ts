@@ -1,16 +1,18 @@
 import { ConflictException, Inject, Injectable } from '@nestjs/common';
 import { UserFactory } from 'src/users/domains/factories/user.factory';
-import { USER_REPOSITORY } from '../ports/repositories/user.repository';
+import {
+  USER_REPOSITORY,
+  type UserRepository,
+} from '../ports/repositories/user.repository';
 import { RegisterDto } from 'src/users/presenters/dto/user.dto';
 import { User } from 'src/users/domains/user';
-import { UserTypeOrmRepository } from 'src/users/infrastructures/persistences/repositories/user.repository';
 
 @Injectable()
 export class RegisterUseCase {
   constructor(
     private readonly userFactory: UserFactory,
     @Inject(USER_REPOSITORY)
-    private readonly userRepository: UserTypeOrmRepository,
+    private readonly userRepository: UserRepository,
   ) {}
 
   async execute(registerDto: RegisterDto): Promise<User> {
