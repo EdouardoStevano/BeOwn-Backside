@@ -67,7 +67,7 @@ export class VerifyEmailService {
     });
   }
 
-  async confirmMail(token: string): Promise<string> {
+  async confirmEmail(token: string): Promise<string> {
     try {
       const emailTokenPayload = await this.tokenService.verifyEmailToken(token);
 

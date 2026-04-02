@@ -14,7 +14,7 @@ export class VerifyEmailController {
 
   @Get('verify')
   async verify(@Query('token') token: string) {
-    const email = await this.verifyEmailService.confirmMail(token);
+    const email = await this.verifyEmailService.confirmEmail(token);
     return { message: `Email ${email} verifié avec succés ` };
   }
 }
