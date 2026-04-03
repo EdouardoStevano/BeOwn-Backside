@@ -26,6 +26,7 @@ export class RegisterUseCase {
       lastname: registerDto.lastname ?? null,
       email: registerDto.email,
       password: registerDto.password,
+      socialId: null,
     });
 
     return this.userRepository.save(user);

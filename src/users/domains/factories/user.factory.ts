@@ -11,6 +11,7 @@ export interface CreateUserProps {
   lastname: string | null;
   email: string;
   password: string | null;
+  socialId: string | null;
 }
 
 @Injectable()
@@ -23,10 +24,12 @@ export class UserFactory {
 
     user.firstname = props.firstname;
     user.lastname = props.lastname;
-    user.password = await this.hashingService.hash(props.password!);
+    user.password = props.password
+      ? await this.hashingService.hash(props.password!)
+      : null;
     user.userEmail = new UserEmail(props.email);
     user.tfaMethods = [];
-    user.socialId = null;
+    user.socialId = props.socialId;
     return user;
   }
 }

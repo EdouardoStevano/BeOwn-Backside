@@ -46,4 +46,11 @@ export class UserTypeOrmRepository implements UserRepository {
     const updated = await this.usersRepository.save(entity);
     return UserMapper.toDomain(updated);
   }
+
+  async findOneBySocialId(socialId: string): Promise<User | null> {
+    const userEntity = await this.usersRepository.findOneBy({
+      socialId: socialId,
+    });
+    return userEntity ? UserMapper.toDomain(userEntity) : null;
+  }
 }
