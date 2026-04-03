@@ -41,7 +41,10 @@ export class JwtTokenService implements TokenService {
       }),
     ]);
 
-    await this.cacheManagerService.insert(payload.email, refreshTokenId);
+    await this.cacheManagerService.insertRefreshTokenId(
+      payload.email,
+      refreshTokenId,
+    );
 
     return { accessToken, refreshToken };
   }
@@ -72,10 +75,13 @@ export class JwtTokenService implements TokenService {
       },
     );
 
-    const isValidToken = await this.validateRefreshToken(email, refreshTokenId);
+    const isValidToken = await this.cacheManagerService.validateRefreshToken(
+      email,
+      refreshTokenId,
+    );
 
     if (isValidToken) {
-      await this.cacheManagerService.remove(email);
+      await this.cacheManagerService.invalidateRefreshTokenId(email);
     } else {
       throw new Error('Refresh token is no longer available!');
     }
@@ -84,11 +90,6 @@ export class JwtTokenService implements TokenService {
       sub,
       email,
     } as TokenPayload);
-  }
-
-  private async validateRefreshToken(email: string, refreshTokenId: string) {
-    const tokenIdCache = await this.cacheManagerService.get<string>(email);
-    return refreshTokenId === tokenIdCache;
   }
 
   verifyAccessToken(token: string): Promise<TokenPayload> {

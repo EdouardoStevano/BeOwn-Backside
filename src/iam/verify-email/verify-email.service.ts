@@ -42,7 +42,7 @@ export class VerifyEmailService {
     }
 
     if (user.userEmail.isVerified) {
-      throw new Error('This email is already verified');
+      throw new BadRequestException('This email is already verified');
     }
 
     const tokenId = randomUUID();
@@ -53,7 +53,7 @@ export class VerifyEmailService {
       emailTokenId: tokenId,
     });
 
-    await this.cacheManagerService.insert<string>(
+    await this.cacheManagerService.insertEmailTokenId(
       user.userEmail.email,
       tokenId,
     );
@@ -77,7 +77,9 @@ export class VerifyEmailService {
       );
 
       if (isValidToken) {
-        await this.cacheManagerService.remove(emailTokenPayload.email);
+        await this.cacheManagerService.invalidateEmailTokenId(
+          emailTokenPayload.email,
+        );
       } else {
         throw new BadRequestException('Token invalide ou expiré');
       }
@@ -90,9 +92,10 @@ export class VerifyEmailService {
         throw new BadRequestException('Token invalide ou expiré');
       }
 
-      user?.userEmail.verify;
+      user?.userEmail.verify();
 
-      this.usersRepository.update(user);
+      await this.usersRepository.update(user);
+
       return user.userEmail.email;
     } catch {
       throw new BadRequestException('Token invalide ou expiré');
