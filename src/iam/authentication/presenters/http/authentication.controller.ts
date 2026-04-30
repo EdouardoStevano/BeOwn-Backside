@@ -8,6 +8,7 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { SignInUsecase } from '../../application/usecases/sign-in.usecase';
 import { SignInDto } from './dto/sign-in.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
@@ -17,6 +18,7 @@ import { FacebookAuthGuard } from '../../infrastructures/guards/facebook-auth.gu
 import { GoogleAuthGuard } from '../../infrastructures/guards/google-auth.guard';
 import { LinkedinAuthGuard } from '../../infrastructures/guards/linkedin-auth.guard';
 
+@ApiTags('Authentication')
 @Controller('auth')
 export class AuthenticationController {
   constructor(
@@ -25,22 +27,30 @@ export class AuthenticationController {
     private readonly socialAuthUseCase: SocialAuthUseCase,
   ) {}
 
+  @ApiOperation({ summary: 'Connexion avec email et mot de passe' })
+  @ApiResponse({ status: 200, description: 'Tokens retournés avec succès' })
+  @ApiResponse({ status: 401, description: 'Identifiants invalides' })
   @HttpCode(HttpStatus.OK)
   @Post('sign-in')
   signIn(@Body() signInDto: SignInDto) {
     return this.signInUsecase.signIn(signInDto);
   }
 
+  @ApiOperation({ summary: 'Rafraîchir les tokens d\'accès' })
+  @ApiResponse({ status: 200, description: 'Nouveaux tokens retournés' })
+  @ApiResponse({ status: 401, description: 'Refresh token invalide ou expiré' })
   @HttpCode(HttpStatus.OK)
   @Post('refresh-tokens')
   refreshToken(@Body() refreshTokenDto: RefreshTokenDto) {
     return this.refreshTokenUseCase.refreshToken(refreshTokenDto);
   }
 
+  @ApiOperation({ summary: 'Authentification via Facebook' })
   @Get('facebook')
   @UseGuards(FacebookAuthGuard)
   facebookAuthenticate() {}
 
+  @ApiOperation({ summary: 'Callback Facebook OAuth' })
   @Get('facebook/callback')
   @UseGuards(FacebookAuthGuard)
   facebookCallback(@Req() req) {
@@ -48,22 +58,25 @@ export class AuthenticationController {
     return this.socialAuthUseCase.authenticate(user);
   }
 
+  @ApiOperation({ summary: 'Authentification via Google' })
   @Get('google')
   @UseGuards(GoogleAuthGuard)
   googleAuthenticate() {}
 
+  @ApiOperation({ summary: 'Callback Google OAuth' })
   @Get('google/callback')
   @UseGuards(GoogleAuthGuard)
   googleCallback(@Req() req) {
     const user = req.user;
-    console.log(user);
     return this.socialAuthUseCase.authenticate(user);
   }
 
+  @ApiOperation({ summary: 'Authentification via LinkedIn' })
   @Get('linkedin')
   @UseGuards(LinkedinAuthGuard)
   linkedinAuthenticate() {}
 
+  @ApiOperation({ summary: 'Callback LinkedIn OAuth' })
   @Get('linkedin/callback')
   @UseGuards(LinkedinAuthGuard)
   linkedinCallback(@Req() req) {

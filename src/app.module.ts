@@ -16,7 +16,7 @@ import * as redisStore from 'cache-manager-ioredis';
       port: Number(process.env.REDIS_PORT),
     }),
 
-    ConfigModule.forRoot({ envFilePath: '.env' }),
+    ConfigModule.forRoot({ isGlobal: true }),
     TypeOrmModule.forRoot({
       type: 'postgres',
       host: process.env.DATABASE_HOST,
