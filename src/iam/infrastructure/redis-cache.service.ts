@@ -43,11 +43,27 @@ export class RedisCacheService implements CacheManagerService {
     await this.cacheManager.del(this.emailKey(email));
   }
 
+  async insertTwoFactorSession(token: string, userId: number): Promise<void> {
+    await this.cacheManager.set<number>(this.twoFactorKey(token), userId);
+  }
+
+  async getTwoFactorSession(token: string): Promise<number | undefined> {
+    return await this.cacheManager.get<number>(this.twoFactorKey(token));
+  }
+
+  async removeTwoFactorSession(token: string): Promise<void> {
+    await this.cacheManager.del(this.twoFactorKey(token));
+  }
+
   private refreshKey(email: string): string {
     return `refresh:${email}`;
   }
 
   private emailKey(email: string): string {
     return `email-verify:${email}`;
+  }
+
+  private twoFactorKey(token: string): string {
+    return `2fa-session:${token}`;
   }
 }
