@@ -1,9 +1,4 @@
-import {
-  ConflictException,
-  Inject,
-  Injectable,
-  InternalServerErrorException,
-} from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import {
   TOKEN_SERVICE,
   type TokenService,
@@ -11,9 +6,10 @@ import {
 import {
   USER_REPOSITORY,
   type UserRepository,
-} from 'src/users/applications/ports/repositories/user.repository';
+} from 'src/users/domain/ports/user.repository';
 import { SocialInterface } from '../../infrastructures/interfaces/social.interface';
 import { UserFactory } from 'src/users/domains/factories/user.factory';
+import { UserAlreadyExistsError } from 'src/users/domain/errors/user-already-exists.error';
 
 @Injectable()
 export class SocialAuthUseCase {
@@ -24,30 +20,26 @@ export class SocialAuthUseCase {
   ) {}
 
   async authenticate(social: SocialInterface) {
-    try {
-      const user = await this.usersRepository.findOneBySocialId(
-        social.socialId,
-      );
+    const existingUser = await this.usersRepository.findOneBySocialId(social.socialId);
 
-      if (user) {
-        console.log('executed');
-        return this.tokenService.generateTokens({
-          email: user.userEmail.email,
-          sub: user.userId,
-          refreshTokenId: null,
-        });
-      }
-
-      const newUser = await this.userFactory.create({
-        password: null,
-        firstname: social.firstname,
-        lastname: social.lastname ?? null,
-        email: social.email,
-        socialId: social.socialId,
+    if (existingUser) {
+      return this.tokenService.generateTokens({
+        email: existingUser.userEmail.email,
+        sub: existingUser.userId,
+        refreshTokenId: null,
       });
+    }
 
+    const newUser = await this.userFactory.create({
+      password: null,
+      firstname: social.firstname,
+      lastname: social.lastname ?? null,
+      email: social.email,
+      socialId: social.socialId,
+    });
+
+    try {
       const savedUser = await this.usersRepository.save(newUser);
-
       return this.tokenService.generateTokens({
         email: savedUser.userEmail.email,
         sub: savedUser.userId,
@@ -55,11 +47,10 @@ export class SocialAuthUseCase {
       });
     } catch (err) {
       const pgUniqueViolationErrorCode = '23505';
-      if (err.code === pgUniqueViolationErrorCode) {
-        throw new ConflictException('Email already in use');
+      if (err?.code === pgUniqueViolationErrorCode) {
+        throw new UserAlreadyExistsError(social.email);
       }
-
-      throw new InternalServerErrorException(err.message);
+      throw err;
     }
   }
 }

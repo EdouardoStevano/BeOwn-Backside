@@ -1,4 +1,4 @@
-import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import {
   HASHING_SERVICE,
   type HashingService,
@@ -12,7 +12,9 @@ import { SignInDto } from '../../presenters/http/dto/sign-in.dto';
 import {
   USER_REPOSITORY,
   type UserRepository,
-} from 'src/users/applications/ports/repositories/user.repository';
+} from 'src/users/domain/ports/user.repository';
+import { InvalidCredentialsError } from 'src/users/domain/errors/invalid-credentials.error';
+import { EmailNotVerifiedError } from 'src/users/domain/errors/email-not-verified.error';
 
 @Injectable()
 export class SignInUsecase {
@@ -26,27 +28,25 @@ export class SignInUsecase {
     const user = await this.usersRepository.findByEmail(signInDto.email);
 
     if (!user) {
-      throw new UnauthorizedException('Invalid credential');
+      throw new InvalidCredentialsError();
     }
 
-    if (!user.userEmail.isVerified) {
-      throw new UnauthorizedException('Invalid credential');
+    if (!user.isEmailVerified()) {
+      throw new EmailNotVerifiedError();
     }
 
-    const isValidPassword = this.hashingService.compare(
+    const isValidPassword = await this.hashingService.compare(
       signInDto.password,
       user.password!,
     );
 
     if (!isValidPassword) {
-      throw new UnauthorizedException('Invalid creadential');
+      throw new InvalidCredentialsError();
     }
 
-    const tokenPayload = await this.tokenService.generateTokens({
+    return this.tokenService.generateTokens({
       sub: user.userId,
       email: user.userEmail.email,
     } as TokenPayload);
-
-    return { ...tokenPayload };
   }
 }

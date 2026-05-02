@@ -23,4 +23,12 @@ export class NodemailerMailService implements EmailService {
       context: { otp, expiresIn: '5 minutes' },
     });
   }
+
+  async sendVerificationEmail(email: string, verificationUrl: string): Promise<void> {
+    await this.mailerService.sendMail({
+      to: email,
+      subject: 'Confirmez votre adresse email',
+      text: `Cliquez ici pour confirmer votre email: ${verificationUrl}`,
+    });
+  }
 }

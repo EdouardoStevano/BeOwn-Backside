@@ -2,7 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { UserEmailEntity } from './persistences/entities/user-email.entity';
 import { UserEntity } from './persistences/entities/user.entity';
-import { USER_REPOSITORY } from '../applications/ports/repositories/user.repository';
+import { USER_REPOSITORY } from 'src/users/domain/ports/user.repository';
 import { UserTypeOrmRepository } from './persistences/repositories/user.repository';
 import { TFAMethodEntity } from './persistences/entities/tfa-method.entity';
 import { SMSMethodEntity } from './persistences/entities/sms-method.entity';

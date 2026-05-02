@@ -9,4 +9,16 @@ export class User {
   password: string | null;
   userEmail: UserEmail;
   tfaMethods: TfaMethod[] = [];
+
+  verifyEmail(): void {
+    this.userEmail.verify();
+  }
+
+  isEmailVerified(): boolean {
+    return this.userEmail.isVerified;
+  }
+
+  hasSocialLogin(): boolean {
+    return this.socialId !== null;
+  }
 }
