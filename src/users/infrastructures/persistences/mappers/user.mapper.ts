@@ -23,10 +23,11 @@ export class UserMapper {
     user.password = entity.password;
 
     if (entity.userEmail) {
-      const vo = new UserEmail(entity.userEmail.email);
-      vo.isVerified = entity.userEmail.isVerified;
-      vo.verifiedDate = entity.userEmail.verifiedDate;
-      user.userEmail = vo;
+      user.userEmail = UserEmail.reconstitute(
+        entity.userEmail.email,
+        entity.userEmail.isVerified,
+        entity.userEmail.verifiedDate,
+      );
     }
 
     if (entity.tfaMethods) {

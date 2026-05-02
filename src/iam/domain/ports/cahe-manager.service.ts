@@ -10,4 +10,7 @@ export interface CacheManagerService {
   invalidateRefreshTokenId(email: string): Promise<void>;
   insertEmailTokenId(email: string, emailTokenId: string): Promise<void>;
   invalidateEmailTokenId(email: string): Promise<void>;
+  insertTwoFactorSession(token: string, userId: number): Promise<void>;
+  getTwoFactorSession(token: string): Promise<number | undefined>;
+  removeTwoFactorSession(token: string): Promise<void>;
 }

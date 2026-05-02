@@ -1,5 +1,4 @@
 import { Module } from '@nestjs/common';
-import { IamInfrastructureModule } from './infrastructure/iam-infrastructure.module';
 import { AuthenticationModule } from './authentication/application/authentication.module';
 import { OtpModule } from './authentication/application/otp.module';
 import { UsersInfrastructureModule } from 'src/users/infrastructures/users-infrastructure.module';
@@ -11,7 +10,7 @@ import { ConfigModule } from '@nestjs/config';
 
 @Module({
   imports: [
-    IamInfrastructureModule,
+    AuthenticationModule,
     AuthenticationModule,
     OtpModule,
     UsersInfrastructureModule,

@@ -1,11 +1,18 @@
-import { ConflictException, Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { UserFactory } from 'src/users/domains/factories/user.factory';
 import {
   USER_REPOSITORY,
   type UserRepository,
-} from '../ports/repositories/user.repository';
-import { RegisterDto } from 'src/users/presenters/dto/user.dto';
+} from 'src/users/domain/ports/user.repository';
 import { User } from 'src/users/domains/user';
+import { UserAlreadyExistsError } from 'src/users/domain/errors/user-already-exists.error';
+
+export interface RegisterUserCommand {
+  firstname: string;
+  lastname?: string | null;
+  email: string;
+  password: string;
+}
 
 @Injectable()
 export class RegisterUseCase {
@@ -15,17 +22,17 @@ export class RegisterUseCase {
     private readonly userRepository: UserRepository,
   ) {}
 
-  async execute(registerDto: RegisterDto): Promise<User> {
-    const existing = await this.userRepository.findByEmail(registerDto.email);
+  async execute(command: RegisterUserCommand): Promise<User> {
+    const existing = await this.userRepository.findByEmail(command.email);
     if (existing) {
-      throw new ConflictException('Un compte avec cette email existe déjà.');
+      throw new UserAlreadyExistsError(command.email);
     }
 
     const user = await this.userFactory.create({
-      firstname: registerDto.firstname,
-      lastname: registerDto.lastname ?? null,
-      email: registerDto.email,
-      password: registerDto.password,
+      firstname: command.firstname,
+      lastname: command.lastname ?? null,
+      email: command.email,
+      password: command.password,
       socialId: null,
     });
 

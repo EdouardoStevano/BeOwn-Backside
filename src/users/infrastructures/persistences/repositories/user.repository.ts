@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { UserRepository } from 'src/users/applications/ports/repositories/user.repository';
+import { UserRepository } from 'src/users/domain/ports/user.repository';
 import { UserEntity } from '../entities/user.entity';
 import { Repository } from 'typeorm';
 import { User } from 'src/users/domains/user';
@@ -24,7 +24,6 @@ export class UserTypeOrmRepository implements UserRepository {
       where: { userId },
       relations: ['userEmail', 'tfaMethods'],
     });
-
     return entity ? UserMapper.toDomain(entity) : null;
   }
 
@@ -36,21 +35,20 @@ export class UserTypeOrmRepository implements UserRepository {
       .addSelect('user.password')
       .where('userEmail.email = :email', { email: email.toLowerCase() })
       .getOne();
-
     return entity ? UserMapper.toDomain(entity) : null;
   }
 
   async update(user: User): Promise<User> {
     const entity = UserMapper.toEntity(user);
-
     const updated = await this.usersRepository.save(entity);
     return UserMapper.toDomain(updated);
   }
 
   async findOneBySocialId(socialId: string): Promise<User | null> {
-    const userEntity = await this.usersRepository.findOneBy({
-      socialId: socialId,
+    const entity = await this.usersRepository.findOne({
+      where: { socialId },
+      relations: ['userEmail'],
     });
-    return userEntity ? UserMapper.toDomain(userEntity) : null;
+    return entity ? UserMapper.toDomain(entity) : null;
   }
 }

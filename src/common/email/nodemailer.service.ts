@@ -10,8 +10,11 @@ export class NodemailerMailService implements EmailService {
     await this.mailerService.sendMail({
       to: email,
       subject: 'Activez votre compte',
-      template: './activation',
-      context: { otp, expiresIn: '5 minutes' },
+      html: `
+        <p>Voici votre code d'activation :</p>
+        <h2 style="letter-spacing:4px">${otp}</h2>
+        <p>Ce code expire dans <strong>5 minutes</strong>.</p>
+      `,
     });
   }
 
@@ -19,8 +22,19 @@ export class NodemailerMailService implements EmailService {
     await this.mailerService.sendMail({
       to: email,
       subject: 'Votre code de connexion',
-      template: './two-factor',
-      context: { otp, expiresIn: '5 minutes' },
+      html: `
+        <p>Voici votre code de double authentification :</p>
+        <h2 style="letter-spacing:4px">${otp}</h2>
+        <p>Ce code expire dans <strong>5 minutes</strong>.</p>
+      `,
+    });
+  }
+
+  async sendVerificationEmail(email: string, verificationUrl: string): Promise<void> {
+    await this.mailerService.sendMail({
+      to: email,
+      subject: 'Confirmez votre adresse email',
+      text: `Cliquez ici pour confirmer votre email: ${verificationUrl}`,
     });
   }
 }

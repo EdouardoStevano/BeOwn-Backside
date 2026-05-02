@@ -6,66 +6,64 @@ export class RedisCacheService implements CacheManagerService {
   constructor(@Inject(CACHE_MANAGER) private readonly cacheManager: Cache) {}
 
   async insert<T>(key: string, data: T): Promise<void> {
-    await this.cacheManager.set(this.getKey(key), data);
+    await this.cacheManager.set(key, data);
   }
 
   async get<T>(key: string): Promise<T | undefined> {
-    return await this.cacheManager.get(this.getKey(key));
+    return await this.cacheManager.get(key);
   }
 
   async remove(key: string): Promise<void> {
-    await this.cacheManager.del(this.getKey(key));
+    await this.cacheManager.del(key);
   }
 
-  private getKey(email: string) {
-    return `user-${email}`;
+  async insertRefreshTokenId(email: string, refreshTokenId: string): Promise<void> {
+    await this.cacheManager.set<string>(this.refreshKey(email), refreshTokenId);
   }
 
-  async insertRefreshTokenId(
-    email: string,
-    refreshTokenId: string,
-  ): Promise<void> {
-    const key = this.getRefreshTokenKey(email);
-    await this.cacheManager.set<string>(key, refreshTokenId);
-  }
-
-  async validateRefreshToken(
-    email: string,
-    refreshTokenId: string,
-  ): Promise<boolean> {
-    const key = this.getRefreshTokenKey(email);
-    const storedId = await this.cacheManager.get<string>(key);
-    return storedId === refreshTokenId;
+  async validateRefreshToken(email: string, refreshTokenId: string): Promise<boolean> {
+    const stored = await this.cacheManager.get<string>(this.refreshKey(email));
+    return stored === refreshTokenId;
   }
 
   async invalidateRefreshTokenId(email: string): Promise<void> {
-    const key = this.getRefreshTokenKey(email);
-    await this.cacheManager.del(key);
-  }
-
-  private getRefreshTokenKey(email: string) {
-    return `refresh-${email}`;
+    await this.cacheManager.del(this.refreshKey(email));
   }
 
   async insertEmailTokenId(email: string, emailTokenId: string): Promise<void> {
-    const key = this.getEmailTokenId(email);
-    await this.cacheManager.set<string>(key, emailTokenId);
+    await this.cacheManager.set<string>(this.emailKey(email), emailTokenId);
   }
 
-  async validateEmailToken(
-    email: string,
-    emailTokenId: string,
-  ): Promise<boolean> {
-    const storedId = await this.cacheManager.get<string>(this.getKey(email));
-    return storedId === emailTokenId;
+  async validateEmailToken(email: string, emailTokenId: string): Promise<boolean> {
+    const stored = await this.cacheManager.get<string>(this.emailKey(email));
+    return stored === emailTokenId;
   }
 
   async invalidateEmailTokenId(email: string): Promise<void> {
-    const key = this.getEmailTokenId(email);
-    await this.cacheManager.del(key);
+    await this.cacheManager.del(this.emailKey(email));
   }
 
-  private getEmailTokenId(email: string) {
-    return `user-${email}`;
+  async insertTwoFactorSession(token: string, userId: number): Promise<void> {
+    await this.cacheManager.set<number>(this.twoFactorKey(token), userId);
+  }
+
+  async getTwoFactorSession(token: string): Promise<number | undefined> {
+    return await this.cacheManager.get<number>(this.twoFactorKey(token));
+  }
+
+  async removeTwoFactorSession(token: string): Promise<void> {
+    await this.cacheManager.del(this.twoFactorKey(token));
+  }
+
+  private refreshKey(email: string): string {
+    return `refresh:${email}`;
+  }
+
+  private emailKey(email: string): string {
+    return `email-verify:${email}`;
+  }
+
+  private twoFactorKey(token: string): string {
+    return `2fa-session:${token}`;
   }
 }
