@@ -1,10 +1,17 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule } from '@nestjs/config';
-import { UsersModule } from './users/users.module';
+import { UsersModule } from './users/applications/users.module';
 import { IamModule } from './iam/iam.module';
+import { ProfilesModule } from './profiles/applications/profiles.module';
+import { ProjectsModule } from './projects/applications/projects.module';
+import { ReservationsModule } from './reservations/applications/reservations.module';
+import { InvestmentsModule } from './investments/applications/investments.module';
+import { WalletsModule } from './wallets/applications/wallets.module';
+import { PaymentsModule } from './payments/payments.module';
+import { SecondaryMarketModule } from './secondary-market/applications/secondary-market.module';
+import { NotificationsModule } from './notifications/notifications.module';
 import { MailerModule } from '@nestjs-modules/mailer';
-import { MailModule } from './mail/mail.module';
 import { CacheModule } from '@nestjs/cache-manager';
 import * as redisStore from 'cache-manager-ioredis';
 
@@ -14,10 +21,10 @@ import * as redisStore from 'cache-manager-ioredis';
       isGlobal: true,
       store: redisStore,
       host: process.env.REDIS_HOST,
-      prort: Number(process.env.REDIS_PORT),
+      port: Number(process.env.REDIS_PORT),
     }),
 
-    ConfigModule.forRoot({ envFilePath: '.env' }),
+    ConfigModule.forRoot({ isGlobal: true }),
     TypeOrmModule.forRoot({
       type: 'postgres',
       host: process.env.DATABASE_HOST,
@@ -46,7 +53,14 @@ import * as redisStore from 'cache-manager-ioredis';
     }),
     UsersModule,
     IamModule,
-    MailModule,
+    ProfilesModule,
+    ProjectsModule,
+    ReservationsModule,
+    InvestmentsModule,
+    WalletsModule,
+    PaymentsModule,
+    SecondaryMarketModule,
+    NotificationsModule,
   ],
 })
 export class AppModule {}
