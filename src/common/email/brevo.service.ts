@@ -103,4 +103,8 @@ export class BrevoEmailService implements EmailService {
       throw error;
     }
   }
+
+  async sendVerificationEmail(email: string, verificationUrl: string): Promise<void> {
+    await this.send(email, 'Confirmez votre adresse email', `Cliquez sur le lien ci-dessous pour confirmer votre adresse email : ${verificationUrl}`);
+  }
 }

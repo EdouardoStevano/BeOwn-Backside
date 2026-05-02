@@ -6,6 +6,8 @@ import { CACHE_MANAGER_SERVICE } from '../domain/ports/cahe-manager.service';
 import { TOKEN_SERVICE } from '../domain/ports/token.service';
 import { RedisCacheService } from './redis-cache.service';
 import { JwtTokenService } from './jwt-token.service';
+import { OTP_SERVICE } from '../domain/ports/otp.service';
+import {OtpImplService} from './otp-impl.service';
 
 @Module({
   imports: [
@@ -15,7 +17,8 @@ import { JwtTokenService } from './jwt-token.service';
   providers: [
     { provide: CACHE_MANAGER_SERVICE, useClass: RedisCacheService },
     { provide: TOKEN_SERVICE, useClass: JwtTokenService },
+    { provide: OTP_SERVICE, useClass: OtpImplService },
   ],
-  exports: [CACHE_MANAGER_SERVICE, TOKEN_SERVICE],
+  exports: [CACHE_MANAGER_SERVICE, TOKEN_SERVICE, OTP_SERVICE],
 })
 export class IamInfrastructureModule {}

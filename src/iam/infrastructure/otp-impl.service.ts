@@ -2,7 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import {
   OtpService,
   SecretOtpPayload,
-} from '../applications/ports/otp.service';
+} from '../domain/ports/otp.service';
 import {
   CACHE_MANAGER_SERVICE,
   type CacheManagerService,
@@ -17,7 +17,7 @@ interface OtpRecord {
 }
 
 @Injectable()
-export class RedisImplService implements OtpService {
+export class OtpImplService implements OtpService {
   constructor(
     @Inject(CACHE_MANAGER_SERVICE)
     private readonly cacheManagerService: CacheManagerService,

@@ -14,4 +14,5 @@ export interface EmailService {
     subject: string,
     htmlContent: string,
   ): Promise<void>;
+  sendVerificationEmail(email: string, verificationUrl: string): Promise<void>;
 }

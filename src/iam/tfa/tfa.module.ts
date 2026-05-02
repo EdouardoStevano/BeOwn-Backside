@@ -1,7 +1,6 @@
 import { Module } from '@nestjs/common';
 import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructure.module';
 import { UsersInfrastructureModule } from 'src/users/infrastructures/users-infrastructure.module';
-import { OtpInfrastructureModule } from 'src/iam/otp/infrastructure/otp-infrastructure.module';
 import { NodemailerMailService } from 'src/common/email/nodemailer.service';
 import { EMAIL_SERVICE } from 'src/common/email/email.service';
 import { JwtAuthGuard } from 'src/iam/authentication/infrastructures/guards/jwt-auth.guard';
@@ -12,7 +11,7 @@ import { VerifyEmailOtpUseCase } from './application/usecases/verify-email-otp.u
 import { TfaController } from './presentation/http/tfa.controller';
 
 @Module({
-  imports: [IamInfrastructureModule, UsersInfrastructureModule, OtpInfrastructureModule],
+  imports: [IamInfrastructureModule, UsersInfrastructureModule],
   providers: [
     InitiateEmailTfaUseCase,
     ConfirmEmailTfaUseCase,

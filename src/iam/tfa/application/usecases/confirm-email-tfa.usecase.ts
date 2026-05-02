@@ -10,7 +10,7 @@ import {
 import {
   OTP_SERVICE,
   type OtpService,
-} from 'src/iam/otp/applications/ports/otp.service';
+} from 'src/iam/domain/ports/otp.service';
 import { EmailMethod } from 'src/users/domains/tfa-method';
 import { InvalidCredentialsError } from 'src/users/domain/errors/invalid-credentials.error';
 import { TfaInvalidOtpError } from 'src/users/domain/errors/tfa-invalid-otp.error';

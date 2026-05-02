@@ -10,7 +10,7 @@ import {
 import {
   OTP_SERVICE,
   type OtpService,
-} from 'src/iam/otp/applications/ports/otp.service';
+} from 'src/iam/domain/ports/otp.service';
 import {
   EMAIL_SERVICE,
   type EmailService,
