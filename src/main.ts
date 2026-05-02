@@ -16,13 +16,16 @@ async function bootstrap() {
 
   const config = new DocumentBuilder()
     .setTitle('BeOwn API')
-    .setDescription('Documentation de l\'API BeOwn')
+    .setDescription("Documentation de l'API BeOwn")
     .setVersion('1.0')
     .addBearerAuth()
     .build();
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api/docs', app, document);
 
-  await app.listen(process.env.PORT ?? 3000);
+  await app.listen(process.env.PORT ?? 3001);
 }
-bootstrap();
+bootstrap().catch((err) => {
+  console.error('Application failed to start:', err);
+  process.exit(1);
+});

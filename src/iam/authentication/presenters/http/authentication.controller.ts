@@ -17,6 +17,15 @@ import { SocialAuthUseCase } from '../../application/usecases/social-auth.usecas
 import { FacebookAuthGuard } from '../../infrastructures/guards/facebook-auth.guard';
 import { GoogleAuthGuard } from '../../infrastructures/guards/google-auth.guard';
 import { LinkedinAuthGuard } from '../../infrastructures/guards/linkedin-auth.guard';
+import { ForgotPasswordUseCase } from '../../application/usecases/forgot-password.usecase';
+import { ResetPasswordUseCase } from '../../application/usecases/reset-password.usecase';
+import {
+  ForgotPasswordDto,
+  ResetPasswordDto,
+  SignUpDto,
+} from './dto/password.dto';
+import { RegisterUseCase } from 'src/users/applications/usecases/register.usecase';
+import { Public } from 'src/common/auth/public.decorator';
 
 @ApiTags('Authentication')
 @Controller('auth')
@@ -25,6 +34,9 @@ export class AuthenticationController {
     private readonly signInUsecase: SignInUsecase,
     private readonly refreshTokenUseCase: RefreshTokenUseCase,
     private readonly socialAuthUseCase: SocialAuthUseCase,
+    private readonly forgotPasswordUseCase: ForgotPasswordUseCase,
+    private readonly resetPasswordUseCase: ResetPasswordUseCase,
+    private readonly registerUseCase: RegisterUseCase,
   ) {}
 
   @ApiOperation({ summary: 'Connexion avec email et mot de passe' })
@@ -36,7 +48,7 @@ export class AuthenticationController {
     return this.signInUsecase.signIn(signInDto);
   }
 
-  @ApiOperation({ summary: 'Rafraîchir les tokens d\'accès' })
+  @ApiOperation({ summary: "Rafraîchir les tokens d'accès" })
   @ApiResponse({ status: 200, description: 'Nouveaux tokens retournés' })
   @ApiResponse({ status: 401, description: 'Refresh token invalide ou expiré' })
   @HttpCode(HttpStatus.OK)
@@ -82,5 +94,32 @@ export class AuthenticationController {
   linkedinCallback(@Req() req) {
     const user = req.user;
     return this.socialAuthUseCase.authenticate(user);
+  }
+
+  @ApiOperation({ summary: 'Inscription (sign-up)' })
+  @ApiResponse({ status: 201, description: 'Compte créé avec succès' })
+  @Public()
+  @Post('sign-up')
+  signUp(@Body() dto: SignUpDto) {
+    return this.registerUseCase.execute(dto);
+  }
+
+  @ApiOperation({ summary: 'Mot de passe oublié' })
+  @ApiResponse({ status: 200, description: 'Email de réinitialisation envoyé' })
+  @Public()
+  @Post('forgot-password')
+  forgotPassword(@Body() dto: ForgotPasswordDto) {
+    return this.forgotPasswordUseCase.execute(dto);
+  }
+
+  @ApiOperation({ summary: 'Réinitialiser le mot de passe' })
+  @ApiResponse({
+    status: 200,
+    description: 'Mot de passe réinitialisé avec succès',
+  })
+  @Public()
+  @Post('reset-password')
+  resetPassword(@Body() dto: ResetPasswordDto) {
+    return this.resetPasswordUseCase.execute(dto);
   }
 }

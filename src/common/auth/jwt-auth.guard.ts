@@ -1,0 +1,53 @@
+import {
+  CanActivate,
+  ExecutionContext,
+  Inject,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
+import {
+  TOKEN_SERVICE,
+  type TokenService,
+} from 'src/iam/domain/ports/token.service';
+import { IS_PUBLIC_KEY } from '../auth/public.decorator';
+
+@Injectable()
+export class JwtAuthGuard implements CanActivate {
+  constructor(
+    @Inject(TOKEN_SERVICE) private readonly tokenService: TokenService,
+    private readonly reflector: Reflector,
+  ) {}
+
+  async canActivate(context: ExecutionContext): Promise<boolean> {
+    const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+    if (isPublic) return true;
+
+    const request = context.switchToHttp().getRequest();
+    const token = this.extractTokenFromHeader(request);
+
+    if (!token) {
+      throw new UnauthorizedException('Token manquant');
+    }
+
+    try {
+      const payload = await this.tokenService.verifyAccessToken(token);
+      request.user = {
+        userId: payload.sub,
+        email: payload.email,
+      };
+    } catch {
+      throw new UnauthorizedException('Token invalide ou expiré');
+    }
+
+    return true;
+  }
+
+  private extractTokenFromHeader(request: any): string | undefined {
+    const [type, token] = request.headers.authorization?.split(' ') ?? [];
+    return type === 'Bearer' ? token : undefined;
+  }
+}

@@ -60,7 +60,7 @@ export class UserMapper {
     return entity;
   }
 
-  private static tfaToDomain(entity: TFAMethodEntity): TfaMethod {
+  private static tfaToDomain(this: void, entity: TFAMethodEntity): TfaMethod {
     if (entity instanceof EmailMethodEntity) {
       const emailMethod = new EmailMethod();
       emailMethod.emailOtp = entity.emailOTP;
