@@ -5,6 +5,7 @@ import { RedisImplService } from './otp-impl.service';
 
 @Module({
   imports: [IamInfrastructureModule],
-  exports: [{ provide: OTP_SERVICE, useClass: RedisImplService }],
+  providers: [{ provide: OTP_SERVICE, useClass: RedisImplService }],
+  exports: [OTP_SERVICE],
 })
 export class OtpInfrastructureModule {}

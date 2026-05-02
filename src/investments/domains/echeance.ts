@@ -1,0 +1,13 @@
+import { EcheanceStatus } from './enums/investment-status.enum';
+
+export class Echeance {
+  id: string;
+  investissementId: string;
+  numero: number;
+  datePrevue: Date;
+  montantCapital: number;
+  montantInterets: number;
+  montantTotal: number;
+  statut: EcheanceStatus;
+  payeLe: Date | null;
+}

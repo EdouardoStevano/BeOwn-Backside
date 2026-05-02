@@ -1,0 +1,23 @@
+import { ProfilPP } from 'src/profiles/domains/profil-pp';
+import { ProfilPM } from 'src/profiles/domains/profil-pm';
+import { Kyc } from 'src/profiles/domains/kyc';
+import { KycStatus } from 'src/profiles/domains/enums/kyc-status.enum';
+
+export const PROFIL_REPOSITORY = Symbol('PROFIL_REPOSITORY');
+
+export interface ProfilRepository {
+  saveProfilPP(profil: ProfilPP): Promise<ProfilPP>;
+  findProfilPPByUserId(userId: number): Promise<ProfilPP | null>;
+  updateProfilPP(profil: ProfilPP): Promise<ProfilPP>;
+
+  saveProfilPM(profil: ProfilPM): Promise<ProfilPM>;
+  findProfilPMByUserId(userId: number): Promise<ProfilPM | null>;
+
+  saveKyc(kyc: Kyc): Promise<Kyc>;
+  findKycByUserId(userId: number): Promise<Kyc | null>;
+  updateKycStatus(
+    kycId: string,
+    status: KycStatus,
+    motifRefus?: string,
+  ): Promise<Kyc>;
+}

@@ -17,7 +17,10 @@ export class VerifyEmailController {
   }
 
   @ApiOperation({ summary: 'Confirmer un email via token' })
-  @ApiQuery({ name: 'token', description: 'Token de vérification reçu par email' })
+  @ApiQuery({
+    name: 'token',
+    description: 'Token de vérification reçu par email',
+  })
   @ApiResponse({ status: 200, description: 'Email vérifié avec succès' })
   @ApiResponse({ status: 400, description: 'Token invalide ou expiré' })
   @Get('verify')
