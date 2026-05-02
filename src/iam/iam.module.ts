@@ -1,28 +1,27 @@
 import { Module } from '@nestjs/common';
-import { HashingService } from './hashing/hashing.service';
-import { BcryptService } from './hashing/bcrypt.service';
-import { AuthenticationController } from './authentication/authentication.controller';
-import { AuthenticationService } from './authentication/authentication.service';
-import { TypeOrmModule } from '@nestjs/typeorm';
-import { User } from 'src/users/entities/user.entity';
-import { JwtModule } from '@nestjs/jwt';
-import jwtConfig from './config/jwt.config';
+import { IamInfrastructureModule } from './infrastructure/iam-infrastructure.module';
+import { AuthenticationModule } from './authentication/application/authentication.module';
+import { OtpModule } from './authentication/application/otp.module';
+import { UsersInfrastructureModule } from 'src/users/infrastructures/users-infrastructure.module';
+import { VerifyEmailService } from './verify-email/verify-email.service';
+import { VerifyEmailController } from './verify-email/verify-email.controller';
+import { SMS_SERVICE } from 'src/common/sms/sms.service';
+import { TwilioSmsService } from 'src/common/sms/twilio-sms.service';
 import { ConfigModule } from '@nestjs/config';
-import { TokenService } from './token/token.service';
-import { RefreshTokenIdsStorage } from './authentication/refresh-token-ids.storage/refresh-token-ids.storage';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User]),
-    JwtModule.registerAsync(jwtConfig.asProvider()),
-    ConfigModule.forFeature(jwtConfig),
+    IamInfrastructureModule,
+    AuthenticationModule,
+    OtpModule,
+    UsersInfrastructureModule,
+    ConfigModule,
   ],
   providers: [
-    { provide: HashingService, useClass: BcryptService },
-    AuthenticationService,
-    TokenService,
-    RefreshTokenIdsStorage,
+    VerifyEmailService,
+    { provide: SMS_SERVICE, useClass: TwilioSmsService },
   ],
-  controllers: [AuthenticationController],
+  controllers: [VerifyEmailController],
+  exports: [SMS_SERVICE],
 })
 export class IamModule {}

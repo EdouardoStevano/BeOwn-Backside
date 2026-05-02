@@ -1,16 +1,14 @@
 services:
   db:
     image: postgres
-    env_file:
-      - .env
     ports:
-      - '${DATABASE_PORT-5432}:5432'
+      - '${DATABASE_PORT}:5432'
     environment:
       POSTGRES_USER: ${DATABASE_USERNAME}
-      POSTGRES_PASSWORD: ${DATABASE_PASSWORD-pass123}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
       POSTGRES_DB: ${DATABASE_DB}
+
   redis:
     image: redis
     ports:
       - '6379:6379'
-    restart: always

@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/Users/ASUS/AppData/Local/Temp/pdftools/node_modules/pdf-parse/**)",
+      "Read(//c/Users/ASUS/AppData/Local/Temp/**)",
+      "Bash(node extract_pdf2.mjs)",
+      "Bash(node extract_pdf3.mjs)",
+      "Bash(node extract_pdf4.mjs)",
+      "Bash(node extract_pdf5.mjs)",
+      "Bash(cat)",
+      "Bash(node extract_pdf6.mjs)",
+      "PowerShell(npm run build 2>&1)",
+      "PowerShell(npm install stripe twilio @getbrevo/brevo 2>&1)",
+      "PowerShell(npm install --save-dev @types/twilio 2>&1)"
+    ]
+  }
+}
