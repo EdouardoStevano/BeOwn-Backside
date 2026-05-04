@@ -21,3 +21,24 @@ export class VerifyEmailOtpDto {
   @Length(6, 6)
   otp: string;
 }
+
+export class ConfirmTotpDto {
+  @ApiProperty({ example: '123456', description: 'Code TOTP généré par Authy/Google Authenticator' })
+  @IsString()
+  @IsNotEmpty()
+  @Length(6, 6)
+  totp: string;
+}
+
+export class VerifyTotpDto {
+  @ApiProperty({ example: 'uuid-token', description: 'Token de session 2FA' })
+  @IsString()
+  @IsNotEmpty()
+  twoFactorToken: string;
+
+  @ApiProperty({ example: '123456', description: 'Code TOTP généré par votre application' })
+  @IsString()
+  @IsNotEmpty()
+  @Length(6, 6)
+  totp: string;
+}

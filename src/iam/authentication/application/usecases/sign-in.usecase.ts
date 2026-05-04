@@ -32,7 +32,7 @@ import { AuthTokens } from 'src/iam/domain/ports/token.service';
 
 export type SignInResult =
   | AuthTokens
-  | { requiresTwoFactor: true; twoFactorToken: string };
+  | { requiresTwoFactor: true; twoFactorToken: string; method: 'email' | 'totp' };
 
 @Injectable()
 export class SignInUsecase {
@@ -66,7 +66,14 @@ export class SignInUsecase {
       const twoFactorToken = randomUUID();
       await this.cacheManager.insertTwoFactorSession(twoFactorToken, user.userId);
 
-      return { requiresTwoFactor: true, twoFactorToken };
+      return { requiresTwoFactor: true, twoFactorToken, method: 'email' as const };
+    }
+
+    if (user.hasTwoFactorTotpEnabled()) {
+      const twoFactorToken = randomUUID();
+      await this.cacheManager.insertTwoFactorSession(twoFactorToken, user.userId);
+
+      return { requiresTwoFactor: true, twoFactorToken, method: 'totp' as const };
     }
 
     return this.tokenService.generateTokens({

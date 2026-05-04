@@ -1,4 +1,4 @@
-import { EmailMethod, TfaMethod } from './tfa-method';
+import { EmailMethod, TfaMethod, TotpMethod } from './tfa-method';
 import { UserEmail } from './value-objects/user-email.vo';
 
 export class User {
@@ -22,7 +22,15 @@ export class User {
     return this.socialId !== null;
   }
 
+  hasAnyTwoFactorEnabled(): boolean {
+    return this.tfaMethods.some((m) => m.isActive);
+  }
+
   hasTwoFactorEmailEnabled(): boolean {
     return this.tfaMethods.some((m) => m instanceof EmailMethod && m.isActive);
+  }
+
+  hasTwoFactorTotpEnabled(): boolean {
+    return this.tfaMethods.some((m) => m instanceof TotpMethod && m.isActive);
   }
 }

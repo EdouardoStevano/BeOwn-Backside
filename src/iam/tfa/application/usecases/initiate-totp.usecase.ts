@@ -4,34 +4,45 @@ import {
   type UserRepository,
 } from 'src/users/domain/ports/user.repository';
 import {
+  TFA_REPOSITORY,
+  type TfaRepository,
+} from 'src/users/domain/ports/tfa.repository';
+import {
   OTP_SERVICE,
   type OtpService,
 } from 'src/iam/domain/ports/otp.service';
-import {
-  EMAIL_SERVICE,
-  type EmailService,
-} from 'src/common/email/email.service';
+import { TotpMethod } from 'src/users/domains/tfa-method';
 import { InvalidCredentialsError } from 'src/users/domain/errors/invalid-credentials.error';
 import { TfaMethodConflictError } from 'src/users/domain/errors/tfa-method-conflict.error';
 
+export interface TotpSetupPayload {
+  secret: string;
+  uri: string;
+}
+
 @Injectable()
-export class InitiateEmailTfaUseCase {
+export class InitiateTotpUseCase {
   constructor(
     @Inject(USER_REPOSITORY) private readonly userRepository: UserRepository,
+    @Inject(TFA_REPOSITORY) private readonly tfaRepository: TfaRepository,
     @Inject(OTP_SERVICE) private readonly otpService: OtpService,
-    @Inject(EMAIL_SERVICE) private readonly emailService: EmailService,
   ) {}
 
-  async execute(userId: number): Promise<{ message: string }> {
+  async execute(userId: number): Promise<TotpSetupPayload> {
     const user = await this.userRepository.findById(userId);
     if (!user) throw new InvalidCredentialsError();
 
     if (user.hasAnyTwoFactorEnabled()) throw new TfaMethodConflictError();
 
-    const email = user.userEmail.email;
-    const otp = await this.otpService.generateOtp(`2fa-enable:${email}`);
-    await this.emailService.sendTwoFactorCodeEmail(email, otp);
+    const { secret, uri } = this.otpService.generateSecretTotp(user.userEmail.email);
 
-    return { message: 'Code OTP envoyé à votre adresse email.' };
+    const existing = await this.tfaRepository.findTotpMethodByUserId(userId);
+    const method = existing ?? new TotpMethod();
+    method.isActive = true;
+    method.secretKeyOtp = secret;
+
+    await this.tfaRepository.saveTotpMethod(method, userId);
+
+    return { secret, uri };
   }
 }
