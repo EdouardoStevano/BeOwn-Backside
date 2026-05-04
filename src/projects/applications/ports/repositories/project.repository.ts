@@ -1,6 +1,9 @@
 import { Project } from 'src/projects/domains/project';
 import { Spv } from 'src/projects/domains/spv';
-import { ProjectStatus } from 'src/projects/domains/enums/project-status.enum';
+import {
+  ProjectStatus,
+  ProjectType,
+} from 'src/projects/domains/enums/project-status.enum';
 
 export const PROJECT_REPOSITORY = Symbol('PROJECT_REPOSITORY');
 
@@ -10,6 +13,8 @@ export interface ProjectRepository {
   findProjectBySlug(slug: string): Promise<Project | null>;
   findAllProjects(filters?: {
     statut?: ProjectStatus;
+    statuts?: ProjectStatus[];
+    type?: ProjectType;
     page?: number;
     limit?: number;
   }): Promise<{ data: Project[]; total: number }>;

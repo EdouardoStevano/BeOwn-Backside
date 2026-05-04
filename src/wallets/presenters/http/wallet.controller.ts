@@ -11,6 +11,7 @@ import {
 import {
   ApiBearerAuth,
   ApiOperation,
+  ApiParam,
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
@@ -51,6 +52,8 @@ export class WalletController {
   }
 
   @ApiOperation({ summary: "Wallet d'un utilisateur" })
+  @ApiParam({ name: 'userId', description: "ID numérique de l'utilisateur" })
+  @ApiResponse({ status: 200, description: 'Wallet trouvé' })
   @ApiResponse({ status: 404, description: 'Wallet introuvable' })
   @Get('user/:userId')
   async getUserWallet(
@@ -65,6 +68,9 @@ export class WalletController {
   }
 
   @ApiOperation({ summary: "Détail d'un wallet" })
+  @ApiParam({ name: 'id', description: 'UUID du wallet' })
+  @ApiResponse({ status: 200, description: 'Wallet trouvé' })
+  @ApiResponse({ status: 404, description: 'Wallet introuvable' })
   @Get(':id')
   async findOne(@Param('id') id: string): Promise<Wallet> {
     const wallet = await this.walletRepository.findWalletById(id);
@@ -73,6 +79,8 @@ export class WalletController {
   }
 
   @ApiOperation({ summary: "Transactions d'un wallet" })
+  @ApiParam({ name: 'id', description: 'UUID du wallet' })
+  @ApiResponse({ status: 200, description: 'Liste des transactions' })
   @Get(':id/transactions')
   getTransactions(@Param('id') id: string): Promise<Transaction[]> {
     return this.walletRepository.findTransactionsByWallet(id);

@@ -22,8 +22,8 @@
     "migration:run": "ts-node -r tsconfig-paths/register ./node_modules/typeorm/cli.js migration:run -d src/data-source.ts",
     "migration:revert": "ts-node -r tsconfig-paths/register ./node_modules/typeorm/cli.js migration:revert -d src/data-source.ts",
     "migration:drop": "ts-node -r tsconfig-paths/register ./node_modules/typeorm/cli.js migration:drop -d src/data-source",
-    "schema:drop": "typeorm-ts-node-commonjs schema:drop -d src/data-source.ts",
-    "seed": "ts-node -r tsconfig-paths/register src/seeds/seed.ts"
+    "schema:drop": "ts-node -r tsconfig-paths/register ./node_modules/typeorm/cli.js schema:drop -d src/data-source.ts",
+    "seed": "ts-node -r tsconfig-paths/register database/seeds/seed.ts"
   },
   "dependencies": {
     "@getbrevo/brevo": "^5.0.4",
@@ -69,6 +69,7 @@
     "@types/bcrypt": "^6.0.0",
     "@types/express": "^5.0.0",
     "@types/jest": "^30.0.0",
+    "@types/multer": "^2.1.0",
     "@types/node": "^22.10.7",
     "@types/nodemailer": "^7.0.11",
     "@types/passport-facebook": "^3.0.4",

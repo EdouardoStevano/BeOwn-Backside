@@ -8,14 +8,56 @@ import {
   IsPositive,
   IsString,
   IsUUID,
+  IsUrl,
+  IsLatitude,
+  IsLongitude,
+  IsArray,
+  ValidateNested,
   Min,
+  IsInt,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   ProjectInstrument,
   ProjectStatus,
   ProjectType,
 } from 'src/projects/domains/enums/project-status.enum';
+
+export class EtapeChronologieDto {
+  @ApiProperty()
+  @IsString()
+  etape: string;
+
+  @ApiProperty({ example: '2025-06-01' })
+  @IsString()
+  date: string;
+
+  @ApiProperty({ enum: ['done', 'in_progress', 'pending'] })
+  @IsString()
+  statut: 'done' | 'in_progress' | 'pending';
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  description?: string;
+}
+
+export class GarantieDto {
+  @ApiProperty({ example: 'Hypothèque de premier rang' })
+  @IsString()
+  type: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  rang?: number;
+}
 
 export class CreateProjectDto {
   @ApiProperty({ example: 'Résidence Les Arcs - Lyon' })
@@ -111,6 +153,56 @@ export class CreateProjectDto {
   @IsOptional()
   @IsString()
   avertissementMd?: string;
+
+  @ApiPropertyOptional({ example: '5 Rue de la Paix, Dakar' })
+  @IsOptional()
+  @IsString()
+  adresseComplete?: string;
+
+  @ApiPropertyOptional({ example: 14.6928 })
+  @IsOptional()
+  @IsLatitude()
+  latitude?: number;
+
+  @ApiPropertyOptional({ example: -17.4467 })
+  @IsOptional()
+  @IsLongitude()
+  longitude?: number;
+
+  @ApiPropertyOptional({ example: 'https://www.youtube.com/watch?v=xxxx' })
+  @IsOptional()
+  @IsUrl()
+  youtubeUrl?: string;
+
+  @ApiPropertyOptional({ description: 'Nombre total de fractions d\'actif' })
+  @IsOptional()
+  @IsInt()
+  @IsPositive()
+  nbFractions?: number;
+
+  @ApiPropertyOptional({ description: 'Prix unitaire d\'une fraction' })
+  @IsOptional()
+  @IsNumber()
+  @IsPositive()
+  prixFraction?: number;
+
+  @ApiPropertyOptional({ description: 'Prévisionnel financier (objet JSON libre)' })
+  @IsOptional()
+  previsionnel?: any;
+
+  @ApiPropertyOptional({ description: 'Chronologie du projet', type: [EtapeChronologieDto] })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => EtapeChronologieDto)
+  chronologie?: EtapeChronologieDto[];
+
+  @ApiPropertyOptional({ description: 'Garanties offertes', type: [GarantieDto] })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => GarantieDto)
+  garanties?: GarantieDto[];
 }
 
 export class UpdateProjectStatusDto {

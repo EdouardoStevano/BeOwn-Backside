@@ -2,9 +2,18 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import * as express from 'express';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, { rawBody: true });
+  app.use(
+    '/payments/webhook/stripe',
+    express.raw({ type: 'application/json' }),
+  );
+  app.use(
+    '/payments/webhook/sumsub',
+    express.raw({ type: 'application/json' }),
+  );
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -16,12 +25,81 @@ async function bootstrap() {
 
   const config = new DocumentBuilder()
     .setTitle('BeOwn API')
-    .setDescription("Documentation de l'API BeOwn")
-    .setVersion('1.0')
-    .addBearerAuth()
+    .setDescription(
+      `## Plateforme d'investissement immobilier fractionné — Afrique\n\n` +
+        `BeOwn est une plateforme PSFP (Prestataire de Services de Financement Participatif) ` +
+        `permettant l'investissement fractionné dans l'immobilier africain.\n\n` +
+        `### Authentification\n` +
+        `La majorité des routes nécessitent un **JWT Bearer token** obtenu via \`POST /auth/sign-in\`.\n` +
+        `Utilisez le bouton **Authorize** ci-dessus pour renseigner votre token.\n\n` +
+        `### Flux principal\n` +
+        `1. \`POST /auth/sign-up\` — Créer un compte\n` +
+        `2. \`POST /email/send-verification\` + \`GET /email/verify?token=...\` — Vérifier l'email\n` +
+        `3. \`POST /auth/sign-in\` — Obtenir les tokens\n` +
+        `4. \`POST /profiles/:userId/pp\` + \`POST /profiles/:userId/kyc\` — Compléter le profil KYC\n` +
+        `5. \`GET /projects\` — Parcourir les projets\n` +
+        `6. \`POST /payments/depot/intent\` — Déposer des fonds\n` +
+        `7. \`POST /investments\` — Investir dans un projet`,
+    )
+    .setVersion('1.0.0')
+    .addServer(
+      `http://localhost:${process.env.PORT ?? 3001}`,
+      'Développement local',
+    )
+    .addServer('https://api.beown.com', 'Production')
+    .addBearerAuth({
+      type: 'http',
+      scheme: 'bearer',
+      bearerFormat: 'JWT',
+      in: 'header',
+    })
+    .addTag('Health', "Vérification de l'état de l'API")
+    .addTag(
+      'Authentication',
+      'Connexion, inscription, OAuth social, tokens JWT',
+    )
+    .addTag('Email Verification', "Envoi et confirmation d'email")
+    .addTag('OTP / 2FA', 'OTP par email et TOTP (Google Authenticator)')
+    .addTag('Users', 'Gestion des comptes utilisateurs')
+    .addTag('Profiles & KYC', 'Profil investisseur (PP/PM) et dossier KYC')
+    .addTag('Projects', 'Projets immobiliers — CRUD, statuts, SPV')
+    .addTag(
+      'Reservations (Pré-investissement)',
+      'Réservations de parts avant ouverture de collecte',
+    )
+    .addTag('Investments', 'Souscriptions, échéanciers, portfolio')
+    .addTag(
+      'Wallets & Transactions',
+      'Wallets investisseurs et historique des transactions',
+    )
+    .addTag('Payments & KYC', 'Stripe PaymentIntent, retraits, Stripe Identity')
+    .addTag('Marché Secondaire', "Carnet d'ordres, vente/achat de parts")
+    .addTag(
+      'Documents',
+      'Upload et gestion des documents (KYC, projet, investissement)',
+    )
+    .addTag('Notifications', 'Notifications in-app et email')
     .build();
+
   const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api/docs', app, document);
+  SwaggerModule.setup('api/docs', app, document, {
+    swaggerOptions: {
+      persistAuthorization: true,
+      tagsSorter: 'alpha',
+      operationsSorter: 'alpha',
+      docExpansion: 'none',
+      filter: true,
+      showRequestDuration: true,
+    },
+    customSiteTitle: 'BeOwn API Docs',
+  });
+
+  app.enableCors({
+    origin: process.env.FRONTEND_URL ?? 'http://localhost:5173',
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+  });
 
   await app.listen(process.env.PORT ?? 3001);
 }

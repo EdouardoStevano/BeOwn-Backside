@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { NotificationEntity } from './infrastructures/persistences/entities/notification.entity';
-import { AuditLogEntity } from './infrastructures/persistences/entities/audit-log.entity';
+import { NotificationEntity } from './infrastructure/persistences/entities/notification.entity';
+import { AuditLogEntity } from './infrastructure/persistences/entities/audit-log.entity';
 import { NotificationService } from './applications/notification.service';
 import { NotificationController } from './presenters/http/notification.controller';
 import { AuditLogService } from './applications/audit-log.service';

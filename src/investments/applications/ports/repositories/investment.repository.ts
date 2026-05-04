@@ -9,6 +9,8 @@ export interface InvestmentRepository {
   findInvestmentById(id: string): Promise<Investment | null>;
   findByUserId(userId: number): Promise<Investment[]>;
   findByProjetId(projetId: string): Promise<Investment[]>;
+  countFractionsVendues(projetId: string): Promise<number>;
+  countFractionsVenduesBatch(projetIds: string[]): Promise<Record<string, number>>;
   updateInvestmentStatus(
     id: string,
     status: InvestmentStatus,

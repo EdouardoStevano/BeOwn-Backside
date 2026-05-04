@@ -44,6 +44,15 @@ export class CreateProjectUseCase {
       : null;
     project.descriptionMd = dto.descriptionMd ?? null;
     project.avertissementMd = dto.avertissementMd ?? null;
+    project.adresseComplete = dto.adresseComplete ?? null;
+    project.latitude = dto.latitude ?? null;
+    project.longitude = dto.longitude ?? null;
+    project.youtubeUrl = dto.youtubeUrl ?? null;
+    project.nbFractions = dto.nbFractions ?? null;
+    project.prixFraction = dto.prixFraction ?? null;
+    project.previsionnel = dto.previsionnel ?? null;
+    project.chronologie = dto.chronologie ?? [];
+    project.garanties = dto.garanties ?? [];
 
     return this.projectRepository.saveProject(project);
   }

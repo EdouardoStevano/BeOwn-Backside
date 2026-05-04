@@ -1,5 +1,5 @@
-import { Inject } from '@nestjs/common';
-import { CacheManagerService } from '../domain/ports/cahe-manager.service';
+﻿import { Inject } from '@nestjs/common';
+import { CacheManagerService } from '../domains/ports/cahe-manager.service';
 import { CACHE_MANAGER, type Cache } from '@nestjs/cache-manager';
 
 export class RedisCacheService implements CacheManagerService {

@@ -1,6 +1,6 @@
 import {
   IsEnum,
-  IsNumber,
+  IsInt,
   IsOptional,
   IsPositive,
   IsUUID,
@@ -12,14 +12,18 @@ import {
 } from 'src/investments/domains/enums/investment-status.enum';
 
 export class CreateInvestmentDto {
-  @ApiProperty({ example: 'uuid-du-projet' })
+  @ApiProperty({ description: 'UUID du projet', example: 'uuid-du-projet' })
   @IsUUID()
   projetId: string;
 
-  @ApiProperty({ example: 5000 })
-  @IsNumber()
+  @ApiProperty({
+    description: 'Nombre de fractions à acheter (1 fraction = prixFraction du projet)',
+    example: 3,
+    minimum: 1,
+  })
+  @IsInt()
   @IsPositive()
-  montant: number;
+  nbFractions: number;
 
   @ApiPropertyOptional({ enum: RemboursementMode })
   @IsOptional()

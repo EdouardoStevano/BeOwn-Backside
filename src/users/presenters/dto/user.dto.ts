@@ -1,6 +1,7 @@
 import {
   IsEmail,
   IsNotEmpty,
+  IsOptional,
   IsString,
   Matches,
   MinLength,
@@ -30,4 +31,18 @@ export class RegisterDto {
       'Le mot de passe doit contenir au moins une majuscule, une minuscule et un chiffre',
   })
   password: string;
+}
+
+export class UpdateUserDto {
+  @ApiPropertyOptional({ example: 'Jean' })
+  @IsOptional()
+  @IsString()
+  @MinLength(2)
+  firstname?: string;
+
+  @ApiPropertyOptional({ example: 'Dupont' })
+  @IsOptional()
+  @IsString()
+  @MinLength(2)
+  lastname?: string;
 }

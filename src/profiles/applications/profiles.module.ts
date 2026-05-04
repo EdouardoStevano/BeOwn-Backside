@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { ProfilesInfrastructureModule } from '../infrastructures/profiles-infrastructure.module';
+import { ProfilesInfrastructureModule } from '../infrastructure/profiles-infrastructure.module';
 import { CreateProfilPPUseCase } from './usecases/create-profil-pp.usecase';
 import { CreateKycUseCase } from './usecases/create-kyc.usecase';
 import { UpdateKycStatusUseCase } from './usecases/update-kyc-status.usecase';

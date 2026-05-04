@@ -1,23 +1,28 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
   Headers,
   HttpCode,
   HttpStatus,
+  Logger,
   Param,
   Post,
   Req,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
+  ApiHeader,
   ApiOperation,
+  ApiParam,
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { StripePaymentService } from '../../infrastructure/stripe-payment.service';
 import { StripeIdentityServiceImpl } from '../../infrastructure/stripe-identity.service';
+import { SumsubService } from '../../infrastructure/sumsub.service';
 import {
   ConfirmDepotDto,
   CreatePaymentIntentDto,
@@ -27,8 +32,8 @@ import {
 import Stripe from 'stripe';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { WalletEntity } from 'src/wallets/infrastructures/persistences/entities/wallet.entity';
-import { TransactionEntity } from 'src/wallets/infrastructures/persistences/entities/transaction.entity';
+import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/wallet.entity';
+import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entities/transaction.entity';
 import {
   TransactionFournisseur,
   TransactionStatus,
@@ -40,15 +45,21 @@ import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
 import { UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
+import { UpdateKycStatusUseCase } from 'src/profiles/applications/usecases/update-kyc-status.usecase';
+import { KycStatus } from 'src/profiles/domains/enums/kyc-status.enum';
 
 @ApiTags('Payments & KYC')
 @ApiBearerAuth()
 @Controller('payments')
 @UseGuards(JwtAuthGuard)
 export class PaymentController {
+  private readonly logger = new Logger(PaymentController.name);
+
   constructor(
     private readonly stripeService: StripePaymentService,
     private readonly identityService: StripeIdentityServiceImpl,
+    private readonly sumsubService: SumsubService,
+    private readonly updateKycStatus: UpdateKycStatusUseCase,
     @InjectRepository(WalletEntity)
     private readonly walletRepo: Repository<WalletEntity>,
     @InjectRepository(TransactionEntity)
@@ -181,6 +192,65 @@ export class PaymentController {
     return { success: true, transactionId: tx.id, status: tx.statut };
   }
 
+  // ─── KYC Sumsub ──────────────────────────────────────────────────────────
+
+  @ApiOperation({ summary: 'Obtenir un access token Sumsub pour le SDK Web' })
+  @ApiResponse({ status: 200, description: 'Token Sumsub retourné' })
+  @Get('kyc/sumsub/token')
+  async getSumsubToken(@CurrentUser() user: ActiveUser) {
+    return this.sumsubService.generateAccessToken(String(user.userId));
+  }
+
+  @ApiOperation({ summary: 'Webhook Sumsub (signature HMAC requise)' })
+  @ApiHeader({
+    name: 'x-payload-digest',
+    description: 'Signature HMAC Sumsub',
+    required: false,
+  })
+  @ApiResponse({ status: 200, description: 'Événement reçu et traité' })
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @Post('webhook/sumsub')
+  async handleSumsubWebhook(
+    @Headers('x-payload-digest') digest: string,
+    @Req() req: Request,
+  ) {
+    const rawBody = (req as any).rawBody as Buffer | undefined;
+    if (
+      digest &&
+      rawBody &&
+      !this.sumsubService.verifyWebhookSignature(rawBody, digest)
+    ) {
+      throw new BadRequestException('Invalid Sumsub webhook signature');
+    }
+
+    const event = req.body as any;
+    this.logger.log(
+      `Sumsub webhook received: type=${event?.type}, externalUserId=${event?.externalUserId}`,
+    );
+
+    if (event.type === 'applicantReviewed') {
+      const userId = parseInt(event.externalUserId, 10);
+      if (!isNaN(userId)) {
+        const reviewAnswer = event.reviewResult?.reviewAnswer;
+        if (reviewAnswer === 'GREEN') {
+          await this.updateKycStatus.execute(userId, KycStatus.VALIDE);
+        } else if (reviewAnswer === 'RED') {
+          const motif =
+            event.reviewResult?.moderationComment ?? 'KYC refusé par Sumsub';
+          await this.updateKycStatus.execute(userId, KycStatus.REFUSE, motif);
+        }
+      }
+    } else if (event.type === 'applicantPending') {
+      const userId = parseInt(event.externalUserId, 10);
+      if (!isNaN(userId)) {
+        await this.updateKycStatus.execute(userId, KycStatus.EN_REVUE);
+      }
+    }
+
+    return { received: true, type: event?.type };
+  }
+
   // ─── KYC Stripe Identity ──────────────────────────────────────────────────
 
   @ApiOperation({ summary: 'Démarrer une session KYC Stripe Identity' })
@@ -194,12 +264,22 @@ export class PaymentController {
   }
 
   @ApiOperation({ summary: "Consulter le statut d'une session KYC" })
+  @ApiParam({
+    name: 'sessionId',
+    description: 'ID de la session Stripe Identity (vs_xxx)',
+  })
+  @ApiResponse({ status: 200, description: 'Statut de la session KYC' })
   @Get('kyc/session/:sessionId')
   async getKycSession(@Param('sessionId') sessionId: string) {
     return this.identityService.retrieveVerificationSession(sessionId);
   }
 
   @ApiOperation({ summary: 'Annuler une session KYC' })
+  @ApiParam({
+    name: 'sessionId',
+    description: 'ID de la session Stripe Identity (vs_xxx)',
+  })
+  @ApiResponse({ status: 204, description: 'Session annulée' })
   @HttpCode(HttpStatus.NO_CONTENT)
   @Post('kyc/session/:sessionId/cancel')
   async cancelKycSession(@Param('sessionId') sessionId: string) {
@@ -208,7 +288,17 @@ export class PaymentController {
 
   // ─── Webhook Stripe ────────────────────────────────────────────────────────
 
-  @ApiOperation({ summary: 'Webhook Stripe (signature HMAC requise)' })
+  @ApiOperation({
+    summary: 'Webhook Stripe (signature HMAC requise)',
+    description:
+      'Endpoint appelé par Stripe. La signature `stripe-signature` dans le header est vérifiée via `STRIPE_WEBHOOK_SECRET`.',
+  })
+  @ApiHeader({
+    name: 'stripe-signature',
+    description: 'Signature HMAC Stripe',
+    required: true,
+  })
+  @ApiResponse({ status: 200, description: 'Événement reçu et traité' })
   @Public()
   @Post('webhook/stripe')
   async handleStripeWebhook(

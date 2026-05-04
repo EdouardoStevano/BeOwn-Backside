@@ -4,8 +4,8 @@ import { Repository } from 'typeorm';
 import {
   NotificationEntity,
   NotificationCanal,
-} from '../infrastructures/persistences/entities/notification.entity';
-import { UserEntity } from 'src/users/infrastructures/persistences/entities/user.entity';
+} from '../infrastructure/persistences/entities/notification.entity';
+import { UserEntity } from 'src/users/infrastructure/persistences/entities/user.entity';
 
 @Injectable()
 export class NotificationService {

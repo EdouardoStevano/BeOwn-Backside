@@ -1,0 +1,67 @@
+import { Injectable } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { AvisEntity } from '../entities/avis.entity';
+import { AvisRepository } from 'src/avis/applications/ports/repositories/avis.repository';
+import { Avis } from 'src/avis/domains/avis';
+
+@Injectable()
+export class AvisTypeOrmRepository implements AvisRepository {
+  constructor(
+    @InjectRepository(AvisEntity)
+    private readonly repo: Repository<AvisEntity>,
+  ) {}
+
+  async save(avis: Avis): Promise<Avis> {
+    const entity = this.repo.create({
+      projetId: avis.projetId,
+      userId: avis.userId,
+      note: avis.note,
+      commentaire: avis.commentaire ?? null,
+    });
+    const saved = await this.repo.save(entity);
+    return this.toAvis(saved);
+  }
+
+  async findByProjetId(projetId: string): Promise<Avis[]> {
+    const entities = await this.repo.find({
+      where: { projetId },
+      order: { createdAt: 'DESC' },
+    });
+    return entities.map((e) => this.toAvis(e));
+  }
+
+  async findByUserAndProjet(
+    userId: number,
+    projetId: string,
+  ): Promise<Avis | null> {
+    const entity = await this.repo.findOne({ where: { userId, projetId } });
+    return entity ? this.toAvis(entity) : null;
+  }
+
+  async getStats(
+    projetId: string,
+  ): Promise<{ noteMoyenne: number; nbAvis: number }> {
+    const result = await this.repo
+      .createQueryBuilder('a')
+      .select('AVG(a.note)', 'avg')
+      .addSelect('COUNT(*)', 'count')
+      .where('a.projetId = :projetId', { projetId })
+      .getRawOne();
+    return {
+      noteMoyenne: result?.avg ? Math.round(Number(result.avg) * 10) / 10 : 0,
+      nbAvis: Number(result?.count ?? 0),
+    };
+  }
+
+  private toAvis(e: AvisEntity): Avis {
+    const avis = new Avis();
+    avis.id = e.id;
+    avis.projetId = e.projetId;
+    avis.userId = e.userId;
+    avis.note = e.note;
+    avis.commentaire = e.commentaire;
+    avis.createdAt = e.createdAt;
+    return avis;
+  }
+}

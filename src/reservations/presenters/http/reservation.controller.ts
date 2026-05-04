@@ -12,6 +12,7 @@ import {
 import {
   ApiBearerAuth,
   ApiOperation,
+  ApiParam,
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
@@ -61,6 +62,7 @@ export class ReservationController {
   }
 
   @ApiOperation({ summary: 'Lister mes réservations' })
+  @ApiParam({ name: 'userId', description: "ID numérique de l'utilisateur" })
   @ApiResponse({ status: 200, description: 'Liste des réservations' })
   @Get('user/:userId')
   listByUser(@Param('userId', ParseIntPipe) userId: number) {
@@ -68,6 +70,7 @@ export class ReservationController {
   }
 
   @ApiOperation({ summary: "Lister les réservations d'un projet" })
+  @ApiParam({ name: 'projetId', description: 'UUID du projet' })
   @ApiResponse({ status: 200, description: 'Liste des réservations du projet' })
   @Get('project/:projetId')
   listByProject(@Param('projetId') projetId: string) {
@@ -75,10 +78,9 @@ export class ReservationController {
   }
 
   @ApiOperation({ summary: 'Annuler une réservation (investisseur)' })
-  @ApiResponse({
-    status: 200,
-    description: 'Réservation annulée, fonds débloqués',
-  })
+  @ApiParam({ name: 'id', description: 'UUID de la réservation' })
+  @ApiResponse({ status: 200, description: 'Réservation annulée, fonds débloqués' })
+  @ApiResponse({ status: 404, description: 'Réservation introuvable' })
   @HttpCode(HttpStatus.OK)
   @Delete(':id/cancel')
   cancel(
@@ -90,6 +92,7 @@ export class ReservationController {
   }
 
   @ApiOperation({ summary: 'Annuler une réservation (admin)' })
+  @ApiParam({ name: 'id', description: 'UUID de la réservation' })
   @ApiResponse({ status: 200, description: 'Réservation annulée par admin' })
   @HttpCode(HttpStatus.OK)
   @Delete(':id/admin-cancel')

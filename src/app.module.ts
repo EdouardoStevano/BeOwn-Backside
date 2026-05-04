@@ -1,16 +1,22 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule } from '@nestjs/config';
 import { UsersModule } from './users/applications/users.module';
+import { HealthController } from './health/health.controller';
 import { IamModule } from './iam/iam.module';
+import { IamInfrastructureModule } from './iam/infrastructure/iam-infrastructure.module';
+import { JwtAuthGuard } from './common/auth/jwt-auth.guard';
 import { ProfilesModule } from './profiles/applications/profiles.module';
 import { ProjectsModule } from './projects/applications/projects.module';
 import { ReservationsModule } from './reservations/applications/reservations.module';
 import { InvestmentsModule } from './investments/applications/investments.module';
 import { WalletsModule } from './wallets/applications/wallets.module';
 import { PaymentsModule } from './payments/payments.module';
-import { SecondaryMarketModule } from './secondary-market/applications/secondary-market.module';
+import { SecondaryMarketModule } from './secondarymarket/applications/secondary-market.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { DocumentsModule } from './documents/applications/documents.module';
+import { NotificationTestModule } from './common/test/notification-test.module';
 import { MailerModule } from '@nestjs-modules/mailer';
 import { CacheModule } from '@nestjs/cache-manager';
 import * as redisStore from 'cache-manager-ioredis';
@@ -51,6 +57,7 @@ import * as redisStore from 'cache-manager-ioredis';
         },
       }),
     }),
+    IamInfrastructureModule,
     UsersModule,
     IamModule,
     ProfilesModule,
@@ -61,6 +68,12 @@ import * as redisStore from 'cache-manager-ioredis';
     PaymentsModule,
     SecondaryMarketModule,
     NotificationsModule,
+    DocumentsModule,
+    ...(process.env.NODE_ENV !== 'production' ? [NotificationTestModule] : []),
+  ],
+  controllers: [HealthController],
+  providers: [
+    { provide: APP_GUARD, useClass: JwtAuthGuard },
   ],
 })
 export class AppModule {}

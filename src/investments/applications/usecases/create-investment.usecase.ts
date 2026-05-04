@@ -33,32 +33,50 @@ export class CreateInvestmentUseCase {
 
     if (project.statut !== ProjectStatus.EN_COLLECTE) {
       throw new BadRequestException(
-        "L'investissement n'est possible que sur un projet en cours de collecte.",
+        project.statut === ProjectStatus.FINANCE
+          ? 'Ce projet est déjà entièrement financé.'
+          : "L'investissement n'est possible que sur un projet en cours de collecte.",
       );
     }
 
-    if (dto.montant < project.ticketMinimum) {
+    // Prix par fraction = ticketMinimum du projet
+    const prixFraction = Number(project.ticketMinimum);
+
+    // Nombre total de fractions du projet (calculé si non renseigné explicitement)
+    const nbFractionsTotal =
+      project.nbFractions ?? Math.floor(Number(project.capitalCible) / prixFraction);
+
+    // Fractions déjà vendues (investissements actifs hors rétractés/annulés)
+    const fractionsVendues = await this.investmentRepository.countFractionsVendues(dto.projetId);
+    const fractionsDisponibles = nbFractionsTotal - fractionsVendues;
+
+    if (fractionsDisponibles <= 0) {
       throw new BadRequestException(
-        `Montant minimum : ${project.ticketMinimum} €`,
+        'Il ne reste plus de fractions disponibles sur ce projet.',
       );
     }
 
-    if (project.ticketMaximum && dto.montant > project.ticketMaximum) {
+    if (dto.nbFractions > fractionsDisponibles) {
       throw new BadRequestException(
-        `Montant maximum : ${project.ticketMaximum} €`,
+        `Seulement ${fractionsDisponibles} fraction(s) disponible(s) sur ce projet.`,
       );
     }
 
-    const valeurTitre = project.ticketMinimum;
-    const nbTitres = Math.floor(dto.montant / valeurTitre);
+    const montant = dto.nbFractions * prixFraction;
+
+    if (project.ticketMaximum && montant > Number(project.ticketMaximum)) {
+      throw new BadRequestException(
+        `Votre investissement dépasse le ticket maximum de ${project.ticketMaximum}.`,
+      );
+    }
 
     const investment = new Investment();
     investment.projetId = dto.projetId;
     investment.utilisateurId = userId;
-    investment.montant = dto.montant;
+    investment.montant = montant;
     investment.instrument = project.instrument;
-    investment.nbTitres = nbTitres;
-    investment.valeurTitre = valeurTitre;
+    investment.nbTitres = dto.nbFractions;
+    investment.valeurTitre = prixFraction;
     investment.statut = InvestmentStatus.INITIE;
     investment.delaiRetractationJusquAu = null;
     investment.bulletinDocId = null;
@@ -69,12 +87,21 @@ export class CreateInvestmentUseCase {
 
     const echeances = this.generateEcheances(
       saved.id,
-      dto.montant,
+      montant,
       project.triCible ?? 0,
       project.dureeMois,
       dto.modeRemboursement ?? RemboursementMode.IN_FINE,
     );
     await this.investmentRepository.saveEcheances(echeances);
+
+    // Auto-transition vers FINANCE si toutes les fractions sont vendues
+    const totalApresAchat = fractionsVendues + dto.nbFractions;
+    if (totalApresAchat >= nbFractionsTotal) {
+      await this.projectRepository.updateProjectStatus(
+        dto.projetId,
+        ProjectStatus.FINANCE,
+      );
+    }
 
     return saved;
   }

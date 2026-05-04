@@ -1,8 +1,8 @@
-import { Inject } from '@nestjs/common';
+﻿import { Inject } from '@nestjs/common';
 import {
   CACHE_MANAGER_SERVICE,
   type CacheManagerService,
-} from '../domain/ports/cahe-manager.service';
+} from '../domains/ports/cahe-manager.service';
 import { JwtService } from '@nestjs/jwt';
 import jwtConfig from './config/jwt.config';
 import { type ConfigType } from '@nestjs/config';
@@ -11,7 +11,7 @@ import {
   EmailTokenPayload,
   TokenPayload,
   TokenService,
-} from '../domain/ports/token.service';
+} from '../domains/ports/token.service';
 import { randomUUID } from 'crypto';
 
 export class JwtTokenService implements TokenService {
