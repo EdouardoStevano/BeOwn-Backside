@@ -63,7 +63,7 @@ export class SocialAuthUseCase {
         throw new ConflictException('Email already in use');
       }
 
-      throw new InternalServerErrorException(err.message);
+      throw new InternalServerErrorException('Authentification échouée');
     }
   }
 }

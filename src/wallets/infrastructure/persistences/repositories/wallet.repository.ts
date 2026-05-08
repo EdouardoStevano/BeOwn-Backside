@@ -71,9 +71,10 @@ export class WalletTypeOrmRepository implements WalletRepository {
   async findTransactionsByWallet(walletId: string): Promise<Transaction[]> {
     const entities = await this.txRepo
       .createQueryBuilder('t')
-      .where('t.walletSource = :id OR t.walletDestination = :id', {
-        id: walletId,
-      })
+      .where(
+        't.walletSource = :id OR t.walletDestination = :id OR t.walletId = :id',
+        { id: walletId },
+      )
       .orderBy('t.createdAt', 'DESC')
       .getMany();
     return entities.map(WalletMapper.txToDomain);

@@ -12,6 +12,7 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
+import { createHash } from 'crypto';
 import {
   ApiTags,
   ApiOperation,
@@ -49,7 +50,9 @@ import { CreateAvisDto } from 'src/avis/presenters/dto/avis.dto';
 import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
 import { Public } from 'src/common/auth/public.decorator';
+import { SkipThrottle } from '@nestjs/throttler';
 
+@SkipThrottle()
 @ApiTags('Projects')
 @ApiBearerAuth()
 @Controller('projects')
@@ -177,6 +180,57 @@ export class ProjectController {
   @Get('spv/list')
   listSpv() {
     return this.projectRepository.findAllSpv();
+  }
+
+  // ─── Partage ───────────────────────────────────────────────────────────────
+
+  @ApiOperation({ summary: 'Obtenir le lien de partage d\'un projet' })
+  @ApiParam({ name: 'id', description: 'UUID du projet' })
+  @ApiResponse({ status: 200, description: 'Token de partage retourné' })
+  @ApiResponse({ status: 404, description: 'Projet introuvable' })
+  @Public()
+  @Get(':id/share')
+  async getShareToken(@Param('id') id: string) {
+    const project = await this.projectRepository.findProjectById(id);
+    if (!project) throw new NotFoundException('Projet introuvable.');
+    const secret = process.env.PROJECT_SHARE_SECRET || 'beown-share-secret';
+    const token = createHash('sha256')
+      .update(`${id}${secret}`)
+      .digest('hex')
+      .substring(0, 16);
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    return {
+      shareToken: token,
+      shareUrl: `${frontendUrl}/p/${token}`,
+    };
+  }
+
+  @ApiOperation({ summary: 'Obtenir un projet via son token de partage (accès public)' })
+  @ApiParam({ name: 'token', description: 'Token de partage (16 caractères)' })
+  @ApiResponse({ status: 200, description: 'Données publiques du projet' })
+  @ApiResponse({ status: 404, description: 'Projet introuvable' })
+  @Public()
+  @Get('shared/:token')
+  async findByShareToken(@Param('token') token: string) {
+    const secret = process.env.PROJECT_SHARE_SECRET || 'beown-share-secret';
+    const allProjects = await this.getProjects.execute({
+      statuts: [
+        ProjectStatus.EN_COLLECTE,
+        ProjectStatus.PRE_INVESTISSEMENT,
+        ProjectStatus.FINANCE,
+      ],
+      page: 1,
+      limit: 1000,
+    });
+    const project = allProjects.data.find((p) => {
+      const expected = createHash('sha256')
+        .update(`${p.id}${secret}`)
+        .digest('hex')
+        .substring(0, 16);
+      return expected === token;
+    });
+    if (!project) throw new NotFoundException('Lien de partage invalide ou projet introuvable.');
+    return this.buildProjectDetail(project.id);
   }
 
   // ─── Avis ──────────────────────────────────────────────────────────────────

@@ -3,9 +3,31 @@ import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import * as express from 'express';
+import helmet from 'helmet';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { rawBody: true });
+
+  app.use(helmet({
+    crossOriginEmbedderPolicy: false,
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", "'unsafe-inline'", 'https://*.stripe.com', 'https://js.stripe.com'],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", 'data:', 'https:'],
+        frameSrc: ["'self'", 'https://*.stripe.com'],
+        connectSrc: [
+          "'self'",
+          process.env.FRONTEND_URL ?? 'http://localhost:5173',
+          process.env.ADMIN_URL ?? 'http://localhost:5174',
+          'https://*.stripe.com',
+          'https://*.stripe.network',
+        ],
+      },
+    },
+  }));
+
   app.use(
     '/payments/webhook/stripe',
     express.raw({ type: 'application/json' }),
@@ -43,7 +65,7 @@ async function bootstrap() {
     )
     .setVersion('1.0.0')
     .addServer(
-      `http://localhost:${process.env.PORT ?? 3001}`,
+      `http://localhost:${process.env.PORT ?? 3002}`,
       'Développement local',
     )
     .addServer('https://api.beown.com', 'Production')
@@ -94,8 +116,19 @@ async function bootstrap() {
     customSiteTitle: 'BeOwn API Docs',
   });
 
+  const allowedOrigins = [
+    process.env.FRONTEND_URL ?? 'http://localhost:5173',
+    process.env.ADMIN_URL ?? 'http://localhost:5174',
+  ];
+
   app.enableCors({
-    origin: process.env.FRONTEND_URL ?? 'http://localhost:5173',
+    origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error(`CORS: origin ${origin} not allowed`));
+      }
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],

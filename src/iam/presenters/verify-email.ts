@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Post, Query } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
-import { VerifyEmailService } from './verify-email.service';
-import { EmailVerificationDto } from './dto/email-verification.dto';
+import { VerifyEmailService } from '../applications/verify-email/verify-email.service';
+import { EmailVerificationDto } from '../applications/verify-email/dto/email-verification.dto';
 
 @ApiTags('Email Verification')
 @Controller('email')

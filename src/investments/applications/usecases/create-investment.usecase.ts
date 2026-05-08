@@ -8,6 +8,8 @@ import type { InvestmentRepository } from '../ports/repositories/investment.repo
 import { INVESTMENT_REPOSITORY } from '../ports/repositories/investment.repository';
 import type { ProjectRepository } from 'src/projects/applications/ports/repositories/project.repository';
 import { PROJECT_REPOSITORY } from 'src/projects/applications/ports/repositories/project.repository';
+import type { WalletRepository } from 'src/wallets/applications/ports/repositories/wallet.repository';
+import { WALLET_REPOSITORY } from 'src/wallets/applications/ports/repositories/wallet.repository';
 import { Investment } from 'src/investments/domains/investment';
 import { Echeance } from 'src/investments/domains/echeance';
 import {
@@ -17,6 +19,13 @@ import {
 } from 'src/investments/domains/enums/investment-status.enum';
 import { CreateInvestmentDto } from 'src/investments/presenters/dto/investment.dto';
 import { ProjectStatus } from 'src/projects/domains/enums/project-status.enum';
+import { WalletType } from 'src/wallets/domains/enums/wallet.enum';
+import { Transaction } from 'src/wallets/domains/transaction';
+import {
+  TransactionFournisseur,
+  TransactionStatus,
+  TransactionType,
+} from 'src/wallets/domains/enums/wallet.enum';
 
 @Injectable()
 export class CreateInvestmentUseCase {
@@ -25,6 +34,8 @@ export class CreateInvestmentUseCase {
     private readonly investmentRepository: InvestmentRepository,
     @Inject(PROJECT_REPOSITORY)
     private readonly projectRepository: ProjectRepository,
+    @Inject(WALLET_REPOSITORY)
+    private readonly walletRepository: WalletRepository,
   ) {}
 
   async execute(userId: number, dto: CreateInvestmentDto): Promise<Investment> {
@@ -70,6 +81,22 @@ export class CreateInvestmentUseCase {
       );
     }
 
+    // ── Wallet check & deduction ──────────────────────────────────────────────
+    const wallet = await this.walletRepository.findWalletByUser(
+      userId,
+      WalletType.INVESTISSEUR,
+    );
+    if (!wallet) {
+      throw new BadRequestException(
+        'Wallet introuvable. Veuillez alimenter votre compte avant d\'investir.',
+      );
+    }
+    if (Number(wallet.solde) < montant) {
+      throw new BadRequestException(
+        `Solde insuffisant. Disponible : ${wallet.solde} XOF — Requis : ${montant} XOF`,
+      );
+    }
+
     const investment = new Investment();
     investment.projetId = dto.projetId;
     investment.utilisateurId = userId;
@@ -77,13 +104,37 @@ export class CreateInvestmentUseCase {
     investment.instrument = project.instrument;
     investment.nbTitres = dto.nbFractions;
     investment.valeurTitre = prixFraction;
-    investment.statut = InvestmentStatus.INITIE;
+    investment.statut = InvestmentStatus.CONFIRME;
     investment.delaiRetractationJusquAu = null;
     investment.bulletinDocId = null;
     investment.signatureId = null;
     investment.reservationId = dto.reservationId ?? null;
 
     const saved = await this.investmentRepository.saveInvestment(investment);
+
+    // Deduct wallet (atomic SQL update: solde = solde - delta)
+    await this.walletRepository.updateSolde(wallet.id, -montant);
+
+    // Record ledger transaction
+    const tx = new Transaction();
+    tx.walletSource = wallet.id;
+    tx.walletDestination = null;
+    tx.type = TransactionType.SOUSCRIPTION;
+    tx.montant = montant;
+    tx.devise = wallet.devise;
+    tx.statut = TransactionStatus.REUSSI;
+    tx.fournisseur = TransactionFournisseur.INTERNE;
+    tx.referenceExterne = null;
+    tx.investissementId = saved.id;
+    tx.echeanceId = null;
+    tx.reservationId = null;
+    tx.projetId = dto.projetId;
+    tx.idempotencyKey = `invest:${userId}:${saved.id}`;
+    tx.fraisPsp = 0;
+    tx.fraisPlateforme = 0;
+    tx.metadata = null;
+    tx.motifEchec = null;
+    await this.walletRepository.saveTransaction(tx);
 
     const echeances = this.generateEcheances(
       saved.id,

@@ -1,4 +1,5 @@
-﻿import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+﻿import { Injectable, Logger, NotFoundException, InternalServerErrorException } from '@nestjs/common';
+import { randomBytes } from 'crypto';
 import { Inject } from '@nestjs/common';
 import {
   TOKEN_SERVICE,
@@ -31,7 +32,7 @@ export class ForgotPasswordUseCase {
     const payload: EmailTokenPayload = {
       sub: user.userId,
       email: user.userEmail.email,
-      emailTokenId: Math.random().toString(36).substring(7),
+      emailTokenId: randomBytes(32).toString('hex'),
     };
 
     const token = await this.tokenService.generateEmailToken(payload);
@@ -41,6 +42,9 @@ export class ForgotPasswordUseCase {
         await this.emailService.sendPasswordResetEmail(dto.email, token);
       } catch (err) {
         this.logger.error('Failed to send password reset email', err);
+        throw new InternalServerErrorException(
+          "Impossible d'envoyer l'email de réinitialisation. Veuillez réessayer.",
+        );
       }
     }
   }

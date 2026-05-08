@@ -1,3 +1,5 @@
+import { AuthTokens } from './token.service';
+
 export const CACHE_MANAGER_SERVICE = Symbol('CACHE_MANAGER_SERVICE');
 
 export interface CacheManagerService {
@@ -10,4 +12,6 @@ export interface CacheManagerService {
   invalidateRefreshTokenId(email: string): Promise<void>;
   insertEmailTokenId(email: string, emailTokenId: string): Promise<void>;
   invalidateEmailTokenId(email: string): Promise<void>;
+  insertOAuthCode(code: string, tokens: AuthTokens): Promise<void>;
+  getAndDeleteOAuthCode(code: string): Promise<AuthTokens | null>;
 }

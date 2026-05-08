@@ -12,4 +12,14 @@ export class Kyc {
   motifRefus: string | null;
   createdAt: Date;
   updatedAt: Date;
+  // Populated when loaded with relations (admin list)
+  utilisateur?: {
+    userId: number;
+    firstname?: string;
+    lastname?: string;
+    role: string;
+    status: string;
+    createdAt?: Date;
+    userEmail?: { email: string };
+  };
 }

@@ -16,7 +16,12 @@ export class UserTypeOrmRepository implements UserRepository {
   async save(user: User): Promise<User> {
     const entity = UserMapper.toEntity(user);
     const saved = await this.usersRepository.save(entity);
-    return UserMapper.toDomain(saved);
+    // Reload with relations — TypeORM save() does not auto-populate them
+    const reloaded = await this.usersRepository.findOne({
+      where: { userId: saved.userId },
+      relations: ['userEmail', 'tfaMethods'],
+    });
+    return UserMapper.toDomain(reloaded ?? saved);
   }
 
   async findById(userId: number): Promise<User | null> {
@@ -48,8 +53,9 @@ export class UserTypeOrmRepository implements UserRepository {
   }
 
   async findOneBySocialId(socialId: string): Promise<User | null> {
-    const userEntity = await this.usersRepository.findOneBy({
-      socialId: socialId,
+    const userEntity = await this.usersRepository.findOne({
+      where: { socialId },
+      relations: ['userEmail', 'tfaMethods'],
     });
     return userEntity ? UserMapper.toDomain(userEntity) : null;
   }

@@ -19,7 +19,7 @@ export class GetKycUseCase {
     return kyc;
   }
 
-  async executeAll() {
-    return this.profilRepository.findKycByUserId(0);
+  async executeAll(params?: { page?: number; limit?: number }) {
+    return this.profilRepository.findAllKyc(params);
   }
 }

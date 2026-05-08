@@ -29,7 +29,6 @@ import {
   CreateRetraitDto,
   StartKycVerificationDto,
 } from '../dto/payment.dto';
-import Stripe from 'stripe';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/wallet.entity';
@@ -47,7 +46,9 @@ import { UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
 import { UpdateKycStatusUseCase } from 'src/profiles/applications/usecases/update-kyc-status.usecase';
 import { KycStatus } from 'src/profiles/domains/enums/kyc-status.enum';
+import { SkipThrottle } from '@nestjs/throttler';
 
+@SkipThrottle({ short: true, medium: true })
 @ApiTags('Payments & KYC')
 @ApiBearerAuth()
 @Controller('payments')
@@ -124,10 +125,12 @@ export class PaymentController {
     const existing = await this.txRepo.findOne({ where: { idempotencyKey } });
     if (existing) return { success: true, alreadyProcessed: true };
 
+    const amountMajor = Number(intent.amount) / 100;
+
     await this.walletRepo
       .createQueryBuilder()
       .update(WalletEntity)
-      .set({ solde: () => `solde + ${Number(intent.clientSecret) || 0}` })
+      .set({ solde: () => `solde + ${amountMajor}` })
       .where('id = :id', { id: wallet.id })
       .execute();
 
@@ -135,7 +138,7 @@ export class PaymentController {
       this.txRepo.create({
         walletId: wallet.id,
         type: TransactionType.DEPOT,
-        montant: 0,
+        montant: amountMajor,
         devise: 'XOF',
         statut: TransactionStatus.REUSSI,
         fournisseur: TransactionFournisseur.STRIPE,
@@ -216,11 +219,7 @@ export class PaymentController {
     @Req() req: Request,
   ) {
     const rawBody = (req as any).rawBody as Buffer | undefined;
-    if (
-      digest &&
-      rawBody &&
-      !this.sumsubService.verifyWebhookSignature(rawBody, digest)
-    ) {
+    if (!rawBody || !digest || !this.sumsubService.verifyWebhookSignature(rawBody, digest)) {
       throw new BadRequestException('Invalid Sumsub webhook signature');
     }
 
@@ -305,9 +304,58 @@ export class PaymentController {
     @Headers('stripe-signature') signature: string,
     @Req() req: Request,
   ) {
-    const payload = Buffer.from(JSON.stringify(req.body));
-    const event = this.stripeService.constructWebhookEvent(payload, signature);
-    const evt = event as any;
-    return { received: true, type: evt.type, eventId: evt.id };
+    const rawBody: Buffer = (req as any).rawBody ?? Buffer.from(JSON.stringify(req.body));
+    const event = this.stripeService.constructWebhookEvent(rawBody, signature) as any;
+
+    this.logger.log(`Stripe webhook: type=${event.type}, id=${event.id}`);
+
+    if (event.type === 'payment_intent.succeeded') {
+      const intent = event.data.object as any;
+      const userId = parseInt(intent.metadata?.userId, 10);
+      const operationType = intent.metadata?.operationType ?? 'depot';
+
+      if (!isNaN(userId) && operationType === 'depot') {
+        const idempotencyKey = `depot:${intent.id}`;
+        const existing = await this.txRepo.findOne({ where: { idempotencyKey } });
+        if (!existing) {
+          let wallet = await this.walletRepo.findOne({
+            where: { proprietaireUserId: userId, type: WalletType.INVESTISSEUR },
+          });
+          if (!wallet) {
+            wallet = await this.walletRepo.save(
+              this.walletRepo.create({
+                type: WalletType.INVESTISSEUR,
+                proprietaireUserId: userId,
+                fournisseurRef: `INV-${userId}-auto`,
+                devise: 'XOF',
+                solde: 0,
+              }),
+            );
+          }
+          const amountMajor = Number(intent.amount) / 100;
+          await this.walletRepo
+            .createQueryBuilder()
+            .update(WalletEntity)
+            .set({ solde: () => `solde + ${amountMajor}` })
+            .where('id = :id', { id: wallet.id })
+            .execute();
+          await this.txRepo.save(
+            this.txRepo.create({
+              walletId: wallet.id,
+              type: TransactionType.DEPOT,
+              montant: amountMajor,
+              devise: 'XOF',
+              statut: TransactionStatus.REUSSI,
+              fournisseur: TransactionFournisseur.STRIPE,
+              fournisseurRef: intent.id,
+              idempotencyKey,
+            }),
+          );
+          this.logger.log(`Wallet crédité: userId=${userId}, montant=${amountMajor}`);
+        }
+      }
+    }
+
+    return { received: true, type: event.type, eventId: event.id };
   }
 }

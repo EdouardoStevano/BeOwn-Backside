@@ -21,11 +21,19 @@ export class GoogleStrategy extends PassportStrategy(Strategy, Social.GOOGLE) {
     profile: any,
     done: VerifyCallback,
   ) {
+    const emailEntry = profile.emails?.[0];
+    if (!emailEntry?.value) {
+      return done(new Error('Aucune adresse email associée à ce compte Google.'));
+    }
+    if (emailEntry.verified === false) {
+      return done(new Error('Adresse email Google non vérifiée.'));
+    }
+
     const user: SocialInterface = {
-      email: profile.emails[0].value,
-      firstname: profile.name.givenName,
-      lastname: profile.name.familyName,
-      picture: profile.photos[0]?.value,
+      email: emailEntry.value,
+      firstname: profile.name?.givenName ?? profile.displayName ?? '',
+      lastname: profile.name?.familyName ?? '',
+      picture: profile.photos?.[0]?.value,
       socialId: profile.id,
     };
 

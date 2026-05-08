@@ -30,7 +30,10 @@ export class SignInUsecase {
     }
 
     if (!user.userEmail.isVerified) {
-      throw new UnauthorizedException('Veuillez vérifier votre adresse email avant de vous connecter');
+      throw new UnauthorizedException({
+        code: 'EMAIL_NOT_VERIFIED',
+        message: 'Veuillez vérifier votre adresse email avant de vous connecter.',
+      });
     }
 
     const isValidPassword = await this.hashingService.compare(

@@ -67,6 +67,18 @@ export class ProfilTypeOrmRepository implements ProfilRepository {
     return entity ? ProfilMapper.kycToDomain(entity) : null;
   }
 
+  async findAllKyc(params?: { page?: number; limit?: number }): Promise<{ items: Kyc[]; total: number }> {
+    const page = Math.max(1, params?.page ?? 1);
+    const limit = Math.min(100, Math.max(1, params?.limit ?? 20));
+    const [entities, total] = await this.kycRepo.findAndCount({
+      relations: ['utilisateur', 'utilisateur.userEmail'],
+      order: { createdAt: 'DESC' },
+      skip: (page - 1) * limit,
+      take: limit,
+    });
+    return { items: entities.map(ProfilMapper.kycToDomain), total };
+  }
+
   async updateKycStatus(
     kycId: string,
     status: KycStatus,

@@ -30,22 +30,38 @@ export class LinkedinStrategy extends PassportStrategy(
   }
 
   async validate(accessToken: string, _refreshToken: string, _profile: unknown): Promise<SocialInterface> {
-    const { data } = await axios.get<{
-      sub: string;
-      email?: string;
-      given_name?: string;
-      family_name?: string;
-      picture?: string;
-    }>('https://api.linkedin.com/v2/userinfo', {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
+    try {
+      const { data } = await axios.get<{
+        sub: string;
+        email?: string;
+        email_verified?: boolean;
+        given_name?: string;
+        family_name?: string;
+        picture?: string;
+      }>('https://api.linkedin.com/v2/userinfo', {
+        headers: { Authorization: `Bearer ${accessToken}` },
+        timeout: 5000,
+      });
 
-    return {
-      socialId: data.sub,
-      email: data.email ?? '',
-      firstname: data.given_name ?? '',
-      lastname: data.family_name ?? '',
-      picture: data.picture,
-    };
+      if (!data.email) {
+        throw new Error('Aucune adresse email associée à ce compte LinkedIn.');
+      }
+      if (data.email_verified === false) {
+        throw new Error('Adresse email LinkedIn non vérifiée.');
+      }
+
+      return {
+        socialId: data.sub,
+        email: data.email,
+        firstname: data.given_name ?? '',
+        lastname: data.family_name ?? '',
+        picture: data.picture,
+      };
+    } catch (err) {
+      if (err instanceof Error && (err.message.includes('LinkedIn') || err.message.includes('email'))) {
+        throw err;
+      }
+      throw new Error('Impossible de récupérer le profil LinkedIn');
+    }
   }
 }

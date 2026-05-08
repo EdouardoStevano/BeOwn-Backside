@@ -31,6 +31,11 @@ export enum UserStatus {
   SUPPRIME = 'supprime',
 }
 
+export enum UserType {
+  PP = 'PP',
+  PM = 'PM',
+}
+
 @Entity('users')
 export class UserEntity {
   @PrimaryGeneratedColumn()
@@ -60,6 +65,9 @@ export class UserEntity {
 
   @Column({ type: 'timestamp', nullable: true })
   lastLoginAt: Date | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  userType: UserType | null;
 
   @CreateDateColumn()
   createdAt: Date;

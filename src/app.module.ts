@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule } from '@nestjs/config';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { UsersModule } from './users/applications/users.module';
 import { HealthController } from './health/health.controller';
 import { IamModule } from './iam/iam.module';
@@ -17,6 +18,7 @@ import { SecondaryMarketModule } from './secondarymarket/applications/secondary-
 import { NotificationsModule } from './notifications/notifications.module';
 import { DocumentsModule } from './documents/applications/documents.module';
 import { NotificationTestModule } from './common/test/notification-test.module';
+import { AdminModule } from './admin/admin.module';
 import { MailerModule } from '@nestjs-modules/mailer';
 import { CacheModule } from '@nestjs/cache-manager';
 import * as redisStore from 'cache-manager-ioredis';
@@ -30,6 +32,11 @@ import * as redisStore from 'cache-manager-ioredis';
       port: Number(process.env.REDIS_PORT),
     }),
 
+    ThrottlerModule.forRoot([
+      { name: 'short', ttl: 1000, limit: 500 },
+      { name: 'medium', ttl: 60_000, limit: 2000 },
+      { name: 'auth', ttl: 900_000, limit: 500 },
+    ]),
     ConfigModule.forRoot({ isGlobal: true }),
     TypeOrmModule.forRoot({
       type: 'postgres',
@@ -39,7 +46,7 @@ import * as redisStore from 'cache-manager-ioredis';
       password: process.env.DATABASE_PASSWORD || 'pass123',
       database: process.env.DATABASE_DB || 'postgres',
       autoLoadEntities: true,
-      synchronize: true,
+      synchronize: process.env.NODE_ENV !== 'production',
     }),
     MailerModule.forRootAsync({
       useFactory: () => ({
@@ -69,10 +76,12 @@ import * as redisStore from 'cache-manager-ioredis';
     SecondaryMarketModule,
     NotificationsModule,
     DocumentsModule,
+    AdminModule,
     ...(process.env.NODE_ENV !== 'production' ? [NotificationTestModule] : []),
   ],
   controllers: [HealthController],
   providers: [
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
   ],
 })

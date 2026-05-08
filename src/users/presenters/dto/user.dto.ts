@@ -46,3 +46,27 @@ export class UpdateUserDto {
   @MinLength(2)
   lastname?: string;
 }
+
+export class UpdateUserAdminDto {
+  @ApiPropertyOptional({ example: 'Jean' })
+  @IsOptional()
+  @IsString()
+  @MinLength(2)
+  firstname?: string;
+
+  @ApiPropertyOptional({ example: 'Dupont' })
+  @IsOptional()
+  @IsString()
+  @MinLength(2)
+  lastname?: string;
+
+  @ApiPropertyOptional({ example: 'support', enum: ['admin', 'support', 'compliance', 'financier', 'rcci', 'investisseur'] })
+  @IsOptional()
+  @IsString()
+  role?: string;
+
+  @ApiPropertyOptional({ example: 'actif', enum: ['actif', 'suspendu', 'clos'] })
+  @IsOptional()
+  @IsString()
+  status?: string;
+}

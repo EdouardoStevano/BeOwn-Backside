@@ -25,7 +25,9 @@ import {
   WalletType,
 } from 'src/wallets/domains/enums/wallet.enum';
 import { CreateTransactionDto, CreateWalletDto } from '../dto/wallet.dto';
+import { SkipThrottle } from '@nestjs/throttler';
 
+@SkipThrottle()
 @ApiTags('Wallets & Transactions')
 @ApiBearerAuth()
 @Controller('wallets')
@@ -59,11 +61,22 @@ export class WalletController {
   async getUserWallet(
     @Param('userId', ParseIntPipe) userId: number,
   ): Promise<Wallet> {
-    const wallet = await this.walletRepository.findWalletByUser(
+    let wallet = await this.walletRepository.findWalletByUser(
       userId,
       WalletType.INVESTISSEUR,
     );
-    if (!wallet) throw new NotFoundException('Wallet introuvable.');
+    if (!wallet) {
+      const newWallet = new Wallet();
+      newWallet.type = WalletType.INVESTISSEUR;
+      newWallet.proprietaireUserId = userId;
+      newWallet.projetId = null;
+      newWallet.spvId = null;
+      newWallet.fournisseurRef = `INV-${userId}-auto`;
+      newWallet.devise = 'XOF';
+      newWallet.solde = 0;
+      newWallet.statut = 'actif';
+      wallet = await this.walletRepository.saveWallet(newWallet);
+    }
     return wallet;
   }
 

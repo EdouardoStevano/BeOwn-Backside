@@ -103,6 +103,19 @@ export class ProfilMapper {
     domain.motifRefus = entity.motifRefus;
     domain.createdAt = entity.createdAt;
     domain.updatedAt = entity.updatedAt;
+    if (entity.utilisateur) {
+      domain.utilisateur = {
+        userId: entity.utilisateur.userId,
+        firstname: entity.utilisateur.firstname ?? undefined,
+        lastname: entity.utilisateur.lastname ?? undefined,
+        role: entity.utilisateur.role,
+        status: entity.utilisateur.status,
+        createdAt: entity.utilisateur.createdAt,
+        userEmail: entity.utilisateur.userEmail
+          ? { email: entity.utilisateur.userEmail.email }
+          : undefined,
+      };
+    }
     return domain;
   }
 

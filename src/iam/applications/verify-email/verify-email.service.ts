@@ -58,8 +58,8 @@ export class VerifyEmailService {
       tokenId,
     );
 
-    const frontendUrl = process.env.API_URL || 'http://localhost:3001';
-    const confirmEmailUrl = `${frontendUrl}/email/verify?token=${token}`;
+    const apiUrl = process.env.API_URL || 'http://localhost:3001';
+    const confirmEmailUrl = `${apiUrl}/email/verify?token=${token}`;
 
     await this.mailerService.sendMail({
       to: emailVerificationDto.email,

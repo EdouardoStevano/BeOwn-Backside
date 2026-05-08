@@ -28,13 +28,14 @@ export class StripePaymentService implements PaymentService {
         userId: String(params.userId),
         ...params.metadata,
       },
-      automatic_payment_methods: { enabled: true },
+      automatic_payment_methods: { enabled: true, allow_redirects: 'never' },
     });
 
     return {
       clientSecret: intent.client_secret!,
       intentId: intent.id,
       status: intent.status,
+      amount: intent.amount,
     };
   }
 
@@ -44,6 +45,7 @@ export class StripePaymentService implements PaymentService {
       clientSecret: intent.client_secret!,
       intentId: intent.id,
       status: intent.status,
+      amount: intent.amount,
     };
   }
 

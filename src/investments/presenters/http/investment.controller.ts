@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  ForbiddenException,
   Get,
   Param,
   ParseIntPipe,
@@ -29,7 +30,9 @@ import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
 import { UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
+import { SkipThrottle } from '@nestjs/throttler';
 
+@SkipThrottle()
 @ApiTags('Investments')
 @ApiBearerAuth()
 @Controller('investments')
@@ -54,8 +57,15 @@ export class InvestmentController {
   @ApiOperation({ summary: 'Mes investissements' })
   @ApiParam({ name: 'userId', description: "ID numérique de l'utilisateur" })
   @ApiResponse({ status: 200, description: 'Liste des investissements' })
+  @ApiResponse({ status: 403, description: 'Accès refusé' })
   @Get('user/:userId')
-  listByUser(@Param('userId', ParseIntPipe) userId: number) {
+  listByUser(
+    @Param('userId', ParseIntPipe) userId: number,
+    @CurrentUser() currentUser: ActiveUser,
+  ) {
+    if (currentUser.userId !== userId) {
+      throw new ForbiddenException('Accès refusé.');
+    }
     return this.investmentRepository.findByUserId(userId);
   }
 
@@ -114,6 +124,55 @@ export class InvestmentController {
       nbInvestissements: investments.length,
       montantTotal,
       investments,
+    };
+  }
+
+  @ApiOperation({ summary: 'ROI global et par projet de mes investissements' })
+  @ApiResponse({ status: 200, description: 'ROI calculé' })
+  @Get('roi/me')
+  async getMyRoi(@CurrentUser() user: ActiveUser) {
+    const investments = await this.investmentRepository.findByUserId(user.userId);
+    const now = new Date();
+
+    let montantInvestiTotal = 0;
+    let gainTotal = 0;
+
+    const roiParProjet = investments.map((inv) => {
+      const montant = Number(inv.montant);
+      const tri = Number((inv as any).projet?.triCible ?? 0);
+      const createdAt = new Date(inv.createdAt ?? now);
+      const anneesEcoulees =
+        (now.getTime() - createdAt.getTime()) / (365.25 * 24 * 60 * 60 * 1000);
+      const gain = Math.round(montant * (tri / 100) * anneesEcoulees * 100) / 100;
+      const montantActuel = montant + gain;
+      const roiPct = montant > 0 ? Math.round((gain / montant) * 10000) / 100 : 0;
+
+      montantInvestiTotal += montant;
+      gainTotal += gain;
+
+      return {
+        investissementId: inv.id,
+        projetId: inv.projetId,
+        montantInvesti: montant,
+        gain,
+        montantActuel,
+        roi: roiPct,
+        triCible: tri,
+        statut: inv.statut,
+      };
+    });
+
+    const roiGlobal =
+      montantInvestiTotal > 0
+        ? Math.round((gainTotal / montantInvestiTotal) * 10000) / 100
+        : 0;
+
+    return {
+      montantInvestiTotal,
+      gainTotal: Math.round(gainTotal * 100) / 100,
+      montantActuelTotal: Math.round((montantInvestiTotal + gainTotal) * 100) / 100,
+      roiGlobal,
+      roiParProjet,
     };
   }
 }

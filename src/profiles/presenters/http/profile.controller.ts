@@ -8,6 +8,7 @@ import {
   HttpCode,
   HttpStatus,
   Get,
+  Query,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -109,9 +110,15 @@ export class ProfileController {
   }
 
   @ApiOperation({ summary: 'Lister tous les KYC (admin)' })
-  @ApiResponse({ status: 200, description: 'Liste des KYC' })
+  @ApiResponse({ status: 200, description: 'Liste paginée des KYC avec données utilisateur' })
   @Get('kyc/all')
-  listAllKyc() {
-    return this.getKyc.executeAll();
+  listAllKyc(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.getKyc.executeAll({
+      page: page ? parseInt(page, 10) : 1,
+      limit: limit ? parseInt(limit, 10) : 20,
+    });
   }
 }
