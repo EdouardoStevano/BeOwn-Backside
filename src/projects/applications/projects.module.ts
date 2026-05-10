@@ -4,6 +4,7 @@ import { InvestmentsInfrastructureModule } from 'src/investments/infrastructure/
 import { DocumentsInfrastructureModule } from 'src/documents/infrastructure/documents-infrastructure.module';
 import { AvisInfrastructureModule } from 'src/avis/infrastructure/avis-infrastructure.module';
 import { CreateProjectUseCase } from './usecases/create-project.usecase';
+import { UpdateProjectUseCase } from './usecases/update-project.usecase';
 import { UpdateProjectStatusUseCase } from './usecases/update-project-status.usecase';
 import { GetProjectsUseCase } from './usecases/get-projects.usecase';
 import { ProjectController } from '../presenters/http/project.controller';
@@ -17,6 +18,7 @@ import { ProjectController } from '../presenters/http/project.controller';
   ],
   providers: [
     CreateProjectUseCase,
+    UpdateProjectUseCase,
     UpdateProjectStatusUseCase,
     GetProjectsUseCase,
   ],

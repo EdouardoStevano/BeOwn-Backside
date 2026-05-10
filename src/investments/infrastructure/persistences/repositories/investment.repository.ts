@@ -8,6 +8,7 @@ import { InvestmentStatus } from 'src/investments/domains/enums/investment-statu
 import { InvestmentEntity } from '../entities/investment.entity';
 import { EcheanceEntity } from '../entities/echeance.entity';
 import { InvestmentMapper } from '../mappers/investment.mapper';
+import { ProjectEntity } from 'src/projects/infrastructure/persistences/entities/project.entity';
 
 @Injectable()
 export class InvestmentTypeOrmRepository implements InvestmentRepository {
@@ -24,24 +25,37 @@ export class InvestmentTypeOrmRepository implements InvestmentRepository {
     return InvestmentMapper.toDomain(saved);
   }
 
+  private withProjet() {
+    return this.investRepo
+      .createQueryBuilder('inv')
+      .leftJoinAndMapOne(
+        'inv.projet',
+        ProjectEntity,
+        'p',
+        'p.id = inv."projetId"',
+      );
+  }
+
   async findInvestmentById(id: string): Promise<Investment | null> {
-    const entity = await this.investRepo.findOne({ where: { id } });
+    const entity = await this.withProjet()
+      .where('inv.id = :id', { id })
+      .getOne();
     return entity ? InvestmentMapper.toDomain(entity) : null;
   }
 
   async findByUserId(userId: number): Promise<Investment[]> {
-    const entities = await this.investRepo.find({
-      where: { utilisateurId: userId },
-      order: { createdAt: 'DESC' },
-    });
+    const entities = await this.withProjet()
+      .where('inv.utilisateurId = :userId', { userId })
+      .orderBy('inv.createdAt', 'DESC')
+      .getMany();
     return entities.map(InvestmentMapper.toDomain);
   }
 
   async findByProjetId(projetId: string): Promise<Investment[]> {
-    const entities = await this.investRepo.find({
-      where: { projetId },
-      order: { createdAt: 'ASC' },
-    });
+    const entities = await this.withProjet()
+      .where('inv.projetId = :projetId', { projetId })
+      .orderBy('inv.createdAt', 'ASC')
+      .getMany();
     return entities.map(InvestmentMapper.toDomain);
   }
 
@@ -81,6 +95,10 @@ export class InvestmentTypeOrmRepository implements InvestmentRepository {
     await this.investRepo.update(id, { statut: status });
     const updated = await this.investRepo.findOneOrFail({ where: { id } });
     return InvestmentMapper.toDomain(updated);
+  }
+
+  async updateBulletinDocId(investmentId: string, bulletinDocId: string): Promise<void> {
+    await this.investRepo.update(investmentId, { bulletinDocId });
   }
 
   async saveEcheances(echeances: Echeance[]): Promise<Echeance[]> {

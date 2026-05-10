@@ -91,4 +91,18 @@ export class ProfilTypeOrmRepository implements ProfilRepository {
     const updated = await this.kycRepo.findOneOrFail({ where: { id: kycId } });
     return ProfilMapper.kycToDomain(updated);
   }
+
+  async updateKycSession(
+    kycId: string,
+    sessionId: string,
+    status: KycStatus,
+  ): Promise<Kyc> {
+    await this.kycRepo.update(kycId, {
+      fournisseurRef: sessionId,
+      fournisseur: 'stripe',
+      statut: status,
+    });
+    const updated = await this.kycRepo.findOneOrFail({ where: { id: kycId } });
+    return ProfilMapper.kycToDomain(updated);
+  }
 }

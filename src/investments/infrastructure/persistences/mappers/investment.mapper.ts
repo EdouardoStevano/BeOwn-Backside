@@ -1,4 +1,4 @@
-import { Investment } from 'src/investments/domains/investment';
+import { Investment, type InvestmentProjet } from 'src/investments/domains/investment';
 import { Echeance } from 'src/investments/domains/echeance';
 import { InvestmentEntity } from '../entities/investment.entity';
 import { EcheanceEntity } from '../entities/echeance.entity';
@@ -21,6 +21,19 @@ export class InvestmentMapper {
     d.reservationId = entity.reservationId;
     d.createdAt = entity.createdAt;
     d.updatedAt = entity.updatedAt;
+    if (entity.projet) {
+      d.projet = {
+        id: entity.projet.id,
+        titre: entity.projet.titre,
+        ville: entity.projet.ville,
+        pays: entity.projet.pays,
+        type: entity.projet.type,
+        triCible: entity.projet.triCible != null ? Number(entity.projet.triCible) : null,
+        dureeMois: entity.projet.dureeMois,
+        prixFraction: entity.projet.prixFraction != null ? Number(entity.projet.prixFraction) : null,
+        nbFractions: entity.projet.nbFractions,
+      } satisfies InvestmentProjet;
+    }
     return d;
   }
 

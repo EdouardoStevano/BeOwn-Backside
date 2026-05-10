@@ -12,23 +12,19 @@ import {
   ParseIntPipe,
   Patch,
   Post,
-  StreamableFile,
+  Redirect,
   UploadedFile,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { diskStorage } from 'multer';
-import { extname, join } from 'path';
-import { createReadStream, existsSync } from 'fs';
-import { unlink } from 'fs/promises';
+import { memoryStorage } from 'multer';
 import {
   ApiBearerAuth,
   ApiBody,
   ApiConsumes,
   ApiOperation,
   ApiParam,
-  ApiProduces,
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
@@ -41,8 +37,8 @@ import type { DocumentRepository } from 'src/documents/applications/ports/reposi
 import { Document } from 'src/documents/domains/document';
 import { DocumentRelatedTo, DocumentType } from 'src/documents/domains/enums/document-type.enum';
 import { SetOrdreDto, UploadDocumentDto } from '../dto/document.dto';
+import { CloudStorageService } from 'src/common/cloud-storage/cloud-storage.service';
 
-const UPLOADS_DIR = join(process.cwd(), 'uploads');
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
 const ALLOWED_MIME = [
   'image/jpeg',
@@ -59,6 +55,7 @@ export class DocumentController {
   constructor(
     @Inject(DOCUMENT_REPOSITORY)
     private readonly documentRepository: DocumentRepository,
+    private readonly cloudStorage: CloudStorageService,
   ) {}
 
   @ApiOperation({ summary: 'Uploader un document (lié à un utilisateur, projet ou investissement)' })
@@ -81,13 +78,7 @@ export class DocumentController {
   @Post('upload')
   @UseInterceptors(
     FileInterceptor('file', {
-      storage: diskStorage({
-        destination: UPLOADS_DIR,
-        filename: (_req, file, cb) => {
-          const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-          cb(null, `${unique}${extname(file.originalname)}`);
-        },
-      }),
+      storage: memoryStorage(),
       limits: { fileSize: MAX_FILE_SIZE_BYTES },
       fileFilter: (_req, file, cb) => {
         if (ALLOWED_MIME.includes(file.mimetype)) {
@@ -110,18 +101,30 @@ export class DocumentController {
   ) {
     if (!file) throw new BadRequestException('Fichier manquant.');
 
+    const folder = dto.relatedTo === DocumentRelatedTo.PROJECT
+      ? 'projets'
+      : dto.relatedTo === DocumentRelatedTo.INVESTMENT
+      ? 'investissements'
+      : 'utilisateurs';
+
+    const { objectName, publicUrl } = await this.cloudStorage.upload(
+      file.buffer,
+      file.originalname,
+      file.mimetype,
+      folder,
+    );
+
     const doc = new Document();
     doc.type = dto.type;
     doc.relatedTo = dto.relatedTo;
-    doc.userId =
-      dto.relatedTo === DocumentRelatedTo.USER ? user.userId : null;
+    doc.userId = dto.relatedTo === DocumentRelatedTo.USER ? user.userId : null;
     doc.projectId = dto.projectId ?? null;
     doc.investmentId = dto.investmentId ?? null;
     doc.originalName = file.originalname;
-    doc.filename = file.filename;
+    doc.filename = objectName;
     doc.mimeType = file.mimetype;
     doc.sizeBytes = file.size;
-    doc.path = file.path;
+    doc.path = publicUrl;
     doc.isPublic = dto.isPublic ?? false;
     doc.uploadedBy = user.userId;
     doc.ordre = dto.ordre ?? null;
@@ -172,16 +175,16 @@ export class DocumentController {
     return doc;
   }
 
-  @ApiOperation({ summary: "Télécharger le fichier d'un document" })
+  @ApiOperation({ summary: "URL de téléchargement sécurisée (signed URL, expire dans 60 min)" })
   @ApiParam({ name: 'id', description: 'UUID du document' })
-  @ApiProduces('application/octet-stream', 'application/pdf', 'image/jpeg', 'image/png')
-  @ApiResponse({ status: 200, description: 'Flux binaire du fichier (PDF ou image)' })
-  @ApiResponse({ status: 404, description: 'Document ou fichier introuvable' })
+  @ApiResponse({ status: 302, description: 'Redirection vers le fichier sur Google Cloud Storage' })
+  @ApiResponse({ status: 404, description: 'Document introuvable' })
   @Get(':id/download')
+  @Redirect()
   async download(
     @Param('id') id: string,
     @CurrentUser() user: ActiveUser,
-  ): Promise<StreamableFile> {
+  ) {
     const doc = await this.documentRepository.findById(id);
     if (!doc) throw new NotFoundException('Document introuvable.');
 
@@ -189,14 +192,17 @@ export class DocumentController {
       throw new NotFoundException('Document introuvable.');
     }
 
-    if (!existsSync(doc.path)) {
-      throw new NotFoundException('Fichier introuvable sur le serveur.');
+    // Si path est déjà une URL publique GCS, on redirige directement
+    if (doc.path.startsWith('https://')) {
+      if (doc.isPublic) {
+        return { url: doc.path };
+      }
+      // Fichier privé : générer une signed URL depuis l'objectName (filename)
+      const signedUrl = await this.cloudStorage.getSignedUrl(doc.filename);
+      return { url: signedUrl };
     }
 
-    return new StreamableFile(createReadStream(doc.path), {
-      type: doc.mimeType,
-      disposition: `attachment; filename="${doc.originalName}"`,
-    });
+    throw new NotFoundException('Fichier introuvable.');
   }
 
   @ApiOperation({ summary: 'Supprimer un document' })
@@ -215,10 +221,7 @@ export class DocumentController {
       throw new NotFoundException('Document introuvable.');
     }
 
-    if (existsSync(doc.path)) {
-      await unlink(doc.path);
-    }
-
+    await this.cloudStorage.delete(doc.filename);
     await this.documentRepository.delete(id);
   }
 
@@ -245,8 +248,6 @@ export class DocumentController {
   @ApiOperation({ summary: "Définir une image comme principale d'un projet" })
   @ApiParam({ name: 'id', description: 'UUID du document PHOTO_PROJET' })
   @ApiResponse({ status: 200, description: 'Image définie comme principale' })
-  @ApiResponse({ status: 400, description: 'Le document n\'est pas une PHOTO_PROJET' })
-  @ApiResponse({ status: 404, description: 'Document introuvable' })
   @Patch(':id/set-main')
   async setMainImage(
     @Param('id') id: string,
@@ -258,7 +259,7 @@ export class DocumentController {
       throw new BadRequestException('Seules les PHOTO_PROJET peuvent être définies comme principale.');
     }
     if (!doc.projectId) {
-      throw new BadRequestException('Ce document n\'est pas lié à un projet.');
+      throw new BadRequestException("Ce document n'est pas lié à un projet.");
     }
     return this.documentRepository.setMainImage(id, doc.projectId);
   }
@@ -267,8 +268,6 @@ export class DocumentController {
   @ApiParam({ name: 'id', description: 'UUID du document PHOTO_PROJET' })
   @ApiBody({ type: SetOrdreDto })
   @ApiResponse({ status: 200, description: 'Ordre mis à jour' })
-  @ApiResponse({ status: 400, description: 'Le document n\'est pas une PHOTO_PROJET' })
-  @ApiResponse({ status: 404, description: 'Document introuvable' })
   @Patch(':id/ordre')
   async setOrdre(
     @Param('id') id: string,
@@ -278,7 +277,7 @@ export class DocumentController {
     const doc = await this.documentRepository.findById(id);
     if (!doc) throw new NotFoundException('Document introuvable.');
     if (doc.type !== DocumentType.PHOTO_PROJET) {
-      throw new BadRequestException('Seules les PHOTO_PROJET ont un ordre d\'affichage.');
+      throw new BadRequestException("Seules les PHOTO_PROJET ont un ordre d'affichage.");
     }
     return this.documentRepository.updateOrdre(id, dto.ordre);
   }

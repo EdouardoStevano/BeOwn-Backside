@@ -23,6 +23,7 @@ import {
   ApiBody,
 } from '@nestjs/swagger';
 import { CreateProjectUseCase } from 'src/projects/applications/usecases/create-project.usecase';
+import { UpdateProjectUseCase } from 'src/projects/applications/usecases/update-project.usecase';
 import { UpdateProjectStatusUseCase } from 'src/projects/applications/usecases/update-project-status.usecase';
 import { GetProjectsUseCase } from 'src/projects/applications/usecases/get-projects.usecase';
 import {
@@ -59,6 +60,7 @@ import { SkipThrottle } from '@nestjs/throttler';
 export class ProjectController {
   constructor(
     private readonly createProject: CreateProjectUseCase,
+    private readonly updateProject: UpdateProjectUseCase,
     private readonly updateStatus: UpdateProjectStatusUseCase,
     private readonly getProjects: GetProjectsUseCase,
     @Inject(PROJECT_REPOSITORY)
@@ -96,7 +98,9 @@ export class ProjectController {
       page: page ? parseInt(page) : 1,
       limit: limit ? parseInt(limit) : 20,
     });
-    return { ...result, data: await this.enrichFractions(result.data) };
+    const enriched = await this.enrichFractions(result.data);
+    const withImages = await this.enrichImages(enriched);
+    return { ...result, data: withImages };
   }
 
   @ApiOperation({ summary: 'Lister les projets (admin)' })
@@ -149,6 +153,16 @@ export class ProjectController {
   @Post()
   create(@Body() dto: CreateProjectDto) {
     return this.createProject.execute(dto);
+  }
+
+  @ApiOperation({ summary: 'Mettre à jour les champs d\'un projet (admin)' })
+  @ApiParam({ name: 'id', description: 'UUID du projet' })
+  @ApiResponse({ status: 200, description: 'Projet mis à jour' })
+  @ApiResponse({ status: 404, description: 'Projet introuvable' })
+  @HttpCode(HttpStatus.OK)
+  @Patch(':id')
+  update(@Param('id') id: string, @Body() dto: Partial<CreateProjectDto>) {
+    return this.updateProject.execute(id, dto);
   }
 
   @ApiOperation({ summary: "Mettre à jour le statut d'un projet (admin)" })
@@ -314,6 +328,22 @@ export class ProjectController {
           tauxRemplissage,
         },
       };
+    });
+  }
+
+  private async enrichImages(projects: any[]) {
+    if (projects.length === 0) return projects;
+    const imagesByProject = await Promise.all(
+      projects.map((p) => this.documentRepository.findByProjectId(p.id)),
+    );
+    return projects.map((p, i) => {
+      const images = imagesByProject[i]
+        .filter((d) => d.type === DocumentType.PHOTO_PROJET)
+        .sort((a, b) => {
+          if (a.estPrincipale !== b.estPrincipale) return a.estPrincipale ? -1 : 1;
+          return (a.ordre ?? 999) - (b.ordre ?? 999);
+        });
+      return { ...p, images };
     });
   }
 

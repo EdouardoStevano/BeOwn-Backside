@@ -21,4 +21,10 @@ export interface ProfilRepository {
     status: KycStatus,
     motifRefus?: string,
   ): Promise<Kyc>;
+
+  updateKycSession(
+    kycId: string,
+    sessionId: string,
+    status: KycStatus,
+  ): Promise<Kyc>;
 }

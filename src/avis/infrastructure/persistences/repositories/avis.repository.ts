@@ -13,12 +13,20 @@ export class AvisTypeOrmRepository implements AvisRepository {
   ) {}
 
   async save(avis: Avis): Promise<Avis> {
-    const entity = this.repo.create({
-      projetId: avis.projetId,
-      userId: avis.userId,
-      note: avis.note,
-      commentaire: avis.commentaire ?? null,
-    });
+    // If avis has an id, update the existing record; otherwise insert
+    const entity = avis.id
+      ? await this.repo.findOne({ where: { id: avis.id } }).then((e) =>
+          Object.assign(e ?? this.repo.create(), {
+            note: avis.note,
+            commentaire: avis.commentaire ?? null,
+          }),
+        )
+      : this.repo.create({
+          projetId: avis.projetId,
+          userId: avis.userId,
+          note: avis.note,
+          commentaire: avis.commentaire ?? null,
+        });
     const saved = await this.repo.save(entity);
     return this.toAvis(saved);
   }

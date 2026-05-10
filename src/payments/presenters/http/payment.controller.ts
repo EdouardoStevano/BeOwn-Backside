@@ -6,6 +6,7 @@ import {
   Headers,
   HttpCode,
   HttpStatus,
+  Inject,
   Logger,
   Param,
   Post,
@@ -45,7 +46,9 @@ import type { ActiveUser } from 'src/common/auth/current-user.decorator';
 import { UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
 import { UpdateKycStatusUseCase } from 'src/profiles/applications/usecases/update-kyc-status.usecase';
-import { KycStatus } from 'src/profiles/domains/enums/kyc-status.enum';
+import { KycStatus, KycNiveau } from 'src/profiles/domains/enums/kyc-status.enum';
+import { PROFIL_REPOSITORY, type ProfilRepository } from 'src/profiles/applications/ports/repositories/profil.repository';
+import { Kyc } from 'src/profiles/domains/kyc';
 import { SkipThrottle } from '@nestjs/throttler';
 
 @SkipThrottle({ short: true, medium: true })
@@ -61,6 +64,8 @@ export class PaymentController {
     private readonly identityService: StripeIdentityServiceImpl,
     private readonly sumsubService: SumsubService,
     private readonly updateKycStatus: UpdateKycStatusUseCase,
+    @Inject(PROFIL_REPOSITORY)
+    private readonly profilRepository: ProfilRepository,
     @InjectRepository(WalletEntity)
     private readonly walletRepo: Repository<WalletEntity>,
     @InjectRepository(TransactionEntity)
@@ -218,12 +223,14 @@ export class PaymentController {
     @Headers('x-payload-digest') digest: string,
     @Req() req: Request,
   ) {
-    const rawBody = (req as any).rawBody as Buffer | undefined;
+    // express.raw() stores the body as Buffer in req.body for this route
+    // NestJS rawBody stores in req.rawBody — use whichever is available
+    const rawBody = (req.body instanceof Buffer ? req.body : (req as any).rawBody) as Buffer | undefined;
     if (!rawBody || !digest || !this.sumsubService.verifyWebhookSignature(rawBody, digest)) {
       throw new BadRequestException('Invalid Sumsub webhook signature');
     }
 
-    const event = req.body as any;
+    const event = JSON.parse(rawBody.toString('utf8')) as any;
     this.logger.log(
       `Sumsub webhook received: type=${event?.type}, externalUserId=${event?.externalUserId}`,
     );
@@ -253,13 +260,39 @@ export class PaymentController {
   // ─── KYC Stripe Identity ──────────────────────────────────────────────────
 
   @ApiOperation({ summary: 'Démarrer une session KYC Stripe Identity' })
-  @ApiResponse({ status: 201, description: 'URL de vérification retournée' })
+  @ApiResponse({ status: 201, description: 'Session KYC créée — rediriger vers url' })
   @Post('kyc/start')
-  async startKyc(@Body() dto: StartKycVerificationDto) {
-    return this.identityService.createVerificationSession(
-      dto.userId,
-      dto.email,
+  async startKyc(@CurrentUser() user: ActiveUser) {
+    // Find or create KYC record
+    let kyc = await this.profilRepository.findKycByUserId(user.userId);
+    if (!kyc) {
+      const newKyc = new Kyc();
+      newKyc.utilisateurId = user.userId;
+      newKyc.statut = KycStatus.EN_COURS;
+      newKyc.niveau = KycNiveau.STANDARD;
+      newKyc.fournisseur = 'stripe';
+      newKyc.scoreRisque = null;
+      newKyc.fournisseurRef = null;
+      newKyc.valideJusquAu = null;
+      newKyc.motifRefus = null;
+      kyc = await this.profilRepository.saveKyc(newKyc);
+    }
+
+    // Create Stripe Identity session
+    const session = await this.identityService.createVerificationSession(
+      user.userId,
+      user.email,
     );
+
+    // Persist session ID + mark en_cours
+    await this.profilRepository.updateKycSession(
+      kyc.id,
+      session.sessionId,
+      KycStatus.EN_COURS,
+    );
+
+    this.logger.log(`KYC session créée: userId=${user.userId} sessionId=${session.sessionId}`);
+    return session;
   }
 
   @ApiOperation({ summary: "Consulter le statut d'une session KYC" })
@@ -304,8 +337,18 @@ export class PaymentController {
     @Headers('stripe-signature') signature: string,
     @Req() req: Request,
   ) {
-    const rawBody: Buffer = (req as any).rawBody ?? Buffer.from(JSON.stringify(req.body));
-    const event = this.stripeService.constructWebhookEvent(rawBody, signature) as any;
+    const rawBody: Buffer = (req as any).rawBody
+      ?? (req.body instanceof Buffer ? req.body : Buffer.from(JSON.stringify(req.body)));
+
+    this.logger.debug(`Webhook rawBody length=${rawBody?.length}, sig present=${!!signature}`);
+
+    let event: any;
+    try {
+      event = this.stripeService.constructWebhookEvent(rawBody, signature);
+    } catch (err) {
+      this.logger.error(`Webhook signature failed: ${err.message}`);
+      throw new BadRequestException(`Webhook signature invalide: ${err.message}`);
+    }
 
     this.logger.log(`Stripe webhook: type=${event.type}, id=${event.id}`);
 
@@ -353,6 +396,31 @@ export class PaymentController {
           );
           this.logger.log(`Wallet crédité: userId=${userId}, montant=${amountMajor}`);
         }
+      }
+    } else if (event.type === 'identity.verification_session.verified') {
+      const session = event.data.object as any;
+      const userId = parseInt(session.metadata?.userId, 10);
+      if (!isNaN(userId)) {
+        await this.updateKycStatus.execute(userId, KycStatus.VALIDE);
+        this.logger.log(`KYC validé via Stripe Identity: userId=${userId}`);
+      }
+    } else if (event.type === 'identity.verification_session.requires_input') {
+      const session = event.data.object as any;
+      const userId = parseInt(session.metadata?.userId, 10);
+      if (!isNaN(userId)) {
+        const motif =
+          session.last_error?.reason ??
+          session.last_error?.code ??
+          'Vérification d\'identité échouée';
+        await this.updateKycStatus.execute(userId, KycStatus.REFUSE, motif);
+        this.logger.log(`KYC refusé via Stripe Identity: userId=${userId} motif=${motif}`);
+      }
+    } else if (event.type === 'identity.verification_session.processing') {
+      const session = event.data.object as any;
+      const userId = parseInt(session.metadata?.userId, 10);
+      if (!isNaN(userId)) {
+        await this.updateKycStatus.execute(userId, KycStatus.EN_REVUE);
+        this.logger.log(`KYC en revue via Stripe Identity: userId=${userId}`);
       }
     }
 

@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import type { InvestmentRepository } from '../ports/repositories/investment.repository';
@@ -10,6 +11,10 @@ import type { ProjectRepository } from 'src/projects/applications/ports/reposito
 import { PROJECT_REPOSITORY } from 'src/projects/applications/ports/repositories/project.repository';
 import type { WalletRepository } from 'src/wallets/applications/ports/repositories/wallet.repository';
 import { WALLET_REPOSITORY } from 'src/wallets/applications/ports/repositories/wallet.repository';
+import type { DocumentRepository } from 'src/documents/applications/ports/repositories/document.repository';
+import { DOCUMENT_REPOSITORY } from 'src/documents/applications/ports/repositories/document.repository';
+import type { UserRepository } from 'src/users/applications/ports/repositories/user.repository';
+import { USER_REPOSITORY } from 'src/users/applications/ports/repositories/user.repository';
 import { Investment } from 'src/investments/domains/investment';
 import { Echeance } from 'src/investments/domains/echeance';
 import {
@@ -26,9 +31,15 @@ import {
   TransactionStatus,
   TransactionType,
 } from 'src/wallets/domains/enums/wallet.enum';
+import { ContractGeneratorService } from './contract-generator.service';
+import { CloudStorageService } from 'src/common/cloud-storage/cloud-storage.service';
+import { Document } from 'src/documents/domains/document';
+import { DocumentRelatedTo, DocumentType } from 'src/documents/domains/enums/document-type.enum';
 
 @Injectable()
 export class CreateInvestmentUseCase {
+  private readonly logger = new Logger(CreateInvestmentUseCase.name);
+
   constructor(
     @Inject(INVESTMENT_REPOSITORY)
     private readonly investmentRepository: InvestmentRepository,
@@ -36,6 +47,12 @@ export class CreateInvestmentUseCase {
     private readonly projectRepository: ProjectRepository,
     @Inject(WALLET_REPOSITORY)
     private readonly walletRepository: WalletRepository,
+    @Inject(DOCUMENT_REPOSITORY)
+    private readonly documentRepository: DocumentRepository,
+    @Inject(USER_REPOSITORY)
+    private readonly userRepository: UserRepository,
+    private readonly contractGenerator: ContractGeneratorService,
+    private readonly cloudStorage: CloudStorageService,
   ) {}
 
   async execute(userId: number, dto: CreateInvestmentDto): Promise<Investment> {
@@ -154,7 +171,64 @@ export class CreateInvestmentUseCase {
       );
     }
 
+    // ── Generate & upload bulletin de souscription ────────────────────────────
+    this.generateAndStoreBulletin(saved, project, userId).catch((err) =>
+      this.logger.error(`Bulletin generation failed for investment ${saved.id}: ${err?.message}`),
+    );
+
     return saved;
+  }
+
+  private async generateAndStoreBulletin(
+    investment: Investment,
+    project: { titre: string; ville: string | null; pays: string; triCible: number | null; dureeMois: number },
+    userId: number,
+  ): Promise<void> {
+    const user = await this.userRepository.findById(userId);
+    const firstname = user?.firstname ?? 'Investisseur';
+    const lastname = user?.lastname ?? '';
+    const email = user?.userEmail?.email ?? '';
+
+    const pdfBuffer = await this.contractGenerator.generateBulletin({
+      investment,
+      projectTitle: project.titre,
+      projectVille: project.ville ?? '',
+      projectPays: project.pays,
+      investorFirstname: firstname,
+      investorLastname: lastname,
+      investorEmail: email,
+      triCible: Number(project.triCible ?? 0),
+      dureeMois: Number(project.dureeMois),
+    });
+
+    const filename = `bulletin_${investment.id}.pdf`;
+    const { objectName, publicUrl } = await this.cloudStorage.upload(
+      pdfBuffer,
+      filename,
+      'application/pdf',
+      'contrats',
+    );
+
+    const doc = new Document();
+    doc.type = DocumentType.BULLETIN_SOUSCRIPTION;
+    doc.relatedTo = DocumentRelatedTo.INVESTMENT;
+    doc.userId = null;
+    doc.projectId = investment.projetId;
+    doc.investmentId = investment.id;
+    doc.originalName = filename;
+    doc.filename = objectName;
+    doc.mimeType = 'application/pdf';
+    doc.sizeBytes = pdfBuffer.length;
+    doc.path = publicUrl;
+    doc.isPublic = false;
+    doc.uploadedBy = userId;
+    doc.ordre = null;
+    doc.estPrincipale = false;
+
+    const savedDoc = await this.documentRepository.save(doc);
+    await this.investmentRepository.updateBulletinDocId(investment.id, savedDoc.id);
+
+    this.logger.log(`Bulletin généré: investmentId=${investment.id} docId=${savedDoc.id} url=${publicUrl}`);
   }
 
   private generateEcheances(

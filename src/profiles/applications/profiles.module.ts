@@ -22,6 +22,6 @@ import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructu
     GetKycUseCase,
   ],
   controllers: [ProfileController],
-  exports: [CreateKycUseCase, UpdateKycStatusUseCase],
+  exports: [CreateKycUseCase, UpdateKycStatusUseCase, ProfilesInfrastructureModule],
 })
 export class ProfilesModule {}

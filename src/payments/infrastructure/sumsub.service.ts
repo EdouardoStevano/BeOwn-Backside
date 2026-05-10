@@ -37,13 +37,16 @@ export class SumsubService {
 
   async generateAccessToken(
     userId: string,
-    levelName = 'basic-kyc-level',
+    levelName?: string,
     ttlInSecs = 600,
   ): Promise<SumsubTokenResult> {
+    const level =
+      levelName ??
+      this.config.get<string>('SUMSUB_LEVEL_NAME', 'id-and-liveness');
     const path =
       `/resources/accessTokens` +
       `?userId=${encodeURIComponent(userId)}` +
-      `&levelName=${encodeURIComponent(levelName)}` +
+      `&levelName=${encodeURIComponent(level)}` +
       `&ttlInSecs=${ttlInSecs}`;
 
     const res = await fetch(`${this.baseUrl}${path}`, {

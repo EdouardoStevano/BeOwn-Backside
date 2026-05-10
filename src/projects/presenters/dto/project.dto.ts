@@ -16,13 +16,16 @@ import {
   Min,
   IsInt,
 } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Type, Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   ProjectInstrument,
   ProjectStatus,
   ProjectType,
 } from 'src/projects/domains/enums/project-status.enum';
+
+// Helper: coerce string → number (sent by multipart or form)
+const toNumber = () => Transform(({ value }) => (value != null && value !== '' ? Number(value) : value));
 
 export class EtapeChronologieDto {
   @ApiProperty()
@@ -95,32 +98,44 @@ export class CreateProjectDto {
   pays?: string;
 
   @ApiProperty({ example: 500000 })
+  @toNumber()
+  @Type(() => Number)
   @IsNumber()
   @IsPositive()
   capitalCible: number;
 
   @ApiProperty({ example: 300000 })
+  @toNumber()
+  @Type(() => Number)
   @IsNumber()
   @IsPositive()
   capitalMinimum: number;
 
   @ApiPropertyOptional({ default: 100 })
   @IsOptional()
+  @toNumber()
+  @Type(() => Number)
   @IsNumber()
   @Min(1)
   ticketMinimum?: number;
 
   @ApiPropertyOptional({ example: 50000 })
   @IsOptional()
+  @toNumber()
+  @Type(() => Number)
   @IsNumber()
   ticketMaximum?: number;
 
   @ApiPropertyOptional({ example: 8.5 })
   @IsOptional()
+  @toNumber()
+  @Type(() => Number)
   @IsNumber()
   triCible?: number;
 
   @ApiProperty({ example: 24 })
+  @toNumber()
+  @Type(() => Number)
   @IsNumber()
   @IsPositive()
   dureeMois: number;
@@ -129,6 +144,21 @@ export class CreateProjectDto {
   @IsEnum(ProjectInstrument)
   instrument: ProjectInstrument;
 
+  @ApiPropertyOptional({ enum: ProjectStatus, description: 'Statut initial (défaut : brouillon)' })
+  @IsOptional()
+  @IsEnum(ProjectStatus)
+  statut?: ProjectStatus;
+
+  @ApiPropertyOptional({ description: 'Date de publication ISO 8601' })
+  @IsOptional()
+  @IsDateString()
+  datePublication?: string;
+
+  @ApiPropertyOptional({ description: "Date d'ouverture de collecte ISO 8601" })
+  @IsOptional()
+  @IsDateString()
+  dateOuvertureCollecte?: string;
+
   @ApiPropertyOptional({ default: false })
   @IsOptional()
   @IsBoolean()
@@ -136,6 +166,8 @@ export class CreateProjectDto {
 
   @ApiPropertyOptional({ example: 400000 })
   @IsOptional()
+  @toNumber()
+  @Type(() => Number)
   @IsNumber()
   plafondPreInvestissement?: number;
 
@@ -176,12 +208,16 @@ export class CreateProjectDto {
 
   @ApiPropertyOptional({ description: 'Nombre total de fractions d\'actif' })
   @IsOptional()
+  @toNumber()
+  @Type(() => Number)
   @IsInt()
   @IsPositive()
   nbFractions?: number;
 
   @ApiPropertyOptional({ description: 'Prix unitaire d\'une fraction' })
   @IsOptional()
+  @toNumber()
+  @Type(() => Number)
   @IsNumber()
   @IsPositive()
   prixFraction?: number;

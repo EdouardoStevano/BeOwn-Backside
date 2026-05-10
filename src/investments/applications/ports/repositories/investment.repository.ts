@@ -16,6 +16,8 @@ export interface InvestmentRepository {
     status: InvestmentStatus,
   ): Promise<Investment>;
 
+  updateBulletinDocId(investmentId: string, bulletinDocId: string): Promise<void>;
+
   saveEcheances(echeances: Echeance[]): Promise<Echeance[]>;
   findEcheancesByInvestissement(investissementId: string): Promise<Echeance[]>;
 }

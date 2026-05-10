@@ -45,7 +45,7 @@ export class StripeIdentityServiceImpl implements StripeIdentityService {
           allowed_types: ['id_card', 'passport', 'driving_license'],
         },
       },
-      return_url: `${this.config.get('FRONTEND_URL')}/kyc/callback`,
+      return_url: `${this.config.get('FRONTEND_URL')}/auth/kyc?from=stripe`,
     });
 
     return {

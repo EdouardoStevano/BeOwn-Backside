@@ -19,6 +19,7 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { DocumentsModule } from './documents/applications/documents.module';
 import { NotificationTestModule } from './common/test/notification-test.module';
 import { AdminModule } from './admin/admin.module';
+import { AvisModule } from './avis/applications/avis.module';
 import { MailerModule } from '@nestjs-modules/mailer';
 import { CacheModule } from '@nestjs/cache-manager';
 import * as redisStore from 'cache-manager-ioredis';
@@ -76,6 +77,7 @@ import * as redisStore from 'cache-manager-ioredis';
     SecondaryMarketModule,
     NotificationsModule,
     DocumentsModule,
+    AvisModule,
     AdminModule,
     ...(process.env.NODE_ENV !== 'production' ? [NotificationTestModule] : []),
   ],

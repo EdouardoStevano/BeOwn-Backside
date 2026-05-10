@@ -1,5 +1,17 @@
 import { InvestmentStatus } from './enums/investment-status.enum';
 
+export interface InvestmentProjet {
+  id: string;
+  titre: string;
+  ville: string | null;
+  pays: string;
+  type: string;
+  triCible: number | null;
+  dureeMois: number;
+  prixFraction: number | null;
+  nbFractions: number | null;
+}
+
 export class Investment {
   id: string;
   projetId: string;
@@ -15,4 +27,5 @@ export class Investment {
   reservationId: string | null;
   createdAt: Date;
   updatedAt: Date;
+  projet?: InvestmentProjet;
 }
