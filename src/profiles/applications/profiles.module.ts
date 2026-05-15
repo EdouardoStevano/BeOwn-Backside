@@ -9,9 +9,10 @@ import { UpdateProfilPPUseCase } from './usecases/update-profil-pp.usecase';
 import { CreateProfilPMUseCase } from './usecases/create-profil-pm.usecase';
 import { GetKycUseCase } from './usecases/get-kyc.usecase';
 import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructure.module';
+import { NotificationsModule } from 'src/notifications/notifications.module';
 
 @Module({
-  imports: [ProfilesInfrastructureModule, IamInfrastructureModule],
+  imports: [ProfilesInfrastructureModule, IamInfrastructureModule, NotificationsModule],
   providers: [
     CreateProfilPPUseCase,
     CreateKycUseCase,

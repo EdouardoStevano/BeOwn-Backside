@@ -32,6 +32,8 @@ import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
 import { UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
+import { NotificationEventService } from 'src/notifications/applications/notification-event.service';
+import { KycStatus } from 'src/profiles/domains/enums/kyc-status.enum';
 
 @ApiTags('Profiles & KYC')
 @ApiBearerAuth()
@@ -46,6 +48,7 @@ export class ProfileController {
     private readonly updateProfilPP: UpdateProfilPPUseCase,
     private readonly createProfilPM: CreateProfilPMUseCase,
     private readonly getKyc: GetKycUseCase,
+    private readonly notificationEvents: NotificationEventService,
   ) {}
 
   @ApiOperation({ summary: 'Créer le profil personne physique' })
@@ -71,11 +74,18 @@ export class ProfileController {
   @ApiResponse({ status: 404, description: 'KYC introuvable' })
   @HttpCode(HttpStatus.OK)
   @Patch(':userId/kyc/status')
-  patchKycStatus(
+  async patchKycStatus(
     @Param('userId', ParseIntPipe) userId: number,
     @Body() dto: UpdateKycStatusDto,
+    @CurrentUser() admin: ActiveUser,
   ) {
-    return this.updateKycStatus.execute(userId, dto.status, dto.motifRefus);
+    const updated = await this.updateKycStatus.execute(userId, dto.status, dto.motifRefus);
+    if (dto.status === KycStatus.VALIDE) {
+      this.notificationEvents.kycValidatedByAdmin(userId, admin.userId);
+    } else if (dto.status === KycStatus.REFUSE) {
+      this.notificationEvents.kycRejectedByAdmin(userId, dto.motifRefus ?? '—', admin.userId);
+    }
+    return updated;
   }
 
   @ApiOperation({ summary: 'Obtenir mon profil PP' })
