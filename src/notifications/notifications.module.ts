@@ -6,6 +6,7 @@ import { NotificationEntity } from './infrastructure/persistences/entities/notif
 import { AuditLogEntity } from './infrastructure/persistences/entities/audit-log.entity';
 import { UserEntity } from 'src/users/infrastructure/persistences/entities/user.entity';
 import { NotificationService } from './applications/notification.service';
+import { NotificationEventService } from './applications/notification-event.service';
 import { NotificationController } from './presenters/http/notification.controller';
 import { AuditLogService } from './applications/audit-log.service';
 import { AuditLogController } from './presenters/http/audit-log.controller';
@@ -24,8 +25,8 @@ import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructu
       inject: [ConfigService],
     }),
   ],
-  providers: [NotificationService, AuditLogService, NotificationGateway],
+  providers: [NotificationService, NotificationEventService, AuditLogService, NotificationGateway],
   controllers: [NotificationController, AuditLogController],
-  exports: [NotificationService, AuditLogService, NotificationGateway, TypeOrmModule],
+  exports: [NotificationService, NotificationEventService, AuditLogService, NotificationGateway, TypeOrmModule],
 })
 export class NotificationsModule {}
