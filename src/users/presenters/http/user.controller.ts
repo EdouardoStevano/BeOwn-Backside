@@ -40,6 +40,7 @@ import { RegisterDto, UpdateUserDto, UpdateUserAdminDto, UpdatePreferencesDto } 
 import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
 import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
+import { NotificationEventService } from 'src/notifications/applications/notification-event.service';
 import { USER_REPOSITORY } from 'src/users/applications/ports/repositories/user.repository';
 import type { UserRepository } from 'src/users/applications/ports/repositories/user.repository';
 import { PROFIL_REPOSITORY } from 'src/profiles/applications/ports/repositories/profil.repository';
@@ -76,6 +77,7 @@ export class UserController {
     private readonly walletRepository: WalletRepository,
     @Inject(HASHING_SERVICE)
     private readonly hashingService: HashingService,
+    private readonly notificationEvents: NotificationEventService,
   ) {}
 
   // ─── Helper ───────────────────────────────────────────────────────────────
@@ -368,12 +370,28 @@ export class UserController {
     const found = await this.userRepository.findById(id);
     if (!found) throw new NotFoundException('Utilisateur introuvable.');
 
-    if (dto.firstname !== undefined) found.firstname = dto.firstname;
-    if (dto.lastname !== undefined) found.lastname = dto.lastname ?? null;
-    if (dto.role !== undefined) (found as any).role = dto.role;
-    if (dto.status !== undefined) (found as any).status = dto.status;
+    const changed: string[] = [];
+    if (dto.firstname !== undefined && dto.firstname !== found.firstname) {
+      found.firstname = dto.firstname;
+      changed.push('firstname');
+    }
+    if (dto.lastname !== undefined && (dto.lastname ?? null) !== (found.lastname ?? null)) {
+      found.lastname = dto.lastname ?? null;
+      changed.push('lastname');
+    }
+    if (dto.role !== undefined && dto.role !== (found as any).role) {
+      (found as any).role = dto.role;
+      changed.push('role');
+    }
+    if (dto.status !== undefined && dto.status !== (found as any).status) {
+      (found as any).status = dto.status;
+      changed.push('status');
+    }
 
     const updated = await this.userRepository.update(found);
+    if (changed.length > 0 && id !== currentUser.userId) {
+      this.notificationEvents.profileUpdatedByAdmin(id, changed, currentUser.userId);
+    }
     const { password: _p, ...safe } = updated as any;
     return safe;
   }
