@@ -24,6 +24,7 @@ import { Repository, In, ILike } from 'typeorm';
 import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
 import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
+import { NotificationEventService } from 'src/notifications/applications/notification-event.service';
 import {
   UserEntity,
   UserRole,
@@ -80,6 +81,7 @@ export class AdminController {
     private readonly kycRepo: Repository<KycEntity>,
     @InjectRepository(OrdreMarcheEntity)
     private readonly ordreRepo: Repository<OrdreMarcheEntity>,
+    private readonly notificationEvents: NotificationEventService,
   ) {}
 
   // ─── Guard helper ──────────────────────────────────────────────────────────
@@ -189,18 +191,26 @@ export class AdminController {
 
   @ApiOperation({ summary: 'Suspendre ou réactiver un compte utilisateur' })
   @ApiParam({ name: 'id', type: Number })
-  @ApiBody({ schema: { properties: { status: { type: 'string', enum: ['actif', 'suspendu', 'clos'] } } } })
+  @ApiBody({ schema: { properties: { status: { type: 'string', enum: ['actif', 'suspendu', 'clos'] }, motif: { type: 'string' } } } })
   @ApiResponse({ status: 200, description: 'Statut mis à jour' })
   @Patch('users/:id/status')
   async updateUserStatus(
     @Param('id', ParseIntPipe) id: number,
-    @Body() body: { status: string },
+    @Body() body: { status: string; motif?: string },
     @CurrentUser() currentUser: ActiveUser,
   ) {
     await this.assertAdmin(currentUser.userId);
     const user = await this.userRepo.findOne({ where: { userId: id } });
     if (!user) throw new NotFoundException('Utilisateur introuvable.');
+    const previousStatus = user.status;
     await this.userRepo.update({ userId: id }, { status: body.status as UserStatus });
+    if (body.status === UserStatus.SUSPENDU && previousStatus !== UserStatus.SUSPENDU) {
+      this.notificationEvents.accountSuspended(id, body.motif ?? null, currentUser.userId);
+    } else if (body.status === UserStatus.ACTIF && previousStatus === UserStatus.SUSPENDU) {
+      this.notificationEvents.accountReactivated(id, currentUser.userId);
+    } else if (body.status === UserStatus.CLOS && previousStatus !== UserStatus.CLOS) {
+      this.notificationEvents.accountClosed(id, body.motif ?? null, currentUser.userId);
+    }
     return { userId: id, status: body.status };
   }
 
