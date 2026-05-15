@@ -37,6 +37,7 @@ import { Document } from 'src/documents/domains/document';
 import { DocumentRelatedTo, DocumentType } from 'src/documents/domains/enums/document-type.enum';
 import { NotificationService } from 'src/notifications/applications/notification.service';
 import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
+import { NotificationEventService } from 'src/notifications/applications/notification-event.service';
 
 @Injectable()
 export class CreateInvestmentUseCase {
@@ -56,6 +57,7 @@ export class CreateInvestmentUseCase {
     private readonly contractGenerator: ContractGeneratorService,
     private readonly cloudStorage: CloudStorageService,
     private readonly notificationService: NotificationService,
+    private readonly notificationEvents: NotificationEventService,
   ) {}
 
   async execute(userId: number, dto: CreateInvestmentDto): Promise<Investment> {
@@ -179,13 +181,11 @@ export class CreateInvestmentUseCase {
       this.logger.error(`Bulletin generation failed for investment ${saved.id}: ${err?.message}`),
     );
 
-    this.notificationService.push({
-      utilisateurId: userId,
-      type: NotificationType.INVESTISSEMENT,
-      titre: 'Investissement confirmé',
-      message: `Votre investissement de ${montant} XOF dans "${project.titre}" est confirmé. Vous détenez ${dto.nbFractions} fraction(s).`,
-      metadata: { investissementId: saved.id, projetId: dto.projetId, montant, nbFractions: dto.nbFractions },
-    }).catch(() => {});
+    // Notify via facade (handles both user + admin)
+    const user = await this.userRepository.findById(userId);
+    if (user) {
+      this.notificationEvents.investmentCreated(saved, project, user);
+    }
 
     return saved;
   }

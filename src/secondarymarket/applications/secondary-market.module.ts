@@ -13,6 +13,7 @@ import { CancelInitiationUseCase } from './usecases/cancel-initiation.usecase';
 import { ProjectEntity } from 'src/projects/infrastructure/persistences/entities/project.entity';
 import { UserEntity } from 'src/users/infrastructure/persistences/entities/user.entity';
 import { InvestmentEntity } from 'src/investments/infrastructure/persistences/entities/investment.entity';
+import { UsersModule } from 'src/users/applications/users.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { InvestmentEntity } from 'src/investments/infrastructure/persistences/en
     NotificationsModule,
     CloudStorageModule,
     YouSignModule,
+    UsersModule,
     TypeOrmModule.forFeature([ProjectEntity, UserEntity, InvestmentEntity]),
   ],
   providers: [
