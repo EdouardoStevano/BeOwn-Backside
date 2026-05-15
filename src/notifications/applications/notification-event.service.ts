@@ -320,4 +320,55 @@ export class NotificationEventService {
       this.logger.warn(`fractionsToppedUp (admin) failed: ${(err as Error)?.message}`);
     }
   }
+
+  async secondaryTradeExecuted(
+    ordre: any,
+    project: any,
+    buyer: any,
+    seller: any,
+    nbFractions: number,
+  ): Promise<void> {
+    const prix = Number(ordre.prixUnitaire);
+    const meta = {
+      ordreId: ordre.id,
+      projetId: project.id,
+      buyerId: buyer.userId,
+      sellerId: seller.userId,
+      nbFractions,
+      prixUnitaire: prix,
+    };
+    try {
+      await this.notifications.push({
+        utilisateurId: buyer.userId,
+        type: NotificationType.MARCHE_SECONDAIRE,
+        titre: 'Achat de fractions confirmé',
+        message: `Vous avez acheté ${nbFractions} fraction(s) à ${prix} XOF/fraction pour "${project.titre}".`,
+        metadata: meta,
+      });
+    } catch (err) {
+      this.logger.warn(`secondaryTradeExecuted (buyer) failed: ${(err as Error)?.message}`);
+    }
+    try {
+      await this.notifications.push({
+        utilisateurId: seller.userId,
+        type: NotificationType.MARCHE_SECONDAIRE,
+        titre: 'Vente de fractions exécutée',
+        message: `${nbFractions} fraction(s) de votre ordre ont été achetées à ${prix} XOF/fraction.`,
+        metadata: meta,
+      });
+    } catch (err) {
+      this.logger.warn(`secondaryTradeExecuted (seller) failed: ${(err as Error)?.message}`);
+    }
+    try {
+      await this.notifications.pushToRoles({
+        type: NotificationType.MARCHE_SECONDAIRE,
+        titre: 'Trade marché secondaire',
+        message: `${this.displayName(buyer)} a acheté ${nbFractions} fraction(s) à ${this.displayName(seller)} pour "${project.titre}".`,
+        roles: [UserRole.ADMIN, UserRole.FINANCIER, UserRole.COMPLIANCE],
+        metadata: meta,
+      });
+    } catch (err) {
+      this.logger.warn(`secondaryTradeExecuted (admin) failed: ${(err as Error)?.message}`);
+    }
+  }
 }
