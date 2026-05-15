@@ -129,7 +129,7 @@ export class CreateInvestmentUseCase {
 
     // ── PSFP limit check for non-averti investors ─────────────────────────────
     if (isNonAverti) {
-      const patrimoine = Number((profilPP as any)?.patrimoineDeclare ?? 0);
+      const patrimoine = Number(profilPP?.patrimoineDeclare ?? 0);
       const limit5Percent = patrimoine * 0.05;
       const recommendedCap = Math.max(1000, limit5Percent);
       if (montant > recommendedCap && !dto.consentementDepassementLimite) {
