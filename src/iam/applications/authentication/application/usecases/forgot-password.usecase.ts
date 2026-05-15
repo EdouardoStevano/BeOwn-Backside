@@ -1,4 +1,4 @@
-﻿import { Injectable, Logger, NotFoundException, InternalServerErrorException } from '@nestjs/common';
+﻿import { Injectable, Logger, InternalServerErrorException } from '@nestjs/common';
 import { randomBytes } from 'crypto';
 import { Inject } from '@nestjs/common';
 import {
@@ -26,7 +26,9 @@ export class ForgotPasswordUseCase {
   async execute(dto: ForgotPasswordDto): Promise<void> {
     const user = await this.userRepository.findByEmail(dto.email);
     if (!user) {
-      throw new NotFoundException('Email non trouvé');
+      // Silently no-op to avoid user enumeration via this endpoint.
+      this.logger.log(`Forgot-password requested for unknown email: ${dto.email}`);
+      return;
     }
 
     const payload: EmailTokenPayload = {
