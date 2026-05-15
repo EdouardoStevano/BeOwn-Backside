@@ -15,13 +15,16 @@ import { ProfilPPEntity } from '../infrastructure/persistences/entities/profil-p
 import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructure.module';
 import { NotificationsModule } from 'src/notifications/notifications.module';
 import { RiskScoringService } from './risk-scoring.service';
+import { BeneficiaireEffectifEntity } from '../infrastructure/persistences/entities/beneficiaire-effectif.entity';
+import { ProfilPMEntity } from '../infrastructure/persistences/entities/profil-pm.entity';
+import { BeneficiaireEffectifController } from '../presenters/http/beneficiaire-effectif.controller';
 
 @Module({
   imports: [
     ProfilesInfrastructureModule,
     IamInfrastructureModule,
     NotificationsModule,
-    TypeOrmModule.forFeature([QuestionnaireAdequationEntity, ProfilPPEntity]),
+    TypeOrmModule.forFeature([QuestionnaireAdequationEntity, ProfilPPEntity, BeneficiaireEffectifEntity, ProfilPMEntity]),
   ],
   providers: [
     CreateProfilPPUseCase,
@@ -34,7 +37,7 @@ import { RiskScoringService } from './risk-scoring.service';
     SaveQuestionnaireUseCase,
     RiskScoringService,
   ],
-  controllers: [ProfileController],
+  controllers: [ProfileController, BeneficiaireEffectifController],
   exports: [CreateKycUseCase, UpdateKycStatusUseCase, ProfilesInfrastructureModule, RiskScoringService],
 })
 export class ProfilesModule {}
