@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { AdminController } from './admin.controller';
 import { AdminSecondaryMarketController } from './admin-secondary-market.controller';
 import { AdminEcheancesController } from './admin-echeances.controller';
+import { AdminRetraitsController } from './admin-retraits.controller';
 import { UserEntity } from 'src/users/infrastructure/persistences/entities/user.entity';
 import { ProjectEntity } from 'src/projects/infrastructure/persistences/entities/project.entity';
 import { InvestmentEntity } from 'src/investments/infrastructure/persistences/entities/investment.entity';
@@ -29,6 +30,6 @@ import { InvestmentsModule } from 'src/investments/applications/investments.modu
     NotificationsModule,
     InvestmentsModule,
   ],
-  controllers: [AdminController, AdminSecondaryMarketController, AdminEcheancesController],
+  controllers: [AdminController, AdminSecondaryMarketController, AdminEcheancesController, AdminRetraitsController],
 })
 export class AdminModule {}
