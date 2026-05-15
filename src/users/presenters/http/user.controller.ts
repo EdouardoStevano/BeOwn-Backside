@@ -41,6 +41,7 @@ import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
 import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
 import { NotificationEventService } from 'src/notifications/applications/notification-event.service';
+import { HASHING_SERVICE, type HashingService } from 'src/common/hashing/hashing.service';
 import { USER_REPOSITORY } from 'src/users/applications/ports/repositories/user.repository';
 import type { UserRepository } from 'src/users/applications/ports/repositories/user.repository';
 import { PROFIL_REPOSITORY } from 'src/profiles/applications/ports/repositories/profil.repository';
@@ -394,5 +395,26 @@ export class UserController {
     }
     const { password: _p, ...safe } = updated as any;
     return safe;
+  }
+
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Delete('me')
+  async deleteMe(
+    @CurrentUser() user: ActiveUser,
+    @Body() dto: DeleteAccountDto,
+  ) {
+    const found = await this.userRepository.findById(user.userId);
+    if (!found) throw new NotFoundException('Utilisateur introuvable.');
+
+    const passwordHash = (found as any).password;
+    if (!passwordHash) throw new UnauthorizedException('Confirmation impossible.');
+
+    const valid = await this.hashingService.compare(dto.password, passwordHash);
+    if (!valid) throw new UnauthorizedException('Mot de passe incorrect.');
+
+    (found as any).status = UserStatus.SUPPRIME;
+    await this.userRepository.update(found);
+
+    this.notificationEvents.accountDeletedByUser(found);
   }
 }
