@@ -11,7 +11,9 @@ import {
   Patch,
   Post,
   Query,
+  Req,
 } from '@nestjs/common';
+import type { Request } from 'express';
 import { createHash } from 'crypto';
 import {
   ApiTags,
@@ -51,6 +53,9 @@ import { CreateAvisDto } from 'src/avis/presenters/dto/avis.dto';
 import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
 import { Public } from 'src/common/auth/public.decorator';
+import { PROFIL_REPOSITORY } from 'src/profiles/applications/ports/repositories/profil.repository';
+import type { ProfilRepository } from 'src/profiles/applications/ports/repositories/profil.repository';
+import { KycStatus } from 'src/profiles/domains/enums/kyc-status.enum';
 import { SkipThrottle } from '@nestjs/throttler';
 import { NotificationService } from 'src/notifications/applications/notification.service';
 import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
@@ -74,6 +79,8 @@ export class ProjectController {
     @Inject(AVIS_REPOSITORY)
     private readonly avisRepository: AvisRepository,
     private readonly notificationService: NotificationService,
+    @Inject(PROFIL_REPOSITORY)
+    private readonly profilRepository: ProfilRepository,
   ) {}
 
   @ApiOperation({
@@ -135,8 +142,10 @@ export class ProjectController {
   @ApiResponse({ status: 404, description: 'Projet introuvable' })
   @Public()
   @Get(':id')
-  async findOne(@Param('id') id: string) {
-    return this.buildProjectDetail(id);
+  async findOne(@Param('id') id: string, @Req() req: Request) {
+    const full = await this.buildProjectDetail(id);
+    if (await this.shouldReturnTeaser(req)) return this.toTeaser(full);
+    return full;
   }
 
   @ApiOperation({ summary: 'Obtenir un projet complet par slug' })
@@ -145,10 +154,12 @@ export class ProjectController {
   @ApiResponse({ status: 404, description: 'Projet introuvable' })
   @Public()
   @Get('slug/:slug')
-  async findBySlug(@Param('slug') slug: string) {
+  async findBySlug(@Param('slug') slug: string, @Req() req: Request) {
     const project = await this.getProjects.executeBySlug(slug);
     if (!project) throw new NotFoundException('Projet introuvable.');
-    return this.buildProjectDetail(project.id);
+    const full = await this.buildProjectDetail(project.id);
+    if (await this.shouldReturnTeaser(req)) return this.toTeaser(full);
+    return full;
   }
 
   @ApiOperation({ summary: 'Créer un nouveau projet (admin)' })
@@ -251,7 +262,7 @@ export class ProjectController {
   @ApiResponse({ status: 404, description: 'Projet introuvable' })
   @Public()
   @Get('shared/:token')
-  async findByShareToken(@Param('token') token: string) {
+  async findByShareToken(@Param('token') token: string, @Req() req: Request) {
     const secret = process.env.PROJECT_SHARE_SECRET || 'beown-share-secret';
     const allProjects = await this.getProjects.execute({
       statuts: [
@@ -270,7 +281,9 @@ export class ProjectController {
       return expected === token;
     });
     if (!project) throw new NotFoundException('Lien de partage invalide ou projet introuvable.');
-    return this.buildProjectDetail(project.id);
+    const full = await this.buildProjectDetail(project.id);
+    if (await this.shouldReturnTeaser(req)) return this.toTeaser(full);
+    return full;
   }
 
   // ─── Avis ──────────────────────────────────────────────────────────────────
@@ -371,6 +384,34 @@ export class ProjectController {
         });
       return { ...p, images };
     });
+  }
+
+  // ─── PSFP helpers ──────────────────────────────────────────────────────────
+
+  /** Returns true when the caller has no valid KYC — teaser mode. */
+  private async shouldReturnTeaser(req: Request): Promise<boolean> {
+    const user = (req as any).user as { userId?: number } | undefined;
+    if (!user?.userId) return true;
+    const kyc = await this.profilRepository.findKycByUserId(user.userId);
+    return kyc?.statut !== KycStatus.VALIDE;
+  }
+
+  /** Returns only public-safe fields for non-validated users (PSFP). */
+  private toTeaser(project: any) {
+    return {
+      id: project.id,
+      titre: project.titre,
+      slug: project.slug,
+      ville: project.ville,
+      pays: project.pays,
+      type: project.type,
+      statut: project.statut,
+      images: project.images,
+      description: project.descriptionMd
+        ? project.descriptionMd.slice(0, 200) + '...'
+        : null,
+      teaserOnly: true,
+    };
   }
 
   private async buildProjectDetail(id: string) {
