@@ -20,6 +20,7 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { DocumentsModule } from './documents/applications/documents.module';
 import { NotificationTestModule } from './common/test/notification-test.module';
 import { AdminModule } from './admin/admin.module';
+import { CgpModule } from './cgp/cgp.module';
 import { AvisModule } from './avis/applications/avis.module';
 import { MailerModule } from '@nestjs-modules/mailer';
 import { HandlebarsAdapter } from '@nestjs-modules/mailer/dist/adapters/handlebars.adapter';
@@ -88,6 +89,7 @@ import * as redisStore from 'cache-manager-ioredis';
     DocumentsModule,
     AvisModule,
     AdminModule,
+    CgpModule,
     ...(process.env.NODE_ENV !== 'production' ? [NotificationTestModule] : []),
   ],
   controllers: [HealthController],

@@ -20,6 +20,7 @@ export enum UserRole {
   DPO = 'dpo',
   RCCI = 'rcci',
   FINANCIER = 'financier',
+  CGP = 'cgp',
 }
 
 export enum UserStatus {
@@ -68,6 +69,12 @@ export class UserEntity {
 
   @Column({ type: 'varchar', nullable: true })
   userType: UserType | null;
+
+  @Column({ type: 'int', nullable: true })
+  cgpId: number | null;
+
+  @Column({ type: 'varchar', nullable: true, unique: true })
+  cgpReferralCode: string | null;
 
   @CreateDateColumn()
   createdAt: Date;
