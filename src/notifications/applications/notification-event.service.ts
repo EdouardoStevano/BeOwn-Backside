@@ -35,4 +35,48 @@ export class NotificationEventService {
       this.logger.warn(`kycRejectedByAdmin failed: ${(err as Error)?.message}`);
     }
   }
+
+  async accountSuspended(userId: number, motif: string | null, adminId: number): Promise<void> {
+    try {
+      const suffix = motif ? `. Motif : ${motif}` : '';
+      await this.notifications.push({
+        utilisateurId: userId,
+        type: NotificationType.COMPTE_SUSPENDU,
+        titre: 'Compte suspendu',
+        message: `Votre compte a été suspendu par l'équipe BeOwn${suffix}.`,
+        metadata: { motif, adminId },
+      });
+    } catch (err) {
+      this.logger.warn(`accountSuspended failed: ${(err as Error)?.message}`);
+    }
+  }
+
+  async accountReactivated(userId: number, adminId: number): Promise<void> {
+    try {
+      await this.notifications.push({
+        utilisateurId: userId,
+        type: NotificationType.COMPTE_REACTIVE,
+        titre: 'Compte réactivé ✓',
+        message: 'Votre compte a été réactivé. Vous pouvez à nouveau accéder à la plateforme.',
+        metadata: { adminId },
+      });
+    } catch (err) {
+      this.logger.warn(`accountReactivated failed: ${(err as Error)?.message}`);
+    }
+  }
+
+  async accountClosed(userId: number, motif: string | null, adminId: number): Promise<void> {
+    try {
+      const suffix = motif ? `. Motif : ${motif}` : '';
+      await this.notifications.push({
+        utilisateurId: userId,
+        type: NotificationType.COMPTE_CLOS,
+        titre: 'Compte clôturé',
+        message: `Votre compte a été clôturé par l'équipe BeOwn${suffix}.`,
+        metadata: { motif, adminId },
+      });
+    } catch (err) {
+      this.logger.warn(`accountClosed failed: ${(err as Error)?.message}`);
+    }
+  }
 }

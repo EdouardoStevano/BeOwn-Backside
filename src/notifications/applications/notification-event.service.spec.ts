@@ -57,3 +57,58 @@ describe('NotificationEventService.kyc', () => {
     });
   });
 });
+
+describe('NotificationEventService.accountStatus', () => {
+  let service: NotificationEventService;
+  let notifications: jest.Mocked<NotificationService>;
+
+  beforeEach(() => {
+    notifications = {
+      push: jest.fn().mockResolvedValue(undefined),
+    } as unknown as jest.Mocked<NotificationService>;
+    service = new NotificationEventService(notifications);
+  });
+
+  it('accountSuspended with motif', async () => {
+    await service.accountSuspended(42, 'multiples tentatives échouées', 1);
+    expect(notifications.push).toHaveBeenCalledWith({
+      utilisateurId: 42,
+      type: NotificationType.COMPTE_SUSPENDU,
+      titre: 'Compte suspendu',
+      message: "Votre compte a été suspendu par l'équipe BeOwn. Motif : multiples tentatives échouées.",
+      metadata: { motif: 'multiples tentatives échouées', adminId: 1 },
+    });
+  });
+
+  it('accountSuspended without motif', async () => {
+    await service.accountSuspended(42, null, 1);
+    expect(notifications.push).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: "Votre compte a été suspendu par l'équipe BeOwn.",
+        metadata: { motif: null, adminId: 1 },
+      }),
+    );
+  });
+
+  it('accountReactivated', async () => {
+    await service.accountReactivated(42, 1);
+    expect(notifications.push).toHaveBeenCalledWith({
+      utilisateurId: 42,
+      type: NotificationType.COMPTE_REACTIVE,
+      titre: 'Compte réactivé ✓',
+      message: 'Votre compte a été réactivé. Vous pouvez à nouveau accéder à la plateforme.',
+      metadata: { adminId: 1 },
+    });
+  });
+
+  it('accountClosed with motif', async () => {
+    await service.accountClosed(42, 'demande RGPD', 1);
+    expect(notifications.push).toHaveBeenCalledWith({
+      utilisateurId: 42,
+      type: NotificationType.COMPTE_CLOS,
+      titre: 'Compte clôturé',
+      message: "Votre compte a été clôturé par l'équipe BeOwn. Motif : demande RGPD.",
+      metadata: { motif: 'demande RGPD', adminId: 1 },
+    });
+  });
+});
