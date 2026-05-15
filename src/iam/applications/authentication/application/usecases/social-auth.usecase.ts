@@ -42,6 +42,7 @@ export class SocialAuthUseCase {
         const tokens = await this.tokenService.generateTokens({
           email: existing.userEmail.email,
           sub: existing.userId,
+          role: existing.role,
           refreshTokenId: null,
         });
         return { ...tokens, isNewUser: false };
@@ -60,6 +61,7 @@ export class SocialAuthUseCase {
       const tokens = await this.tokenService.generateTokens({
         email: savedUser.userEmail.email,
         sub: savedUser.userId,
+        role: savedUser.role,
         refreshTokenId: null,
       });
       return { ...tokens, isNewUser: true };
