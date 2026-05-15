@@ -144,19 +144,12 @@ export class SecondaryMarketController {
     });
     const saved = await this.ordreRepo.save(ordre);
 
-    // Fetch investment, project, and vendor for notification
-    const investment = await this.investmentRepo.findOne({
-      where: { id: dto.investissementId },
-    });
-
-    if (investment) {
-      const [project, vendeur] = await Promise.all([
-        this.projectRepo.findOne({ where: { id: investment.projetId } }),
-        this.userRepo.findOne({ where: { userId: user.userId } }),
-      ]);
-      if (project && vendeur) {
-        this.notificationEvents.secondaryOrderCreated(saved, project, vendeur);
-      }
+    const [project, vendeur] = await Promise.all([
+      this.projectRepo.findOne({ where: { id: investment.projetId } }),
+      this.userRepo.findOne({ where: { userId: user.userId } }),
+    ]);
+    if (project && vendeur) {
+      this.notificationEvents.secondaryOrderCreated(saved, project, vendeur);
     }
 
     return saved;
