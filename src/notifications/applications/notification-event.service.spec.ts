@@ -233,3 +233,29 @@ describe('NotificationEventService.accountDeletedByUser', () => {
     }));
   });
 });
+
+describe('NotificationEventService.userRegistered', () => {
+  it('pushes NOUVELLE_INSCRIPTION to ADMIN/SUPPORT', async () => {
+    const notifications = {
+      pushToRoles: jest.fn().mockResolvedValue([]),
+    } as unknown as jest.Mocked<NotificationService>;
+    const service = new NotificationEventService(notifications);
+
+    const user = {
+      userId: 42,
+      firstname: 'Alice',
+      lastname: 'Martin',
+      userEmail: { email: 'alice@example.com' },
+    } as any;
+
+    await service.userRegistered(user);
+
+    expect(notifications.pushToRoles).toHaveBeenCalledWith(expect.objectContaining({
+      type: NotificationType.NOUVELLE_INSCRIPTION,
+      titre: 'Nouvelle inscription',
+      message: "Alice Martin (alice@example.com) vient de s'inscrire sur la plateforme.",
+      roles: [UserRole.ADMIN, UserRole.SUPPORT],
+      metadata: { userId: 42, email: 'alice@example.com' },
+    }));
+  });
+});

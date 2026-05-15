@@ -203,4 +203,19 @@ export class NotificationEventService {
       this.logger.warn(`accountDeletedByUser failed: ${(err as Error)?.message}`);
     }
   }
+
+  async userRegistered(user: any): Promise<void> {
+    try {
+      const email = user.userEmail?.email ?? '';
+      await this.notifications.pushToRoles({
+        type: NotificationType.NOUVELLE_INSCRIPTION,
+        titre: 'Nouvelle inscription',
+        message: `${this.displayName(user)} (${email}) vient de s'inscrire sur la plateforme.`,
+        roles: [UserRole.ADMIN, UserRole.SUPPORT],
+        metadata: { userId: user.userId, email },
+      });
+    } catch (err) {
+      this.logger.warn(`userRegistered failed: ${(err as Error)?.message}`);
+    }
+  }
 }
