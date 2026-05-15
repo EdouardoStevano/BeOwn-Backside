@@ -3,6 +3,7 @@ import { APP_GUARD } from '@nestjs/core';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule } from '@nestjs/config';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { ScheduleModule } from '@nestjs/schedule';
 import { UsersModule } from './users/applications/users.module';
 import { HealthController } from './health/health.controller';
 import { IamModule } from './iam/iam.module';
@@ -41,6 +42,7 @@ import * as redisStore from 'cache-manager-ioredis';
       { name: 'auth', ttl: 900_000, limit: 500 },
     ]),
     ConfigModule.forRoot({ isGlobal: true }),
+    ScheduleModule.forRoot(),
     TypeOrmModule.forRoot({
       type: 'postgres',
       host: process.env.DATABASE_HOST,
