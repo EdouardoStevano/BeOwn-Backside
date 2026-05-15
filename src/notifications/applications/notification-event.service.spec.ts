@@ -188,3 +188,22 @@ describe('NotificationEventService.echeance', () => {
     }));
   });
 });
+
+describe('NotificationEventService.retraitProcessed', () => {
+  it('pushes RETRAIT_TRAITE to the user with reference', async () => {
+    const notifications = {
+      push: jest.fn().mockResolvedValue(undefined),
+    } as unknown as jest.Mocked<NotificationService>;
+    const service = new NotificationEventService(notifications);
+
+    await service.retraitProcessed(42, 100000, 'XOF', 'tx-uuid');
+
+    expect(notifications.push).toHaveBeenCalledWith({
+      utilisateurId: 42,
+      type: NotificationType.RETRAIT_TRAITE,
+      titre: 'Retrait traité ✓',
+      message: 'Votre retrait de 100000 XOF a été envoyé vers votre compte bancaire. Référence : tx-uuid.',
+      metadata: { montant: 100000, devise: 'XOF', reference: 'tx-uuid' },
+    });
+  });
+});
