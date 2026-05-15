@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AdminController } from './admin.controller';
 import { AdminSecondaryMarketController } from './admin-secondary-market.controller';
+import { AdminEcheancesController } from './admin-echeances.controller';
 import { UserEntity } from 'src/users/infrastructure/persistences/entities/user.entity';
 import { ProjectEntity } from 'src/projects/infrastructure/persistences/entities/project.entity';
 import { InvestmentEntity } from 'src/investments/infrastructure/persistences/entities/investment.entity';
@@ -11,6 +12,7 @@ import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/w
 import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entities/transaction.entity';
 import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructure.module';
 import { NotificationsModule } from 'src/notifications/notifications.module';
+import { InvestmentsModule } from 'src/investments/applications/investments.module';
 
 @Module({
   imports: [
@@ -25,7 +27,8 @@ import { NotificationsModule } from 'src/notifications/notifications.module';
     ]),
     IamInfrastructureModule,
     NotificationsModule,
+    InvestmentsModule,
   ],
-  controllers: [AdminController, AdminSecondaryMarketController],
+  controllers: [AdminController, AdminSecondaryMarketController, AdminEcheancesController],
 })
 export class AdminModule {}
