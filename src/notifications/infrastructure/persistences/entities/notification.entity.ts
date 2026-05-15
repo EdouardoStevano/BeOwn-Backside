@@ -26,6 +26,13 @@ export enum NotificationType {
   MARCHE_SECONDAIRE = 'marche_secondaire',
   INVESTISSEMENT = 'investissement',
   AUTRE = 'autre',
+  // ── New ──────────────────────────────────────────
+  COMPTE_SUSPENDU = 'compte_suspendu',
+  COMPTE_REACTIVE = 'compte_reactive',
+  COMPTE_CLOS = 'compte_clos',
+  COMPTE_SUPPRIME = 'compte_supprime',
+  NOUVELLE_INSCRIPTION = 'nouvelle_inscription',
+  PROFIL_MODIFIE = 'profil_modifie',
 }
 
 @Entity('notification')
