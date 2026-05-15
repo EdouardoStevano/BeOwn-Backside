@@ -18,6 +18,8 @@ export class ProfilPP {
   residenceFiscale: string | null;
   nif: string | null;
   categoriePsfp: CategoriePsfp;
+  patrimoineDeclare: number | null;
+  montantMaxConseille: number | null;
   createdAt: Date;
   updatedAt: Date;
 }

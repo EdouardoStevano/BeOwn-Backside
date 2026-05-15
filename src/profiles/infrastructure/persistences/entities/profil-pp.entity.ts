@@ -67,6 +67,12 @@ export class ProfilPPEntity {
   @Column({ type: 'varchar', default: CategoriePsfp.NON_AVERTI })
   categoriePsfp: CategoriePsfp;
 
+  @Column({ type: 'decimal', precision: 15, scale: 2, nullable: true })
+  patrimoineDeclare: number | null;
+
+  @Column({ type: 'decimal', precision: 15, scale: 2, nullable: true })
+  montantMaxConseille: number | null;
+
   @CreateDateColumn()
   createdAt: Date;
 
