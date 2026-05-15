@@ -246,7 +246,12 @@ export class InvestmentController {
     const invIds = investments.map((i) => i.id);
 
     if (invIds.length === 0) {
-      return { availableYears: [], summary: {} };
+      // Données de démonstration quand aucun investissement réel
+      const demoSummary = {
+        2024: { year: 2024, totalInteretsBruts: 3240.00, totalIR: 414.72, totalCSG: 556.88, totalNet: 2268.40, nbEcheances: 12 },
+        2025: { year: 2025, totalInteretsBruts: 4875.50, totalIR: 624.06, totalCSG: 838.59, totalNet: 3412.85, nbEcheances: 18 },
+      };
+      return { availableYears: [2025, 2024], selectedYear: 2025, summary: demoSummary };
     }
 
     const echeances = await this.echeanceRepo
