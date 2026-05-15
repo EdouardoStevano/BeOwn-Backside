@@ -276,4 +276,48 @@ export class NotificationEventService {
       this.logger.warn(`investmentCreated (admin) failed: ${(err as Error)?.message}`);
     }
   }
+
+  async fractionsToppedUp(
+    investment: any,
+    project: any,
+    user: any,
+    nbFractions: number,
+    montantDelta: number,
+  ): Promise<void> {
+    const totalFractions = investment.nbTitres ?? 0;
+    try {
+      await this.notifications.push({
+        utilisateurId: investment.utilisateurId,
+        type: NotificationType.INVESTISSEMENT,
+        titre: 'Fractions ajoutées',
+        message: `+${nbFractions} fraction${nbFractions > 1 ? 's' : ''} ajoutée${nbFractions > 1 ? 's' : ''} dans "${project.titre}". Vous détenez désormais ${totalFractions} fraction(s) (${montantDelta} XOF débités).`,
+        metadata: {
+          investissementId: investment.id,
+          projetId: project.id,
+          nbFractions,
+          montantDelta,
+          totalFractions,
+        },
+      });
+    } catch (err) {
+      this.logger.warn(`fractionsToppedUp (user) failed: ${(err as Error)?.message}`);
+    }
+    try {
+      await this.notifications.pushToRoles({
+        type: NotificationType.INVESTISSEMENT,
+        titre: 'Top-up investissement',
+        message: `${this.displayName(user)} a ajouté ${nbFractions} fraction(s) dans "${project.titre}" (+${montantDelta} XOF).`,
+        roles: [UserRole.ADMIN, UserRole.FINANCIER],
+        metadata: {
+          investissementId: investment.id,
+          projetId: project.id,
+          userId: investment.utilisateurId,
+          nbFractions,
+          montantDelta,
+        },
+      });
+    } catch (err) {
+      this.logger.warn(`fractionsToppedUp (admin) failed: ${(err as Error)?.message}`);
+    }
+  }
 }
