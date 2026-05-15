@@ -21,6 +21,8 @@ import { SignatureEntity } from 'src/signatures/infrastructure/persistences/enti
 import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/wallet.entity';
 import { UserEntity } from 'src/users/infrastructure/persistences/entities/user.entity';
 import { UserEmailEntity } from 'src/users/infrastructure/persistences/entities/user-email.entity';
+import { EcheanceEntity } from 'src/investments/infrastructure/persistences/entities/echeance.entity';
+import { EcheancesCronService } from './echeances-cron.service';
 
 @Module({
   imports: [
@@ -32,6 +34,7 @@ import { UserEmailEntity } from 'src/users/infrastructure/persistences/entities/
       WalletEntity,
       UserEntity,
       UserEmailEntity,
+      EcheanceEntity,
     ]),
     InvestmentsInfrastructureModule,
     IamInfrastructureModule,
@@ -43,7 +46,7 @@ import { UserEmailEntity } from 'src/users/infrastructure/persistences/entities/
     YouSignModule,
     NotificationsModule,
   ],
-  providers: [CreateInvestmentUseCase, ContractGeneratorService, TopUpInvestmentUseCase, InitiateInvestmentUseCase],
+  providers: [CreateInvestmentUseCase, ContractGeneratorService, TopUpInvestmentUseCase, InitiateInvestmentUseCase, EcheancesCronService],
   controllers: [InvestmentController],
   exports: [],
 })
