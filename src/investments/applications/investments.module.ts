@@ -25,6 +25,7 @@ import { UserEntity } from 'src/users/infrastructure/persistences/entities/user.
 import { UserEmailEntity } from 'src/users/infrastructure/persistences/entities/user-email.entity';
 import { EcheanceEntity } from 'src/investments/infrastructure/persistences/entities/echeance.entity';
 import { EcheancesCronService } from './echeances-cron.service';
+import { IfuGenerationService } from './ifu-generation.service';
 import { PayEcheanceUseCase } from './usecases/pay-echeance.usecase';
 import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entities/transaction.entity';
 
@@ -52,8 +53,8 @@ import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entit
     YouSignModule,
     NotificationsModule,
   ],
-  providers: [CreateInvestmentUseCase, ContractGeneratorService, TopUpInvestmentUseCase, InitiateInvestmentUseCase, CancelInvestmentUseCase, EcheancesCronService, PayEcheanceUseCase],
+  providers: [CreateInvestmentUseCase, ContractGeneratorService, TopUpInvestmentUseCase, InitiateInvestmentUseCase, CancelInvestmentUseCase, EcheancesCronService, IfuGenerationService, PayEcheanceUseCase],
   controllers: [InvestmentController],
-  exports: [PayEcheanceUseCase],
+  exports: [PayEcheanceUseCase, IfuGenerationService],
 })
 export class InvestmentsModule {}

@@ -321,6 +321,20 @@ export class NotificationEventService {
     }
   }
 
+  async ifuGenerated(userId: number, year: number, documentId: string): Promise<void> {
+    try {
+      await this.notifications.push({
+        utilisateurId: userId,
+        type: NotificationType.AUTRE,
+        titre: `Votre IFU ${year} est disponible`,
+        message: `Votre Imprimé Fiscal Unique pour l'année ${year} est disponible dans vos documents.`,
+        metadata: { documentId, year },
+      });
+    } catch (err) {
+      this.logger.warn(`ifuGenerated failed: ${(err as Error)?.message}`);
+    }
+  }
+
   async secondaryTradeExecuted(
     ordre: any,
     project: any,

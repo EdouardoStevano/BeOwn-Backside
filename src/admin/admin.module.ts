@@ -4,6 +4,7 @@ import { AdminController } from './admin.controller';
 import { AdminSecondaryMarketController } from './admin-secondary-market.controller';
 import { AdminEcheancesController } from './admin-echeances.controller';
 import { AdminRetraitsController } from './admin-retraits.controller';
+import { AdminFiscalController } from './admin-fiscal.controller';
 import { UserEntity } from 'src/users/infrastructure/persistences/entities/user.entity';
 import { ProjectEntity } from 'src/projects/infrastructure/persistences/entities/project.entity';
 import { InvestmentEntity } from 'src/investments/infrastructure/persistences/entities/investment.entity';
