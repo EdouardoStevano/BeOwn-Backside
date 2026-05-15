@@ -9,6 +9,7 @@ import {
   HttpStatus,
   Get,
   Query,
+  Inject,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -23,15 +24,20 @@ import { GetProfilPPUseCase } from 'src/profiles/applications/usecases/get-profi
 import { UpdateProfilPPUseCase } from 'src/profiles/applications/usecases/update-profil-pp.usecase';
 import { CreateProfilPMUseCase } from 'src/profiles/applications/usecases/create-profil-pm.usecase';
 import { GetKycUseCase } from 'src/profiles/applications/usecases/get-kyc.usecase';
+import { SaveQuestionnaireUseCase } from 'src/profiles/applications/usecases/save-questionnaire.usecase';
+import { QuestionnaireAdequationEntity } from 'src/profiles/infrastructure/persistences/entities/questionnaire-adequation.entity';
 import {
   CreateProfilPPDto,
   UpdateKycStatusDto,
   CreateProfilPMDto,
 } from '../dto/profil.dto';
+import { SaveQuestionnaireDto } from '../dto/questionnaire.dto';
 import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
 import { UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import { NotificationEventService } from 'src/notifications/applications/notification-event.service';
 import { KycStatus } from 'src/profiles/domains/enums/kyc-status.enum';
 
@@ -49,6 +55,9 @@ export class ProfileController {
     private readonly createProfilPM: CreateProfilPMUseCase,
     private readonly getKyc: GetKycUseCase,
     private readonly notificationEvents: NotificationEventService,
+    private readonly saveQuestionnaireUseCase: SaveQuestionnaireUseCase,
+    @InjectRepository(QuestionnaireAdequationEntity)
+    private readonly questionnaireRepo: Repository<QuestionnaireAdequationEntity>,
   ) {}
 
   @ApiOperation({ summary: 'Créer le profil personne physique' })
