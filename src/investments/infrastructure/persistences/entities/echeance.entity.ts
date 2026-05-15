@@ -37,6 +37,12 @@ export class EcheanceEntity {
   @Column({ type: 'decimal', precision: 18, scale: 2, default: 0 })
   montantTotal: number;
 
+  @Column({ type: 'decimal', precision: 14, scale: 2, default: 0 })
+  prelevementIR: number;
+
+  @Column({ type: 'decimal', precision: 14, scale: 2, default: 0 })
+  prelevementCSG: number;
+
   @Column({ type: 'varchar', default: EcheanceStatus.A_VENIR })
   statut: EcheanceStatus;
 

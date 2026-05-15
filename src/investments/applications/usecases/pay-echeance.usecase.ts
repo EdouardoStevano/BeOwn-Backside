@@ -42,21 +42,63 @@ export class PayEcheanceUseCase {
 
     const userId = (echeance as any).investissement.utilisateurId;
     const project = (echeance as any).investissement.projet;
-    const montant = Number(echeance.montantTotal);
 
+    // ── PFU (Prélèvement Forfaitaire Unique 30%) ─────────────────────────────
+    // IR: 12.8% of interest, CSG/CRDS: 17.2% of interest — applied on montantInterets only
+    const interets = Number(echeance.montantInterets);
+    const prelevementIR = Math.round(interets * 0.128 * 100) / 100;
+    const prelevementCSG = Math.round(interets * 0.172 * 100) / 100;
+    const montantNet = Number(echeance.montantTotal) - prelevementIR - prelevementCSG;
+
+    // ── Investor wallet ──────────────────────────────────────────────────────
     const wallet = await this.walletRepo.findOne({
       where: { proprietaireUserId: userId, type: WalletType.INVESTISSEUR },
     });
     if (!wallet) throw new NotFoundException('Wallet investisseur introuvable');
 
-    wallet.solde = Number(wallet.solde) + montant;
+    wallet.solde = Number(wallet.solde) + montantNet;
     await this.walletRepo.save(wallet);
 
-    // Use PAIEMENT_INTERETS for écheance payment (interest payment)
+    // ── Séquestre wallets (system-wide, created on first use) ────────────────
+    let walletIR = await this.walletRepo.findOne({
+      where: { type: WalletType.SEQUESTRE_IR },
+    });
+    if (!walletIR) {
+      walletIR = await this.walletRepo.save(
+        this.walletRepo.create({
+          type: WalletType.SEQUESTRE_IR,
+          proprietaireUserId: null,
+          fournisseurRef: 'SEQUESTRE-IR',
+          devise: wallet.devise,
+          solde: 0,
+        }),
+      );
+    }
+    walletIR.solde = Number(walletIR.solde) + prelevementIR;
+    await this.walletRepo.save(walletIR);
+
+    let walletCSG = await this.walletRepo.findOne({
+      where: { type: WalletType.SEQUESTRE_CSG },
+    });
+    if (!walletCSG) {
+      walletCSG = await this.walletRepo.save(
+        this.walletRepo.create({
+          type: WalletType.SEQUESTRE_CSG,
+          proprietaireUserId: null,
+          fournisseurRef: 'SEQUESTRE-CSG',
+          devise: wallet.devise,
+          solde: 0,
+        }),
+      );
+    }
+    walletCSG.solde = Number(walletCSG.solde) + prelevementCSG;
+    await this.walletRepo.save(walletCSG);
+
+    // ── Main transaction (net interest credited to investor) ─────────────────
     const tx = this.txRepo.create({
       walletDestination: wallet.id,
       type: TransactionType.PAIEMENT_INTERETS,
-      montant,
+      montant: montantNet,
       devise: wallet.devise,
       statut: TransactionStatus.REUSSI,
       fournisseur: TransactionFournisseur.INTERNE,
@@ -69,6 +111,42 @@ export class PayEcheanceUseCase {
     });
     await this.txRepo.save(tx);
 
+    // ── Audit transactions for séquestre transfers ───────────────────────────
+    const txIR = this.txRepo.create({
+      walletDestination: walletIR.id,
+      type: TransactionType.IMPOTS,
+      montant: prelevementIR,
+      devise: wallet.devise,
+      statut: TransactionStatus.REUSSI,
+      fournisseur: TransactionFournisseur.INTERNE,
+      echeanceId: echeance.id,
+      investissementId: echeance.investissementId,
+      projetId: (echeance as any).investissement.projetId,
+      idempotencyKey: `echeance:ir:${echeance.id}`,
+      fraisPsp: 0,
+      fraisPlateforme: 0,
+    });
+    await this.txRepo.save(txIR);
+
+    const txCSG = this.txRepo.create({
+      walletDestination: walletCSG.id,
+      type: TransactionType.IMPOTS,
+      montant: prelevementCSG,
+      devise: wallet.devise,
+      statut: TransactionStatus.REUSSI,
+      fournisseur: TransactionFournisseur.INTERNE,
+      echeanceId: echeance.id,
+      investissementId: echeance.investissementId,
+      projetId: (echeance as any).investissement.projetId,
+      idempotencyKey: `echeance:csg:${echeance.id}`,
+      fraisPsp: 0,
+      fraisPlateforme: 0,
+    });
+    await this.txRepo.save(txCSG);
+
+    // ── Persist fiscal fields + mark paid ────────────────────────────────────
+    echeance.prelevementIR = prelevementIR;
+    echeance.prelevementCSG = prelevementCSG;
     echeance.statut = EcheanceStatus.PAYE;
     echeance.payeLe = new Date();
     const saved = await this.echeanceRepo.save(echeance);
@@ -82,7 +160,7 @@ export class PayEcheanceUseCase {
       echeance.id,
       undefined,
       undefined,
-      { montant, projetId: project?.id },
+      { montantNet, prelevementIR, prelevementCSG, projetId: project?.id },
     );
     return saved;
   }
