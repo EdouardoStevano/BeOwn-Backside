@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { NotificationService } from './notification.service';
 import { NotificationType } from '../infrastructure/persistences/entities/notification.entity';
+import { UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
 
 @Injectable()
 export class NotificationEventService {
@@ -95,6 +96,72 @@ export class NotificationEventService {
       });
     } catch (err) {
       this.logger.warn(`profileUpdatedByAdmin failed: ${(err as Error)?.message}`);
+    }
+  }
+
+  async echeanceUpcoming(echeance: any, project: any): Promise<void> {
+    try {
+      const userId = echeance.investissement?.utilisateurId;
+      if (!userId) return;
+      const dateStr = new Date(echeance.datePrevue).toLocaleDateString('fr-FR');
+      await this.notifications.push({
+        utilisateurId: userId,
+        type: NotificationType.ECHEANCE,
+        titre: 'Échéance à venir',
+        message: `Votre échéance n°${echeance.numero} de ${echeance.montantTotal} XOF pour « ${project.titre} » est prévue le ${dateStr}.`,
+        metadata: {
+          echeanceId: echeance.id,
+          investissementId: echeance.investissementId,
+          projetId: project.id,
+          numero: echeance.numero,
+          montant: Number(echeance.montantTotal),
+          datePrevue: echeance.datePrevue,
+        },
+      });
+    } catch (err) {
+      this.logger.warn(`echeanceUpcoming failed: ${(err as Error)?.message}`);
+    }
+  }
+
+  async echeancePaid(echeance: any, project: any): Promise<void> {
+    try {
+      const userId = echeance.investissement?.utilisateurId;
+      if (!userId) return;
+      await this.notifications.push({
+        utilisateurId: userId,
+        type: NotificationType.ECHEANCE,
+        titre: 'Échéance payée ✓',
+        message: `L'échéance n°${echeance.numero} de ${echeance.montantTotal} XOF pour « ${project.titre} » a été créditée sur votre wallet.`,
+        metadata: {
+          echeanceId: echeance.id,
+          investissementId: echeance.investissementId,
+          projetId: project.id,
+          numero: echeance.numero,
+          montant: Number(echeance.montantTotal),
+        },
+      });
+    } catch (err) {
+      this.logger.warn(`echeancePaid failed: ${(err as Error)?.message}`);
+    }
+  }
+
+  async echeanceOverdueAdmin(echeance: any, project: any): Promise<void> {
+    try {
+      await this.notifications.pushToRoles({
+        type: NotificationType.ECHEANCE,
+        titre: 'Échéance en retard',
+        message: `L'échéance n°${echeance.numero} de ${echeance.montantTotal} XOF pour "${project.titre}" est en retard.`,
+        roles: [UserRole.ADMIN, UserRole.FINANCIER],
+        metadata: {
+          echeanceId: echeance.id,
+          investissementId: echeance.investissementId,
+          projetId: project.id,
+          numero: echeance.numero,
+          montant: Number(echeance.montantTotal),
+        },
+      });
+    } catch (err) {
+      this.logger.warn(`echeanceOverdueAdmin failed: ${(err as Error)?.message}`);
     }
   }
 }

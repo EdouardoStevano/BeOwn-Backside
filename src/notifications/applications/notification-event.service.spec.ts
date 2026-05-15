@@ -1,6 +1,7 @@
 import { NotificationEventService } from './notification-event.service';
 import { NotificationService } from './notification.service';
 import { NotificationType } from '../infrastructure/persistences/entities/notification.entity';
+import { UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
 
 describe('NotificationEventService', () => {
   let service: NotificationEventService;
@@ -129,5 +130,61 @@ describe('NotificationEventService.profileUpdatedByAdmin', () => {
       message: "Votre profil a été modifié par l'équipe BeOwn (lastname, role).",
       metadata: { changedFields: ['lastname', 'role'], adminId: 1 },
     });
+  });
+});
+
+describe('NotificationEventService.echeance', () => {
+  let service: NotificationEventService;
+  let notifications: jest.Mocked<NotificationService>;
+
+  const echeance = {
+    id: 'ech-uuid',
+    investissementId: 'inv-uuid',
+    numero: 3,
+    datePrevue: new Date('2026-06-01T00:00:00Z'),
+    montantTotal: 50000,
+    investissement: { utilisateurId: 42 },
+  } as any;
+  const project = { id: 'p-uuid', titre: 'Résidence Pelican' } as any;
+
+  beforeEach(() => {
+    notifications = {
+      push: jest.fn().mockResolvedValue(undefined),
+      pushToRoles: jest.fn().mockResolvedValue([]),
+    } as unknown as jest.Mocked<NotificationService>;
+    service = new NotificationEventService(notifications);
+  });
+
+  it('echeanceUpcoming pushes ECHEANCE to the user', async () => {
+    await service.echeanceUpcoming(echeance, project);
+    expect(notifications.push).toHaveBeenCalledWith(expect.objectContaining({
+      utilisateurId: 42,
+      type: NotificationType.ECHEANCE,
+      titre: 'Échéance à venir',
+      metadata: expect.objectContaining({
+        echeanceId: 'ech-uuid',
+        projetId: 'p-uuid',
+        numero: 3,
+        montant: 50000,
+      }),
+    }));
+  });
+
+  it('echeancePaid pushes ECHEANCE confirmed to the user', async () => {
+    await service.echeancePaid(echeance, project);
+    expect(notifications.push).toHaveBeenCalledWith(expect.objectContaining({
+      utilisateurId: 42,
+      type: NotificationType.ECHEANCE,
+      titre: 'Échéance payée ✓',
+    }));
+  });
+
+  it('echeanceOverdueAdmin pushes ECHEANCE to ADMIN/FINANCIER', async () => {
+    await service.echeanceOverdueAdmin(echeance, project);
+    expect(notifications.pushToRoles).toHaveBeenCalledWith(expect.objectContaining({
+      type: NotificationType.ECHEANCE,
+      titre: 'Échéance en retard',
+      roles: [UserRole.ADMIN, UserRole.FINANCIER],
+    }));
   });
 });
