@@ -140,4 +140,21 @@ export class ProfileController {
       limit: limit ? parseInt(limit, 10) : 20,
     });
   }
+
+  @ApiOperation({ summary: "Sauvegarder le questionnaire d'adéquation PSFP" })
+  @ApiResponse({ status: 201, description: 'Questionnaire enregistré, catégorie et plafond calculés' })
+  @Post('questionnaire')
+  saveQuestionnaire(
+    @CurrentUser() user: ActiveUser,
+    @Body() dto: SaveQuestionnaireDto,
+  ) {
+    return this.saveQuestionnaireUseCase.execute(user.userId, dto);
+  }
+
+  @ApiOperation({ summary: "Obtenir mon questionnaire d'adéquation" })
+  @ApiResponse({ status: 200, description: 'Questionnaire retourné' })
+  @Get('questionnaire/me')
+  getMyQuestionnaire(@CurrentUser() user: ActiveUser) {
+    return this.questionnaireRepo.findOne({ where: { utilisateurId: user.userId } });
+  }
 }
