@@ -269,25 +269,23 @@ export class YouSignWebhookController {
     });
 
     // Notifications (non-bloquantes)
-    const ordre = await this.ordreRepo.findOne({ where: { id: signature.ordreId! } });
+    const ordre = await this.ordreRepo.findOne({
+      where: { id: signature.ordreId! },
+      relations: ['investissement'],
+    });
     const nbFractions = signature.nbFractions!;
 
-    this.notificationService.push({
-      utilisateurId: signature.userId,
-      type: NotificationType.MARCHE_SECONDAIRE,
-      titre: 'Achat confirmé ✓',
-      message: `Votre achat de ${nbFractions} fraction${nbFractions > 1 ? 's' : ''} a été finalisé. Contrat signé disponible dans vos documents.`,
-      metadata: { investissementId: buyerInvestId, signatureId: signature.id, fusionnee },
-    }).catch(() => {});
-
     if (ordre) {
-      this.notificationService.push({
-        utilisateurId: ordre.vendeurId,
-        type: NotificationType.MARCHE_SECONDAIRE,
-        titre: 'Vente exécutée',
-        message: `${nbFractions} fraction${nbFractions > 1 ? 's' : ''} ont été achetées et le paiement a été crédité sur votre wallet.`,
-        metadata: { ordreId: ordre.id, nbFractions },
-      }).catch(() => {});
+      const projectEntity = await this.projectRepo.findOne({
+        where: { id: ordre.investissement.projetId },
+      });
+      const buyerUser = await this.userRepository.findById(signature.userId);
+      const sellerUser = await this.userRepository.findById(ordre.vendeurId);
+      if (projectEntity && buyerUser && sellerUser) {
+        await this.notificationEvents.secondaryTradeExecuted(
+          ordre, projectEntity, buyerUser, sellerUser, nbFractions,
+        );
+      }
     }
 
     this.logger.log(`Signature done: investmentId=${buyerInvestId} fusionnee=${fusionnee}`);

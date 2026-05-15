@@ -33,6 +33,8 @@ import {
 } from 'src/wallets/domains/enums/wallet.enum';
 import { NotificationService } from 'src/notifications/applications/notification.service';
 import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
+import { NotificationEventService } from 'src/notifications/applications/notification-event.service';
+import { ProjectEntity } from 'src/projects/infrastructure/persistences/entities/project.entity';
 
 const ADMIN_ROLES = [
   UserRole.ADMIN,
@@ -59,8 +61,11 @@ export class AdminSecondaryMarketController {
     private readonly walletRepo: Repository<WalletEntity>,
     @InjectRepository(TransactionEntity)
     private readonly txRepo: Repository<TransactionEntity>,
+    @InjectRepository(ProjectEntity)
+    private readonly projectRepo: Repository<ProjectEntity>,
     private readonly dataSource: DataSource,
     private readonly notificationService: NotificationService,
+    private readonly notificationEvents: NotificationEventService,
   ) {}
 
   private async assertAdmin(user: ActiveUser): Promise<void> {
@@ -254,13 +259,14 @@ export class AdminSecondaryMarketController {
       return { buyerInvestId: buyerInvest.id };
     });
 
-    this.notificationService.push({
-      utilisateurId: buyerUserId,
-      type: NotificationType.MARCHE_SECONDAIRE,
-      titre: 'Achat finalisé par l\'administration',
-      message: `Votre achat de ${nbFractions} fraction(s) a été finalisé manuellement par l\'équipe BeOwn.`,
-      metadata: { investissementId: buyerInvestId },
-    }).catch(() => {});
+    const project = await this.projectRepo.findOne({ where: { id: projetId } });
+    const buyerUser = await this.userRepo.findOne({ where: { userId: buyerUserId } });
+    const sellerUser = await this.userRepo.findOne({ where: { userId: ordre.vendeurId } });
+    if (project && buyerUser && sellerUser) {
+      await this.notificationEvents.secondaryTradeExecuted(
+        ordre, project, buyerUser, sellerUser, nbFractions,
+      );
+    }
 
     return { success: true, buyerInvestId };
   }

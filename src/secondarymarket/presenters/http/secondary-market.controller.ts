@@ -251,21 +251,16 @@ export class SecondaryMarketController {
       };
     });
 
-    this.notificationService.push({
-      utilisateurId: user.userId,
-      type: NotificationType.MARCHE_SECONDAIRE,
-      titre: 'Achat de fractions confirmé',
-      message: `Vous avez acheté ${qtyToBuy} fraction(s) à ${ordre.prixUnitaire} XOF/fraction.`,
-      metadata: { ordreId: id, fractionsAchetees: qtyToBuy, prixUnitaire: ordre.prixUnitaire },
-    }).catch(() => {});
-
-    this.notificationService.push({
-      utilisateurId: vendeurId,
-      type: NotificationType.MARCHE_SECONDAIRE,
-      titre: 'Vente de fractions exécutée',
-      message: `${qtyToBuy} fraction(s) de votre ordre ont été achetées à ${ordre.prixUnitaire} XOF/fraction.`,
-      metadata: { ordreId: id, fractionsVendues: qtyToBuy, prixUnitaire: ordre.prixUnitaire },
-    }).catch(() => {});
+    const [project, buyerUser, sellerUser] = await Promise.all([
+      this.projectRepo.findOne({ where: { id: investOriginal.projetId } }),
+      this.userRepo.findOne({ where: { userId: user.userId } }),
+      this.userRepo.findOne({ where: { userId: vendeurId } }),
+    ]);
+    if (project && buyerUser && sellerUser) {
+      await this.notificationEvents.secondaryTradeExecuted(
+        ordre, project, buyerUser, sellerUser, qtyToBuy,
+      );
+    }
 
     return result;
   }
