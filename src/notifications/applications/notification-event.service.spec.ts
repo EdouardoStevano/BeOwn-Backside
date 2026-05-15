@@ -259,3 +259,26 @@ describe('NotificationEventService.userRegistered', () => {
     }));
   });
 });
+
+describe('NotificationEventService.secondaryOrderCreated', () => {
+  it('pushes MARCHE_SECONDAIRE to ADMIN/COMPLIANCE/FINANCIER', async () => {
+    const notifications = {
+      pushToRoles: jest.fn().mockResolvedValue([]),
+    } as unknown as jest.Mocked<NotificationService>;
+    const service = new NotificationEventService(notifications);
+
+    const ordre = { id: 'o-uuid', nbFractions: 5, prixUnitaire: 1000 } as any;
+    const project = { id: 'p-uuid', titre: 'Résidence Pelican' } as any;
+    const vendeur = { userId: 42, firstname: 'Jean', lastname: 'Dupont', userEmail: { email: 'j@x.com' } } as any;
+
+    await service.secondaryOrderCreated(ordre, project, vendeur);
+
+    expect(notifications.pushToRoles).toHaveBeenCalledWith(expect.objectContaining({
+      type: NotificationType.MARCHE_SECONDAIRE,
+      titre: 'Nouvelle annonce marché secondaire',
+      message: 'Jean Dupont a mis en vente 5 fraction(s) de "Résidence Pelican" à 1000 XOF/fraction.',
+      roles: [UserRole.ADMIN, UserRole.COMPLIANCE, UserRole.FINANCIER],
+      metadata: { ordreId: 'o-uuid', projetId: 'p-uuid', vendeurId: 42, nbFractions: 5, prixUnitaire: 1000 },
+    }));
+  });
+});

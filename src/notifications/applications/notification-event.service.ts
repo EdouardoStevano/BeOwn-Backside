@@ -218,4 +218,24 @@ export class NotificationEventService {
       this.logger.warn(`userRegistered failed: ${(err as Error)?.message}`);
     }
   }
+
+  async secondaryOrderCreated(ordre: any, project: any, vendeur: any): Promise<void> {
+    try {
+      await this.notifications.pushToRoles({
+        type: NotificationType.MARCHE_SECONDAIRE,
+        titre: 'Nouvelle annonce marché secondaire',
+        message: `${this.displayName(vendeur)} a mis en vente ${ordre.nbFractions} fraction(s) de "${project.titre}" à ${Number(ordre.prixUnitaire)} XOF/fraction.`,
+        roles: [UserRole.ADMIN, UserRole.COMPLIANCE, UserRole.FINANCIER],
+        metadata: {
+          ordreId: ordre.id,
+          projetId: project.id,
+          vendeurId: vendeur.userId,
+          nbFractions: ordre.nbFractions,
+          prixUnitaire: Number(ordre.prixUnitaire),
+        },
+      });
+    } catch (err) {
+      this.logger.warn(`secondaryOrderCreated failed: ${(err as Error)?.message}`);
+    }
+  }
 }
