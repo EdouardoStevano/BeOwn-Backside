@@ -5,6 +5,7 @@ import { QuestionnaireAdequationEntity } from '../../infrastructure/persistences
 import { ProfilPPEntity } from '../../infrastructure/persistences/entities/profil-pp.entity';
 import { CategoriePsfp } from '../../domains/enums/kyc-status.enum';
 import { SaveQuestionnaireDto } from '../../presenters/dto/questionnaire.dto';
+import { RiskScoringService } from '../risk-scoring.service';
 
 @Injectable()
 export class SaveQuestionnaireUseCase {
@@ -13,6 +14,7 @@ export class SaveQuestionnaireUseCase {
     private readonly questionnaireRepo: Repository<QuestionnaireAdequationEntity>,
     @InjectRepository(ProfilPPEntity)
     private readonly profilPPRepo: Repository<ProfilPPEntity>,
+    private readonly riskScoringService: RiskScoringService,
   ) {}
 
   async execute(userId: number, dto: SaveQuestionnaireDto): Promise<QuestionnaireAdequationEntity> {
@@ -69,6 +71,9 @@ export class SaveQuestionnaireUseCase {
       (profilPP as any).montantMaxConseille = montantMax;
       await this.profilPPRepo.save(profilPP);
     }
+
+    // Compute and store risk level
+    await this.riskScoringService.computeAndStore(userId);
 
     return saved;
   }

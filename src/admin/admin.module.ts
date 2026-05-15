@@ -5,6 +5,7 @@ import { AdminSecondaryMarketController } from './admin-secondary-market.control
 import { AdminEcheancesController } from './admin-echeances.controller';
 import { AdminRetraitsController } from './admin-retraits.controller';
 import { AdminFiscalController } from './admin-fiscal.controller';
+import { AdminInvestorsController } from './admin-investors.controller';
 import { UserEntity } from 'src/users/infrastructure/persistences/entities/user.entity';
 import { ProjectEntity } from 'src/projects/infrastructure/persistences/entities/project.entity';
 import { InvestmentEntity } from 'src/investments/infrastructure/persistences/entities/investment.entity';
@@ -15,6 +16,7 @@ import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entit
 import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructure.module';
 import { NotificationsModule } from 'src/notifications/notifications.module';
 import { InvestmentsModule } from 'src/investments/applications/investments.module';
+import { ProfilesModule } from 'src/profiles/applications/profiles.module';
 
 @Module({
   imports: [
@@ -30,7 +32,8 @@ import { InvestmentsModule } from 'src/investments/applications/investments.modu
     IamInfrastructureModule,
     NotificationsModule,
     InvestmentsModule,
+    ProfilesModule,
   ],
-  controllers: [AdminController, AdminSecondaryMarketController, AdminEcheancesController, AdminRetraitsController],
+  controllers: [AdminController, AdminSecondaryMarketController, AdminEcheancesController, AdminRetraitsController, AdminInvestorsController],
 })
 export class AdminModule {}

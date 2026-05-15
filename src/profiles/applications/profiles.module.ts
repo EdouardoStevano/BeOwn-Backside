@@ -14,6 +14,7 @@ import { QuestionnaireAdequationEntity } from '../infrastructure/persistences/en
 import { ProfilPPEntity } from '../infrastructure/persistences/entities/profil-pp.entity';
 import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructure.module';
 import { NotificationsModule } from 'src/notifications/notifications.module';
+import { RiskScoringService } from './risk-scoring.service';
 
 @Module({
   imports: [
@@ -31,8 +32,9 @@ import { NotificationsModule } from 'src/notifications/notifications.module';
     CreateProfilPMUseCase,
     GetKycUseCase,
     SaveQuestionnaireUseCase,
+    RiskScoringService,
   ],
   controllers: [ProfileController],
-  exports: [CreateKycUseCase, UpdateKycStatusUseCase, ProfilesInfrastructureModule],
+  exports: [CreateKycUseCase, UpdateKycStatusUseCase, ProfilesInfrastructureModule, RiskScoringService],
 })
 export class ProfilesModule {}

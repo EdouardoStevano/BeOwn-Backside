@@ -20,6 +20,9 @@ export class ProfilPP {
   categoriePsfp: CategoriePsfp;
   patrimoineDeclare: number | null;
   montantMaxConseille: number | null;
+  niveauRisque: string | null = null;
+  dernierContactAdmin: Date | null = null;
+  prochainContactDu: Date | null = null;
   createdAt: Date;
   updatedAt: Date;
 }
