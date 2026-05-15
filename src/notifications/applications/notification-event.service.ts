@@ -9,6 +9,11 @@ export class NotificationEventService {
 
   constructor(private readonly notifications: NotificationService) {}
 
+  private displayName(u: { firstname?: string | null; lastname?: string | null; userEmail?: { email?: string } | null }): string {
+    const name = [u.firstname, u.lastname].filter(Boolean).join(' ');
+    return name || u.userEmail?.email || 'Utilisateur inconnu';
+  }
+
   async kycValidatedByAdmin(userId: number, adminId: number): Promise<void> {
     try {
       await this.notifications.push({
@@ -181,6 +186,21 @@ export class NotificationEventService {
       });
     } catch (err) {
       this.logger.warn(`retraitProcessed failed: ${(err as Error)?.message}`);
+    }
+  }
+
+  async accountDeletedByUser(user: any): Promise<void> {
+    try {
+      const email = user.userEmail?.email ?? '';
+      await this.notifications.pushToRoles({
+        type: NotificationType.COMPTE_SUPPRIME,
+        titre: 'Compte supprimé',
+        message: `${this.displayName(user)} (${email}) a supprimé son compte (soft-delete).`,
+        roles: [UserRole.ADMIN, UserRole.COMPLIANCE, UserRole.SUPPORT],
+        metadata: { userId: user.userId, email },
+      });
+    } catch (err) {
+      this.logger.warn(`accountDeletedByUser failed: ${(err as Error)?.message}`);
     }
   }
 }

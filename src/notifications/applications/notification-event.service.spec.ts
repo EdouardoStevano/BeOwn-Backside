@@ -207,3 +207,29 @@ describe('NotificationEventService.retraitProcessed', () => {
     });
   });
 });
+
+describe('NotificationEventService.accountDeletedByUser', () => {
+  it('pushes COMPTE_SUPPRIME to ADMIN/COMPLIANCE/SUPPORT', async () => {
+    const notifications = {
+      pushToRoles: jest.fn().mockResolvedValue([]),
+    } as unknown as jest.Mocked<NotificationService>;
+    const service = new NotificationEventService(notifications);
+
+    const user = {
+      userId: 42,
+      firstname: 'Jean',
+      lastname: 'Dupont',
+      userEmail: { email: 'jean@example.com' },
+    } as any;
+
+    await service.accountDeletedByUser(user);
+
+    expect(notifications.pushToRoles).toHaveBeenCalledWith(expect.objectContaining({
+      type: NotificationType.COMPTE_SUPPRIME,
+      titre: 'Compte supprimé',
+      message: 'Jean Dupont (jean@example.com) a supprimé son compte (soft-delete).',
+      roles: [UserRole.ADMIN, UserRole.COMPLIANCE, UserRole.SUPPORT],
+      metadata: { userId: 42, email: 'jean@example.com' },
+    }));
+  });
+});
