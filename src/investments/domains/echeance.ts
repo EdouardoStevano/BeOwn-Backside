@@ -10,4 +10,6 @@ export class Echeance {
   montantTotal: number;
   statut: EcheanceStatus;
   payeLe: Date | null;
+  rappelJ7Envoye: boolean = false;
+  rappelJ1Envoye: boolean = false;
 }
