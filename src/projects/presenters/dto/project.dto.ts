@@ -14,6 +14,7 @@ import {
   IsArray,
   ValidateNested,
   Min,
+  Max,
   IsInt,
 } from 'class-validator';
 import { Type, Transform } from 'class-transformer';
@@ -102,6 +103,7 @@ export class CreateProjectDto {
   @Type(() => Number)
   @IsNumber()
   @IsPositive()
+  @Max(5_000_000, { message: 'Capital cible maximum : 5 000 000 € (limite PSFP)' })
   capitalCible: number;
 
   @ApiProperty({ example: 300000 })
