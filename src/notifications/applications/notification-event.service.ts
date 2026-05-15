@@ -238,4 +238,42 @@ export class NotificationEventService {
       this.logger.warn(`secondaryOrderCreated failed: ${(err as Error)?.message}`);
     }
   }
+
+  async investmentCreated(investment: any, project: any, user: any): Promise<void> {
+    const montant = Number(investment.montant);
+    const nbFractions = investment.nbTitres ?? 0;
+    try {
+      await this.notifications.push({
+        utilisateurId: investment.utilisateurId,
+        type: NotificationType.INVESTISSEMENT,
+        titre: 'Investissement confirmé',
+        message: `Votre investissement de ${montant} XOF dans "${project.titre}" est confirmé. Vous détenez ${nbFractions} fraction(s).`,
+        metadata: {
+          investissementId: investment.id,
+          projetId: project.id,
+          montant,
+          nbFractions,
+        },
+      });
+    } catch (err) {
+      this.logger.warn(`investmentCreated (user) failed: ${(err as Error)?.message}`);
+    }
+    try {
+      await this.notifications.pushToRoles({
+        type: NotificationType.INVESTISSEMENT,
+        titre: 'Nouvel investissement',
+        message: `${this.displayName(user)} a investi ${montant} XOF dans "${project.titre}" (${nbFractions} fraction(s)).`,
+        roles: [UserRole.ADMIN, UserRole.FINANCIER, UserRole.COMPLIANCE],
+        metadata: {
+          investissementId: investment.id,
+          projetId: project.id,
+          userId: investment.utilisateurId,
+          montant,
+          nbFractions,
+        },
+      });
+    } catch (err) {
+      this.logger.warn(`investmentCreated (admin) failed: ${(err as Error)?.message}`);
+    }
+  }
 }

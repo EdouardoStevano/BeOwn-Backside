@@ -282,3 +282,88 @@ describe('NotificationEventService.secondaryOrderCreated', () => {
     }));
   });
 });
+
+describe('NotificationEventService.investmentCreated', () => {
+  it('pushes INVESTISSEMENT to user AND ADMIN/FINANCIER/COMPLIANCE', async () => {
+    const notifications = {
+      push: jest.fn().mockResolvedValue(undefined),
+      pushToRoles: jest.fn().mockResolvedValue([]),
+    } as unknown as jest.Mocked<NotificationService>;
+    const service = new NotificationEventService(notifications);
+
+    const investment = { id: 'i-uuid', utilisateurId: 42, montant: 250000, nbTitres: 5 } as any;
+    const project = { id: 'p-uuid', titre: 'Résidence Pelican' } as any;
+    const user = { userId: 42, firstname: 'Jean', lastname: 'Dupont', userEmail: { email: 'j@x.com' } } as any;
+
+    await service.investmentCreated(investment, project, user);
+
+    expect(notifications.push).toHaveBeenCalledWith(expect.objectContaining({
+      utilisateurId: 42,
+      type: NotificationType.INVESTISSEMENT,
+      titre: 'Investissement confirmé',
+    }));
+    expect(notifications.pushToRoles).toHaveBeenCalledWith(expect.objectContaining({
+      type: NotificationType.INVESTISSEMENT,
+      titre: 'Nouvel investissement',
+      message: 'Jean Dupont a investi 250000 XOF dans "Résidence Pelican" (5 fraction(s)).',
+      roles: [UserRole.ADMIN, UserRole.FINANCIER, UserRole.COMPLIANCE],
+    }));
+  });
+});
+
+describe('NotificationEventService.fractionsToppedUp', () => {
+  it('pushes INVESTISSEMENT to user AND ADMIN/FINANCIER', async () => {
+    const notifications = {
+      push: jest.fn().mockResolvedValue(undefined),
+      pushToRoles: jest.fn().mockResolvedValue([]),
+    } as unknown as jest.Mocked<NotificationService>;
+    const service = new NotificationEventService(notifications);
+
+    const investment = { id: 'i-uuid', utilisateurId: 42, nbTitres: 12 } as any;
+    const project = { id: 'p-uuid', titre: 'Résidence Pelican' } as any;
+    const user = { userId: 42, firstname: 'Jean', lastname: 'Dupont' } as any;
+
+    await service.fractionsToppedUp(investment, project, user, 3, 30000);
+
+    expect(notifications.push).toHaveBeenCalledWith(expect.objectContaining({
+      utilisateurId: 42,
+      titre: 'Fractions ajoutées',
+    }));
+    expect(notifications.pushToRoles).toHaveBeenCalledWith(expect.objectContaining({
+      titre: 'Top-up investissement',
+      roles: [UserRole.ADMIN, UserRole.FINANCIER],
+      message: 'Jean Dupont a ajouté 3 fraction(s) dans "Résidence Pelican" (+30000 XOF).',
+    }));
+  });
+});
+
+describe('NotificationEventService.secondaryTradeExecuted', () => {
+  it('pushes to buyer, seller, and ADMIN/FINANCIER/COMPLIANCE', async () => {
+    const notifications = {
+      push: jest.fn().mockResolvedValue(undefined),
+      pushToRoles: jest.fn().mockResolvedValue([]),
+    } as unknown as jest.Mocked<NotificationService>;
+    const service = new NotificationEventService(notifications);
+
+    const ordre = { id: 'o-uuid', prixUnitaire: 1000 } as any;
+    const project = { id: 'p-uuid', titre: 'Résidence Pelican' } as any;
+    const buyer = { userId: 42, firstname: 'Alice', lastname: 'Martin' } as any;
+    const seller = { userId: 99, firstname: 'Jean', lastname: 'Dupont' } as any;
+
+    await service.secondaryTradeExecuted(ordre, project, buyer, seller, 5);
+
+    expect(notifications.push).toHaveBeenCalledWith(expect.objectContaining({
+      utilisateurId: 42,
+      titre: 'Achat de fractions confirmé',
+    }));
+    expect(notifications.push).toHaveBeenCalledWith(expect.objectContaining({
+      utilisateurId: 99,
+      titre: 'Vente de fractions exécutée',
+    }));
+    expect(notifications.pushToRoles).toHaveBeenCalledWith(expect.objectContaining({
+      titre: 'Trade marché secondaire',
+      message: 'Alice Martin a acheté 5 fraction(s) à Jean Dupont pour "Résidence Pelican".',
+      roles: [UserRole.ADMIN, UserRole.FINANCIER, UserRole.COMPLIANCE],
+    }));
+  });
+});
