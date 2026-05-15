@@ -18,6 +18,7 @@ export class OrdreMarche {
   vendeurId: number;
   acheteurId: number | null;
   sens: OrdreMarcheSens;
+  nbFractions: number;
   montant: number;
   prixUnitaire: number;
   statut: OrdreMarcheStatus;

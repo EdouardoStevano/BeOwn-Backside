@@ -27,4 +27,10 @@ export interface ProfilRepository {
     sessionId: string,
     status: KycStatus,
   ): Promise<Kyc>;
+
+  updateKycReportData(
+    kycId: string,
+    reportId: string,
+    identiteExtrait: import('src/profiles/domains/kyc').KycIdentiteExtrait,
+  ): Promise<Kyc>;
 }

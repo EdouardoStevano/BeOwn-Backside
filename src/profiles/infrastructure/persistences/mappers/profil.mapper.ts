@@ -10,12 +10,8 @@ export class ProfilMapper {
     const domain = new ProfilPP();
     domain.utilisateurId = entity.utilisateurId;
     domain.civilite = entity.civilite;
-    domain.prenom = entity.prenom;
-    domain.nom = entity.nom;
-    domain.nomNaissance = entity.nomNaissance;
     domain.dateNaissance = entity.dateNaissance;
     domain.lieuNaissance = entity.lieuNaissance;
-    domain.paysNaissance = entity.paysNaissance;
     domain.nationalite = entity.nationalite;
     domain.adresseLigne1 = entity.adresseLigne1;
     domain.adresseLigne2 = entity.adresseLigne2;
@@ -38,12 +34,8 @@ export class ProfilMapper {
     const entity = new ProfilPPEntity();
     entity.utilisateurId = domain.utilisateurId;
     entity.civilite = domain.civilite;
-    entity.prenom = domain.prenom;
-    entity.nom = domain.nom;
-    entity.nomNaissance = domain.nomNaissance;
     entity.dateNaissance = domain.dateNaissance;
     entity.lieuNaissance = domain.lieuNaissance;
-    entity.paysNaissance = domain.paysNaissance;
     entity.nationalite = domain.nationalite;
     entity.adresseLigne1 = domain.adresseLigne1;
     entity.adresseLigne2 = domain.adresseLigne2;
@@ -101,6 +93,8 @@ export class ProfilMapper {
     domain.fournisseurRef = entity.fournisseurRef;
     domain.valideJusquAu = entity.valideJusquAu;
     domain.motifRefus = entity.motifRefus;
+    domain.stripeReportId = (entity as any).stripeReportId ?? null;
+    domain.identiteExtrait = (entity as any).identiteExtrait ?? null;
     domain.createdAt = entity.createdAt;
     domain.updatedAt = entity.updatedAt;
     if (entity.utilisateur) {

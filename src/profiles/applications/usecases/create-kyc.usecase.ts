@@ -22,7 +22,7 @@ export class CreateKycUseCase {
     kyc.utilisateurId = userId;
     kyc.statut = KycStatus.NON_DEMARRE;
     kyc.niveau = KycNiveau.STANDARD;
-    kyc.fournisseur = 'stripe';
+    kyc.fournisseur = 'stripeIdentity';
     kyc.scoreRisque = null;
     kyc.fournisseurRef = null;
     kyc.valideJusquAu = null;

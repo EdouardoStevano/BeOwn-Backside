@@ -52,6 +52,8 @@ import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
 import { Public } from 'src/common/auth/public.decorator';
 import { SkipThrottle } from '@nestjs/throttler';
+import { NotificationService } from 'src/notifications/applications/notification.service';
+import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
 
 @SkipThrottle()
 @ApiTags('Projects')
@@ -71,6 +73,7 @@ export class ProjectController {
     private readonly documentRepository: DocumentRepository,
     @Inject(AVIS_REPOSITORY)
     private readonly avisRepository: AvisRepository,
+    private readonly notificationService: NotificationService,
   ) {}
 
   @ApiOperation({
@@ -151,8 +154,31 @@ export class ProjectController {
   @ApiOperation({ summary: 'Créer un nouveau projet (admin)' })
   @ApiResponse({ status: 201, description: 'Projet créé' })
   @Post()
-  create(@Body() dto: CreateProjectDto) {
-    return this.createProject.execute(dto);
+  async create(@Body() dto: CreateProjectDto) {
+    const project = await this.createProject.execute(dto);
+
+    // Broadcast temps réel à tous les investisseurs — sauf si brouillon (non visible)
+    if (project.statut !== ProjectStatus.BROUILLON) {
+      const lieu = [project.ville, project.pays].filter(Boolean).join(', ');
+      this.notificationService
+        .pushToInvestors({
+          type: NotificationType.NOUVEAU_PROJET,
+          titre: 'Nouveau projet disponible',
+          message: lieu
+            ? `Découvrez « ${project.titre} » à ${lieu}. Consultez les détails et investissez dès maintenant.`
+            : `Découvrez le nouveau projet « ${project.titre} ». Consultez les détails et investissez dès maintenant.`,
+          metadata: {
+            projectId: project.id,
+            slug: project.slug,
+            statut: project.statut,
+            ville: project.ville,
+            type: project.type,
+          },
+        })
+        .catch(() => {});
+    }
+
+    return project;
   }
 
   @ApiOperation({ summary: 'Mettre à jour les champs d\'un projet (admin)' })

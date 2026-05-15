@@ -19,12 +19,8 @@ export class CreateProfilPPUseCase {
     const profil = new ProfilPP();
     profil.utilisateurId = userId;
     profil.civilite = dto.civilite ?? null;
-    profil.prenom = dto.prenom;
-    profil.nom = dto.nom;
-    profil.nomNaissance = dto.nomNaissance ?? null;
-    profil.dateNaissance = new Date(dto.dateNaissance);
+    profil.dateNaissance = dto.dateNaissance ? new Date(dto.dateNaissance) : null;
     profil.lieuNaissance = dto.lieuNaissance ?? null;
-    profil.paysNaissance = dto.paysNaissance ?? null;
     profil.nationalite = dto.nationalite ?? null;
     profil.adresseLigne1 = dto.adresseLigne1 ?? null;
     profil.adresseLigne2 = dto.adresseLigne2 ?? null;

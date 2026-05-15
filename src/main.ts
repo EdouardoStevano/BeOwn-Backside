@@ -4,9 +4,11 @@ import { ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import * as express from 'express';
 import helmet from 'helmet';
+import { IoAdapter } from '@nestjs/platform-socket.io';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { rawBody: true });
+  app.useWebSocketAdapter(new IoAdapter(app));
 
   app.use(helmet({
     crossOriginEmbedderPolicy: false,
@@ -30,10 +32,6 @@ async function bootstrap() {
 
   app.use(
     '/payments/webhook/stripe',
-    express.raw({ type: 'application/json' }),
-  );
-  app.use(
-    '/payments/webhook/sumsub',
     express.raw({ type: 'application/json' }),
   );
   app.useGlobalPipes(

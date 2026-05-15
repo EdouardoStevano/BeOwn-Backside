@@ -22,6 +22,7 @@ import { AuditLogEntity } from 'src/notifications/infrastructure/persistences/en
 import { DocumentEntity } from 'src/documents/infrastructure/persistences/entities/document.entity';
 import { OrdreMarcheEntity } from 'src/secondarymarket/infrastructure/persistences/entities/ordre-marche.entity';
 import { AvisEntity } from 'src/avis/infrastructure/persistences/entities/avis.entity';
+import { SignatureEntity } from 'src/signatures/infrastructure/persistences/entities/signature.entity';
 import { SeedService } from './seed.service';
 
 @Module({
@@ -56,6 +57,7 @@ import { SeedService } from './seed.service';
         DocumentEntity,
         OrdreMarcheEntity,
         AvisEntity,
+        SignatureEntity,
       ],
       synchronize: false,
     }),
@@ -81,6 +83,7 @@ import { SeedService } from './seed.service';
       DocumentEntity,
       OrdreMarcheEntity,
       AvisEntity,
+      SignatureEntity,
     ]),
   ],
   providers: [SeedService],

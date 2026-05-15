@@ -23,12 +23,10 @@ import {
 import type { Request } from 'express';
 import { StripePaymentService } from '../../infrastructure/stripe-payment.service';
 import { StripeIdentityServiceImpl } from '../../infrastructure/stripe-identity.service';
-import { SumsubService } from '../../infrastructure/sumsub.service';
 import {
   ConfirmDepotDto,
   CreatePaymentIntentDto,
   CreateRetraitDto,
-  StartKycVerificationDto,
 } from '../dto/payment.dto';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -50,6 +48,9 @@ import { KycStatus, KycNiveau } from 'src/profiles/domains/enums/kyc-status.enum
 import { PROFIL_REPOSITORY, type ProfilRepository } from 'src/profiles/applications/ports/repositories/profil.repository';
 import { Kyc } from 'src/profiles/domains/kyc';
 import { SkipThrottle } from '@nestjs/throttler';
+import { NotificationService } from 'src/notifications/applications/notification.service';
+import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
+import { UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
 
 @SkipThrottle({ short: true, medium: true })
 @ApiTags('Payments & KYC')
@@ -62,8 +63,8 @@ export class PaymentController {
   constructor(
     private readonly stripeService: StripePaymentService,
     private readonly identityService: StripeIdentityServiceImpl,
-    private readonly sumsubService: SumsubService,
     private readonly updateKycStatus: UpdateKycStatusUseCase,
+    private readonly notificationService: NotificationService,
     @Inject(PROFIL_REPOSITORY)
     private readonly profilRepository: ProfilRepository,
     @InjectRepository(WalletEntity)
@@ -152,6 +153,14 @@ export class PaymentController {
       }),
     );
 
+    this.notificationService.push({
+      utilisateurId: user.userId,
+      type: NotificationType.DEPOT_CONFIRME,
+      titre: 'Dépôt confirmé',
+      message: `Votre dépôt de ${amountMajor} XOF a été crédité sur votre wallet.`,
+      metadata: { paymentIntentId: dto.paymentIntentId, montant: amountMajor },
+    }).catch(() => {});
+
     return { success: true, walletId: wallet.id };
   }
 
@@ -197,64 +206,24 @@ export class PaymentController {
       .where('id = :id', { id: wallet.id })
       .execute();
 
+    // Alerte aux admins (Financier) — un retrait attend traitement manuel
+    this.notificationService
+      .pushToAdmins({
+        type: NotificationType.RETRAIT_TRAITE,
+        titre: 'Nouvelle demande de retrait',
+        message: `L'utilisateur #${user.userId} a demandé un retrait de ${dto.amount} ${dto.currency} vers ${dto.ibanDestination}.`,
+        roles: [UserRole.ADMIN, UserRole.FINANCIER],
+        metadata: {
+          userId: user.userId,
+          transactionId: tx.id,
+          amount: dto.amount,
+          currency: dto.currency,
+          ibanDestination: dto.ibanDestination,
+        },
+      })
+      .catch(() => {});
+
     return { success: true, transactionId: tx.id, status: tx.statut };
-  }
-
-  // ─── KYC Sumsub ──────────────────────────────────────────────────────────
-
-  @ApiOperation({ summary: 'Obtenir un access token Sumsub pour le SDK Web' })
-  @ApiResponse({ status: 200, description: 'Token Sumsub retourné' })
-  @Get('kyc/sumsub/token')
-  async getSumsubToken(@CurrentUser() user: ActiveUser) {
-    return this.sumsubService.generateAccessToken(String(user.userId));
-  }
-
-  @ApiOperation({ summary: 'Webhook Sumsub (signature HMAC requise)' })
-  @ApiHeader({
-    name: 'x-payload-digest',
-    description: 'Signature HMAC Sumsub',
-    required: false,
-  })
-  @ApiResponse({ status: 200, description: 'Événement reçu et traité' })
-  @Public()
-  @HttpCode(HttpStatus.OK)
-  @Post('webhook/sumsub')
-  async handleSumsubWebhook(
-    @Headers('x-payload-digest') digest: string,
-    @Req() req: Request,
-  ) {
-    // express.raw() stores the body as Buffer in req.body for this route
-    // NestJS rawBody stores in req.rawBody — use whichever is available
-    const rawBody = (req.body instanceof Buffer ? req.body : (req as any).rawBody) as Buffer | undefined;
-    if (!rawBody || !digest || !this.sumsubService.verifyWebhookSignature(rawBody, digest)) {
-      throw new BadRequestException('Invalid Sumsub webhook signature');
-    }
-
-    const event = JSON.parse(rawBody.toString('utf8')) as any;
-    this.logger.log(
-      `Sumsub webhook received: type=${event?.type}, externalUserId=${event?.externalUserId}`,
-    );
-
-    if (event.type === 'applicantReviewed') {
-      const userId = parseInt(event.externalUserId, 10);
-      if (!isNaN(userId)) {
-        const reviewAnswer = event.reviewResult?.reviewAnswer;
-        if (reviewAnswer === 'GREEN') {
-          await this.updateKycStatus.execute(userId, KycStatus.VALIDE);
-        } else if (reviewAnswer === 'RED') {
-          const motif =
-            event.reviewResult?.moderationComment ?? 'KYC refusé par Sumsub';
-          await this.updateKycStatus.execute(userId, KycStatus.REFUSE, motif);
-        }
-      }
-    } else if (event.type === 'applicantPending') {
-      const userId = parseInt(event.externalUserId, 10);
-      if (!isNaN(userId)) {
-        await this.updateKycStatus.execute(userId, KycStatus.EN_REVUE);
-      }
-    }
-
-    return { received: true, type: event?.type };
   }
 
   // ─── KYC Stripe Identity ──────────────────────────────────────────────────
@@ -268,9 +237,9 @@ export class PaymentController {
     if (!kyc) {
       const newKyc = new Kyc();
       newKyc.utilisateurId = user.userId;
-      newKyc.statut = KycStatus.EN_COURS;
+      newKyc.statut = KycStatus.NON_DEMARRE;
       newKyc.niveau = KycNiveau.STANDARD;
-      newKyc.fournisseur = 'stripe';
+      newKyc.fournisseur = 'stripeIdentity';
       newKyc.scoreRisque = null;
       newKyc.fournisseurRef = null;
       newKyc.valideJusquAu = null;
@@ -284,15 +253,62 @@ export class PaymentController {
       user.email,
     );
 
-    // Persist session ID + mark en_cours
+    // Persist session ID — status stays NON_DEMARRE until Stripe confirms photo capture (processing event)
     await this.profilRepository.updateKycSession(
       kyc.id,
       session.sessionId,
-      KycStatus.EN_COURS,
+      KycStatus.NON_DEMARRE,
     );
 
     this.logger.log(`KYC session créée: userId=${user.userId} sessionId=${session.sessionId}`);
     return session;
+  }
+
+  @ApiOperation({ summary: "Obtenir les images KYC de l'utilisateur courant (URLs signées Stripe, 1h)" })
+  @ApiResponse({ status: 200, description: 'URLs signées ou null si pas de KYC validé' })
+  @Get('kyc/images/me')
+  async getMyKycImages(@CurrentUser() user: ActiveUser) {
+    const kyc = await this.profilRepository.findKycByUserId(user.userId);
+    if (!kyc?.identiteExtrait) return { available: false };
+
+    const { documentFrontFileId, documentBackFileId, selfieFileId } = kyc.identiteExtrait as any;
+    const images = await this.identityService.getImageUrls({ documentFrontFileId, documentBackFileId, selfieFileId });
+
+    return {
+      available: true,
+      stripeReportId: kyc.stripeReportId,
+      identiteExtrait: {
+        nom: (kyc.identiteExtrait as any).nom,
+        prenom: (kyc.identiteExtrait as any).prenom,
+        dateNaissance: (kyc.identiteExtrait as any).dateNaissance,
+        nationalite: (kyc.identiteExtrait as any).nationalite,
+        typeDocument: (kyc.identiteExtrait as any).typeDocument,
+        numeroDocument: (kyc.identiteExtrait as any).numeroDocument,
+        dateExpiration: (kyc.identiteExtrait as any).dateExpiration,
+      },
+      images,
+    };
+  }
+
+  @ApiOperation({ summary: "Obtenir les images KYC d'un utilisateur (admin)" })
+  @ApiParam({ name: 'userId', description: 'ID numérique de l\'utilisateur' })
+  @ApiResponse({ status: 200, description: 'URLs signées ou null si pas de KYC validé' })
+  @Get('kyc/images/:userId')
+  async getKycImagesForUser(@Param('userId') userId: string) {
+    const uid = parseInt(userId, 10);
+    if (isNaN(uid)) throw new BadRequestException('userId invalide');
+    const kyc = await this.profilRepository.findKycByUserId(uid);
+    if (!kyc?.identiteExtrait) return { available: false };
+
+    const { documentFrontFileId, documentBackFileId, selfieFileId } = kyc.identiteExtrait as any;
+    const images = await this.identityService.getImageUrls({ documentFrontFileId, documentBackFileId, selfieFileId });
+
+    return {
+      available: true,
+      stripeReportId: kyc.stripeReportId,
+      identiteExtrait: kyc.identiteExtrait,
+      images,
+    };
   }
 
   @ApiOperation({ summary: "Consulter le statut d'une session KYC" })
@@ -395,6 +411,13 @@ export class PaymentController {
             }),
           );
           this.logger.log(`Wallet crédité: userId=${userId}, montant=${amountMajor}`);
+          this.notificationService.push({
+            utilisateurId: userId,
+            type: NotificationType.DEPOT_CONFIRME,
+            titre: 'Dépôt confirmé',
+            message: `Votre dépôt de ${amountMajor} XOF a été crédité sur votre wallet.`,
+            metadata: { paymentIntentId: intent.id, montant: amountMajor },
+          }).catch(() => {});
         }
       }
     } else if (event.type === 'identity.verification_session.verified') {
@@ -403,24 +426,97 @@ export class PaymentController {
       if (!isNaN(userId)) {
         await this.updateKycStatus.execute(userId, KycStatus.VALIDE);
         this.logger.log(`KYC validé via Stripe Identity: userId=${userId}`);
+        this.notificationService.push({
+          utilisateurId: userId,
+          type: NotificationType.KYC_VALIDE,
+          titre: 'Identité vérifiée ✓',
+          message: 'Votre vérification d\'identité a été validée. Vous pouvez désormais investir.',
+        }).catch(() => {});
+
+        // Retrieve report data + upload images to Cloudinary
+        const sessionId = session.id;
+        const reportData = await this.identityService.extractReportData(sessionId);
+        if (reportData) {
+          const kyc = await this.profilRepository.findKycByUserId(userId);
+          if (kyc) {
+            const folder = `kyc/${userId}`;
+
+            // Upload images to Cloudinary in parallel (use Cloudinary URL as "fileId" going forward)
+            const [frontUrl, backUrl, selfieUrl] = await Promise.all([
+              reportData.documentFrontFileId
+                ? this.identityService.downloadAndUploadToCloudinary(
+                    reportData.documentFrontFileId, folder, `kyc_front_${userId}.jpg`,
+                  )
+                : Promise.resolve(undefined),
+              reportData.documentBackFileId
+                ? this.identityService.downloadAndUploadToCloudinary(
+                    reportData.documentBackFileId, folder, `kyc_back_${userId}.jpg`,
+                  )
+                : Promise.resolve(undefined),
+              reportData.selfieFileId
+                ? this.identityService.downloadAndUploadToCloudinary(
+                    reportData.selfieFileId, folder, `kyc_selfie_${userId}.jpg`,
+                  )
+                : Promise.resolve(undefined),
+            ]);
+
+            await this.profilRepository.updateKycReportData(kyc.id, reportData.reportId, {
+              nom: reportData.nom,
+              prenom: reportData.prenom,
+              dateNaissance: reportData.dateNaissance,
+              nationalite: reportData.nationalite,
+              typeDocument: reportData.typeDocument,
+              numeroDocument: reportData.numeroDocument,
+              dateExpiration: reportData.dateExpiration,
+              // Store Cloudinary URLs directly (fallback to Stripe file IDs if upload failed)
+              documentFrontFileId: frontUrl ?? reportData.documentFrontFileId,
+              documentBackFileId: backUrl ?? reportData.documentBackFileId,
+              selfieFileId: selfieUrl ?? reportData.selfieFileId,
+            });
+
+            this.logger.log(
+              `KYC report saved: userId=${userId} reportId=${reportData.reportId} ` +
+              `cloudinary: front=${!!frontUrl} back=${!!backUrl} selfie=${!!selfieUrl}`,
+            );
+          }
+        }
+      }
+    } else if (event.type === 'identity.verification_session.processing') {
+      // Stripe has captured all photos and started verification — mark as in progress
+      const session = event.data.object as any;
+      const userId = parseInt(session.metadata?.userId, 10);
+      if (!isNaN(userId)) {
+        await this.updateKycStatus.execute(userId, KycStatus.EN_COURS);
+        this.logger.log(`KYC en cours (photos reçues) via Stripe Identity: userId=${userId}`);
       }
     } else if (event.type === 'identity.verification_session.requires_input') {
+      // Stripe could not auto-verify — send to admin for manual review
       const session = event.data.object as any;
       const userId = parseInt(session.metadata?.userId, 10);
       if (!isNaN(userId)) {
         const motif =
           session.last_error?.reason ??
           session.last_error?.code ??
-          'Vérification d\'identité échouée';
-        await this.updateKycStatus.execute(userId, KycStatus.REFUSE, motif);
-        this.logger.log(`KYC refusé via Stripe Identity: userId=${userId} motif=${motif}`);
-      }
-    } else if (event.type === 'identity.verification_session.processing') {
-      const session = event.data.object as any;
-      const userId = parseInt(session.metadata?.userId, 10);
-      if (!isNaN(userId)) {
-        await this.updateKycStatus.execute(userId, KycStatus.EN_REVUE);
-        this.logger.log(`KYC en revue via Stripe Identity: userId=${userId}`);
+          'Vérification en attente de révision manuelle';
+        await this.updateKycStatus.execute(userId, KycStatus.EN_REVUE, motif);
+        this.logger.log(`KYC en revue (admin requis) via Stripe Identity: userId=${userId} motif=${motif}`);
+        this.notificationService.push({
+          utilisateurId: userId,
+          type: NotificationType.KYC_REJETE,
+          titre: 'Vérification KYC en attente de révision',
+          message: `Votre vérification d'identité nécessite une révision manuelle. Motif : ${motif}`,
+          metadata: { motif },
+        }).catch(() => {});
+        // Alerte aux admins (Compliance / RCCI) pour traitement manuel
+        this.notificationService
+          .pushToAdmins({
+            type: NotificationType.KYC_REJETE,
+            titre: 'KYC à réviser manuellement',
+            message: `L'utilisateur #${userId} attend une révision manuelle de son KYC. Motif : ${motif}`,
+            roles: [UserRole.ADMIN, UserRole.COMPLIANCE, UserRole.RCCI],
+            metadata: { userId, motif },
+          })
+          .catch(() => {});
       }
     }
 

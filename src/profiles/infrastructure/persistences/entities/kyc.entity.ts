@@ -48,6 +48,28 @@ export class KycEntity {
   @Column({ type: 'varchar', nullable: true })
   motifRefus: string | null;
 
+  /** ID du rapport de vérification Stripe Identity (vs_report_xxx) */
+  @Column({ type: 'varchar', nullable: true })
+  stripeReportId: string | null;
+
+  /** Données extraites du document par Stripe Identity */
+  @Column({ type: 'jsonb', nullable: true })
+  identiteExtrait: {
+    nom?: string;
+    prenom?: string;
+    dateNaissance?: string;
+    nationalite?: string;
+    typeDocument?: string;
+    numeroDocument?: string;
+    dateExpiration?: string;
+    /** Stripe file ID — recto document */
+    documentFrontFileId?: string;
+    /** Stripe file ID — verso document */
+    documentBackFileId?: string;
+    /** Stripe file ID — selfie */
+    selfieFileId?: string;
+  } | null;
+
   @CreateDateColumn()
   createdAt: Date;
 

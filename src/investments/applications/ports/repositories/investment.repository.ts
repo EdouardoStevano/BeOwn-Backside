@@ -17,7 +17,9 @@ export interface InvestmentRepository {
   ): Promise<Investment>;
 
   updateBulletinDocId(investmentId: string, bulletinDocId: string): Promise<void>;
+  updateTopUp(id: string, nbTitresTotal: number, montantTotal: number): Promise<Investment>;
 
   saveEcheances(echeances: Echeance[]): Promise<Echeance[]>;
+  deleteEcheancesByInvestissementId(investissementId: string): Promise<void>;
   findEcheancesByInvestissement(investissementId: string): Promise<Echeance[]>;
 }

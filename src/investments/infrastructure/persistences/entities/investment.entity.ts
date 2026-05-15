@@ -9,6 +9,7 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
+import { SignatureEntity } from 'src/signatures/infrastructure/persistences/entities/signature.entity';
 import { ProjectEntity } from 'src/projects/infrastructure/persistences/entities/project.entity';
 import { UserEntity } from 'src/users/infrastructure/persistences/entities/user.entity';
 import { InvestmentStatus } from 'src/investments/domains/enums/investment-status.enum';
@@ -24,7 +25,7 @@ export class InvestmentEntity {
   projetId: string;
 
   @ManyToOne(() => ProjectEntity)
-  @JoinColumn({ name: 'projet_id' })
+  @JoinColumn({ name: 'projetId' })
   projet: ProjectEntity;
 
   @Column({ type: 'integer' })
@@ -32,7 +33,7 @@ export class InvestmentEntity {
   utilisateurId: number;
 
   @ManyToOne(() => UserEntity)
-  @JoinColumn({ name: 'utilisateur_id' })
+  @JoinColumn({ name: 'utilisateurId' })
   utilisateur: UserEntity;
 
   @Column({ type: 'decimal', precision: 18, scale: 2 })
@@ -58,6 +59,10 @@ export class InvestmentEntity {
 
   @Column({ type: 'uuid', nullable: true })
   signatureId: string | null;
+
+  @ManyToOne(() => SignatureEntity, { nullable: true, eager: false, createForeignKeyConstraints: false })
+  @JoinColumn({ name: 'signatureId' })
+  signature?: SignatureEntity;
 
   @Column({ type: 'uuid', nullable: true })
   reservationId: string | null;

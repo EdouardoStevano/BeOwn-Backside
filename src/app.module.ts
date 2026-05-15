@@ -21,6 +21,8 @@ import { NotificationTestModule } from './common/test/notification-test.module';
 import { AdminModule } from './admin/admin.module';
 import { AvisModule } from './avis/applications/avis.module';
 import { MailerModule } from '@nestjs-modules/mailer';
+import { HandlebarsAdapter } from '@nestjs-modules/mailer/dist/adapters/handlebars.adapter';
+import { join } from 'path';
 import { CacheModule } from '@nestjs/cache-manager';
 import * as redisStore from 'cache-manager-ioredis';
 
@@ -61,7 +63,12 @@ import * as redisStore from 'cache-manager-ioredis';
           },
         },
         defaults: {
-          from: `"Beown" <${process.env.MAIL_FROM}>`,
+          from: `"BeOwn" <${process.env.MAIL_FROM}>`,
+        },
+        template: {
+          dir: join(process.cwd(), 'src', 'common', 'email', 'templates'),
+          adapter: new HandlebarsAdapter(),
+          options: { strict: true },
         },
       }),
     }),

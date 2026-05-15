@@ -56,6 +56,8 @@ import {
   OrdreMarcheStatus,
 } from 'src/secondarymarket/domains/ordre-marche';
 import { AvisEntity } from 'src/avis/infrastructure/persistences/entities/avis.entity';
+import { SignatureEntity } from 'src/signatures/infrastructure/persistences/entities/signature.entity';
+import { SignatureStatus } from 'src/signatures/domains/enums/signature-status.enum';
 
 @Injectable()
 export class SeedService {
@@ -96,6 +98,8 @@ export class SeedService {
     private readonly ordreMarcheRepo: Repository<OrdreMarcheEntity>,
     @InjectRepository(AvisEntity)
     private readonly avisRepo: Repository<AvisEntity>,
+    @InjectRepository(SignatureEntity)
+    private readonly signatureRepo: Repository<SignatureEntity>,
   ) {}
 
   async seed(force: boolean = false): Promise<void> {
@@ -2101,6 +2105,90 @@ Les 1 000 investisseurs ont été intégralement remboursés en **novembre 2024*
     this.logger.log(`✅ ${avisCount} avis créés`);
 
     // ============================================================
+    // 15. SIGNATURES (Yousign) — investissements + marché secondaire
+    // ============================================================
+    this.logger.log('✍️ Création des signatures Yousign...');
+
+    const signaturesData: Partial<SignatureEntity>[] = [];
+
+    // 15.a Signatures liées aux investissements (bulletin de souscription)
+    for (const inv of savedInvestments) {
+      if (!inv.signatureId) continue;
+
+      let statut: SignatureStatus;
+      let signedAt: Date | null = null;
+      switch (inv.statut) {
+        case InvestmentStatus.INITIE:
+          statut = SignatureStatus.PENDING;
+          break;
+        case InvestmentStatus.ANNULE:
+          statut = SignatureStatus.CANCELLED;
+          break;
+        case InvestmentStatus.SIGNE:
+        case InvestmentStatus.CONFIRME:
+        case InvestmentStatus.PAYE:
+        case InvestmentStatus.REMBOURSE_CAPITAL:
+        case InvestmentStatus.REMBOURSE_TOTAL:
+          statut = SignatureStatus.SIGNED;
+          signedAt = new Date(inv.createdAt.getTime() + 5 * 60_000);
+          break;
+        default:
+          statut = SignatureStatus.PENDING;
+      }
+
+      signaturesData.push({
+        id: inv.signatureId, // aligné avec InvestmentEntity.signatureId
+        youSignRequestId: `ysr_${crypto.randomUUID().slice(0, 12)}`,
+        youSignSignerId: `yss_${crypto.randomUUID().slice(0, 12)}`,
+        youSignSigningUrl:
+          statut === SignatureStatus.PENDING
+            ? `https://staging-app.yousign.com/procedure/sign?signatureRequestId=${crypto.randomUUID()}`
+            : null,
+        documentId: inv.bulletinDocId ?? crypto.randomUUID(),
+        investmentId: inv.id,
+        ordreId: null,
+        nbFractions: inv.nbTitres ?? null,
+        userId: inv.utilisateurId,
+        statut,
+        expiresAt: new Date(inv.createdAt.getTime() + 14 * 24 * 60 * 60 * 1000),
+        signedAt,
+      });
+    }
+
+    // 15.b Signatures liées aux ordres de marché secondaire EXECUTE
+    const executedOrders = await this.ordreMarcheRepo.find({
+      where: { statut: OrdreMarcheStatus.EXECUTE },
+    });
+
+    for (const ordre of executedOrders) {
+      if (!ordre.acheteurId) continue;
+      const nbFractions = Math.max(
+        1,
+        Math.floor(Number(ordre.montant) / Number(ordre.prixUnitaire || 1)),
+      );
+      signaturesData.push({
+        youSignRequestId: `ysr_${crypto.randomUUID().slice(0, 12)}`,
+        youSignSignerId: `yss_${crypto.randomUUID().slice(0, 12)}`,
+        youSignSigningUrl: null,
+        documentId: crypto.randomUUID(),
+        investmentId: ordre.investissementId,
+        ordreId: ordre.id,
+        nbFractions,
+        userId: ordre.acheteurId,
+        statut: SignatureStatus.SIGNED,
+        expiresAt: new Date(ordre.createdAt.getTime() + 7 * 24 * 60 * 60 * 1000),
+        signedAt: new Date(ordre.createdAt.getTime() + 12 * 60_000),
+      });
+    }
+
+    if (signaturesData.length > 0) {
+      const entities = this.signatureRepo.create(signaturesData);
+      await this.signatureRepo.save(entities);
+    }
+
+    this.logger.log(`✅ ${signaturesData.length} signatures créées`);
+
+    // ============================================================
     // RÉSUMÉ FINAL
     // ============================================================
     this.logger.log(
@@ -2127,6 +2215,9 @@ Les 1 000 investisseurs ont été intégralement remboursés en **novembre 2024*
     this.logger.log(`📄 Documents: ${(await this.documentRepo.find()).length}`);
     this.logger.log(
       `📊 Ordres de marché: ${(await this.ordreMarcheRepo.find()).length}`,
+    );
+    this.logger.log(
+      `✍️ Signatures: ${(await this.signatureRepo.find()).length}`,
     );
     this.logger.log(
       '═══════════════════════════════════════════════════════════',

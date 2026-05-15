@@ -101,6 +101,16 @@ export class InvestmentTypeOrmRepository implements InvestmentRepository {
     await this.investRepo.update(investmentId, { bulletinDocId });
   }
 
+  async updateTopUp(id: string, nbTitresTotal: number, montantTotal: number): Promise<Investment> {
+    await this.investRepo.update(id, { nbTitres: nbTitresTotal, montant: montantTotal });
+    const updated = await this.withProjet().where('inv.id = :id', { id }).getOneOrFail();
+    return InvestmentMapper.toDomain(updated);
+  }
+
+  async deleteEcheancesByInvestissementId(investissementId: string): Promise<void> {
+    await this.echeanceRepo.delete({ investissementId });
+  }
+
   async saveEcheances(echeances: Echeance[]): Promise<Echeance[]> {
     const entities = echeances.map(InvestmentMapper.echeanceToEntity);
     const saved = await this.echeanceRepo.save(entities);

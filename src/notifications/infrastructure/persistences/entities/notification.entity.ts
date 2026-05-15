@@ -1,5 +1,6 @@
 import {
   Column,
+  CreateDateColumn,
   Entity,
   Index,
   JoinColumn,
@@ -13,6 +14,18 @@ export enum NotificationCanal {
   SMS = 'sms',
   PUSH = 'push',
   IN_APP = 'in_app',
+}
+
+export enum NotificationType {
+  KYC_VALIDE = 'kyc_valide',
+  KYC_REJETE = 'kyc_rejete',
+  NOUVEAU_PROJET = 'nouveau_projet',
+  ECHEANCE = 'echeance',
+  DEPOT_CONFIRME = 'depot_confirme',
+  RETRAIT_TRAITE = 'retrait_traite',
+  MARCHE_SECONDAIRE = 'marche_secondaire',
+  INVESTISSEMENT = 'investissement',
+  AUTRE = 'autre',
 }
 
 @Entity('notification')
@@ -32,6 +45,18 @@ export class NotificationEntity {
   canal: NotificationCanal | null;
 
   @Column({ type: 'varchar', nullable: true })
+  type: NotificationType | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  titre: string | null;
+
+  @Column({ type: 'text', nullable: true })
+  message: string | null;
+
+  @Column({ type: 'boolean', default: false })
+  lu: boolean;
+
+  @Column({ type: 'varchar', nullable: true })
   templateCode: string | null;
 
   @Column({ type: 'varchar', nullable: true })
@@ -42,4 +67,7 @@ export class NotificationEntity {
 
   @Column({ type: 'jsonb', nullable: true })
   metadata: Record<string, unknown> | null;
+
+  @CreateDateColumn({ type: 'timestamptz' })
+  createdAt: Date;
 }

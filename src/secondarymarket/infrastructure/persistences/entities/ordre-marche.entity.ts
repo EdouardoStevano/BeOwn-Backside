@@ -19,20 +19,20 @@ export class OrdreMarcheEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ type: 'uuid' })
+  @Column({ type: 'uuid', name: 'investissementId' })
   @Index()
   investissementId: string;
 
-  @ManyToOne(() => InvestmentEntity)
-  @JoinColumn({ name: 'investissement_id' })
+  @ManyToOne(() => InvestmentEntity, { eager: false })
+  @JoinColumn({ name: 'investissementId' })
   investissement: InvestmentEntity;
 
-  @Column({ type: 'integer' })
+  @Column({ type: 'integer', name: 'vendeurId' })
   @Index()
   vendeurId: number;
 
   @ManyToOne(() => UserEntity)
-  @JoinColumn({ name: 'vendeur_id' })
+  @JoinColumn({ name: 'vendeurId' })
   vendeur: UserEntity;
 
   @Column({ type: 'integer', nullable: true })
@@ -40,6 +40,9 @@ export class OrdreMarcheEntity {
 
   @Column({ type: 'varchar' })
   sens: OrdreMarcheSens;
+
+  @Column({ type: 'integer', default: 0 })
+  nbFractions: number;
 
   @Column({ type: 'decimal', precision: 18, scale: 2 })
   montant: number;

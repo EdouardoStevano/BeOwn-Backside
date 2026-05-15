@@ -34,6 +34,11 @@ export class SocialAuthUseCase {
       );
 
       if (existing) {
+        // Auto-verify email for existing social users (provider already verified it)
+        if (!existing.userEmail.isVerified) {
+          existing.userEmail.verify();
+          await this.usersRepository.update(existing);
+        }
         const tokens = await this.tokenService.generateTokens({
           email: existing.userEmail.email,
           sub: existing.userId,
@@ -48,6 +53,7 @@ export class SocialAuthUseCase {
         lastname: social.lastname ?? null,
         email: social.email,
         socialId: social.socialId,
+        emailVerified: true,
       });
 
       const savedUser = await this.usersRepository.save(newUser);

@@ -1,20 +1,33 @@
 import {
   Body,
   Controller,
+  Delete,
   ForbiddenException,
   Get,
+  HttpCode,
+  HttpStatus,
   NotFoundException,
   Param,
   ParseIntPipe,
   Patch,
   Post,
+  UnauthorizedException,
   UseGuards,
   Inject,
   BadRequestException,
 } from '@nestjs/common';
 import { IsEnum } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
-import { UserRole, UserType } from 'src/users/infrastructure/persistences/entities/user.entity';
+import { UserRole, UserStatus, UserType } from 'src/users/infrastructure/persistences/entities/user.entity';
+import { HASHING_SERVICE } from 'src/common/hashing/hashing.service';
+import type { HashingService } from 'src/common/hashing/hashing.service';
+import { IsString, IsNotEmpty } from 'class-validator';
+
+export class DeleteAccountDto {
+  @IsString()
+  @IsNotEmpty()
+  password: string;
+}
 import {
   ApiTags,
   ApiOperation,
@@ -23,7 +36,7 @@ import {
   ApiBearerAuth,
 } from '@nestjs/swagger';
 import { UsersService } from 'src/users/applications/users.service';
-import { RegisterDto, UpdateUserDto, UpdateUserAdminDto } from '../dto/user.dto';
+import { RegisterDto, UpdateUserDto, UpdateUserAdminDto, UpdatePreferencesDto } from '../dto/user.dto';
 import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
 import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
@@ -61,6 +74,8 @@ export class UserController {
     private readonly documentRepository: DocumentRepository,
     @Inject(WALLET_REPOSITORY)
     private readonly walletRepository: WalletRepository,
+    @Inject(HASHING_SERVICE)
+    private readonly hashingService: HashingService,
   ) {}
 
   // ─── Helper ───────────────────────────────────────────────────────────────
@@ -98,22 +113,91 @@ export class UserController {
     ]);
 
     const { password: _p, ...userSafe } = found as any;
-    const kycStatut = kyc?.statut ?? null;
+    const kycStatut = kyc?.statut ?? 'non_demarre';
+
+    // ── Granular completion steps ──────────────────────────────────────────
+    // Infer user type from profile records if userType field not explicitly set
+    const inferredType: 'PP' | 'PM' | null =
+      userSafe.userType ?? (profilPP ? 'PP' : profilPM ? 'PM' : null);
+
+    const hasUserType = !!(inferredType);
+    const hasProfilData = !!(
+      profilPP?.nationalite || profilPP?.dateNaissance || profilPP?.adresseLigne1 || profilPM?.raisonSociale
+    );
+    const questionnaireCompleted = !!(
+      profilPP?.categoriePsfp || profilPM
+    );
+    const kycStatus = kycStatut as string;
+    const kycCompleted = kycStatus === 'valide';
+    const kycPending = ['en_cours', 'en_revue'].includes(kycStatus);
+    const kycRefused = kycStatus === 'refuse';
+
+    type StepStatus = 'completed' | 'pending' | 'not_started' | 'error';
+    const completionSteps: Array<{ id: string; label: string; status: StepStatus; detail?: string }> = [
+      {
+        id: 'user_type',
+        label: inferredType === 'PP'
+          ? 'Type de compte — Personne physique'
+          : inferredType === 'PM'
+          ? 'Type de compte — Personne morale'
+          : 'Type de compte (PP / PM)',
+        status: hasUserType ? 'completed' : 'not_started',
+        detail: !hasUserType ? 'Choisissez votre type de compte pour commencer' : undefined,
+      },
+      {
+        id: 'profil_investisseur',
+        label: 'Profil investisseur',
+        status: hasProfilData ? 'completed' : hasUserType ? 'pending' : 'not_started',
+        detail: hasUserType && !hasProfilData
+          ? 'Complétez vos informations personnelles ou entreprise'
+          : undefined,
+      },
+      {
+        id: 'kyc',
+        label: "Vérification d'identité (KYC)",
+        status: kycCompleted ? 'completed'
+          : kycRefused ? 'error'
+          : kycPending ? 'pending'
+          : 'not_started',
+        detail: kycRefused
+          ? (kyc?.motifRefus ?? 'KYC refusé — resoumettez vos documents')
+          : kycPending ? 'Vérification en cours par notre équipe'
+          : !kycCompleted ? "Soumettez vos documents d'identité"
+          : undefined,
+      },
+      {
+        id: 'questionnaire',
+        label: "Questionnaire d'adéquation",
+        status: questionnaireCompleted ? 'completed'
+          : hasProfilData ? 'pending'
+          : 'not_started',
+        detail: !questionnaireCompleted && hasProfilData
+          ? 'Répondez au questionnaire pour finaliser votre profil réglementaire'
+          : undefined,
+      },
+    ];
+
+    const completedCount = completionSteps.filter((s) => s.status === 'completed').length;
     let completionStep = 0;
-    if (userSafe.userType) completionStep = 1;
-    if (profilPP || profilPM) completionStep = 2;
-    if (kycStatut && kycStatut !== 'non_demarre') completionStep = 3;
-    if (kycStatut === 'valide') completionStep = 4;
+    if (hasUserType) completionStep = 1;
+    if (hasProfilData) completionStep = 2;
+    if (kycPending || kycCompleted) completionStep = 3;
+    if (kycCompleted) completionStep = 4;
 
     return {
       ...userSafe,
+      // Expose the inferred type so frontend always knows PP or PM
+      userType: inferredType ?? userSafe.userType ?? null,
       profilPP: profilPP ?? null,
       profilPM: profilPM ?? null,
       kyc: kyc ?? null,
       wallet: wallet ?? null,
       documents,
       completionStep,
-      isProfileComplete: completionStep >= 4,
+      completionSteps,
+      completionProgress: Math.round((completedCount / completionSteps.length) * 100),
+      isProfileComplete: kycCompleted && questionnaireCompleted,
+      preferences: await this.userRepository.findPreferences(user.userId).catch(() => null),
     };
   }
 
@@ -128,6 +212,99 @@ export class UserController {
     const updated = await this.userRepository.update(found);
     const { password: _p, ...safe } = updated as any;
     return safe;
+  }
+
+  @ApiOperation({ summary: 'Lire mes préférences' })
+  @ApiResponse({ status: 200, description: 'Préférences utilisateur' })
+  @Get('me/preferences')
+  async getMyPreferences(@CurrentUser() user: ActiveUser) {
+    return this.userRepository.findPreferences(user.userId);
+  }
+
+  @ApiOperation({ summary: 'Mettre à jour mes préférences (bulk)' })
+  @ApiResponse({ status: 200, description: 'Préférences mises à jour' })
+  @Patch('me/preferences')
+  async updateMyPreferences(
+    @CurrentUser() user: ActiveUser,
+    @Body() dto: UpdatePreferencesDto,
+  ) {
+    return this.userRepository.savePreferences(user.userId, dto);
+  }
+
+  @ApiOperation({ summary: 'Changer la langue' })
+  @Patch('me/preferences/langue')
+  async updateLangue(
+    @CurrentUser() user: ActiveUser,
+    @Body() body: { value: string },
+  ) {
+    return this.userRepository.savePreferences(user.userId, { langue: body.value });
+  }
+
+  @ApiOperation({ summary: 'Basculer le masquage des montants sensibles' })
+  @Patch('me/preferences/masquer-montants')
+  async toggleMasquerMontants(
+    @CurrentUser() user: ActiveUser,
+    @Body() body: { value: boolean },
+  ) {
+    return this.userRepository.savePreferences(user.userId, { masquerMontants: body.value });
+  }
+
+  @ApiOperation({ summary: 'Basculer les notifications email' })
+  @Patch('me/preferences/notif-email')
+  async toggleNotifEmail(
+    @CurrentUser() user: ActiveUser,
+    @Body() body: { value: boolean },
+  ) {
+    return this.userRepository.savePreferences(user.userId, { notifEmail: body.value });
+  }
+
+  @ApiOperation({ summary: 'Basculer les notifications SMS' })
+  @Patch('me/preferences/notif-sms')
+  async toggleNotifSms(
+    @CurrentUser() user: ActiveUser,
+    @Body() body: { value: boolean },
+  ) {
+    return this.userRepository.savePreferences(user.userId, { notifSms: body.value });
+  }
+
+  @ApiOperation({ summary: 'Basculer les emails marketing' })
+  @Patch('me/preferences/notif-marketing')
+  async toggleNotifMarketing(
+    @CurrentUser() user: ActiveUser,
+    @Body() body: { value: boolean },
+  ) {
+    return this.userRepository.savePreferences(user.userId, { notifMarketing: body.value });
+  }
+
+  @ApiOperation({ summary: 'Basculer la double authentification' })
+  @Patch('me/preferences/tfa')
+  async toggleTfa(
+    @CurrentUser() user: ActiveUser,
+    @Body() body: { value: boolean },
+  ) {
+    return this.userRepository.savePreferences(user.userId, { twoFactorEnabled: body.value });
+  }
+
+  @ApiOperation({ summary: 'Supprimer mon compte (soft-delete après confirmation de mot de passe)' })
+  @ApiResponse({ status: 204, description: 'Compte supprimé' })
+  @ApiResponse({ status: 401, description: 'Mot de passe incorrect' })
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Delete('me')
+  async deleteMe(
+    @CurrentUser() user: ActiveUser,
+    @Body() dto: DeleteAccountDto,
+  ) {
+    const found = await this.userRepository.findById(user.userId);
+    if (!found) throw new NotFoundException('Utilisateur introuvable.');
+
+    const passwordHash = (found as any).password;
+    if (!passwordHash) throw new UnauthorizedException('Confirmation impossible.');
+
+    const valid = await this.hashingService.compare(dto.password, passwordHash);
+    if (!valid) throw new UnauthorizedException('Mot de passe incorrect.');
+
+    (found as any).status = UserStatus.SUPPRIME;
+    await this.userRepository.update(found);
   }
 
   @ApiOperation({ summary: "Définir le type d'investisseur (PP ou PM)" })

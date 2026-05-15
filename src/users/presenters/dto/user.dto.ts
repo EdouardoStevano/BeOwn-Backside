@@ -1,5 +1,7 @@
 import {
+  IsBoolean,
   IsEmail,
+  IsIn,
   IsNotEmpty,
   IsOptional,
   IsString,
@@ -45,6 +47,44 @@ export class UpdateUserDto {
   @IsString()
   @MinLength(2)
   lastname?: string;
+}
+
+export class UpdatePreferencesDto {
+  @ApiPropertyOptional({ example: 'fr', enum: ['fr', 'en', 'ar'] })
+  @IsOptional()
+  @IsString()
+  @IsIn(['fr', 'en', 'ar'])
+  langue?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  masquerMontants?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  notifEmail?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  notifSms?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  notifMarketing?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  twoFactorEnabled?: boolean;
+
+  @ApiPropertyOptional({ example: 'EUR' })
+  @IsOptional()
+  @IsString()
+  preferredCurrency?: string;
 }
 
 export class UpdateUserAdminDto {

@@ -35,6 +35,8 @@ import { ContractGeneratorService } from './contract-generator.service';
 import { CloudStorageService } from 'src/common/cloud-storage/cloud-storage.service';
 import { Document } from 'src/documents/domains/document';
 import { DocumentRelatedTo, DocumentType } from 'src/documents/domains/enums/document-type.enum';
+import { NotificationService } from 'src/notifications/applications/notification.service';
+import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
 
 @Injectable()
 export class CreateInvestmentUseCase {
@@ -53,6 +55,7 @@ export class CreateInvestmentUseCase {
     private readonly userRepository: UserRepository,
     private readonly contractGenerator: ContractGeneratorService,
     private readonly cloudStorage: CloudStorageService,
+    private readonly notificationService: NotificationService,
   ) {}
 
   async execute(userId: number, dto: CreateInvestmentDto): Promise<Investment> {
@@ -175,6 +178,14 @@ export class CreateInvestmentUseCase {
     this.generateAndStoreBulletin(saved, project, userId).catch((err) =>
       this.logger.error(`Bulletin generation failed for investment ${saved.id}: ${err?.message}`),
     );
+
+    this.notificationService.push({
+      utilisateurId: userId,
+      type: NotificationType.INVESTISSEMENT,
+      titre: 'Investissement confirmé',
+      message: `Votre investissement de ${montant} XOF dans "${project.titre}" est confirmé. Vous détenez ${dto.nbFractions} fraction(s).`,
+      metadata: { investissementId: saved.id, projetId: dto.projetId, montant, nbFractions: dto.nbFractions },
+    }).catch(() => {});
 
     return saved;
   }

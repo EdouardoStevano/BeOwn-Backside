@@ -1,0 +1,267 @@
+import {
+  BadRequestException,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  NotFoundException,
+  Param,
+  Post,
+  Query,
+  UseGuards,
+  ForbiddenException,
+} from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
+import { InjectRepository } from '@nestjs/typeorm';
+import { DataSource, ILike, Repository } from 'typeorm';
+import { SkipThrottle } from '@nestjs/throttler';
+import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
+import { CurrentUser } from 'src/common/auth/current-user.decorator';
+import type { ActiveUser } from 'src/common/auth/current-user.decorator';
+import { OrdreMarcheEntity } from 'src/secondarymarket/infrastructure/persistences/entities/ordre-marche.entity';
+import { InvestmentEntity } from 'src/investments/infrastructure/persistences/entities/investment.entity';
+import { UserEntity, UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
+import { OrdreMarcheStatus } from 'src/secondarymarket/domains/ordre-marche';
+import { InvestmentStatus } from 'src/investments/domains/enums/investment-status.enum';
+import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/wallet.entity';
+import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entities/transaction.entity';
+import {
+  TransactionFournisseur,
+  TransactionStatus,
+  TransactionType,
+  WalletType,
+} from 'src/wallets/domains/enums/wallet.enum';
+import { NotificationService } from 'src/notifications/applications/notification.service';
+import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
+
+const ADMIN_ROLES = [
+  UserRole.ADMIN,
+  UserRole.SUPPORT,
+  UserRole.COMPLIANCE,
+  UserRole.FINANCIER,
+  UserRole.RCCI,
+];
+
+@SkipThrottle()
+@ApiTags('Admin — Marché Secondaire')
+@ApiBearerAuth()
+@Controller('admin/secondary-market')
+@UseGuards(JwtAuthGuard)
+export class AdminSecondaryMarketController {
+  constructor(
+    @InjectRepository(OrdreMarcheEntity)
+    private readonly ordreRepo: Repository<OrdreMarcheEntity>,
+    @InjectRepository(InvestmentEntity)
+    private readonly investRepo: Repository<InvestmentEntity>,
+    @InjectRepository(UserEntity)
+    private readonly userRepo: Repository<UserEntity>,
+    @InjectRepository(WalletEntity)
+    private readonly walletRepo: Repository<WalletEntity>,
+    @InjectRepository(TransactionEntity)
+    private readonly txRepo: Repository<TransactionEntity>,
+    private readonly dataSource: DataSource,
+    private readonly notificationService: NotificationService,
+  ) {}
+
+  private async assertAdmin(user: ActiveUser): Promise<void> {
+    const userEntity = await this.userRepo.findOne({ where: { userId: user.userId } });
+    if (!userEntity || !ADMIN_ROLES.includes(userEntity.role as UserRole)) {
+      throw new ForbiddenException('Accès réservé aux administrateurs');
+    }
+  }
+
+  // ── Liste tous les ordres avec relations ─────────────────────────────────────
+
+  @Get('orders')
+  @ApiOperation({ summary: 'Lister tous les ordres du marché secondaire' })
+  @ApiQuery({ name: 'statut', required: false })
+  @ApiQuery({ name: 'search', required: false })
+  @ApiQuery({ name: 'page', required: false })
+  @ApiQuery({ name: 'limit', required: false })
+  async listOrders(
+    @CurrentUser() user: ActiveUser,
+    @Query('statut') statut?: string,
+    @Query('search') search?: string,
+    @Query('page') page = '1',
+    @Query('limit') limit = '50',
+  ) {
+    await this.assertAdmin(user);
+
+    const skip = (Number(page) - 1) * Number(limit);
+
+    const qb = this.ordreRepo
+      .createQueryBuilder('ord')
+      .leftJoinAndSelect('ord.investissement', 'inv')
+      .leftJoinAndSelect('inv.projet', 'p')
+      .leftJoinAndSelect('ord.vendeur', 'vendeur')
+      .leftJoinAndMapOne(
+        'ord.acheteur',
+        UserEntity,
+        'acheteur',
+        'acheteur."userId" = ord."acheteurId"',
+      )
+      .orderBy('ord.createdAt', 'DESC')
+      .skip(skip)
+      .take(Number(limit));
+
+    if (statut) qb.andWhere('ord.statut = :statut', { statut });
+
+    const [orders, total] = await qb.getManyAndCount();
+
+    return { data: orders, total, page: Number(page), limit: Number(limit) };
+  }
+
+  // ── Annuler un ordre ─────────────────────────────────────────────────────────
+
+  @Post('orders/:id/cancel')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Annuler un ordre (admin)' })
+  async cancelOrder(
+    @Param('id') id: string,
+    @CurrentUser() user: ActiveUser,
+  ) {
+    await this.assertAdmin(user);
+
+    const ordre = await this.ordreRepo.findOne({ where: { id } });
+    if (!ordre) throw new NotFoundException('Ordre introuvable');
+
+    const annulables = [OrdreMarcheStatus.EN_CARNET, OrdreMarcheStatus.MATCH_PROPOSE];
+    if (!annulables.includes(ordre.statut as OrdreMarcheStatus)) {
+      throw new BadRequestException(`Impossible d'annuler un ordre au statut "${ordre.statut}"`);
+    }
+
+    ordre.statut = OrdreMarcheStatus.ANNULE;
+    await this.ordreRepo.save(ordre);
+
+    this.notificationService.push({
+      utilisateurId: ordre.vendeurId,
+      type: NotificationType.MARCHE_SECONDAIRE,
+      titre: 'Ordre annulé par l\'administration',
+      message: 'Votre annonce sur le marché secondaire a été annulée par l\'équipe BeOwn.',
+      metadata: { ordreId: id },
+    }).catch(() => {});
+
+    return { success: true, statut: OrdreMarcheStatus.ANNULE };
+  }
+
+  // ── Forcer l'exécution d'un ordre MATCH_PROPOSE ──────────────────────────────
+
+  @Post('orders/:id/force-execute')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Forcer l\'exécution d\'un ordre MATCH_PROPOSE (admin)' })
+  async forceExecute(
+    @Param('id') id: string,
+    @CurrentUser() user: ActiveUser,
+  ) {
+    await this.assertAdmin(user);
+
+    const ordre = await this.ordreRepo.findOne({
+      where: { id },
+      relations: ['investissement'],
+    });
+    if (!ordre) throw new NotFoundException('Ordre introuvable');
+    if (ordre.statut !== OrdreMarcheStatus.MATCH_PROPOSE) {
+      throw new BadRequestException(
+        'Seuls les ordres au statut MATCH_PROPOSE peuvent être forcés',
+      );
+    }
+    if (!ordre.acheteurId) {
+      throw new BadRequestException('Aucun acheteur défini sur cet ordre');
+    }
+
+    const nbFractions = ordre.nbFractions;
+    const prixUnitaire = Number(ordre.prixUnitaire);
+    const montantTotal = nbFractions * prixUnitaire;
+    const projetId = ordre.investissement.projetId;
+    const buyerUserId = ordre.acheteurId;
+
+    const { buyerInvestId } = await this.dataSource.transaction(async (em) => {
+      const buyerWallet = await em.findOne(WalletEntity, {
+        where: { proprietaireUserId: buyerUserId, type: WalletType.INVESTISSEUR },
+      });
+      if (!buyerWallet || Number(buyerWallet.solde) < montantTotal) {
+        throw new BadRequestException('Solde acheteur insuffisant');
+      }
+
+      const sellerWallet = await em.findOne(WalletEntity, {
+        where: { proprietaireUserId: ordre.vendeurId, type: WalletType.INVESTISSEUR },
+      });
+
+      // Fusion ou nouvel investissement
+      const existingInvest = await em.findOne(InvestmentEntity, {
+        where: { utilisateurId: buyerUserId, projetId, statut: InvestmentStatus.CONFIRME },
+      });
+
+      let buyerInvest: InvestmentEntity;
+      if (existingInvest) {
+        existingInvest.nbTitres = (Number(existingInvest.nbTitres) ?? 0) + nbFractions;
+        existingInvest.montant = Number(existingInvest.montant) + montantTotal;
+        buyerInvest = await em.save(InvestmentEntity, existingInvest);
+      } else {
+        const newInvest = em.create(InvestmentEntity, {
+          projetId,
+          utilisateurId: buyerUserId,
+          montant: montantTotal,
+          instrument: ordre.investissement.instrument,
+          nbTitres: nbFractions,
+          valeurTitre: prixUnitaire,
+          statut: InvestmentStatus.CONFIRME,
+        });
+        buyerInvest = await em.save(InvestmentEntity, newInvest);
+      }
+
+      // Réduire fractions vendeur
+      const sellerInvest = await em.findOne(InvestmentEntity, {
+        where: { id: ordre.investissementId },
+      });
+      if (sellerInvest && sellerInvest.nbTitres != null) {
+        const remaining = Number(sellerInvest.nbTitres) - nbFractions;
+        sellerInvest.nbTitres = Math.max(0, remaining);
+        sellerInvest.montant = remaining > 0
+          ? Number(sellerInvest.montant) - montantTotal
+          : 0;
+        await em.save(InvestmentEntity, sellerInvest);
+      }
+
+      // Clore l'ordre
+      ordre.statut = OrdreMarcheStatus.EXECUTE;
+      await em.save(OrdreMarcheEntity, ordre);
+
+      // Mouvements wallet
+      buyerWallet.solde = Number(buyerWallet.solde) - montantTotal;
+      await em.save(WalletEntity, buyerWallet);
+      if (sellerWallet) {
+        sellerWallet.solde = Number(sellerWallet.solde) + montantTotal;
+        await em.save(WalletEntity, sellerWallet);
+      }
+
+      // Ledger transactions
+      await em.save(TransactionEntity, em.create(TransactionEntity, {
+        walletSource: buyerWallet.id,
+        walletDestination: sellerWallet?.id ?? null,
+        type: TransactionType.SOUSCRIPTION,
+        montant: montantTotal,
+        devise: buyerWallet.devise,
+        statut: TransactionStatus.REUSSI,
+        fournisseur: TransactionFournisseur.INTERNE,
+        investissementId: buyerInvest.id,
+        projetId,
+        idempotencyKey: `admin-force:buyer:${id}`,
+        fraisPsp: 0,
+        fraisPlateforme: 0,
+      }));
+
+      return { buyerInvestId: buyerInvest.id };
+    });
+
+    this.notificationService.push({
+      utilisateurId: buyerUserId,
+      type: NotificationType.MARCHE_SECONDAIRE,
+      titre: 'Achat finalisé par l\'administration',
+      message: `Votre achat de ${nbFractions} fraction(s) a été finalisé manuellement par l\'équipe BeOwn.`,
+      metadata: { investissementId: buyerInvestId },
+    }).catch(() => {});
+
+    return { success: true, buyerInvestId };
+  }
+}

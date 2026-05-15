@@ -41,3 +41,10 @@ export class UpdateInvestmentStatusDto {
   @IsEnum(InvestmentStatus)
   statut: InvestmentStatus;
 }
+
+export class TopUpDto {
+  @ApiProperty({ description: 'Nombre de fractions à rajouter', example: 4, minimum: 1 })
+  @IsInt()
+  @IsPositive()
+  nbFractions: number;
+}

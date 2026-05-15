@@ -19,18 +19,34 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import { IsInt, IsPositive, IsUUID } from 'class-validator';
+import { ApiProperty } from '@nestjs/swagger';
 import { CreateInvestmentUseCase } from 'src/investments/applications/usecases/create-investment.usecase';
+import { InitiateInvestmentUseCase } from 'src/investments/applications/usecases/initiate-investment.usecase';
 import type { InvestmentRepository } from 'src/investments/applications/ports/repositories/investment.repository';
 import { INVESTMENT_REPOSITORY } from 'src/investments/applications/ports/repositories/investment.repository';
 import {
   CreateInvestmentDto,
+  TopUpDto,
   UpdateInvestmentStatusDto,
 } from '../dto/investment.dto';
+import { TopUpInvestmentUseCase } from 'src/investments/applications/usecases/top-up-investment.usecase';
 import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
 import { UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
 import { SkipThrottle } from '@nestjs/throttler';
+
+class InitiateInvestmentDto {
+  @ApiProperty({ description: 'UUID du projet' })
+  @IsUUID()
+  projetId: string;
+
+  @ApiProperty({ description: 'Nombre de fractions', minimum: 1 })
+  @IsInt()
+  @IsPositive()
+  nbFractions: number;
+}
 
 @SkipThrottle()
 @ApiTags('Investments')
@@ -40,6 +56,8 @@ import { SkipThrottle } from '@nestjs/throttler';
 export class InvestmentController {
   constructor(
     private readonly createInvestment: CreateInvestmentUseCase,
+    private readonly topUpInvestment: TopUpInvestmentUseCase,
+    private readonly initiateInvestment: InitiateInvestmentUseCase,
     @Inject(INVESTMENT_REPOSITORY)
     private readonly investmentRepository: InvestmentRepository,
   ) {}
@@ -52,6 +70,13 @@ export class InvestmentController {
   @Post()
   create(@Body() dto: CreateInvestmentDto, @CurrentUser() user: ActiveUser) {
     return this.createInvestment.execute(user.userId, dto);
+  }
+
+  @ApiOperation({ summary: 'Initier un investissement avec signature YouSign (sans débit immédiat)' })
+  @ApiResponse({ status: 201, description: '{ signingUrl, signatureId }' })
+  @Post('initiate')
+  initiateWithYouSign(@Body() dto: InitiateInvestmentDto, @CurrentUser() user: ActiveUser) {
+    return this.initiateInvestment.execute(user.userId, dto.projetId, dto.nbFractions);
   }
 
   @ApiOperation({ summary: 'Mes investissements' })
@@ -174,5 +199,18 @@ export class InvestmentController {
       roiGlobal,
       roiParProjet,
     };
+  }
+
+  @ApiOperation({ summary: "Rajouter des fractions à un investissement existant (débit wallet)" })
+  @ApiParam({ name: 'id', description: "UUID de l'investissement" })
+  @ApiResponse({ status: 200, description: 'Investissement mis à jour' })
+  @HttpCode(HttpStatus.OK)
+  @Patch(':id/top-up')
+  topUp(
+    @Param('id') id: string,
+    @Body() dto: TopUpDto,
+    @CurrentUser() user: ActiveUser,
+  ) {
+    return this.topUpInvestment.execute(id, user.userId, dto.nbFractions);
   }
 }

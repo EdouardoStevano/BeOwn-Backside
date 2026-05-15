@@ -11,42 +11,22 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { KycStatus } from 'src/profiles/domains/enums/kyc-status.enum';
 
 export class CreateProfilPPDto {
-  @ApiPropertyOptional({ example: 'M', description: 'M / Mme' })
+  @ApiPropertyOptional({ example: 'M.', description: 'Civilité (M. / Mme)' })
   @IsOptional()
   @IsString()
   civilite?: string;
 
-  @ApiProperty({ example: 'Jean' })
-  @IsNotEmpty()
-  @IsString()
-  prenom: string;
-
-  @ApiProperty({ example: 'Dupont' })
-  @IsNotEmpty()
-  @IsString()
-  nom: string;
-
-  @ApiPropertyOptional({ example: 'Martin' })
+  @ApiPropertyOptional({ example: '1985-06-15' })
   @IsOptional()
-  @IsString()
-  nomNaissance?: string;
-
-  @ApiProperty({ example: '1985-06-15' })
   @IsDateString()
-  dateNaissance: string;
+  dateNaissance?: string;
 
   @ApiPropertyOptional({ example: 'Paris' })
   @IsOptional()
   @IsString()
   lieuNaissance?: string;
 
-  @ApiPropertyOptional({ example: 'FR' })
-  @IsOptional()
-  @IsString()
-  @Length(2, 2)
-  paysNaissance?: string;
-
-  @ApiPropertyOptional({ example: 'FR' })
+  @ApiPropertyOptional({ example: 'CI', description: 'Code ISO 2 pays de nationalité' })
   @IsOptional()
   @IsString()
   @Length(2, 2)

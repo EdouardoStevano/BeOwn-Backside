@@ -128,12 +128,27 @@ export class AdminController {
       take: limit,
     });
 
-    // Fetch KYC for all returned users in one query
+    // Fetch KYC + aggregated investment totals for all returned users in parallel
     const userIds = users.map((u) => u.userId);
-    const kycRecords = userIds.length > 0
-      ? await this.kycRepo.find({ where: { utilisateurId: In(userIds) } })
-      : [];
+    const [kycRecords, investmentTotals] = await Promise.all([
+      userIds.length > 0
+        ? this.kycRepo.find({ where: { utilisateurId: In(userIds) } })
+        : Promise.resolve([] as KycEntity[]),
+      userIds.length > 0
+        ? this.investRepo
+            .createQueryBuilder('i')
+            .select('i.utilisateurId', 'userId')
+            .addSelect('COALESCE(SUM(i.montant), 0)', 'total')
+            .where('i.utilisateurId IN (:...ids)', { ids: userIds })
+            .andWhere('i.statut IN (:...statuts)', { statuts: ACTIVE_INVESTMENT_STATUSES })
+            .groupBy('i.utilisateurId')
+            .getRawMany<{ userId: number; total: string }>()
+        : Promise.resolve([] as Array<{ userId: number; total: string }>),
+    ]);
     const kycMap = new Map(kycRecords.map((k) => [k.utilisateurId, k]));
+    const investedMap = new Map(
+      investmentTotals.map((r) => [Number(r.userId), parseFloat(r.total)]),
+    );
 
     let items = users
       .filter((u) => {
@@ -152,6 +167,7 @@ export class AdminController {
           kycStatus: kyc?.statut ?? 'non_demarre',
           kycMotifRefus: kyc?.motifRefus ?? null,
           kycId: kyc?.id ?? null,
+          totalInvested: investedMap.get(u.userId) ?? 0,
         };
       });
 

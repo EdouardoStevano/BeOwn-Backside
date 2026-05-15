@@ -17,6 +17,7 @@ import { EMAIL_SERVICE } from 'src/common/email/email.service';
 import { BrevoEmailService } from 'src/common/email/brevo.service';
 import { ConfigModule } from '@nestjs/config';
 import { RegisterUseCase } from 'src/users/applications/usecases/register.usecase';
+import { RecaptchaService } from 'src/common/recaptcha/recaptcha.service';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { RegisterUseCase } from 'src/users/applications/usecases/register.usecas
     ForgotPasswordUseCase,
     ResetPasswordUseCase,
     RegisterUseCase,
+    RecaptchaService,
     { provide: HASHING_SERVICE, useClass: BcryptService },
     { provide: EMAIL_SERVICE, useClass: BrevoEmailService },
     GoogleStrategy,

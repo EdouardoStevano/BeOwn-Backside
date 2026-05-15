@@ -33,6 +33,7 @@ import {
   SignUpDto,
 } from './dto/password.dto';
 import { RegisterUseCase } from 'src/users/applications/usecases/register.usecase';
+import { RecaptchaService } from 'src/common/recaptcha/recaptcha.service';
 import { Public } from 'src/common/auth/public.decorator';
 import { Throttle } from '@nestjs/throttler';
 import {
@@ -50,6 +51,7 @@ export class AuthenticationController {
     private readonly forgotPasswordUseCase: ForgotPasswordUseCase,
     private readonly resetPasswordUseCase: ResetPasswordUseCase,
     private readonly registerUseCase: RegisterUseCase,
+    private readonly recaptchaService: RecaptchaService,
     @Inject(CACHE_MANAGER_SERVICE)
     private readonly cacheManagerService: CacheManagerService,
   ) {}
@@ -57,7 +59,10 @@ export class AuthenticationController {
   @ApiOperation({ summary: 'Connexion avec email et mot de passe' })
   @ApiResponse({ status: 200, description: 'Tokens retournés avec succès' })
   @ApiResponse({ status: 401, description: 'Identifiants invalides' })
-  @ApiResponse({ status: 429, description: 'Trop de tentatives — réessayez dans 15 min' })
+  @ApiResponse({
+    status: 429,
+    description: 'Trop de tentatives — réessayez dans 15 min',
+  })
   @Throttle({ auth: { ttl: 900_000, limit: 500 } })
   @Public()
   @HttpCode(HttpStatus.OK)
@@ -119,14 +124,18 @@ export class AuthenticationController {
     return this.redirectWithTokens(res, req.user);
   }
 
-  @ApiOperation({ summary: 'Échange un code OAuth contre des tokens (usage unique, 30s)' })
+  @ApiOperation({
+    summary: 'Échange un code OAuth contre des tokens (usage unique, 30s)',
+  })
   @ApiResponse({ status: 200, description: 'Tokens retournés' })
   @ApiResponse({ status: 401, description: 'Code invalide ou expiré' })
   @Public()
   @HttpCode(HttpStatus.OK)
   @Post('exchange')
   async exchange(@Body() dto: ExchangeCodeDto) {
-    const tokens = await this.cacheManagerService.getAndDeleteOAuthCode(dto.code);
+    const tokens = await this.cacheManagerService.getAndDeleteOAuthCode(
+      dto.code,
+    );
     if (!tokens) throw new UnauthorizedException('Code invalide ou expiré');
     return tokens;
   }
@@ -146,7 +155,10 @@ export class AuthenticationController {
       const { accessToken, refreshToken, isNewUser } =
         await this.socialAuthUseCase.authenticate(user);
       const code = randomUUID();
-      await this.cacheManagerService.insertOAuthCode(code, { accessToken, refreshToken });
+      await this.cacheManagerService.insertOAuthCode(code, {
+        accessToken,
+        refreshToken,
+      });
       return res.redirect(
         `${target}/auth/oauth-callback?code=${code}&isNewUser=${isNewUser ? '1' : '0'}`,
       );
@@ -163,13 +175,17 @@ export class AuthenticationController {
   @Public()
   @Post('sign-up')
   async signUp(@Body() dto: SignUpDto) {
+    await this.recaptchaService.verify(dto.captchaToken);
     const user = await this.registerUseCase.execute(dto);
     const { password: _p, ...safe } = user as any;
     return safe;
   }
 
   @ApiOperation({ summary: 'Mot de passe oublié' })
-  @ApiResponse({ status: 204, description: 'Email de réinitialisation envoyé si le compte existe' })
+  @ApiResponse({
+    status: 204,
+    description: 'Email de réinitialisation envoyé si le compte existe',
+  })
   @Throttle({ auth: { ttl: 3_600_000, limit: 50 } })
   @Public()
   @HttpCode(HttpStatus.NO_CONTENT)

@@ -46,4 +46,9 @@ export class SignUpDto {
     message: 'Le mot de passe doit contenir au moins une majuscule, une minuscule et un chiffre',
   })
   password: string;
+
+  @ApiPropertyOptional({ description: 'Token reCAPTCHA v3' })
+  @IsString()
+  @IsOptional()
+  captchaToken?: string;
 }

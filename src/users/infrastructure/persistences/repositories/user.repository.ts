@@ -2,8 +2,10 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { UserRepository } from 'src/users/applications/ports/repositories/user.repository';
 import { UserEntity } from '../entities/user.entity';
+import { UserPreferencesEntity } from '../entities/user-preferences.entity';
 import { Repository } from 'typeorm';
 import { User } from 'src/users/domains/user';
+import { UserPreferences } from 'src/users/domains/user-preferences';
 import { UserMapper } from '../mappers/user.mapper';
 
 @Injectable()
@@ -11,6 +13,8 @@ export class UserTypeOrmRepository implements UserRepository {
   constructor(
     @InjectRepository(UserEntity)
     private readonly usersRepository: Repository<UserEntity>,
+    @InjectRepository(UserPreferencesEntity)
+    private readonly prefsRepository: Repository<UserPreferencesEntity>,
   ) {}
 
   async save(user: User): Promise<User> {
@@ -58,5 +62,39 @@ export class UserTypeOrmRepository implements UserRepository {
       relations: ['userEmail', 'tfaMethods'],
     });
     return userEntity ? UserMapper.toDomain(userEntity) : null;
+  }
+
+  async findPreferences(userId: number): Promise<UserPreferences> {
+    let entity = await this.prefsRepository.findOne({ where: { userId } });
+    if (!entity) {
+      entity = this.prefsRepository.create({ userId });
+      entity = await this.prefsRepository.save(entity);
+    }
+    return this.prefsToDomaim(entity);
+  }
+
+  async savePreferences(userId: number, prefs: Partial<UserPreferences>): Promise<UserPreferences> {
+    let entity = await this.prefsRepository.findOne({ where: { userId } });
+    if (!entity) {
+      entity = this.prefsRepository.create({ userId });
+    }
+    Object.assign(entity, prefs);
+    const saved = await this.prefsRepository.save(entity);
+    return this.prefsToDomaim(saved);
+  }
+
+  private prefsToDomaim(e: UserPreferencesEntity): UserPreferences {
+    const p = new UserPreferences();
+    p.userId = e.userId;
+    p.langue = e.langue;
+    p.masquerMontants = e.masquerMontants;
+    p.notifEmail = e.notifEmail;
+    p.notifSms = e.notifSms;
+    p.notifMarketing = e.notifMarketing;
+    p.twoFactorEnabled = e.twoFactorEnabled;
+    p.preferredCurrency = e.preferredCurrency;
+    p.createdAt = e.createdAt;
+    p.updatedAt = e.updatedAt;
+    return p;
   }
 }
