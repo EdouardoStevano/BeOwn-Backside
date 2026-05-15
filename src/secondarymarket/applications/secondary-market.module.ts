@@ -14,6 +14,7 @@ import { ProjectEntity } from 'src/projects/infrastructure/persistences/entities
 import { UserEntity } from 'src/users/infrastructure/persistences/entities/user.entity';
 import { InvestmentEntity } from 'src/investments/infrastructure/persistences/entities/investment.entity';
 import { UsersModule } from 'src/users/applications/users.module';
+import { UsersInfrastructureModule } from 'src/users/infrastructure/users-infrastructure.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { UsersModule } from 'src/users/applications/users.module';
     CloudStorageModule,
     YouSignModule,
     UsersModule,
+    UsersInfrastructureModule,
     TypeOrmModule.forFeature([ProjectEntity, UserEntity, InvestmentEntity]),
   ],
   providers: [
