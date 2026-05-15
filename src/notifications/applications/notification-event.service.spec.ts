@@ -112,3 +112,22 @@ describe('NotificationEventService.accountStatus', () => {
     });
   });
 });
+
+describe('NotificationEventService.profileUpdatedByAdmin', () => {
+  it('pushes PROFIL_MODIFIE with changed fields list', async () => {
+    const notifications = {
+      push: jest.fn().mockResolvedValue(undefined),
+    } as unknown as jest.Mocked<NotificationService>;
+    const service = new NotificationEventService(notifications);
+
+    await service.profileUpdatedByAdmin(42, ['lastname', 'role'], 1);
+
+    expect(notifications.push).toHaveBeenCalledWith({
+      utilisateurId: 42,
+      type: NotificationType.PROFIL_MODIFIE,
+      titre: 'Profil mis à jour',
+      message: "Votre profil a été modifié par l'équipe BeOwn (lastname, role).",
+      metadata: { changedFields: ['lastname', 'role'], adminId: 1 },
+    });
+  });
+});

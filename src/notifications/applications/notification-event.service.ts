@@ -79,4 +79,22 @@ export class NotificationEventService {
       this.logger.warn(`accountClosed failed: ${(err as Error)?.message}`);
     }
   }
+
+  async profileUpdatedByAdmin(
+    userId: number,
+    changedFields: string[],
+    adminId: number,
+  ): Promise<void> {
+    try {
+      await this.notifications.push({
+        utilisateurId: userId,
+        type: NotificationType.PROFIL_MODIFIE,
+        titre: 'Profil mis à jour',
+        message: `Votre profil a été modifié par l'équipe BeOwn (${changedFields.join(', ')}).`,
+        metadata: { changedFields, adminId },
+      });
+    } catch (err) {
+      this.logger.warn(`profileUpdatedByAdmin failed: ${(err as Error)?.message}`);
+    }
+  }
 }
