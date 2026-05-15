@@ -23,6 +23,7 @@ import { IsInt, IsPositive, IsUUID } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { CreateInvestmentUseCase } from 'src/investments/applications/usecases/create-investment.usecase';
 import { InitiateInvestmentUseCase } from 'src/investments/applications/usecases/initiate-investment.usecase';
+import { CancelInvestmentUseCase } from 'src/investments/applications/usecases/cancel-investment.usecase';
 import type { InvestmentRepository } from 'src/investments/applications/ports/repositories/investment.repository';
 import { INVESTMENT_REPOSITORY } from 'src/investments/applications/ports/repositories/investment.repository';
 import {
@@ -58,6 +59,7 @@ export class InvestmentController {
     private readonly createInvestment: CreateInvestmentUseCase,
     private readonly topUpInvestment: TopUpInvestmentUseCase,
     private readonly initiateInvestment: InitiateInvestmentUseCase,
+    private readonly cancelInvestment: CancelInvestmentUseCase,
     @Inject(INVESTMENT_REPOSITORY)
     private readonly investmentRepository: InvestmentRepository,
   ) {}
@@ -212,5 +214,17 @@ export class InvestmentController {
     @CurrentUser() user: ActiveUser,
   ) {
     return this.topUpInvestment.execute(id, user.userId, dto.nbFractions);
+  }
+
+  @ApiOperation({ summary: 'Annuler un investissement pendant le délai de rétractation (4j, non-averti uniquement)' })
+  @ApiParam({ name: 'id', description: "UUID de l'investissement" })
+  @ApiResponse({ status: 204, description: 'Investissement annulé avec remboursement' })
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Post(':id/retract')
+  async retract(
+    @Param('id') id: string,
+    @CurrentUser() user: ActiveUser,
+  ) {
+    await this.cancelInvestment.execute(id, user.userId);
   }
 }
