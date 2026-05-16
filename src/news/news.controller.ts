@@ -14,10 +14,19 @@ import {
 import {
   ApiBearerAuth,
   ApiOperation,
+  ApiProperty,
+  ApiPropertyOptional,
   ApiQuery,
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import {
+  IsDateString,
+  IsEnum,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+} from 'class-validator';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Public } from 'src/common/auth/public.decorator';
@@ -36,17 +45,117 @@ const ADMIN_ROLES: string[] = [
   UserRole.COMPLIANCE,
 ];
 
-class UpsertNewsDto {
+class CreateNewsDto {
+  @ApiProperty({ example: "Lancement de la plateforme BeOwn" })
+  @IsString()
+  @IsNotEmpty()
   titreFr: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
   titreEn?: string;
+
+  @ApiProperty({ example: "<p>Contenu…</p>" })
+  @IsString()
+  @IsNotEmpty()
   contenuFr: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
   contenuEn?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
   resumeFr?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
   resumeEn?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
   imageUrl?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
   category?: string;
+
+  @ApiPropertyOptional({ enum: NewsStatus })
+  @IsOptional()
+  @IsEnum(NewsStatus)
   statut?: NewsStatus;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsDateString()
   publishedAt?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  slug?: string;
+}
+
+class UpdateNewsDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  titreFr?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  titreEn?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  contenuFr?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  contenuEn?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  resumeFr?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  resumeEn?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  imageUrl?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  category?: string;
+
+  @ApiPropertyOptional({ enum: NewsStatus })
+  @IsOptional()
+  @IsEnum(NewsStatus)
+  statut?: NewsStatus;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsDateString()
+  publishedAt?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
   slug?: string;
 }
 
@@ -140,7 +249,7 @@ export class AdminNewsController {
   @ApiOperation({ summary: 'Créer une actualité' })
   @Post()
   async create(
-    @Body() dto: UpsertNewsDto,
+    @Body() dto: CreateNewsDto,
     @CurrentUser() user: ActiveUser,
   ) {
     const u = await this.ensureAdmin(user);
@@ -166,7 +275,7 @@ export class AdminNewsController {
   @Patch(':id')
   async update(
     @Param('id') id: string,
-    @Body() dto: Partial<UpsertNewsDto>,
+    @Body() dto: UpdateNewsDto,
     @CurrentUser() user: ActiveUser,
   ) {
     await this.ensureAdmin(user);
