@@ -261,6 +261,28 @@ export class YouSignWebhookController {
       return { buyerInvestId: buyerInvest.id, fusionnee: !!existingInvest };
     });
 
+    // Remplacer le PDF unsigné par la version signée YouSign (parité avec
+    // l'investissement primaire) — l'acheteur voit ainsi son vrai contrat de
+    // Cession dans "Mes Investissements".
+    try {
+      if (signature.documentId) {
+        const signedPdf = await this.youSignService.downloadSignedDocument(signature.youSignRequestId);
+        const filename = `contrat_cession_${buyerInvestId.slice(0, 8)}_${signature.userId}_${Date.now()}.pdf`;
+        const { objectName, publicUrl } = await this.cloudStorage.upload(
+          signedPdf,
+          filename,
+          'application/pdf',
+          'contrats',
+        );
+        await this.documentRepo.update(
+          { id: signature.documentId },
+          { filename: objectName, path: publicUrl, originalName: filename, sizeBytes: signedPdf.length },
+        );
+      }
+    } catch (err: any) {
+      this.logger.warn(`Could not store signed cession PDF for investment ${buyerInvestId}: ${err?.message}`);
+    }
+
     // Notifications (non-bloquantes)
     const ordre = await this.ordreRepo.findOne({ where: { id: signature.ordreId! } });
     const nbFractions = signature.nbFractions!;
