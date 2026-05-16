@@ -23,10 +23,12 @@ import { GetProfilPPUseCase } from 'src/profiles/applications/usecases/get-profi
 import { UpdateProfilPPUseCase } from 'src/profiles/applications/usecases/update-profil-pp.usecase';
 import { CreateProfilPMUseCase } from 'src/profiles/applications/usecases/create-profil-pm.usecase';
 import { GetKycUseCase } from 'src/profiles/applications/usecases/get-kyc.usecase';
+import { SaveQuestionnaireUseCase } from 'src/profiles/applications/usecases/save-questionnaire.usecase';
 import {
   CreateProfilPPDto,
   UpdateKycStatusDto,
   CreateProfilPMDto,
+  SaveQuestionnaireDto,
 } from '../dto/profil.dto';
 import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
@@ -46,6 +48,7 @@ export class ProfileController {
     private readonly updateProfilPP: UpdateProfilPPUseCase,
     private readonly createProfilPM: CreateProfilPMUseCase,
     private readonly getKyc: GetKycUseCase,
+    private readonly saveQuestionnaire: SaveQuestionnaireUseCase,
   ) {}
 
   @ApiOperation({ summary: 'Créer le profil personne physique' })
@@ -120,5 +123,17 @@ export class ProfileController {
       page: page ? parseInt(page, 10) : 1,
       limit: limit ? parseInt(limit, 10) : 20,
     });
+  }
+
+  @ApiOperation({ summary: 'Enregistrer le questionnaire d\'adéquation' })
+  @ApiResponse({ status: 201, description: 'Questionnaire enregistré' })
+  @ApiResponse({ status: 404, description: 'Profil PP introuvable' })
+  @HttpCode(HttpStatus.OK)
+  @Post('questionnaire')
+  submitQuestionnaire(
+    @CurrentUser() user: ActiveUser,
+    @Body() dto: SaveQuestionnaireDto,
+  ) {
+    return this.saveQuestionnaire.execute(user.userId, dto.categoriePsfp);
   }
 }

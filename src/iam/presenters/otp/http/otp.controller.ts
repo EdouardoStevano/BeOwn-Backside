@@ -11,6 +11,11 @@ import {
   SetupTotpDto,
   VerifyTotpDto,
 } from '../../../applications/otp/applications/usecases/create-totp.usecase';
+import {
+  CreateSmsOtpUseCase,
+  SendSmsOtpDto,
+  VerifySmsOtpDto,
+} from '../../../applications/otp/applications/usecases/create-sms-otp.usecase';
 
 @ApiTags('OTP / 2FA')
 @Controller('otp')
@@ -18,6 +23,7 @@ export class OtpController {
   constructor(
     private readonly emailOtpUseCase: CreateEmailOtpUseCase,
     private readonly totpUseCase: CreateTotpUseCase,
+    private readonly smsOtpUseCase: CreateSmsOtpUseCase,
   ) {}
 
   @ApiOperation({ summary: 'Envoyer un OTP par email' })
@@ -49,5 +55,22 @@ export class OtpController {
   @Post('totp/verify')
   verifyTotp(@Body() dto: VerifyTotpDto) {
     return this.totpUseCase.verify(dto);
+  }
+
+  @ApiOperation({ summary: 'Envoyer un OTP par SMS' })
+  @ApiResponse({ status: 204, description: 'SMS envoyé' })
+  @Public()
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Post('sms/send')
+  sendSmsOtp(@Body() dto: SendSmsOtpDto) {
+    return this.smsOtpUseCase.send(dto);
+  }
+
+  @ApiOperation({ summary: "Vérifier l'OTP SMS" })
+  @ApiResponse({ status: 200, description: 'OTP valide' })
+  @Public()
+  @Post('sms/verify')
+  verifySmsOtp(@Body() dto: VerifySmsOtpDto) {
+    return this.smsOtpUseCase.verify(dto);
   }
 }

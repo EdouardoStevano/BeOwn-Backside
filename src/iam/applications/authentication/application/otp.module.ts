@@ -1,13 +1,15 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { OtpInfrastructureModule } from 'src/iam/applications/otp/infrastructure/otp-infrastructure.module';
 import { UsersInfrastructureModule } from 'src/users/infrastructure/users-infrastructure.module';
 import { CreateEmailOtpUseCase } from 'src/iam/applications/otp/applications/usecases/create-email-otp.usecase';
 import { CreateTotpUseCase } from 'src/iam/applications/otp/applications/usecases/create-totp.usecase';
+import { CreateSmsOtpUseCase } from 'src/iam/applications/otp/applications/usecases/create-sms-otp.usecase';
 import { OtpController } from 'src/iam/presenters/otp/http/otp.controller';
+import { IamModule } from 'src/iam/iam.module';
 
 @Module({
-  imports: [OtpInfrastructureModule, UsersInfrastructureModule],
-  providers: [CreateEmailOtpUseCase, CreateTotpUseCase],
+  imports: [OtpInfrastructureModule, UsersInfrastructureModule, forwardRef(() => IamModule)],
+  providers: [CreateEmailOtpUseCase, CreateTotpUseCase, CreateSmsOtpUseCase],
   controllers: [OtpController],
 })
 export class OtpModule {}

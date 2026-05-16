@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { IamInfrastructureModule } from './infrastructure/iam-infrastructure.module';
 import { AuthenticationModule } from './applications/authentication/application/authentication.module';
 import { OtpModule } from './applications/authentication/application/otp.module';
@@ -7,13 +7,14 @@ import { VerifyEmailService } from './applications/verify-email/verify-email.ser
 import { VerifyEmailController } from './applications/verify-email/verify-email.controller';
 import { SMS_SERVICE } from 'src/common/sms/sms.service';
 import { TwilioSmsService } from 'src/common/sms/twilio-sms.service';
+import { TOKEN_SERVICE } from './domains/ports/token.service';
 import { ConfigModule } from '@nestjs/config';
 
 @Module({
   imports: [
     IamInfrastructureModule,
     AuthenticationModule,
-    OtpModule,
+    forwardRef(() => OtpModule),
     UsersInfrastructureModule,
     ConfigModule,
   ],
@@ -22,6 +23,6 @@ import { ConfigModule } from '@nestjs/config';
     { provide: SMS_SERVICE, useClass: TwilioSmsService },
   ],
   controllers: [VerifyEmailController],
-  exports: [SMS_SERVICE],
+  exports: [SMS_SERVICE, IamInfrastructureModule],
 })
 export class IamModule {}

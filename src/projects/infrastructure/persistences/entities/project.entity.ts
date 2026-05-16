@@ -49,6 +49,26 @@ export interface Garantie {
   rang?: number;
 }
 
+/**
+ * Borrower-side schedule defined by admin on the project itself. Investor-side
+ * schedules (EcheanceEntity) are derived from this on a per-investment prorata.
+ */
+export interface EcheanceEmprunteur {
+  id?: string;
+  numero: number;
+  datePrevue: string; // ISO date (YYYY-MM-DD)
+  montantCapital: number;
+  montantInterets: number;
+  montantFraisPlateforme: number;
+  montantFraisRetard: number;
+  tauxInteretsAnnuel: number;
+  tauxRetardAnnuel: number;
+  capitalRestantAvant?: number;
+  capitalRestantApres?: number;
+  montantTotal?: number;
+  statut: 'a_venir' | 'verifiee' | 'en_paiement' | 'payee' | 'retard';
+}
+
 @Entity('projet')
 export class ProjectEntity {
   @PrimaryGeneratedColumn('uuid')
@@ -156,6 +176,15 @@ export class ProjectEntity {
 
   @Column({ type: 'jsonb', nullable: true, default: [] })
   garanties: Garantie[];
+
+  @Column({ type: 'jsonb', nullable: true, default: [] })
+  echeancierEmprunteur: EcheanceEmprunteur[];
+
+  @Column({ type: 'text', nullable: true })
+  motifAnnulation: string | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  annuleLe: Date | null;
 
   @CreateDateColumn()
   createdAt: Date;

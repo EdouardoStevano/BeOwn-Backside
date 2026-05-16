@@ -8,6 +8,7 @@ import { GetProfilPPUseCase } from './usecases/get-profil-pp.usecase';
 import { UpdateProfilPPUseCase } from './usecases/update-profil-pp.usecase';
 import { CreateProfilPMUseCase } from './usecases/create-profil-pm.usecase';
 import { GetKycUseCase } from './usecases/get-kyc.usecase';
+import { SaveQuestionnaireUseCase } from './usecases/save-questionnaire.usecase';
 import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructure.module';
 
 @Module({
@@ -20,6 +21,7 @@ import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructu
     UpdateProfilPPUseCase,
     CreateProfilPMUseCase,
     GetKycUseCase,
+    SaveQuestionnaireUseCase,
   ],
   controllers: [ProfileController],
   exports: [CreateKycUseCase, UpdateKycStatusUseCase, ProfilesInfrastructureModule],
