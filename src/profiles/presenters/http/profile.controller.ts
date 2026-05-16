@@ -16,6 +16,8 @@ import {
   ApiResponse,
   ApiBearerAuth,
 } from '@nestjs/swagger';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import { CreateProfilPPUseCase } from 'src/profiles/applications/usecases/create-profil-pp.usecase';
 import { CreateKycUseCase } from 'src/profiles/applications/usecases/create-kyc.usecase';
 import { UpdateKycStatusUseCase } from 'src/profiles/applications/usecases/update-kyc-status.usecase';
@@ -24,12 +26,13 @@ import { UpdateProfilPPUseCase } from 'src/profiles/applications/usecases/update
 import { CreateProfilPMUseCase } from 'src/profiles/applications/usecases/create-profil-pm.usecase';
 import { GetKycUseCase } from 'src/profiles/applications/usecases/get-kyc.usecase';
 import { SaveQuestionnaireUseCase } from 'src/profiles/applications/usecases/save-questionnaire.usecase';
+import { QuestionnaireAdequationEntity } from 'src/profiles/infrastructure/persistences/entities/questionnaire-adequation.entity';
 import {
   CreateProfilPPDto,
   UpdateKycStatusDto,
   CreateProfilPMDto,
-  SaveQuestionnaireDto,
 } from '../dto/profil.dto';
+import { SaveQuestionnaireDto } from '../dto/questionnaire.dto';
 import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
 import { UseGuards } from '@nestjs/common';
@@ -48,7 +51,9 @@ export class ProfileController {
     private readonly updateProfilPP: UpdateProfilPPUseCase,
     private readonly createProfilPM: CreateProfilPMUseCase,
     private readonly getKyc: GetKycUseCase,
-    private readonly saveQuestionnaire: SaveQuestionnaireUseCase,
+    private readonly saveQuestionnaireUseCase: SaveQuestionnaireUseCase,
+    @InjectRepository(QuestionnaireAdequationEntity)
+    private readonly questionnaireRepo: Repository<QuestionnaireAdequationEntity>,
   ) {}
 
   @ApiOperation({ summary: 'Créer le profil personne physique' })
@@ -125,15 +130,20 @@ export class ProfileController {
     });
   }
 
-  @ApiOperation({ summary: 'Enregistrer le questionnaire d\'adéquation' })
-  @ApiResponse({ status: 201, description: 'Questionnaire enregistré' })
-  @ApiResponse({ status: 404, description: 'Profil PP introuvable' })
-  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: "Sauvegarder le questionnaire d'adéquation PSFP" })
+  @ApiResponse({ status: 201, description: 'Questionnaire enregistré, catégorie et plafond calculés' })
   @Post('questionnaire')
-  submitQuestionnaire(
+  saveQuestionnaire(
     @CurrentUser() user: ActiveUser,
     @Body() dto: SaveQuestionnaireDto,
   ) {
-    return this.saveQuestionnaire.execute(user.userId, dto.categoriePsfp);
+    return this.saveQuestionnaireUseCase.execute(user.userId, dto);
+  }
+
+  @ApiOperation({ summary: "Obtenir mon questionnaire d'adéquation" })
+  @ApiResponse({ status: 200, description: 'Questionnaire retourné' })
+  @Get('questionnaire/me')
+  getMyQuestionnaire(@CurrentUser() user: ActiveUser) {
+    return this.questionnaireRepo.findOne({ where: { utilisateurId: user.userId } });
   }
 }

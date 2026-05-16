@@ -8,7 +8,7 @@ import {
   Length,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { KycStatus, CategoriePsfp } from 'src/profiles/domains/enums/kyc-status.enum';
+import { KycStatus } from 'src/profiles/domains/enums/kyc-status.enum';
 
 export class CreateProfilPPDto {
   @ApiPropertyOptional({ example: 'M.', description: 'Civilité (M. / Mme)' })
@@ -137,8 +137,3 @@ export class UpdateKycStatusDto {
   motifRefus?: string;
 }
 
-export class SaveQuestionnaireDto {
-  @ApiProperty({ enum: CategoriePsfp, description: 'Catégorie PSFP (non_averti, averti, professionnel)' })
-  @IsEnum(CategoriePsfp)
-  categoriePsfp: CategoriePsfp;
-}
