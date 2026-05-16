@@ -34,6 +34,7 @@ import { InvestmentStatus } from 'src/investments/domains/enums/investment-statu
 import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
 import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
+import { KycValidatedGuard } from 'src/common/auth/kyc-validated.guard';
 import { Public } from 'src/common/auth/public.decorator';
 import { NotificationService } from 'src/notifications/applications/notification.service';
 import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
@@ -97,8 +98,9 @@ export class SecondaryMarketController {
       );
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, KycValidatedGuard)
   @ApiOperation({ summary: 'Passer un ordre de vente' })
+  @ApiResponse({ status: 403, description: 'KYC non validé' })
   @Post('orders')
   async createOrder(
     @Body() dto: CreateOrdreMarcheDto,
@@ -138,9 +140,10 @@ export class SecondaryMarketController {
     return this.ordreRepo.save(ordre);
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, KycValidatedGuard)
   @ApiOperation({ summary: 'Exécuter un ordre (achat total ou partiel)' })
   @ApiParam({ name: 'id', description: "UUID de l'ordre" })
+  @ApiResponse({ status: 403, description: 'KYC non validé' })
   @HttpCode(HttpStatus.OK)
   @Post('orders/:id/execute')
   async executeOrder(
@@ -271,9 +274,10 @@ export class SecondaryMarketController {
     return this.ordreRepo.save(ordre);
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, KycValidatedGuard)
   @ApiOperation({ summary: 'Initier un achat (génère contrat + YouSign)' })
   @ApiParam({ name: 'id', description: "UUID de l'ordre" })
+  @ApiResponse({ status: 403, description: 'KYC non validé' })
   @HttpCode(HttpStatus.OK)
   @Post('orders/:id/initiate-buy')
   async initiateBuy(
