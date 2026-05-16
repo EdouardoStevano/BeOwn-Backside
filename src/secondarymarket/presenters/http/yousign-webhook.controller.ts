@@ -35,6 +35,7 @@ import { YouSignService } from 'src/common/yousign/yousign.service';
 import { CloudStorageService } from 'src/common/cloud-storage/cloud-storage.service';
 import { NotificationService } from 'src/notifications/applications/notification.service';
 import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
+import { UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
 
 @ApiExcludeController()
 @SkipThrottle()
@@ -303,6 +304,16 @@ export class YouSignWebhookController {
         message: `${nbFractions} fraction${nbFractions > 1 ? 's' : ''} ont été achetées et le paiement a été crédité sur votre wallet.`,
         metadata: { ordreId: ordre.id, nbFractions },
       }).catch(() => {});
+
+      this.notificationService
+        .pushToAdmins({
+          type: NotificationType.MARCHE_SECONDAIRE,
+          titre: 'Vente marché secondaire',
+          message: `User #${signature.userId} a acheté ${nbFractions} fraction(s) à User #${ordre.vendeurId}.`,
+          roles: [UserRole.ADMIN, UserRole.FINANCIER, UserRole.COMPLIANCE],
+          metadata: { ordreId: ordre.id, buyerInvestId, sellerId: ordre.vendeurId, buyerId: signature.userId, nbFractions },
+        })
+        .catch(() => {});
     }
 
     this.logger.log(`Signature done: investmentId=${buyerInvestId} fusionnee=${fusionnee}`);
@@ -414,6 +425,16 @@ export class YouSignWebhookController {
       message: `Votre contrat signé est enregistré. Vous détenez ${investment.nbTitres} fraction${(investment.nbTitres ?? 1) > 1 ? 's' : ''} dans "${project?.titre ?? 'le projet'}".`,
       metadata: { investissementId: investment.id, projetId: investment.projetId, montant },
     }).catch(() => {});
+
+    this.notificationService
+      .pushToAdmins({
+        type: NotificationType.INVESTISSEMENT,
+        titre: 'Nouvel investissement',
+        message: `User #${investment.utilisateurId} a investi ${montant} XOF dans "${project?.titre ?? 'projet'}".`,
+        roles: [UserRole.ADMIN, UserRole.FINANCIER, UserRole.COMPLIANCE],
+        metadata: { investissementId: investment.id, projetId: investment.projetId, montant, userId: investment.utilisateurId },
+      })
+      .catch(() => {});
 
     this.logger.log(`Investment signature done: investmentId=${investment.id} userId=${investment.utilisateurId}`);
   }
