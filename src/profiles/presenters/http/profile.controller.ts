@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  ForbiddenException,
   Param,
   ParseIntPipe,
   Patch,
@@ -18,6 +19,10 @@ import {
 } from '@nestjs/swagger';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import {
+  UserEntity,
+  UserRole,
+} from 'src/users/infrastructure/persistences/entities/user.entity';
 import { CreateProfilPPUseCase } from 'src/profiles/applications/usecases/create-profil-pp.usecase';
 import { CreateKycUseCase } from 'src/profiles/applications/usecases/create-kyc.usecase';
 import { UpdateKycStatusUseCase } from 'src/profiles/applications/usecases/update-kyc-status.usecase';
@@ -57,8 +62,26 @@ export class ProfileController {
     private readonly saveQuestionnaireUseCase: SaveQuestionnaireUseCase,
     @InjectRepository(QuestionnaireAdequationEntity)
     private readonly questionnaireRepo: Repository<QuestionnaireAdequationEntity>,
+    @InjectRepository(UserEntity)
+    private readonly userRepo: Repository<UserEntity>,
     private readonly notifications: NotificationService,
   ) {}
+
+  /** KYC-status mutation is reserved to admin / compliance / support staff. */
+  private async assertKycReviewer(user: ActiveUser): Promise<void> {
+    const u = await this.userRepo.findOne({ where: { userId: user.userId } });
+    const allowed: string[] = [
+      UserRole.ADMIN,
+      UserRole.SUPPORT,
+      UserRole.COMPLIANCE,
+      UserRole.RCCI,
+    ];
+    if (!u || !allowed.includes(u.role)) {
+      throw new ForbiddenException(
+        "Action réservée aux équipes admin / compliance.",
+      );
+    }
+  }
 
   @ApiOperation({ summary: 'Créer le profil personne physique' })
   @ApiResponse({ status: 201, description: 'Profil PP créé' })
@@ -80,13 +103,16 @@ export class ProfileController {
 
   @ApiOperation({ summary: 'Mettre à jour le statut KYC (admin)' })
   @ApiResponse({ status: 200, description: 'Statut KYC mis à jour' })
+  @ApiResponse({ status: 403, description: 'Réservé aux équipes admin / compliance' })
   @ApiResponse({ status: 404, description: 'KYC introuvable' })
   @HttpCode(HttpStatus.OK)
   @Patch(':userId/kyc/status')
   async patchKycStatus(
     @Param('userId', ParseIntPipe) userId: number,
     @Body() dto: UpdateKycStatusDto,
+    @CurrentUser() currentUser: ActiveUser,
   ) {
+    await this.assertKycReviewer(currentUser);
     const updated = await this.updateKycStatus.execute(userId, dto.status, dto.motifRefus);
 
     if (dto.status === KycStatus.VALIDE) {
