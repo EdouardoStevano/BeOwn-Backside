@@ -37,6 +37,9 @@ import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
 import { UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
+import { NotificationService } from 'src/notifications/applications/notification.service';
+import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
+import { KycStatus } from 'src/profiles/domains/enums/kyc-status.enum';
 
 @ApiTags('Profiles & KYC')
 @ApiBearerAuth()
@@ -54,6 +57,7 @@ export class ProfileController {
     private readonly saveQuestionnaireUseCase: SaveQuestionnaireUseCase,
     @InjectRepository(QuestionnaireAdequationEntity)
     private readonly questionnaireRepo: Repository<QuestionnaireAdequationEntity>,
+    private readonly notifications: NotificationService,
   ) {}
 
   @ApiOperation({ summary: 'Créer le profil personne physique' })
@@ -79,11 +83,38 @@ export class ProfileController {
   @ApiResponse({ status: 404, description: 'KYC introuvable' })
   @HttpCode(HttpStatus.OK)
   @Patch(':userId/kyc/status')
-  patchKycStatus(
+  async patchKycStatus(
     @Param('userId', ParseIntPipe) userId: number,
     @Body() dto: UpdateKycStatusDto,
   ) {
-    return this.updateKycStatus.execute(userId, dto.status, dto.motifRefus);
+    const updated = await this.updateKycStatus.execute(userId, dto.status, dto.motifRefus);
+
+    if (dto.status === KycStatus.VALIDE) {
+      this.notifications
+        .push({
+          utilisateurId: userId,
+          type: NotificationType.KYC_VALIDE,
+          titre: 'KYC validé',
+          message:
+            'Votre KYC a été validé. Vous pouvez désormais investir sur BeOwn.',
+          metadata: { decidedAt: new Date().toISOString() },
+        })
+        .catch(() => {});
+    } else if (dto.status === KycStatus.REFUSE) {
+      this.notifications
+        .push({
+          utilisateurId: userId,
+          type: NotificationType.KYC_REJETE,
+          titre: 'KYC refusé',
+          message: dto.motifRefus
+            ? `Votre KYC a été refusé : ${dto.motifRefus}`
+            : 'Votre KYC a été refusé. Merci de mettre à jour votre dossier.',
+          metadata: { motifRefus: dto.motifRefus ?? null },
+        })
+        .catch(() => {});
+    }
+
+    return updated;
   }
 
   @ApiOperation({ summary: 'Obtenir mon profil PP' })

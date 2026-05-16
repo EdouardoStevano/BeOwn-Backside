@@ -13,11 +13,13 @@ import { SaveQuestionnaireUseCase } from './usecases/save-questionnaire.usecase'
 import { QuestionnaireAdequationEntity } from '../infrastructure/persistences/entities/questionnaire-adequation.entity';
 import { ProfilPPEntity } from '../infrastructure/persistences/entities/profil-pp.entity';
 import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructure.module';
+import { NotificationsModule } from 'src/notifications/notifications.module';
 
 @Module({
   imports: [
     ProfilesInfrastructureModule,
     IamInfrastructureModule,
+    NotificationsModule,
     TypeOrmModule.forFeature([QuestionnaireAdequationEntity, ProfilPPEntity]),
   ],
   providers: [
