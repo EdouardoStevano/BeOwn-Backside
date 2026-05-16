@@ -1,5 +1,6 @@
 import {
   Controller,
+  Delete,
   Get,
   Param,
   Post,
@@ -56,5 +57,22 @@ export class NotificationController {
   @Post('me/read-all')
   markAllAsRead(@CurrentUser() user: ActiveUser) {
     return this.notificationService.markAllAsRead(user.userId);
+  }
+
+  @ApiOperation({ summary: 'Supprimer une notification' })
+  @ApiParam({ name: 'id', description: 'UUID de la notification' })
+  @ApiResponse({ status: 200, description: '{ deleted: boolean }' })
+  @HttpCode(HttpStatus.OK)
+  @Delete(':id')
+  deleteOne(@Param('id') id: string, @CurrentUser() user: ActiveUser) {
+    return this.notificationService.deleteOne(id, user.userId);
+  }
+
+  @ApiOperation({ summary: 'Vider toutes mes notifications' })
+  @ApiResponse({ status: 200, description: '{ deletedCount: number }' })
+  @HttpCode(HttpStatus.OK)
+  @Delete('me/all')
+  deleteAll(@CurrentUser() user: ActiveUser) {
+    return this.notificationService.deleteAll(user.userId);
   }
 }

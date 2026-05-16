@@ -117,6 +117,23 @@ export class NotificationService {
     });
   }
 
+  async deleteOne(id: string, userId: number): Promise<{ deleted: boolean }> {
+    // Constrain by utilisateurId so a user can only delete their own notifs.
+    const res = await this.notificationRepo.delete({ id, utilisateurId: userId });
+    const deleted = (res.affected ?? 0) > 0;
+    if (deleted) {
+      const unread = await this.countUnread(userId);
+      this.gateway.sendUnreadCount(userId, unread);
+    }
+    return { deleted };
+  }
+
+  async deleteAll(userId: number): Promise<{ deletedCount: number }> {
+    const res = await this.notificationRepo.delete({ utilisateurId: userId });
+    this.gateway.sendUnreadCount(userId, 0);
+    return { deletedCount: res.affected ?? 0 };
+  }
+
   /**
    * Pousse une notification à tous les utilisateurs portant l'un des rôles passés.
    * Une notification par destinataire — broadcast en temps réel via WebSocket.
