@@ -35,6 +35,7 @@ import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
 import { UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
+import { KycValidatedGuard } from 'src/common/auth/kyc-validated.guard';
 import { SkipThrottle } from '@nestjs/throttler';
 
 class InitiateInvestmentDto {
@@ -67,6 +68,8 @@ export class InvestmentController {
     status: 201,
     description: 'Investissement créé avec échéancier',
   })
+  @ApiResponse({ status: 403, description: 'KYC non validé' })
+  @UseGuards(KycValidatedGuard)
   @Post()
   create(@Body() dto: CreateInvestmentDto, @CurrentUser() user: ActiveUser) {
     return this.createInvestment.execute(user.userId, dto);
@@ -74,6 +77,8 @@ export class InvestmentController {
 
   @ApiOperation({ summary: 'Initier un investissement avec signature YouSign (sans débit immédiat)' })
   @ApiResponse({ status: 201, description: '{ signingUrl, signatureId }' })
+  @ApiResponse({ status: 403, description: 'KYC non validé' })
+  @UseGuards(KycValidatedGuard)
   @Post('initiate')
   initiateWithYouSign(@Body() dto: InitiateInvestmentDto, @CurrentUser() user: ActiveUser) {
     return this.initiateInvestment.execute(user.userId, dto.projetId, dto.nbFractions);
@@ -204,6 +209,8 @@ export class InvestmentController {
   @ApiOperation({ summary: "Rajouter des fractions à un investissement existant (débit wallet)" })
   @ApiParam({ name: 'id', description: "UUID de l'investissement" })
   @ApiResponse({ status: 200, description: 'Investissement mis à jour' })
+  @ApiResponse({ status: 403, description: 'KYC non validé' })
+  @UseGuards(KycValidatedGuard)
   @HttpCode(HttpStatus.OK)
   @Patch(':id/top-up')
   topUp(
