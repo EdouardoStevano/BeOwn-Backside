@@ -32,11 +32,34 @@ export class AvisTypeOrmRepository implements AvisRepository {
   }
 
   async findByProjetId(projetId: string): Promise<Avis[]> {
-    const entities = await this.repo.find({
-      where: { projetId },
-      order: { createdAt: 'DESC' },
+    const rows = await this.repo
+      .createQueryBuilder('a')
+      .leftJoin('users', 'u', 'u.user_id = a.user_id')
+      .where('a.projet_id = :projetId', { projetId })
+      .orderBy('a.created_at', 'DESC')
+      .select([
+        'a.id AS id',
+        'a.projet_id AS "projetId"',
+        'a.user_id AS "userId"',
+        'a.note AS note',
+        'a.commentaire AS commentaire',
+        'a.created_at AS "createdAt"',
+        'u.firstname AS "userFirstname"',
+        'u.lastname AS "userLastname"',
+      ])
+      .getRawMany();
+    return rows.map((r) => {
+      const avis = new Avis();
+      avis.id = r.id;
+      avis.projetId = r.projetId;
+      avis.userId = Number(r.userId);
+      avis.note = Number(r.note);
+      avis.commentaire = r.commentaire;
+      avis.createdAt = r.createdAt;
+      avis.userFirstname = r.userFirstname ?? null;
+      avis.userLastname = r.userLastname ?? null;
+      return avis;
     });
-    return entities.map((e) => this.toAvis(e));
   }
 
   async findByUserAndProjet(
