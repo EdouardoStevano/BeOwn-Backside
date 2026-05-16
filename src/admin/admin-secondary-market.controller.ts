@@ -115,33 +115,131 @@ export class AdminSecondaryMarketController {
 
   @Post('orders/:id/cancel')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Annuler un ordre (admin)' })
+  @ApiOperation({ summary: 'Annuler un ordre (admin) — reverse complète si déjà exécuté' })
   async cancelOrder(
     @Param('id') id: string,
     @CurrentUser() user: ActiveUser,
   ) {
     await this.assertAdmin(user);
 
-    const ordre = await this.ordreRepo.findOne({ where: { id } });
+    const ordre = await this.ordreRepo.findOne({
+      where: { id },
+      relations: ['investissement'],
+    });
     if (!ordre) throw new NotFoundException('Ordre introuvable');
 
-    const annulables = [OrdreMarcheStatus.EN_CARNET, OrdreMarcheStatus.MATCH_PROPOSE];
-    if (!annulables.includes(ordre.statut as OrdreMarcheStatus)) {
-      throw new BadRequestException(`Impossible d'annuler un ordre au statut "${ordre.statut}"`);
+    if (ordre.statut === OrdreMarcheStatus.ANNULE || ordre.statut === OrdreMarcheStatus.EXPIRE) {
+      throw new BadRequestException(`Ordre déjà au statut "${ordre.statut}"`);
     }
 
-    ordre.statut = OrdreMarcheStatus.ANNULE;
-    await this.ordreRepo.save(ordre);
+    // Cas A — ordre sans acheteur (EN_CARNET / MATCH_PROPOSE) : annulation simple
+    if (
+      ordre.statut === OrdreMarcheStatus.EN_CARNET ||
+      (ordre.statut === OrdreMarcheStatus.MATCH_PROPOSE && !ordre.acheteurId)
+    ) {
+      ordre.statut = OrdreMarcheStatus.ANNULE;
+      await this.ordreRepo.save(ordre);
 
+      this.notificationService.push({
+        utilisateurId: ordre.vendeurId,
+        type: NotificationType.MARCHE_SECONDAIRE,
+        titre: "Ordre annulé par l'administration",
+        message: "Votre annonce sur le marché secondaire a été annulée par l'équipe BeOwn.",
+        metadata: { ordreId: id, reverse: false },
+      }).catch(() => {});
+
+      return { success: true, statut: OrdreMarcheStatus.ANNULE, reversed: false };
+    }
+
+    // Cas B — ordre EXECUTE (ou MATCH_PROPOSE avec acheteur) : reverse complète
+    const nbFractions = ordre.nbFractions;
+    const prixUnitaire = Number(ordre.prixUnitaire);
+    const montantTotal = nbFractions * prixUnitaire;
+    const projetId = ordre.investissement.projetId;
+    const buyerUserId = ordre.acheteurId!;
+    const sellerUserId = ordre.vendeurId;
+
+    await this.dataSource.transaction(async (em) => {
+      // 1. Restaurer fractions vendeur sur son investissement source
+      const sellerInvest = await em.findOne(InvestmentEntity, {
+        where: { id: ordre.investissementId },
+      });
+      if (sellerInvest) {
+        sellerInvest.nbTitres = (Number(sellerInvest.nbTitres) ?? 0) + nbFractions;
+        sellerInvest.montant = Number(sellerInvest.montant) + montantTotal;
+        if (sellerInvest.statut === InvestmentStatus.ANNULE) {
+          sellerInvest.statut = InvestmentStatus.CONFIRME;
+        }
+        await em.save(InvestmentEntity, sellerInvest);
+      }
+
+      // 2. Retirer fractions sur investissement acheteur (fusionnel ou dédié)
+      const buyerInvest = await em.findOne(InvestmentEntity, {
+        where: { utilisateurId: buyerUserId, projetId, statut: InvestmentStatus.CONFIRME },
+      });
+      if (buyerInvest) {
+        const newTitres = Math.max(0, (Number(buyerInvest.nbTitres) ?? 0) - nbFractions);
+        buyerInvest.nbTitres = newTitres;
+        buyerInvest.montant = Math.max(0, Number(buyerInvest.montant) - montantTotal);
+        if (newTitres === 0) buyerInvest.statut = InvestmentStatus.ANNULE;
+        await em.save(InvestmentEntity, buyerInvest);
+      }
+
+      // 3. Wallets : recréditer acheteur, débiter vendeur
+      const buyerWallet = await em.findOne(WalletEntity, {
+        where: { proprietaireUserId: buyerUserId, type: WalletType.INVESTISSEUR },
+      });
+      const sellerWallet = await em.findOne(WalletEntity, {
+        where: { proprietaireUserId: sellerUserId, type: WalletType.INVESTISSEUR },
+      });
+      if (buyerWallet) {
+        buyerWallet.solde = Number(buyerWallet.solde) + montantTotal;
+        await em.save(WalletEntity, buyerWallet);
+      }
+      if (sellerWallet) {
+        sellerWallet.solde = Math.max(0, Number(sellerWallet.solde) - montantTotal);
+        await em.save(WalletEntity, sellerWallet);
+      }
+
+      // 4. Ledger transactions (reverse)
+      await em.save(TransactionEntity, em.create(TransactionEntity, {
+        walletSource: sellerWallet?.id ?? null,
+        walletDestination: buyerWallet?.id ?? null,
+        type: TransactionType.SOUSCRIPTION,
+        montant: montantTotal,
+        devise: buyerWallet?.devise ?? sellerWallet?.devise ?? 'XOF',
+        statut: TransactionStatus.REUSSI,
+        fournisseur: TransactionFournisseur.INTERNE,
+        investissementId: ordre.investissementId,
+        projetId,
+        idempotencyKey: `admin-cancel-reverse:${id}`,
+        fraisPsp: 0,
+        fraisPlateforme: 0,
+      }));
+
+      // 5. Statut de l'ordre
+      ordre.statut = OrdreMarcheStatus.ANNULE;
+      await em.save(OrdreMarcheEntity, ordre);
+    });
+
+    // Notifications
     this.notificationService.push({
-      utilisateurId: ordre.vendeurId,
+      utilisateurId: sellerUserId,
       type: NotificationType.MARCHE_SECONDAIRE,
-      titre: 'Ordre annulé par l\'administration',
-      message: 'Votre annonce sur le marché secondaire a été annulée par l\'équipe BeOwn.',
-      metadata: { ordreId: id },
+      titre: "Vente d'ordre refusée — fractions restaurées",
+      message: `Votre vente de ${nbFractions} fraction(s) à ${prixUnitaire} XOF a été annulée par l'administration. Les fractions ont été restaurées sur votre investissement.`,
+      metadata: { ordreId: id, reverse: true, montantRestaure: montantTotal },
     }).catch(() => {});
 
-    return { success: true, statut: OrdreMarcheStatus.ANNULE };
+    this.notificationService.push({
+      utilisateurId: buyerUserId,
+      type: NotificationType.MARCHE_SECONDAIRE,
+      titre: "Achat annulé — remboursement effectué",
+      message: `L'achat de ${nbFractions} fraction(s) a été annulé par l'administration. ${montantTotal} XOF ont été recrédités sur votre wallet.`,
+      metadata: { ordreId: id, reverse: true, montantRembourse: montantTotal },
+    }).catch(() => {});
+
+    return { success: true, statut: OrdreMarcheStatus.ANNULE, reversed: true, montantRembourse: montantTotal };
   }
 
   // ── Forcer l'exécution d'un ordre MATCH_PROPOSE ──────────────────────────────
