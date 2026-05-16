@@ -161,6 +161,16 @@ export class PaymentController {
       metadata: { paymentIntentId: dto.paymentIntentId, montant: amountMajor },
     }).catch(() => {});
 
+    this.notificationService
+      .pushToAdmins({
+        type: NotificationType.DEPOT_CONFIRME,
+        titre: 'Dépôt utilisateur',
+        message: `User #${user.userId} a déposé ${amountMajor} XOF.`,
+        roles: [UserRole.ADMIN, UserRole.FINANCIER],
+        metadata: { userId: user.userId, paymentIntentId: dto.paymentIntentId, montant: amountMajor },
+      })
+      .catch(() => {});
+
     return { success: true, walletId: wallet.id };
   }
 
