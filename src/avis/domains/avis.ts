@@ -5,4 +5,6 @@ export class Avis {
   note: number;
   commentaire: string | null;
   createdAt: Date;
+  userFirstname?: string | null;
+  userLastname?: string | null;
 }
