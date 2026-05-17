@@ -37,11 +37,13 @@ import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
 import { KycValidatedGuard } from 'src/common/auth/kyc-validated.guard';
 import { Public } from 'src/common/auth/public.decorator';
 import { NotificationService } from 'src/notifications/applications/notification.service';
+import { NotificationEventService } from 'src/notifications/applications/notification-event.service';
 import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
 import { InitiateBuyUseCase } from 'src/secondarymarket/applications/usecases/initiate-buy.usecase';
 import { CancelInitiationUseCase } from 'src/secondarymarket/applications/usecases/cancel-initiation.usecase';
 import { SignatureEntity } from 'src/signatures/infrastructure/persistences/entities/signature.entity';
 import { SignatureStatus } from 'src/signatures/domains/enums/signature-status.enum';
+import { UserEntity } from 'src/users/infrastructure/persistences/entities/user.entity';
 
 @SkipThrottle()
 @ApiTags('Marché Secondaire')
@@ -53,8 +55,13 @@ export class SecondaryMarketController {
     private readonly ordreRepo: Repository<OrdreMarcheEntity>,
     @InjectRepository(InvestmentEntity)
     private readonly investRepo: Repository<InvestmentEntity>,
+    @InjectRepository(ProjectEntity)
+    private readonly projectRepo: Repository<ProjectEntity>,
+    @InjectRepository(UserEntity)
+    private readonly userRepo: Repository<UserEntity>,
     private readonly dataSource: DataSource,
     private readonly notificationService: NotificationService,
+    private readonly notificationEvents: NotificationEventService,
     private readonly initiateBuyUseCase: InitiateBuyUseCase,
     private readonly cancelInitiationUseCase: CancelInitiationUseCase,
     @InjectRepository(SignatureEntity)
@@ -137,7 +144,17 @@ export class SecondaryMarketController {
       statut: OrdreMarcheStatus.EN_CARNET,
       valideJusquAu: dto.valideJusquAu ? new Date(dto.valideJusquAu) : null,
     });
-    return this.ordreRepo.save(ordre);
+    const saved = await this.ordreRepo.save(ordre);
+
+    const [project, vendeur] = await Promise.all([
+      this.projectRepo.findOne({ where: { id: investment.projetId } }),
+      this.userRepo.findOne({ where: { userId: user.userId } }),
+    ]);
+    if (project && vendeur) {
+      this.notificationEvents.secondaryOrderCreated(saved, project, vendeur);
+    }
+
+    return saved;
   }
 
   @UseGuards(JwtAuthGuard, KycValidatedGuard)
@@ -237,21 +254,16 @@ export class SecondaryMarketController {
       };
     });
 
-    this.notificationService.push({
-      utilisateurId: user.userId,
-      type: NotificationType.MARCHE_SECONDAIRE,
-      titre: 'Achat de fractions confirmé',
-      message: `Vous avez acheté ${qtyToBuy} fraction(s) à ${ordre.prixUnitaire} XOF/fraction.`,
-      metadata: { ordreId: id, fractionsAchetees: qtyToBuy, prixUnitaire: ordre.prixUnitaire },
-    }).catch(() => {});
-
-    this.notificationService.push({
-      utilisateurId: vendeurId,
-      type: NotificationType.MARCHE_SECONDAIRE,
-      titre: 'Vente de fractions exécutée',
-      message: `${qtyToBuy} fraction(s) de votre ordre ont été achetées à ${ordre.prixUnitaire} XOF/fraction.`,
-      metadata: { ordreId: id, fractionsVendues: qtyToBuy, prixUnitaire: ordre.prixUnitaire },
-    }).catch(() => {});
+    const [project, buyerUser, sellerUser] = await Promise.all([
+      this.projectRepo.findOne({ where: { id: investOriginal.projetId } }),
+      this.userRepo.findOne({ where: { userId: user.userId } }),
+      this.userRepo.findOne({ where: { userId: vendeurId } }),
+    ]);
+    if (project && buyerUser && sellerUser) {
+      await this.notificationEvents.secondaryTradeExecuted(
+        ordre, project, buyerUser, sellerUser, qtyToBuy,
+      );
+    }
 
     return result;
   }

@@ -7,11 +7,14 @@ import {
   ParseIntPipe,
   Patch,
   Post,
+  Query,
   HttpCode,
   HttpStatus,
   Inject,
   NotFoundException,
 } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import {
   ApiBearerAuth,
   ApiOperation,
@@ -23,6 +26,7 @@ import { IsInt, IsPositive, IsUUID } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { CreateInvestmentUseCase } from 'src/investments/applications/usecases/create-investment.usecase';
 import { InitiateInvestmentUseCase } from 'src/investments/applications/usecases/initiate-investment.usecase';
+import { CancelInvestmentUseCase } from 'src/investments/applications/usecases/cancel-investment.usecase';
 import type { InvestmentRepository } from 'src/investments/applications/ports/repositories/investment.repository';
 import { INVESTMENT_REPOSITORY } from 'src/investments/applications/ports/repositories/investment.repository';
 import {
@@ -37,6 +41,8 @@ import { UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
 import { KycValidatedGuard } from 'src/common/auth/kyc-validated.guard';
 import { SkipThrottle } from '@nestjs/throttler';
+import { EcheanceEntity } from 'src/investments/infrastructure/persistences/entities/echeance.entity';
+import { EcheanceStatus } from 'src/investments/domains/enums/investment-status.enum';
 
 class InitiateInvestmentDto {
   @ApiProperty({ description: 'UUID du projet' })
@@ -59,8 +65,11 @@ export class InvestmentController {
     private readonly createInvestment: CreateInvestmentUseCase,
     private readonly topUpInvestment: TopUpInvestmentUseCase,
     private readonly initiateInvestment: InitiateInvestmentUseCase,
+    private readonly cancelInvestment: CancelInvestmentUseCase,
     @Inject(INVESTMENT_REPOSITORY)
     private readonly investmentRepository: InvestmentRepository,
+    @InjectRepository(EcheanceEntity)
+    private readonly echeanceRepo: Repository<EcheanceEntity>,
   ) {}
 
   @ApiOperation({ summary: 'Créer un investissement (souscription)' })
@@ -219,5 +228,72 @@ export class InvestmentController {
     @CurrentUser() user: ActiveUser,
   ) {
     return this.topUpInvestment.execute(id, user.userId, dto.nbFractions);
+  }
+
+  @ApiOperation({ summary: 'Annuler un investissement pendant le délai de rétractation (4j, non-averti uniquement)' })
+  @ApiParam({ name: 'id', description: "UUID de l'investissement" })
+  @ApiResponse({ status: 204, description: 'Investissement annulé avec remboursement' })
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Post(':id/retract')
+  async retract(
+    @Param('id') id: string,
+    @CurrentUser() user: ActiveUser,
+  ) {
+    await this.cancelInvestment.execute(id, user.userId);
+  }
+
+  @ApiOperation({ summary: 'Résumé fiscal annuel de mes échéances (PFU 30%)' })
+  @ApiResponse({ status: 200, description: 'Données fiscales par année' })
+  @Get('fiscal/me')
+  async getMyFiscalSummary(
+    @CurrentUser() user: ActiveUser,
+    @Query('year') yearParam?: string,
+  ) {
+    const investments = await this.investmentRepository.findByUserId(user.userId);
+    const invIds = investments.map((i) => i.id);
+
+    if (invIds.length === 0) {
+      // Données de démonstration quand aucun investissement réel
+      const demoSummary = {
+        2024: { year: 2024, totalInteretsBruts: 3240.00, totalIR: 414.72, totalCSG: 556.88, totalNet: 2268.40, nbEcheances: 12 },
+        2025: { year: 2025, totalInteretsBruts: 4875.50, totalIR: 624.06, totalCSG: 838.59, totalNet: 3412.85, nbEcheances: 18 },
+      };
+      return { availableYears: [2025, 2024], selectedYear: 2025, summary: demoSummary };
+    }
+
+    const echeances = await this.echeanceRepo
+      .createQueryBuilder('e')
+      .where('e.investissementId IN (:...ids)', { ids: invIds })
+      .andWhere('e.statut = :statut', { statut: EcheanceStatus.PAYE })
+      .andWhere('e.payeLe IS NOT NULL')
+      .orderBy('e.payeLe', 'ASC')
+      .getMany();
+
+    const byYear = new Map<number, { totalInteretsBruts: number; totalIR: number; totalCSG: number; nbEcheances: number }>();
+    for (const e of echeances) {
+      const yr = new Date(e.payeLe!).getFullYear();
+      const existing = byYear.get(yr) ?? { totalInteretsBruts: 0, totalIR: 0, totalCSG: 0, nbEcheances: 0 };
+      existing.totalInteretsBruts += Number(e.montantInterets ?? 0);
+      existing.totalIR += Number(e.prelevementIR ?? 0);
+      existing.totalCSG += Number(e.prelevementCSG ?? 0);
+      existing.nbEcheances += 1;
+      byYear.set(yr, existing);
+    }
+
+    const availableYears = Array.from(byYear.keys()).sort((a, b) => b - a);
+    const summary: Record<number, object> = {};
+    for (const [yr, data] of byYear.entries()) {
+      summary[yr] = {
+        year: yr,
+        totalInteretsBruts: Math.round(data.totalInteretsBruts * 100) / 100,
+        totalIR: Math.round(data.totalIR * 100) / 100,
+        totalCSG: Math.round(data.totalCSG * 100) / 100,
+        totalNet: Math.round((data.totalInteretsBruts - data.totalIR - data.totalCSG) * 100) / 100,
+        nbEcheances: data.nbEcheances,
+      };
+    }
+
+    const selectedYear = yearParam ? parseInt(yearParam, 10) : (availableYears[0] ?? new Date().getFullYear());
+    return { availableYears, selectedYear, summary };
   }
 }

@@ -3,6 +3,7 @@ import {
   IsDateString,
   IsEnum,
   IsNotEmpty,
+  IsNumber,
   IsOptional,
   IsString,
   Length,
@@ -88,6 +89,16 @@ export class CreateProfilPPDto {
   @IsOptional()
   @IsString()
   nif?: string;
+
+  @ApiPropertyOptional({ example: 500000, description: 'Patrimoine net déclaré (€) — pour calcul limite 5% non-averti' })
+  @IsOptional()
+  @IsNumber()
+  patrimoineDeclare?: number;
+
+  @ApiPropertyOptional({ example: 25000, description: 'Montant max conseillé par investissement (€) — déduit du questionnaire' })
+  @IsOptional()
+  @IsNumber()
+  montantMaxConseille?: number;
 }
 
 export class CreateProfilPMDto {

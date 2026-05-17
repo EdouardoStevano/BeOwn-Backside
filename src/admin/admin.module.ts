@@ -7,6 +7,9 @@ import { AdminReservationsController } from './admin-reservations.controller';
 import { AdminSettingsController } from './admin-settings.controller';
 import { AdminReportsController } from './admin-reports.controller';
 import { AdminEcheancesController } from './admin-echeances.controller';
+import { AdminRetraitsController } from './admin-retraits.controller';
+import { AdminFiscalController } from './admin-fiscal.controller';
+import { AdminInvestorsController } from './admin-investors.controller';
 import { UserEntity } from 'src/users/infrastructure/persistences/entities/user.entity';
 import { ProjectEntity } from 'src/projects/infrastructure/persistences/entities/project.entity';
 import { InvestmentEntity } from 'src/investments/infrastructure/persistences/entities/investment.entity';
@@ -19,6 +22,8 @@ import { ReservationEntity } from 'src/reservations/infrastructure/persistences/
 import { AdminSettingsEntity } from './entities/admin-settings.entity';
 import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructure.module';
 import { NotificationsModule } from 'src/notifications/notifications.module';
+import { InvestmentsModule } from 'src/investments/applications/investments.module';
+import { ProfilesModule } from 'src/profiles/applications/profiles.module';
 
 @Module({
   imports: [
@@ -36,6 +41,8 @@ import { NotificationsModule } from 'src/notifications/notifications.module';
     ]),
     IamInfrastructureModule,
     NotificationsModule,
+    InvestmentsModule,
+    ProfilesModule,
   ],
   controllers: [
     AdminController,
@@ -45,6 +52,8 @@ import { NotificationsModule } from 'src/notifications/notifications.module';
     AdminSettingsController,
     AdminReportsController,
     AdminEcheancesController,
+    AdminRetraitsController,
+    AdminInvestorsController,
   ],
 })
 export class AdminModule {}

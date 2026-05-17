@@ -10,6 +10,7 @@ import {
   HttpStatus,
   Get,
   Query,
+  Inject,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -44,6 +45,7 @@ import { UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
 import { NotificationService } from 'src/notifications/applications/notification.service';
 import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
+import { NotificationEventService } from 'src/notifications/applications/notification-event.service';
 import { KycStatus } from 'src/profiles/domains/enums/kyc-status.enum';
 
 @ApiTags('Profiles & KYC')
@@ -65,6 +67,7 @@ export class ProfileController {
     @InjectRepository(UserEntity)
     private readonly userRepo: Repository<UserEntity>,
     private readonly notifications: NotificationService,
+    private readonly notificationEvents: NotificationEventService,
   ) {}
 
   /** KYC-status mutation is reserved to admin / compliance / support staff. */
@@ -126,6 +129,7 @@ export class ProfileController {
           metadata: { decidedAt: new Date().toISOString() },
         })
         .catch(() => {});
+      this.notificationEvents.kycValidatedByAdmin(userId, currentUser.userId);
     } else if (dto.status === KycStatus.REFUSE) {
       this.notifications
         .push({
@@ -138,6 +142,7 @@ export class ProfileController {
           metadata: { motifRefus: dto.motifRefus ?? null },
         })
         .catch(() => {});
+      this.notificationEvents.kycRejectedByAdmin(userId, dto.motifRefus ?? '—', currentUser.userId);
     }
 
     return updated;

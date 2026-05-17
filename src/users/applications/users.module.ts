@@ -10,6 +10,7 @@ import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructu
 import { ProfilesInfrastructureModule } from 'src/profiles/infrastructure/profiles-infrastructure.module';
 import { DocumentsInfrastructureModule } from 'src/documents/infrastructure/documents-infrastructure.module';
 import { WalletsInfrastructureModule } from 'src/wallets/infrastructure/wallets-infrastructure.module';
+import { NotificationsModule } from 'src/notifications/notifications.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { WalletsInfrastructureModule } from 'src/wallets/infrastructure/wallets-
     ProfilesInfrastructureModule,
     DocumentsInfrastructureModule,
     WalletsInfrastructureModule,
+    NotificationsModule,
   ],
   providers: [
     UsersService,

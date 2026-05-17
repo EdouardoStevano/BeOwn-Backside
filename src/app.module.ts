@@ -3,6 +3,7 @@ import { APP_GUARD } from '@nestjs/core';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule } from '@nestjs/config';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { ScheduleModule } from '@nestjs/schedule';
 import { UsersModule } from './users/applications/users.module';
 import { HealthController } from './health/health.controller';
 import { IamModule } from './iam/iam.module';
@@ -19,6 +20,7 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { DocumentsModule } from './documents/applications/documents.module';
 import { NotificationTestModule } from './common/test/notification-test.module';
 import { AdminModule } from './admin/admin.module';
+import { CgpModule } from './cgp/cgp.module';
 import { AvisModule } from './avis/applications/avis.module';
 import { NewsModule } from './news/news.module';
 import { MailerModule } from '@nestjs-modules/mailer';
@@ -42,6 +44,7 @@ import * as redisStore from 'cache-manager-ioredis';
       { name: 'auth', ttl: 900_000, limit: 500 },
     ]),
     ConfigModule.forRoot({ isGlobal: true }),
+    ScheduleModule.forRoot(),
     TypeOrmModule.forRoot({
       type: 'postgres',
       host: process.env.DATABASE_HOST,
@@ -88,6 +91,7 @@ import * as redisStore from 'cache-manager-ioredis';
     AvisModule,
     NewsModule,
     AdminModule,
+    CgpModule,
     ...(process.env.NODE_ENV !== 'production' ? [NotificationTestModule] : []),
   ],
   controllers: [HealthController],

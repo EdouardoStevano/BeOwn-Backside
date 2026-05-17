@@ -4,6 +4,8 @@ export enum WalletType {
   SPV = 'spv',
   FRAIS_PLATEFORME = 'frais_plateforme',
   TAXES = 'taxes',
+  SEQUESTRE_IR = 'sequestre_ir',   // Wallet séquestre pour Impôt sur le Revenu (12.8%)
+  SEQUESTRE_CSG = 'sequestre_csg', // Wallet séquestre pour CSG/CRDS (17.2%)
 }
 
 export enum TransactionType {

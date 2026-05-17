@@ -67,6 +67,21 @@ export class ProfilPPEntity {
   @Column({ type: 'varchar', default: CategoriePsfp.NON_AVERTI })
   categoriePsfp: CategoriePsfp;
 
+  @Column({ type: 'decimal', precision: 15, scale: 2, nullable: true })
+  patrimoineDeclare: number | null;
+
+  @Column({ type: 'decimal', precision: 15, scale: 2, nullable: true })
+  montantMaxConseille: number | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  niveauRisque: string | null; // 'vulnerable' | 'modere' | 'qualifie'
+
+  @Column({ type: 'timestamptz', nullable: true })
+  dernierContactAdmin: Date | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  prochainContactDu: Date | null;
+
   @CreateDateColumn()
   createdAt: Date;
 

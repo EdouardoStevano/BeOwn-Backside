@@ -4,6 +4,7 @@ import {
   Headers,
   HttpCode,
   HttpStatus,
+  Inject,
   Logger,
   Post,
   Req,
@@ -36,6 +37,9 @@ import { CloudStorageService } from 'src/common/cloud-storage/cloud-storage.serv
 import { NotificationService } from 'src/notifications/applications/notification.service';
 import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
 import { UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
+import { NotificationEventService } from 'src/notifications/applications/notification-event.service';
+import type { UserRepository } from 'src/users/applications/ports/repositories/user.repository';
+import { USER_REPOSITORY } from 'src/users/applications/ports/repositories/user.repository';
 
 @ApiExcludeController()
 @SkipThrottle()
@@ -64,6 +68,9 @@ export class YouSignWebhookController {
     private readonly youSignService: YouSignService,
     private readonly notificationService: NotificationService,
     private readonly cloudStorage: CloudStorageService,
+    @Inject(USER_REPOSITORY)
+    private readonly userRepository: UserRepository,
+    private readonly notificationEvents: NotificationEventService,
   ) {}
 
   @Public()
@@ -285,16 +292,11 @@ export class YouSignWebhookController {
     }
 
     // Notifications (non-bloquantes)
-    const ordre = await this.ordreRepo.findOne({ where: { id: signature.ordreId! } });
+    const ordre = await this.ordreRepo.findOne({
+      where: { id: signature.ordreId! },
+      relations: ['investissement'],
+    });
     const nbFractions = signature.nbFractions!;
-
-    this.notificationService.push({
-      utilisateurId: signature.userId,
-      type: NotificationType.MARCHE_SECONDAIRE,
-      titre: 'Achat confirmé ✓',
-      message: `Votre achat de ${nbFractions} fraction${nbFractions > 1 ? 's' : ''} a été finalisé. Contrat signé disponible dans vos documents.`,
-      metadata: { investissementId: buyerInvestId, signatureId: signature.id, fusionnee },
-    }).catch(() => {});
 
     if (ordre) {
       this.notificationService.push({
@@ -314,6 +316,17 @@ export class YouSignWebhookController {
           metadata: { ordreId: ordre.id, buyerInvestId, sellerId: ordre.vendeurId, buyerId: signature.userId, nbFractions },
         })
         .catch(() => {});
+
+      const projectEntity = await this.projectRepo.findOne({
+        where: { id: ordre.investissement.projetId },
+      });
+      const buyerUser = await this.userRepository.findById(signature.userId);
+      const sellerUser = await this.userRepository.findById(ordre.vendeurId);
+      if (projectEntity && buyerUser && sellerUser) {
+        await this.notificationEvents.secondaryTradeExecuted(
+          ordre, projectEntity, buyerUser, sellerUser, nbFractions,
+        );
+      }
     }
 
     this.logger.log(`Signature done: investmentId=${buyerInvestId} fusionnee=${fusionnee}`);
@@ -418,13 +431,11 @@ export class YouSignWebhookController {
       this.logger.warn(`Could not store signed PDF for investment ${investment.id}: ${err?.message}`);
     }
 
-    this.notificationService.push({
-      utilisateurId: investment.utilisateurId,
-      type: NotificationType.INVESTISSEMENT,
-      titre: 'Investissement confirmé ✓',
-      message: `Votre contrat signé est enregistré. Vous détenez ${investment.nbTitres} fraction${(investment.nbTitres ?? 1) > 1 ? 's' : ''} dans "${project?.titre ?? 'le projet'}".`,
-      metadata: { investissementId: investment.id, projetId: investment.projetId, montant },
-    }).catch(() => {});
+    // Notify via facade (handles both user + admin)
+    const user = await this.userRepository.findById(investment.utilisateurId);
+    if (project && user) {
+      this.notificationEvents.investmentCreated(investment, project, user);
+    }
 
     this.notificationService
       .pushToAdmins({

@@ -12,15 +12,22 @@ import { InitiateBuyUseCase } from './usecases/initiate-buy.usecase';
 import { CancelInitiationUseCase } from './usecases/cancel-initiation.usecase';
 import { KycEntity } from 'src/profiles/infrastructure/persistences/entities/kyc.entity';
 import { KycValidatedGuard } from 'src/common/auth/kyc-validated.guard';
+import { ProjectEntity } from 'src/projects/infrastructure/persistences/entities/project.entity';
+import { UserEntity } from 'src/users/infrastructure/persistences/entities/user.entity';
+import { InvestmentEntity } from 'src/investments/infrastructure/persistences/entities/investment.entity';
+import { UsersModule } from 'src/users/applications/users.module';
+import { UsersInfrastructureModule } from 'src/users/infrastructure/users-infrastructure.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([KycEntity]),
+    TypeOrmModule.forFeature([KycEntity, ProjectEntity, UserEntity, InvestmentEntity]),
     SecondaryMarketInfrastructureModule,
     IamInfrastructureModule,
     NotificationsModule,
     CloudStorageModule,
     YouSignModule,
+    UsersModule,
+    UsersInfrastructureModule,
   ],
   providers: [
     ContractGeneratorService,

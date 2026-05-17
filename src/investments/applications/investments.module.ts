@@ -5,12 +5,14 @@ import { ProjectsInfrastructureModule } from 'src/projects/infrastructure/projec
 import { WalletsInfrastructureModule } from 'src/wallets/infrastructure/wallets-infrastructure.module';
 import { DocumentsInfrastructureModule } from 'src/documents/infrastructure/documents-infrastructure.module';
 import { UsersInfrastructureModule } from 'src/users/infrastructure/users-infrastructure.module';
+import { ProfilesInfrastructureModule } from 'src/profiles/infrastructure/profiles-infrastructure.module';
 import { CloudStorageModule } from 'src/common/cloud-storage/cloud-storage.module';
 import { YouSignModule } from 'src/common/yousign/yousign.module';
 import { CreateInvestmentUseCase } from './usecases/create-investment.usecase';
 import { ContractGeneratorService } from './usecases/contract-generator.service';
 import { TopUpInvestmentUseCase } from './usecases/top-up-investment.usecase';
 import { InitiateInvestmentUseCase } from './usecases/initiate-investment.usecase';
+import { CancelInvestmentUseCase } from './usecases/cancel-investment.usecase';
 import { InvestmentController } from '../presenters/http/investment.controller';
 import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructure.module';
 import { NotificationsModule } from 'src/notifications/notifications.module';
@@ -23,6 +25,11 @@ import { UserEntity } from 'src/users/infrastructure/persistences/entities/user.
 import { UserEmailEntity } from 'src/users/infrastructure/persistences/entities/user-email.entity';
 import { KycEntity } from 'src/profiles/infrastructure/persistences/entities/kyc.entity';
 import { KycValidatedGuard } from 'src/common/auth/kyc-validated.guard';
+import { EcheanceEntity } from 'src/investments/infrastructure/persistences/entities/echeance.entity';
+import { EcheancesCronService } from './echeances-cron.service';
+import { IfuGenerationService } from './ifu-generation.service';
+import { PayEcheanceUseCase } from './usecases/pay-echeance.usecase';
+import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entities/transaction.entity';
 
 @Module({
   imports: [
@@ -35,6 +42,8 @@ import { KycValidatedGuard } from 'src/common/auth/kyc-validated.guard';
       UserEntity,
       UserEmailEntity,
       KycEntity,
+      EcheanceEntity,
+      TransactionEntity,
     ]),
     InvestmentsInfrastructureModule,
     IamInfrastructureModule,
@@ -42,6 +51,7 @@ import { KycValidatedGuard } from 'src/common/auth/kyc-validated.guard';
     WalletsInfrastructureModule,
     DocumentsInfrastructureModule,
     UsersInfrastructureModule,
+    ProfilesInfrastructureModule,
     CloudStorageModule,
     YouSignModule,
     NotificationsModule,
@@ -51,9 +61,13 @@ import { KycValidatedGuard } from 'src/common/auth/kyc-validated.guard';
     ContractGeneratorService,
     TopUpInvestmentUseCase,
     InitiateInvestmentUseCase,
+    CancelInvestmentUseCase,
     KycValidatedGuard,
+    EcheancesCronService,
+    IfuGenerationService,
+    PayEcheanceUseCase,
   ],
   controllers: [InvestmentController],
-  exports: [],
+  exports: [PayEcheanceUseCase, IfuGenerationService],
 })
 export class InvestmentsModule {}

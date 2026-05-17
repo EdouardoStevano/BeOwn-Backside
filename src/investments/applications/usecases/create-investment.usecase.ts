@@ -15,6 +15,8 @@ import type { DocumentRepository } from 'src/documents/applications/ports/reposi
 import { DOCUMENT_REPOSITORY } from 'src/documents/applications/ports/repositories/document.repository';
 import type { UserRepository } from 'src/users/applications/ports/repositories/user.repository';
 import { USER_REPOSITORY } from 'src/users/applications/ports/repositories/user.repository';
+import type { ProfilRepository } from 'src/profiles/applications/ports/repositories/profil.repository';
+import { PROFIL_REPOSITORY } from 'src/profiles/applications/ports/repositories/profil.repository';
 import { Investment } from 'src/investments/domains/investment';
 import { Echeance } from 'src/investments/domains/echeance';
 import {
@@ -37,6 +39,7 @@ import { Document } from 'src/documents/domains/document';
 import { DocumentRelatedTo, DocumentType } from 'src/documents/domains/enums/document-type.enum';
 import { NotificationService } from 'src/notifications/applications/notification.service';
 import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
+import { NotificationEventService } from 'src/notifications/applications/notification-event.service';
 
 @Injectable()
 export class CreateInvestmentUseCase {
@@ -53,14 +56,21 @@ export class CreateInvestmentUseCase {
     private readonly documentRepository: DocumentRepository,
     @Inject(USER_REPOSITORY)
     private readonly userRepository: UserRepository,
+    @Inject(PROFIL_REPOSITORY)
+    private readonly profilRepository: ProfilRepository,
     private readonly contractGenerator: ContractGeneratorService,
     private readonly cloudStorage: CloudStorageService,
     private readonly notificationService: NotificationService,
+    private readonly notificationEvents: NotificationEventService,
   ) {}
 
   async execute(userId: number, dto: CreateInvestmentDto): Promise<Investment> {
     const project = await this.projectRepository.findProjectById(dto.projetId);
     if (!project) throw new NotFoundException('Projet introuvable.');
+
+    // Get investor profile to check PSFP category
+    const profilPP = await this.profilRepository.findProfilPPByUserId(userId);
+    const isNonAverti = profilPP?.categoriePsfp === 'non_averti';
 
     if (project.statut !== ProjectStatus.EN_COLLECTE) {
       throw new BadRequestException(
@@ -117,6 +127,20 @@ export class CreateInvestmentUseCase {
       );
     }
 
+    // ── PSFP limit check for non-averti investors ─────────────────────────────
+    if (isNonAverti) {
+      const patrimoine = Number(profilPP?.patrimoineDeclare ?? 0);
+      const limit5Percent = patrimoine * 0.05;
+      const recommendedCap = Math.max(1000, limit5Percent);
+      if (montant > recommendedCap && !dto.consentementDepassementLimite) {
+        throw new BadRequestException(
+          `Votre statut "non averti" recommande de ne pas dépasser ${recommendedCap.toFixed(0)} € par investissement ` +
+          `(max entre 1000 € et 5% de votre patrimoine déclaré de ${patrimoine} €). ` +
+          `Pour passer outre, cochez la case de consentement explicite "consentementDepassementLimite": true.`,
+        );
+      }
+    }
+
     const investment = new Investment();
     investment.projetId = dto.projetId;
     investment.utilisateurId = userId;
@@ -125,7 +149,14 @@ export class CreateInvestmentUseCase {
     investment.nbTitres = dto.nbFractions;
     investment.valeurTitre = prixFraction;
     investment.statut = InvestmentStatus.CONFIRME;
-    investment.delaiRetractationJusquAu = null;
+    // PSFP: set 4-day retraction delay for non-averti investors
+    if (isNonAverti) {
+      const retractationDate = new Date();
+      retractationDate.setDate(retractationDate.getDate() + 4);
+      investment.delaiRetractationJusquAu = retractationDate;
+    } else {
+      investment.delaiRetractationJusquAu = null;
+    }
     investment.bulletinDocId = null;
     investment.signatureId = null;
     investment.reservationId = dto.reservationId ?? null;
@@ -179,13 +210,11 @@ export class CreateInvestmentUseCase {
       this.logger.error(`Bulletin generation failed for investment ${saved.id}: ${err?.message}`),
     );
 
-    this.notificationService.push({
-      utilisateurId: userId,
-      type: NotificationType.INVESTISSEMENT,
-      titre: 'Investissement confirmé',
-      message: `Votre investissement de ${montant} XOF dans "${project.titre}" est confirmé. Vous détenez ${dto.nbFractions} fraction(s).`,
-      metadata: { investissementId: saved.id, projetId: dto.projetId, montant, nbFractions: dto.nbFractions },
-    }).catch(() => {});
+    // Notify via facade (handles both user + admin)
+    const user = await this.userRepository.findById(userId);
+    if (user) {
+      this.notificationEvents.investmentCreated(saved, project, user);
+    }
 
     return saved;
   }

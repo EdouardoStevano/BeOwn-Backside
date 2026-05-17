@@ -15,13 +15,17 @@ import { ProfilPPEntity } from '../infrastructure/persistences/entities/profil-p
 import { UserEntity } from 'src/users/infrastructure/persistences/entities/user.entity';
 import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructure.module';
 import { NotificationsModule } from 'src/notifications/notifications.module';
+import { RiskScoringService } from './risk-scoring.service';
+import { BeneficiaireEffectifEntity } from '../infrastructure/persistences/entities/beneficiaire-effectif.entity';
+import { ProfilPMEntity } from '../infrastructure/persistences/entities/profil-pm.entity';
+import { BeneficiaireEffectifController } from '../presenters/http/beneficiaire-effectif.controller';
 
 @Module({
   imports: [
     ProfilesInfrastructureModule,
     IamInfrastructureModule,
     NotificationsModule,
-    TypeOrmModule.forFeature([QuestionnaireAdequationEntity, ProfilPPEntity, UserEntity]),
+    TypeOrmModule.forFeature([QuestionnaireAdequationEntity, ProfilPPEntity, UserEntity, BeneficiaireEffectifEntity, ProfilPMEntity]),
   ],
   providers: [
     CreateProfilPPUseCase,
@@ -32,8 +36,9 @@ import { NotificationsModule } from 'src/notifications/notifications.module';
     CreateProfilPMUseCase,
     GetKycUseCase,
     SaveQuestionnaireUseCase,
+    RiskScoringService,
   ],
-  controllers: [ProfileController],
-  exports: [CreateKycUseCase, UpdateKycStatusUseCase, ProfilesInfrastructureModule],
+  controllers: [ProfileController, BeneficiaireEffectifController],
+  exports: [CreateKycUseCase, UpdateKycStatusUseCase, ProfilesInfrastructureModule, RiskScoringService],
 })
 export class ProfilesModule {}

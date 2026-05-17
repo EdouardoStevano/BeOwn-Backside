@@ -1,4 +1,5 @@
 import {
+  IsBoolean,
   IsEnum,
   IsInt,
   IsOptional,
@@ -34,6 +35,14 @@ export class CreateInvestmentDto {
   @IsOptional()
   @IsUUID()
   reservationId?: string;
+
+  @ApiPropertyOptional({
+    description: 'Consentement explicite pour dépasser la limite recommandée (non-avertis uniquement). Le client doit cocher cette case si le montant dépasse max(1000€, 5% du patrimoine déclaré).',
+    example: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  consentementDepassementLimite?: boolean;
 }
 
 export class UpdateInvestmentStatusDto {

@@ -12,6 +12,11 @@ export enum DocumentType {
   PERMIS_CONSTRUIRE = 'PERMIS_CONSTRUIRE',
   PHOTO_PROJET = 'PHOTO_PROJET',
   AUTRE = 'AUTRE',
+  FICI = 'FICI',
+  DIS = 'DIS',
+  IFU_ANNUEL = 'IFU_ANNUEL',
+  CONTRAT_RAJOUT = 'CONTRAT_RAJOUT',
+  DBE_S1 = 'DBE_S1',
 }
 
 export enum DocumentRelatedTo {

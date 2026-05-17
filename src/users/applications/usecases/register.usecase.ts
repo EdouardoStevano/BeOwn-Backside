@@ -6,6 +6,7 @@ import {
 } from '../ports/repositories/user.repository';
 import { RegisterDto } from 'src/users/presenters/dto/user.dto';
 import { User } from 'src/users/domains/user';
+import { NotificationEventService } from 'src/notifications/applications/notification-event.service';
 
 @Injectable()
 export class RegisterUseCase {
@@ -13,6 +14,7 @@ export class RegisterUseCase {
     private readonly userFactory: UserFactory,
     @Inject(USER_REPOSITORY)
     private readonly userRepository: UserRepository,
+    private readonly notificationEvents: NotificationEventService,
   ) {}
 
   async execute(registerDto: RegisterDto): Promise<User> {
@@ -29,6 +31,11 @@ export class RegisterUseCase {
       socialId: null,
     });
 
-    return this.userRepository.save(user);
+    const savedUser = await this.userRepository.save(user);
+
+    const fullUser = await this.userRepository.findById(savedUser.userId);
+    if (fullUser) this.notificationEvents.userRegistered(fullUser);
+
+    return savedUser;
   }
 }

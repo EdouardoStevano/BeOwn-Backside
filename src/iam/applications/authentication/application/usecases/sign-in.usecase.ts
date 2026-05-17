@@ -48,6 +48,7 @@ export class SignInUsecase {
     const tokenPayload = await this.tokenService.generateTokens({
       sub: user.userId,
       email: user.userEmail.email,
+      role: user.role,
     } as TokenPayload);
 
     return { ...tokenPayload };

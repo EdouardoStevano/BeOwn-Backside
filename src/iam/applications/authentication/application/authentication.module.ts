@@ -18,6 +18,7 @@ import { BrevoEmailService } from 'src/common/email/brevo.service';
 import { ConfigModule } from '@nestjs/config';
 import { RegisterUseCase } from 'src/users/applications/usecases/register.usecase';
 import { RecaptchaService } from 'src/common/recaptcha/recaptcha.service';
+import { NotificationsModule } from 'src/notifications/notifications.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { RecaptchaService } from 'src/common/recaptcha/recaptcha.service';
     UsersInfrastructureModule,
     UsersModule,
     ConfigModule,
+    NotificationsModule,
   ],
   providers: [
     SignInUsecase,

@@ -37,9 +37,21 @@ export class EcheanceEntity {
   @Column({ type: 'decimal', precision: 18, scale: 2, default: 0 })
   montantTotal: number;
 
+  @Column({ type: 'decimal', precision: 14, scale: 2, default: 0 })
+  prelevementIR: number;
+
+  @Column({ type: 'decimal', precision: 14, scale: 2, default: 0 })
+  prelevementCSG: number;
+
   @Column({ type: 'varchar', default: EcheanceStatus.A_VENIR })
   statut: EcheanceStatus;
 
   @Column({ type: 'timestamptz', nullable: true })
   payeLe: Date | null;
+
+  @Column({ type: 'boolean', default: false })
+  rappelJ7Envoye: boolean;
+
+  @Column({ type: 'boolean', default: false })
+  rappelJ1Envoye: boolean;
 }

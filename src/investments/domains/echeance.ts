@@ -8,6 +8,10 @@ export class Echeance {
   montantCapital: number;
   montantInterets: number;
   montantTotal: number;
+  prelevementIR: number = 0;
+  prelevementCSG: number = 0;
   statut: EcheanceStatus;
   payeLe: Date | null;
+  rappelJ7Envoye: boolean = false;
+  rappelJ1Envoye: boolean = false;
 }

@@ -36,6 +36,7 @@ import { DocumentRelatedTo, DocumentType } from 'src/documents/domains/enums/doc
 import { Investment } from 'src/investments/domains/investment';
 import { NotificationService } from 'src/notifications/applications/notification.service';
 import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
+import { NotificationEventService } from 'src/notifications/applications/notification-event.service';
 
 @Injectable()
 export class TopUpInvestmentUseCase {
@@ -55,6 +56,7 @@ export class TopUpInvestmentUseCase {
     private readonly contractGenerator: ContractGeneratorService,
     private readonly cloudStorage: CloudStorageService,
     private readonly notificationService: NotificationService,
+    private readonly notificationEvents: NotificationEventService,
   ) {}
 
   async execute(
@@ -147,14 +149,11 @@ export class TopUpInvestmentUseCase {
       this.logger.error(`Top-up bulletin regen failed for ${investmentId}: ${err?.message}`),
     );
 
-    // In-app notification (non-blocking)
-    this.notificationService.push({
-      utilisateurId: userId,
-      type: NotificationType.INVESTISSEMENT,
-      titre: 'Fractions ajoutées',
-      message: `+${nbFractions} fraction${nbFractions > 1 ? 's' : ''} ajoutée${nbFractions > 1 ? 's' : ''} dans "${project.titre}". Vous détenez désormais ${newNbTitres} fraction${newNbTitres > 1 ? 's' : ''} (${montantDelta} XOF débités).`,
-      metadata: { investissementId: investmentId, projetId: investment.projetId, nbFractions, montantDelta, newNbTitres },
-    }).catch(() => {});
+    // Notify via facade (handles both user + admin)
+    const user = await this.userRepository.findById(userId);
+    if (user) {
+      this.notificationEvents.fractionsToppedUp(updated, project, user, nbFractions, montantDelta);
+    }
 
     return updated;
   }

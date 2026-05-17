@@ -43,6 +43,7 @@ import {
 } from 'src/wallets/domains/enums/wallet.enum';
 import { NotificationService } from 'src/notifications/applications/notification.service';
 import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
+import { PayEcheanceUseCase } from 'src/investments/applications/usecases/pay-echeance.usecase';
 
 const ADMIN_ROLES = [
   UserRole.ADMIN,
@@ -64,6 +65,7 @@ export class AdminEcheancesController {
     @InjectRepository(TransactionEntity) private readonly txRepo: Repository<TransactionEntity>,
     private readonly dataSource: DataSource,
     private readonly notifications: NotificationService,
+    private readonly payEcheance: PayEcheanceUseCase,
   ) {}
 
   private async assertAdmin(user: ActiveUser): Promise<void> {
@@ -191,5 +193,14 @@ export class AdminEcheancesController {
       .catch(() => {});
 
     return { paidCount, totalAmount, skipped };
+  }
+
+  @ApiOperation({ summary: "Marquer une échéance comme payée (crédite le wallet)" })
+  @ApiParam({ name: 'id', description: "UUID de l'échéance" })
+  @HttpCode(HttpStatus.OK)
+  @Post(':id/pay')
+  async markPaid(@Param('id') id: string, @CurrentUser() user: ActiveUser) {
+    await this.assertAdmin(user);
+    return this.payEcheance.execute(id, user.userId);
   }
 }

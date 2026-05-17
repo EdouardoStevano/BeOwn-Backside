@@ -5,6 +5,7 @@ import { QuestionnaireAdequationEntity } from '../../infrastructure/persistences
 import { ProfilPPEntity } from '../../infrastructure/persistences/entities/profil-pp.entity';
 import { CategoriePsfp } from '../../domains/enums/kyc-status.enum';
 import { SaveQuestionnaireDto } from '../../presenters/dto/questionnaire.dto';
+import { RiskScoringService } from '../risk-scoring.service';
 
 @Injectable()
 export class SaveQuestionnaireUseCase {
@@ -13,9 +14,11 @@ export class SaveQuestionnaireUseCase {
     private readonly questionnaireRepo: Repository<QuestionnaireAdequationEntity>,
     @InjectRepository(ProfilPPEntity)
     private readonly profilPPRepo: Repository<ProfilPPEntity>,
+    private readonly riskScoringService: RiskScoringService,
   ) {}
 
   async execute(userId: number, dto: SaveQuestionnaireDto): Promise<QuestionnaireAdequationEntity> {
+    // Étape 1 — Pré-qualification : 2 sur 3 → professionnel
     const proPoints = [
       dto.workInFinancialSector,
       dto.moreThan10TransactionsPerQuarter,
@@ -28,6 +31,7 @@ export class SaveQuestionnaireUseCase {
     if (proPoints >= 2) {
       categorie = CategoriePsfp.PROFESSIONNEL;
     } else {
+      // Étape 2 — Qualification : 4 sur 5 → averti
       const advancedPoints = [
         dto.previousUnlistedInvestments,
         dto.investmentExperienceOver5Years,
@@ -40,11 +44,13 @@ export class SaveQuestionnaireUseCase {
         categorie = CategoriePsfp.AVERTI;
       } else {
         categorie = CategoriePsfp.NON_AVERTI;
+        // Étape 3 — Simulation : montantMax = max(1000, patrimoine * 5%)
         const patrimoine = Number(dto.patrimoineNet ?? 0);
         montantMax = Math.max(1000, Math.round(patrimoine * 0.05));
       }
     }
 
+    // Save questionnaire (upsert by userId)
     let q = await this.questionnaireRepo.findOne({ where: { utilisateurId: userId } });
     if (!q) q = this.questionnaireRepo.create({ utilisateurId: userId });
     Object.assign(q, {
@@ -57,6 +63,7 @@ export class SaveQuestionnaireUseCase {
     });
     const saved = await this.questionnaireRepo.save(q);
 
+    // Sync to ProfilPP
     const profilPP = await this.profilPPRepo.findOne({ where: { utilisateurId: userId } });
     if (profilPP) {
       profilPP.categoriePsfp = categorie;
@@ -64,6 +71,9 @@ export class SaveQuestionnaireUseCase {
       (profilPP as any).montantMaxConseille = montantMax;
       await this.profilPPRepo.save(profilPP);
     }
+
+    // Compute and store risk level
+    await this.riskScoringService.computeAndStore(userId);
 
     return saved;
   }
