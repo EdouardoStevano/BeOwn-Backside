@@ -1,5 +1,6 @@
 import {
   Cashflow,
+  ComputedEcheance,
   EcheanceComputedStatus,
   NetCalculationInput,
   NetCalculationOutput,
@@ -96,4 +97,54 @@ export function deriveEcheanceStatus(
   if (joursRetard <= 30) return 'retard_leger';
   if (joursRetard <= 90) return 'retard_significatif';
   return 'defaut';
+}
+
+export function aggregateExposureBy<T, K extends string>(
+  items: T[],
+  keyFn: (item: T) => K,
+  amountFn: (item: T) => number,
+): Record<K, number> {
+  const out = {} as Record<K, number>;
+  for (const item of items) {
+    const k = keyFn(item);
+    out[k] = (out[k] ?? 0) + amountFn(item);
+  }
+  return out;
+}
+
+export function tauxDefaut(echeances: ComputedEcheance[]): {
+  tauxRetard: number;
+  tauxDefaut: number;
+  tauxPerteDefinitive: number;
+} {
+  // Encours = capital non encore remboursé (exclut "payee" et "perte_definitive")
+  const encoursStatuts: ComputedEcheance['statut'][] = [
+    'a_venir',
+    'retard_leger',
+    'retard_significatif',
+    'defaut',
+  ];
+  const encoursTotal = echeances
+    .filter((e) => encoursStatuts.includes(e.statut))
+    .reduce((s, e) => s + e.montantCapital, 0);
+
+  const capitalRetard = echeances
+    .filter((e) => e.statut === 'retard_leger' || e.statut === 'retard_significatif')
+    .reduce((s, e) => s + e.montantCapital, 0);
+  const capitalDefaut = echeances
+    .filter((e) => e.statut === 'defaut')
+    .reduce((s, e) => s + e.montantCapital, 0);
+
+  const capitalPreteTotal = echeances
+    .filter((e) => e.statut !== 'payee')
+    .reduce((s, e) => s + e.montantCapital, 0);
+  const capitalPerte = echeances
+    .filter((e) => e.statut === 'perte_definitive')
+    .reduce((s, e) => s + e.montantCapital, 0);
+
+  return {
+    tauxRetard: encoursTotal > 0 ? (capitalRetard / encoursTotal) * 100 : 0,
+    tauxDefaut: encoursTotal > 0 ? (capitalDefaut / encoursTotal) * 100 : 0,
+    tauxPerteDefinitive: capitalPreteTotal > 0 ? (capitalPerte / capitalPreteTotal) * 100 : 0,
+  };
 }

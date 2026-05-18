@@ -169,3 +169,72 @@ describe('deriveEcheanceStatus', () => {
     expect(deriveEcheanceStatus(make('2024-01-01'), now)).toBe('defaut');
   });
 });
+
+import { aggregateExposureBy, tauxDefaut } from './kpi-calculator';
+import type { ComputedEcheance } from './types';
+
+describe('aggregateExposureBy', () => {
+  it('groups and sums by key', () => {
+    const items = [
+      { porteur: 'A', montant: 100 },
+      { porteur: 'B', montant: 50 },
+      { porteur: 'A', montant: 25 },
+    ];
+    const result = aggregateExposureBy(items, (i) => i.porteur, (i) => i.montant);
+    expect(result).toEqual({ A: 125, B: 50 });
+  });
+
+  it('returns empty object for empty input', () => {
+    expect(aggregateExposureBy<unknown, string>([], () => 'x', () => 0)).toEqual({});
+  });
+});
+
+describe('tauxDefaut', () => {
+  const e = (statut: ComputedEcheance['statut'], capital = 100): ComputedEcheance => ({
+    montantCapital: capital,
+    montantInterets: 10,
+    statut,
+  });
+
+  it('computes 0% rates when everything is healthy', () => {
+    const r = tauxDefaut([e('a_venir'), e('a_venir'), e('payee')]);
+    expect(r.tauxRetard).toBe(0);
+    expect(r.tauxDefaut).toBe(0);
+    expect(r.tauxPerteDefinitive).toBe(0);
+  });
+
+  it('computes retard and défaut rates on capital basis', () => {
+    // encours total (non-paid, non-loss) = 4 × 100 = 400
+    // en retard (leger + significatif) = 2 × 100 = 200 → 50%
+    // en défaut = 1 × 100 = 100 → 25%
+    const echeances = [
+      e('a_venir'),
+      e('retard_leger'),
+      e('retard_significatif'),
+      e('defaut'),
+      e('payee', 100), // exclu de l'encours
+    ];
+    const r = tauxDefaut(echeances);
+    expect(r.tauxRetard).toBeCloseTo(50, 2);
+    expect(r.tauxDefaut).toBeCloseTo(25, 2);
+  });
+
+  it('computes perte definitive rate on total lent capital', () => {
+    // total lent = somme de tout sauf payee (= 4 × 100 = 400)
+    // perte = 1 × 100 = 100 → 25%
+    const r = tauxDefaut([
+      e('a_venir'),
+      e('retard_leger'),
+      e('defaut'),
+      e('perte_definitive'),
+    ]);
+    expect(r.tauxPerteDefinitive).toBeCloseTo(25, 2);
+  });
+
+  it('returns 0 (not NaN) when encours total is zero', () => {
+    const r = tauxDefaut([e('payee')]);
+    expect(r.tauxRetard).toBe(0);
+    expect(r.tauxDefaut).toBe(0);
+    expect(r.tauxPerteDefinitive).toBe(0);
+  });
+});
