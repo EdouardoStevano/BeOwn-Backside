@@ -49,6 +49,9 @@ export class EcheanceEntity {
   @Column({ type: 'timestamptz', nullable: true })
   payeLe: Date | null;
 
+  @Column({ type: 'timestamptz', nullable: true })
+  statutChangeLe: Date | null;
+
   @Column({ type: 'boolean', default: false })
   rappelJ7Envoye: boolean;
 
