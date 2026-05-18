@@ -25,6 +25,7 @@ import { AdminModule } from './admin/admin.module';
 import { CgpModule } from './cgp/cgp.module';
 import { AvisModule } from './avis/applications/avis.module';
 import { NewsModule } from './news/news.module';
+import { KpiModule } from './kpi/kpi.module';
 import { MailerModule } from '@nestjs-modules/mailer';
 import { HandlebarsAdapter } from '@nestjs-modules/mailer/adapters/handlebars.adapter';
 import { join } from 'path';
@@ -103,6 +104,7 @@ function requireEnv(name: string): string {
     DocumentsModule,
     AvisModule,
     NewsModule,
+    KpiModule,
     AdminModule,
     CgpModule,
     ...(process.env.NODE_ENV !== 'production' ? [NotificationTestModule] : []),
