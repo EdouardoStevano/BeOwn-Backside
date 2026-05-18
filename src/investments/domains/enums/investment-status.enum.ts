@@ -15,7 +15,11 @@ export enum EcheanceStatus {
   A_VENIR = 'a_venir',
   EN_ATTENTE_PAIEMENT = 'en_attente_paiement',
   PAYE = 'paye',
-  RETARD = 'retard',
+  RETARD = 'retard',                           // legacy, replaced by RETARD_LEGER (kept for migration window)
+  RETARD_LEGER = 'retard_leger',               // J+1 à J+30
+  RETARD_SIGNIFICATIF = 'retard_significatif', // J+31 à J+90
+  DEFAUT = 'defaut',                           // > J+90
+  PERTE_DEFINITIVE = 'perte_definitive',       // décision admin
   IMPAYE = 'impaye',
   ANNULE = 'annule',
 }
