@@ -35,3 +35,22 @@ export function computeIrr(flows: Cashflow[], guess = 0.1): number | null {
   }
   return null;
 }
+
+/**
+ * Weighted Average Life: Σ(years × capitalRepaid) / Σ(capitalRepaid).
+ * Returns null if total capital ≤ 0. Past-dated échéances contribute 0.
+ */
+export function computeWal(
+  echeancesFutures: Array<{ datePrevue: Date; montantCapital: number }>,
+  referenceDate: Date = new Date(),
+): number | null {
+  const totalCapital = echeancesFutures.reduce((s, e) => s + e.montantCapital, 0);
+  if (totalCapital <= 0) return null;
+
+  const weighted = echeancesFutures.reduce((s, e) => {
+    const years = (e.datePrevue.getTime() - referenceDate.getTime()) / MS_PER_YEAR;
+    return s + Math.max(0, years) * e.montantCapital;
+  }, 0);
+
+  return weighted / totalCapital;
+}

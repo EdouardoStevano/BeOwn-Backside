@@ -40,3 +40,49 @@ describe('computeIrr', () => {
     expect(computeIrr(flows)).toBeNull();
   });
 });
+
+import { computeWal } from './kpi-calculator';
+
+describe('computeWal', () => {
+  const ref = new Date('2025-01-01');
+
+  it('returns null when no future capital to repay', () => {
+    expect(computeWal([], ref)).toBeNull();
+    expect(computeWal([{ datePrevue: new Date('2026-01-01'), montantCapital: 0 }], ref)).toBeNull();
+  });
+
+  it('returns 2 years for a single in-fine repayment at 24 months', () => {
+    const wal = computeWal(
+      [{ datePrevue: new Date('2027-01-01'), montantCapital: 1000 }],
+      ref,
+    );
+    expect(wal).toBeCloseTo(2.0, 2);
+  });
+
+  it('returns ~1 year for linear monthly amortization over 24 months', () => {
+    const futures = [];
+    for (let m = 1; m <= 24; m++) {
+      const d = new Date('2025-01-01');
+      d.setMonth(d.getMonth() + m);
+      futures.push({ datePrevue: d, montantCapital: 1000 / 24 });
+    }
+    const wal = computeWal(futures, ref);
+    expect(wal).not.toBeNull();
+    // mean position of 24 equal monthly payments ≈ 12.5 months = 1.04 years
+    expect(wal!).toBeGreaterThan(1.0);
+    expect(wal!).toBeLessThan(1.1);
+  });
+
+  it('clamps past-dated échéances to 0 contribution', () => {
+    const wal = computeWal(
+      [
+        { datePrevue: new Date('2024-01-01'), montantCapital: 500 },
+        { datePrevue: new Date('2026-01-01'), montantCapital: 500 },
+      ],
+      ref,
+    );
+    expect(wal).not.toBeNull();
+    // half (past) contributes 0, half contributes 1 year × 500 / 1000 = 0.5 year
+    expect(wal!).toBeCloseTo(0.5, 2);
+  });
+});
