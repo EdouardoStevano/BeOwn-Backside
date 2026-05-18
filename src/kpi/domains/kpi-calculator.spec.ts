@@ -127,3 +127,45 @@ describe('computeNetInterests', () => {
     expect(r.net.toString().split('.')[1]?.length ?? 0).toBeLessThanOrEqual(2);
   });
 });
+
+import { deriveEcheanceStatus } from './kpi-calculator';
+
+describe('deriveEcheanceStatus', () => {
+  const now = new Date('2025-06-01T12:00:00Z');
+
+  const make = (datePrevue: string, payeLe: string | null = null, statut = 'a_venir') => ({
+    datePrevue: new Date(datePrevue),
+    payeLe: payeLe ? new Date(payeLe) : null,
+    statut,
+  });
+
+  it('returns "payee" when payeLe is set', () => {
+    expect(deriveEcheanceStatus(make('2025-05-15', '2025-05-16'), now)).toBe('payee');
+  });
+
+  it('returns "perte_definitive" if marked manually', () => {
+    expect(
+      deriveEcheanceStatus(make('2025-01-01', null, 'perte_definitive'), now),
+    ).toBe('perte_definitive');
+  });
+
+  it('returns "a_venir" when datePrevue is today or future', () => {
+    expect(deriveEcheanceStatus(make('2025-06-01'), now)).toBe('a_venir');
+    expect(deriveEcheanceStatus(make('2025-07-01'), now)).toBe('a_venir');
+  });
+
+  it('returns "retard_leger" at J+1 to J+30', () => {
+    expect(deriveEcheanceStatus(make('2025-05-31'), now)).toBe('retard_leger');
+    expect(deriveEcheanceStatus(make('2025-05-02'), now)).toBe('retard_leger');
+  });
+
+  it('returns "retard_significatif" at J+31 to J+90', () => {
+    expect(deriveEcheanceStatus(make('2025-05-01'), now)).toBe('retard_significatif'); // 31 jours
+    expect(deriveEcheanceStatus(make('2025-03-03'), now)).toBe('retard_significatif'); // 90 jours
+  });
+
+  it('returns "defaut" beyond J+90', () => {
+    expect(deriveEcheanceStatus(make('2025-03-02'), now)).toBe('defaut'); // 91 jours
+    expect(deriveEcheanceStatus(make('2024-01-01'), now)).toBe('defaut');
+  });
+});

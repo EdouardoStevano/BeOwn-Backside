@@ -1,4 +1,9 @@
-import { Cashflow, NetCalculationInput, NetCalculationOutput } from './types';
+import {
+  Cashflow,
+  EcheanceComputedStatus,
+  NetCalculationInput,
+  NetCalculationOutput,
+} from './types';
 
 const MS_PER_YEAR = 365.25 * 86_400_000;
 
@@ -76,4 +81,19 @@ export function computeNetInterests(input: NetCalculationInput): NetCalculationO
   // PFU 30% default
   const ir = round2(interetsBruts * 0.128);
   return { net: round2(interetsBruts - ir - csg), prelevementIR: ir, prelevementCSG: csg };
+}
+
+const MS_PER_DAY = 86_400_000;
+
+export function deriveEcheanceStatus(
+  echeance: { datePrevue: Date; payeLe: Date | null; statut: string },
+  now: Date = new Date(),
+): EcheanceComputedStatus {
+  if (echeance.statut === 'perte_definitive') return 'perte_definitive';
+  if (echeance.payeLe) return 'payee';
+  const joursRetard = Math.floor((now.getTime() - echeance.datePrevue.getTime()) / MS_PER_DAY);
+  if (joursRetard <= 0) return 'a_venir';
+  if (joursRetard <= 30) return 'retard_leger';
+  if (joursRetard <= 90) return 'retard_significatif';
+  return 'defaut';
 }
