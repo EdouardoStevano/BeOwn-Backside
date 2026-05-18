@@ -1,4 +1,4 @@
-import { Cashflow } from './types';
+import { Cashflow, NetCalculationInput, NetCalculationOutput } from './types';
 
 const MS_PER_YEAR = 365.25 * 86_400_000;
 
@@ -53,4 +53,27 @@ export function computeWal(
   }, 0);
 
   return weighted / totalCapital;
+}
+
+function round2(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
+export function computeNetInterests(input: NetCalculationInput): NetCalculationOutput {
+  const { interetsBruts, regime, tauxBaremeMarginal } = input;
+  const csg = round2(interetsBruts * 0.172);
+
+  if (regime === 'DISPENSE') {
+    return { net: round2(interetsBruts - csg), prelevementIR: 0, prelevementCSG: csg };
+  }
+  if (regime === 'BAREME') {
+    if (tauxBaremeMarginal === undefined) {
+      throw new Error('tauxBaremeMarginal required for BAREME');
+    }
+    const ir = round2(interetsBruts * tauxBaremeMarginal);
+    return { net: round2(interetsBruts - ir - csg), prelevementIR: ir, prelevementCSG: csg };
+  }
+  // PFU 30% default
+  const ir = round2(interetsBruts * 0.128);
+  return { net: round2(interetsBruts - ir - csg), prelevementIR: ir, prelevementCSG: csg };
 }

@@ -86,3 +86,44 @@ describe('computeWal', () => {
     expect(wal!).toBeCloseTo(0.5, 2);
   });
 });
+
+import { computeNetInterests } from './kpi-calculator';
+
+describe('computeNetInterests', () => {
+  it('PFU 30%: 100€ brut → 70€ net (12.80 IR + 17.20 CSG)', () => {
+    const r = computeNetInterests({ interetsBruts: 100, regime: 'PFU' });
+    expect(r.prelevementIR).toBeCloseTo(12.8, 2);
+    expect(r.prelevementCSG).toBeCloseTo(17.2, 2);
+    expect(r.net).toBeCloseTo(70.0, 2);
+  });
+
+  it('BAREME TMI 30%: 100€ brut → 52.80€ net (30 IR + 17.20 CSG)', () => {
+    const r = computeNetInterests({
+      interetsBruts: 100,
+      regime: 'BAREME',
+      tauxBaremeMarginal: 0.30,
+    });
+    expect(r.prelevementIR).toBeCloseTo(30.0, 2);
+    expect(r.prelevementCSG).toBeCloseTo(17.2, 2);
+    expect(r.net).toBeCloseTo(52.8, 2);
+  });
+
+  it('DISPENSE: 100€ brut → 82.80€ net (0 IR + 17.20 CSG)', () => {
+    const r = computeNetInterests({ interetsBruts: 100, regime: 'DISPENSE' });
+    expect(r.prelevementIR).toBe(0);
+    expect(r.prelevementCSG).toBeCloseTo(17.2, 2);
+    expect(r.net).toBeCloseTo(82.8, 2);
+  });
+
+  it('throws if BAREME without tauxBaremeMarginal', () => {
+    expect(() =>
+      computeNetInterests({ interetsBruts: 100, regime: 'BAREME' }),
+    ).toThrow('tauxBaremeMarginal required for BAREME');
+  });
+
+  it('rounds to 2 decimals (no floating point weirdness)', () => {
+    const r = computeNetInterests({ interetsBruts: 33.33, regime: 'PFU' });
+    expect(Number.isFinite(r.net)).toBe(true);
+    expect(r.net.toString().split('.')[1]?.length ?? 0).toBeLessThanOrEqual(2);
+  });
+});
