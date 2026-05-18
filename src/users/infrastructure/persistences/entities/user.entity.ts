@@ -37,6 +37,12 @@ export enum UserType {
   PM = 'PM',
 }
 
+export enum RegimeFiscal {
+  PFU = 'PFU',
+  BAREME = 'BAREME',
+  DISPENSE = 'DISPENSE',
+}
+
 @Entity('users')
 export class UserEntity {
   @PrimaryGeneratedColumn()
@@ -69,6 +75,12 @@ export class UserEntity {
 
   @Column({ type: 'varchar', nullable: true })
   userType: UserType | null;
+
+  @Column({ type: 'varchar', default: RegimeFiscal.PFU })
+  regimeFiscal: RegimeFiscal;
+
+  @Column({ type: 'decimal', precision: 4, scale: 3, nullable: true })
+  tauxBaremeMarginal: number | null;
 
   @Column({ type: 'int', nullable: true })
   cgpId: number | null;
