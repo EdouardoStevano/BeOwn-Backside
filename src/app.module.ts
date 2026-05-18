@@ -4,11 +4,13 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule } from '@nestjs/config';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { ScheduleModule } from '@nestjs/schedule';
+import { EventEmitterModule } from '@nestjs/event-emitter';
 import { UsersModule } from './users/applications/users.module';
 import { HealthController } from './health/health.controller';
 import { IamModule } from './iam/iam.module';
 import { IamInfrastructureModule } from './iam/infrastructure/iam-infrastructure.module';
 import { JwtAuthGuard } from './common/auth/jwt-auth.guard';
+import { RolesGuard } from './common/auth/roles.guard';
 import { ProfilesModule } from './profiles/applications/profiles.module';
 import { ProjectsModule } from './projects/applications/projects.module';
 import { ReservationsModule } from './reservations/applications/reservations.module';
@@ -24,10 +26,14 @@ import { CgpModule } from './cgp/cgp.module';
 import { AvisModule } from './avis/applications/avis.module';
 import { NewsModule } from './news/news.module';
 import { MailerModule } from '@nestjs-modules/mailer';
-import { HandlebarsAdapter } from '@nestjs-modules/mailer/dist/adapters/handlebars.adapter';
+import { HandlebarsAdapter } from '@nestjs-modules/mailer/adapters/handlebars.adapter';
 import { join } from 'path';
 import { CacheModule } from '@nestjs/cache-manager';
 import * as redisStore from 'cache-manager-ioredis';
+
+function requireEnv(name: string): string {
+  throw new Error(`Required environment variable ${name} is not set.`);
+}
 
 @Module({
   imports: [
@@ -45,13 +51,20 @@ import * as redisStore from 'cache-manager-ioredis';
     ]),
     ConfigModule.forRoot({ isGlobal: true }),
     ScheduleModule.forRoot(),
+    EventEmitterModule.forRoot({
+      wildcard: false,
+      delimiter: '.',
+      maxListeners: 20,
+      verboseMemoryLeak: false,
+      ignoreErrors: false,
+    }),
     TypeOrmModule.forRoot({
       type: 'postgres',
       host: process.env.DATABASE_HOST,
       port: parseInt(process.env.DATABASE_PORT ?? '5432', 10),
-      username: process.env.DATABASE_USERNAME || 'postgres',
-      password: process.env.DATABASE_PASSWORD || 'pass123',
-      database: process.env.DATABASE_DB || 'postgres',
+      username: process.env.DATABASE_USERNAME ?? requireEnv('DATABASE_USERNAME'),
+      password: process.env.DATABASE_PASSWORD ?? requireEnv('DATABASE_PASSWORD'),
+      database: process.env.DATABASE_DB ?? requireEnv('DATABASE_DB'),
       autoLoadEntities: true,
       synchronize: process.env.NODE_ENV !== 'production',
     }),
@@ -98,6 +111,7 @@ import * as redisStore from 'cache-manager-ioredis';
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
+    { provide: APP_GUARD, useClass: RolesGuard },
   ],
 })
 export class AppModule {}
