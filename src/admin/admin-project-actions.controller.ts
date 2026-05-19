@@ -2,7 +2,6 @@ import {
   Body,
   Controller,
   ForbiddenException,
-  Get,
   HttpCode,
   HttpStatus,
   NotFoundException,
@@ -20,16 +19,14 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository, DataSource } from 'typeorm';
 import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
+import { Roles } from 'src/common/auth/roles.decorator';
 import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
 import {
   UserEntity,
   UserRole,
 } from 'src/users/infrastructure/persistences/entities/user.entity';
-import {
-  ProjectEntity,
-  EcheanceEmprunteur,
-} from 'src/projects/infrastructure/persistences/entities/project.entity';
+import { ProjectEntity } from 'src/projects/infrastructure/persistences/entities/project.entity';
 import { ProjectStatus } from 'src/projects/domains/enums/project-status.enum';
 import { InvestmentEntity } from 'src/investments/infrastructure/persistences/entities/investment.entity';
 import { InvestmentStatus } from 'src/investments/domains/enums/investment-status.enum';
@@ -65,14 +62,11 @@ class CancelCollecteDto {
   reason?: string;
 }
 
-class SaveEcheancesDto {
-  echeances: EcheanceEmprunteur[];
-}
-
 @ApiTags('Admin – Project actions')
 @ApiBearerAuth()
 @Controller('admin')
 @UseGuards(JwtAuthGuard)
+@Roles(UserRole.ADMIN, UserRole.SUPPORT, UserRole.COMPLIANCE, UserRole.FINANCIER, UserRole.RCCI)
 export class AdminProjectActionsController {
   constructor(
     @InjectRepository(UserEntity)
@@ -242,51 +236,4 @@ export class AdminProjectActionsController {
     return { id, statut: ProjectStatus.ANNONCE };
   }
 
-  // ─── Échéancier emprunteur (project-level) ──────────────────────────────────
-
-  @ApiOperation({ summary: 'Récupérer l\'échéancier emprunteur du projet' })
-  @Get('projects/:id/echeances')
-  async getEcheances(@Param('id') id: string) {
-    const project = await this.projectRepo.findOne({
-      where: { id },
-      select: ['id', 'echeancierEmprunteur'],
-    });
-    if (!project) throw new NotFoundException('Projet introuvable.');
-    return project.echeancierEmprunteur ?? [];
-  }
-
-  @ApiOperation({ summary: 'Enregistrer l\'échéancier emprunteur (remplacement complet)' })
-  @Post('projects/:id/echeances')
-  async saveEcheances(
-    @Param('id') id: string,
-    @Body() dto: SaveEcheancesDto,
-    @CurrentUser() currentUser: ActiveUser,
-  ) {
-    await this.ensureAdmin(currentUser);
-    const project = await this.projectRepo.findOne({ where: { id } });
-    if (!project) throw new NotFoundException('Projet introuvable.');
-
-    // Preserve locked echeances (payee, verifiee, en_paiement) from existing
-    const existing = project.echeancierEmprunteur ?? [];
-    const lockedById = new Map<string, EcheanceEmprunteur>();
-    for (const e of existing) {
-      if (e.id && ['payee', 'verifiee', 'en_paiement'].includes(e.statut)) {
-        lockedById.set(e.id, e);
-      }
-    }
-
-    const merged: EcheanceEmprunteur[] = dto.echeances.map((e) => {
-      if (e.id && lockedById.has(e.id)) {
-        // Don't allow modification of locked rows — keep original
-        return lockedById.get(e.id)!;
-      }
-      return {
-        ...e,
-        id: e.id ?? crypto.randomUUID(),
-      };
-    });
-
-    await this.projectRepo.update({ id }, { echeancierEmprunteur: merged });
-    return merged;
-  }
 }
