@@ -5,6 +5,7 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
+import { Roles } from 'src/common/auth/roles.decorator';
 import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
 import { UserEntity, UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
@@ -16,6 +17,7 @@ const ADMIN_ROLES: string[] = [UserRole.ADMIN, UserRole.COMPLIANCE, UserRole.SUP
 @ApiBearerAuth()
 @Controller('admin/investors')
 @UseGuards(JwtAuthGuard)
+@Roles(UserRole.ADMIN, UserRole.COMPLIANCE, UserRole.SUPPORT)
 export class AdminInvestorsController {
   constructor(
     @InjectRepository(UserEntity)

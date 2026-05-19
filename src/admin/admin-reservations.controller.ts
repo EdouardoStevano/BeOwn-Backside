@@ -7,9 +7,11 @@ import {
   HttpStatus,
   NotFoundException,
   Param,
+  Patch,
   Post,
   UseGuards,
 } from '@nestjs/common';
+import { IsNumber, IsOptional, Min } from 'class-validator';
 import {
   ApiBearerAuth,
   ApiOperation,
@@ -19,6 +21,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
+import { Roles } from 'src/common/auth/roles.decorator';
 import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
 import {
@@ -46,6 +49,11 @@ class CreateReservationAdminDto {
   sendEmail?: boolean;
 }
 
+class UpdateReservationAdminDto {
+  @IsOptional() @IsNumber() @Min(0) montantReserve?: number;
+  @IsOptional() @IsNumber() @Min(0) rangFile?: number;
+}
+
 const mapStatus = (s: ReservationStatus): string => {
   switch (s) {
     case ReservationStatus.EN_ATTENTE:
@@ -68,6 +76,7 @@ const mapStatus = (s: ReservationStatus): string => {
 @ApiBearerAuth()
 @Controller('admin')
 @UseGuards(JwtAuthGuard)
+@Roles(UserRole.ADMIN, UserRole.SUPPORT, UserRole.COMPLIANCE, UserRole.FINANCIER)
 export class AdminReservationsController {
   constructor(
     @InjectRepository(UserEntity)
@@ -166,6 +175,26 @@ export class AdminReservationsController {
     }
 
     return { id: saved.id, rangFile: saved.rangFile };
+  }
+
+  @ApiOperation({ summary: 'Mettre à jour une réservation (admin)' })
+  @Patch('reservations/:id')
+  async update(
+    @Param('id') id: string,
+    @Body() dto: UpdateReservationAdminDto,
+    @CurrentUser() user: ActiveUser,
+  ) {
+    await this.ensureAdmin(user);
+    const r = await this.reservationRepo.findOne({ where: { id } });
+    if (!r) throw new NotFoundException('Réservation introuvable.');
+    if (r.statut === ReservationStatus.CONVERTIE) {
+      throw new ForbiddenException('Réservation déjà convertie en investissement.');
+    }
+    const patch: Partial<ReservationEntity> = {};
+    if (dto.montantReserve !== undefined) patch.montantReserve = dto.montantReserve;
+    if (dto.rangFile !== undefined) patch.rangFile = dto.rangFile;
+    await this.reservationRepo.update({ id }, patch);
+    return this.reservationRepo.findOneOrFail({ where: { id } });
   }
 
   @ApiOperation({ summary: 'Annuler une réservation (admin)' })

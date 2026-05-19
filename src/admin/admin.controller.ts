@@ -22,6 +22,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In, ILike } from 'typeorm';
 import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
+import { Roles } from 'src/common/auth/roles.decorator';
 import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
 import { NotificationEventService } from 'src/notifications/applications/notification-event.service';
@@ -69,6 +70,7 @@ const MONTH_LABELS: Record<number, string> = {
 @ApiBearerAuth()
 @Controller('admin')
 @UseGuards(JwtAuthGuard)
+@Roles(UserRole.ADMIN, UserRole.SUPPORT, UserRole.COMPLIANCE, UserRole.FINANCIER, UserRole.RCCI)
 export class AdminController {
   constructor(
     @InjectRepository(UserEntity)

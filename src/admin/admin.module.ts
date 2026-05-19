@@ -6,7 +6,7 @@ import { AdminProjectActionsController } from './admin-project-actions.controlle
 import { AdminReservationsController } from './admin-reservations.controller';
 import { AdminSettingsController } from './admin-settings.controller';
 import { AdminReportsController } from './admin-reports.controller';
-import { AdminEcheancesController } from './admin-echeances.controller';
+import { AdminEcheancesController, AdminEcheancesItemController } from './admin-echeances.controller';
 import { AdminRetraitsController } from './admin-retraits.controller';
 import { AdminFiscalController } from './admin-fiscal.controller';
 import { AdminInvestorsController } from './admin-investors.controller';
@@ -52,6 +52,7 @@ import { ProfilesModule } from 'src/profiles/applications/profiles.module';
     AdminSettingsController,
     AdminReportsController,
     AdminEcheancesController,
+    AdminEcheancesItemController,
     AdminRetraitsController,
     AdminInvestorsController,
   ],
