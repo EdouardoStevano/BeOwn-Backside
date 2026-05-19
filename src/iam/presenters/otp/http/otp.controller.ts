@@ -1,4 +1,5 @@
 import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { Public } from 'src/common/auth/public.decorator';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import {
@@ -28,6 +29,8 @@ export class OtpController {
 
   @ApiOperation({ summary: 'Envoyer un OTP par email' })
   @ApiResponse({ status: 204, description: 'OTP envoyé' })
+  @ApiResponse({ status: 429, description: 'Trop de demandes — réessayez plus tard' })
+  @Throttle({ short: { ttl: 60_000, limit: 3 }, medium: { ttl: 60_000, limit: 3 }, auth: { ttl: 60_000, limit: 3 } })
   @Public()
   @HttpCode(HttpStatus.NO_CONTENT)
   @Post('email/send')
@@ -59,6 +62,8 @@ export class OtpController {
 
   @ApiOperation({ summary: 'Envoyer un OTP par SMS' })
   @ApiResponse({ status: 204, description: 'SMS envoyé' })
+  @ApiResponse({ status: 429, description: 'Trop de demandes — réessayez plus tard' })
+  @Throttle({ short: { ttl: 60_000, limit: 3 }, medium: { ttl: 60_000, limit: 3 }, auth: { ttl: 60_000, limit: 3 } })
   @Public()
   @HttpCode(HttpStatus.NO_CONTENT)
   @Post('sms/send')

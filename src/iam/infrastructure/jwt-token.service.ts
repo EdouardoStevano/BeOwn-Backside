@@ -29,15 +29,16 @@ export class JwtTokenService implements TokenService {
     const refreshTokenId = randomUUID();
 
     const [accessToken, refreshToken] = await Promise.all([
-      this.signToken<{ email: string }>(
+      this.signToken<{ email: string; role?: string }>(
         payload.sub,
         this.jwtConfiguration.accessTokenTtl,
-        { email: payload.email },
+        { email: payload.email, role: payload.role },
       ),
 
       this.signToken(payload.sub, this.jwtConfiguration.refreshTokenTtl, {
         refreshTokenId,
         email: payload.email,
+        role: payload.role,
       }),
     ]);
 
@@ -66,14 +67,12 @@ export class JwtTokenService implements TokenService {
   }
 
   async refreshTokens(token: string): Promise<AuthTokens> {
-    const { sub, email, refreshTokenId } = await this.jwtService.verifyAsync(
-      token,
-      {
+    const { sub, email, role, refreshTokenId } =
+      await this.jwtService.verifyAsync(token, {
         secret: this.jwtConfiguration.secret,
         audience: this.jwtConfiguration.audience,
         issuer: this.jwtConfiguration.issuer,
-      },
-    );
+      });
 
     const isValidToken = await this.cacheManagerService.validateRefreshToken(
       email,
@@ -89,6 +88,7 @@ export class JwtTokenService implements TokenService {
     return this.generateTokens({
       sub,
       email,
+      role,
     } as TokenPayload);
   }
 

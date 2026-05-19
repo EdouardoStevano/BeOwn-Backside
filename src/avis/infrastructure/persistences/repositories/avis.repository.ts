@@ -34,16 +34,16 @@ export class AvisTypeOrmRepository implements AvisRepository {
   async findByProjetId(projetId: string): Promise<Avis[]> {
     const rows = await this.repo
       .createQueryBuilder('a')
-      .leftJoin('users', 'u', 'u.userid = a.user_id')
-      .where('a.projet_id = :projetId', { projetId })
-      .orderBy('a.created_at', 'DESC')
+      .leftJoin('users', 'u', 'u."userId" = a."userId"')
+      .where('a."projetId" = :projetId', { projetId })
+      .orderBy('a."createdAt"', 'DESC')
       .select([
         'a.id AS id',
-        'a.projet_id AS "projetId"',
-        'a.user_id AS "userId"',
+        'a."projetId" AS "projetId"',
+        'a."userId" AS "userId"',
         'a.note AS note',
         'a.commentaire AS commentaire',
-        'a.created_at AS "createdAt"',
+        'a."createdAt" AS "createdAt"',
         'u.firstname AS "userFirstname"',
         'u.lastname AS "userLastname"',
       ])
