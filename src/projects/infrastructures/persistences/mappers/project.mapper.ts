@@ -78,7 +78,13 @@ export class ProjectMapper {
       entity.capitalSocial != null ? Number(entity.capitalSocial) : null;
     domain.siegeAdresse = entity.siegeAdresse;
     domain.iban = entity.iban;
+    // Equity-locatif fields
+    domain.dateConstitution = entity.dateConstitution;
+    domain.statutsPdfUrl = entity.statutsPdfUrl;
+    domain.regimeFiscal = entity.regimeFiscal;
+    domain.gestionnaireUserId = entity.gestionnaireUserId;
     domain.createdAt = entity.createdAt;
+    domain.updatedAt = entity.updatedAt;
     return domain;
   }
 
@@ -91,6 +97,11 @@ export class ProjectMapper {
     entity.capitalSocial = domain.capitalSocial;
     entity.siegeAdresse = domain.siegeAdresse;
     entity.iban = domain.iban;
+    // Equity-locatif fields
+    entity.dateConstitution = domain.dateConstitution;
+    entity.statutsPdfUrl = domain.statutsPdfUrl;
+    entity.regimeFiscal = domain.regimeFiscal;
+    entity.gestionnaireUserId = domain.gestionnaireUserId;
     return entity;
   }
 }
