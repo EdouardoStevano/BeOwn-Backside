@@ -1,0 +1,52 @@
+import { ValidateChargeUseCase } from './validate-charge.usecase';
+import { StatutDeclaration } from '../../domains/enums/statut-declaration.enum';
+
+describe('ValidateChargeUseCase', () => {
+  let useCase: ValidateChargeUseCase;
+  let chargeRepo: any;
+
+  const declarePending = () => ({
+    id: 'c1',
+    statut: StatutDeclaration.DECLARE,
+    valideParUserId: null,
+    valideLe: null,
+    motifRejet: null,
+  });
+
+  beforeEach(() => {
+    chargeRepo = {
+      findById: jest.fn().mockResolvedValue(declarePending()),
+      save: jest.fn().mockImplementation((c) => Promise.resolve(c)),
+    };
+    useCase = new ValidateChargeUseCase(chargeRepo);
+  });
+
+  it('validate passe en VALIDE', async () => {
+    const r = await useCase.validate('c1', 7);
+    expect(r.statut).toBe(StatutDeclaration.VALIDE);
+    expect(r.valideParUserId).toBe(7);
+  });
+
+  it('reject passe en REJETE avec motif', async () => {
+    const r = await useCase.reject('c1', 7, 'Facture absente');
+    expect(r.statut).toBe(StatutDeclaration.REJETE);
+    expect(r.motifRejet).toBe('Facture absente');
+  });
+
+  it('reject rejette si motif vide', async () => {
+    await expect(useCase.reject('c1', 7, '')).rejects.toThrow(/motif/i);
+  });
+
+  it('validate rejette si déjà VALIDE', async () => {
+    chargeRepo.findById.mockResolvedValue({
+      ...declarePending(),
+      statut: StatutDeclaration.VALIDE,
+    });
+    await expect(useCase.validate('c1', 7)).rejects.toThrow(/DECLARE/);
+  });
+
+  it('rejette si introuvable', async () => {
+    chargeRepo.findById.mockResolvedValue(null);
+    await expect(useCase.validate('x', 7)).rejects.toThrow(/introuvable/);
+  });
+});
