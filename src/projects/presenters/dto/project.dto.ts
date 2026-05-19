@@ -24,6 +24,7 @@ import {
   ProjectStatus,
   ProjectType,
 } from 'src/projects/domains/enums/project-status.enum';
+import { RegimeFiscal } from 'src/projects/domains/enums/regime-fiscal.enum';
 
 // Helper: coerce string → number (sent by multipart or form)
 const toNumber = () => Transform(({ value }) => (value != null && value !== '' ? Number(value) : value));
@@ -274,4 +275,24 @@ export class CreateSpvDto {
   @IsOptional()
   @IsString()
   siegeAdresse?: string;
+
+  @ApiProperty({ required: false, example: '2026-01-15' })
+  @IsOptional()
+  @IsDateString()
+  dateConstitution?: string;
+
+  @ApiProperty({ required: false, example: 'https://storage/statuts.pdf' })
+  @IsOptional()
+  @IsString()
+  statutsPdfUrl?: string;
+
+  @ApiProperty({ required: false, enum: RegimeFiscal, example: RegimeFiscal.IS })
+  @IsOptional()
+  @IsEnum(RegimeFiscal)
+  regimeFiscal?: RegimeFiscal;
+
+  @ApiProperty({ required: false, example: 42 })
+  @IsOptional()
+  @IsInt()
+  gestionnaireUserId?: number;
 }
