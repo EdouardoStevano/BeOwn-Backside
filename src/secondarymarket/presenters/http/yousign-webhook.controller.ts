@@ -25,6 +25,7 @@ import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/w
 import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entities/transaction.entity';
 import { InvestmentStatus, EcheanceStatus } from 'src/investments/domains/enums/investment-status.enum';
 import { OrdreMarcheStatus } from 'src/secondarymarket/domains/ordre-marche';
+import { computeSecondaryMarketCommission } from 'src/secondarymarket/domains/commission';
 import {
   TransactionFournisseur,
   TransactionStatus,
@@ -148,6 +149,8 @@ export class YouSignWebhookController {
       const projetId = ordre.investissement.projetId;
       const prixUnitaire = Number(ordre.prixUnitaire);
       const montantTotal = nbFractions * prixUnitaire;
+      const commission = computeSecondaryMarketCommission(montantTotal);
+      const montantNetVendeur = montantTotal - commission;
       const buyerUserId = signature.userId;
 
       // 1. Vérifier/obtenir wallet acheteur
@@ -220,17 +223,40 @@ export class YouSignWebhookController {
       }
       await em.save(OrdreMarcheEntity, ordre);
 
-      // 7. Débiter wallet acheteur
+      // 7. Débiter wallet acheteur (montant total)
       buyerWallet.solde = Number(buyerWallet.solde) - montantTotal;
       await em.save(WalletEntity, buyerWallet);
 
-      // 8. Créditer wallet vendeur
+      // 8. Créditer wallet vendeur (net de commission)
       if (sellerWallet) {
-        sellerWallet.solde = Number(sellerWallet.solde) + montantTotal;
+        sellerWallet.solde = Number(sellerWallet.solde) + montantNetVendeur;
         await em.save(WalletEntity, sellerWallet);
       }
 
-      // 9. Transaction ledger acheteur
+      // 9. Créditer wallet plateforme (commission)
+      // Wallet system-wide, créé à la volée si absent (parité avec SEQUESTRE_IR/CSG).
+      let platformWallet: WalletEntity | null = null;
+      if (commission > 0) {
+        platformWallet = await em.findOne(WalletEntity, {
+          where: { type: WalletType.FRAIS_PLATEFORME },
+        });
+        if (!platformWallet) {
+          platformWallet = await em.save(
+            WalletEntity,
+            em.create(WalletEntity, {
+              type: WalletType.FRAIS_PLATEFORME,
+              proprietaireUserId: null,
+              fournisseurRef: 'PLAT-FEES-001',
+              devise: buyerWallet.devise,
+              solde: 0,
+            }),
+          );
+        }
+        platformWallet.solde = Number(platformWallet.solde) + commission;
+        await em.save(WalletEntity, platformWallet);
+      }
+
+      // 10. Transaction ledger acheteur
       const txBuyer = em.create(TransactionEntity, {
         walletSource: buyerWallet.id,
         walletDestination: sellerWallet?.id ?? null,
@@ -243,17 +269,17 @@ export class YouSignWebhookController {
         projetId,
         idempotencyKey: `rachat:buyer:${signature.id}`,
         fraisPsp: 0,
-        fraisPlateforme: 0,
+        fraisPlateforme: commission,
       });
       await em.save(TransactionEntity, txBuyer);
 
-      // 10. Transaction ledger vendeur
+      // 11. Transaction ledger vendeur (net de commission)
       if (sellerWallet) {
         const txSeller = em.create(TransactionEntity, {
           walletSource: null,
           walletDestination: sellerWallet.id,
           type: TransactionType.SOUSCRIPTION,
-          montant: montantTotal,
+          montant: montantNetVendeur,
           devise: sellerWallet.devise,
           statut: TransactionStatus.REUSSI,
           fournisseur: TransactionFournisseur.INTERNE,
@@ -261,9 +287,28 @@ export class YouSignWebhookController {
           projetId,
           idempotencyKey: `rachat:seller:${signature.id}`,
           fraisPsp: 0,
-          fraisPlateforme: 0,
+          fraisPlateforme: commission,
         });
         await em.save(TransactionEntity, txSeller);
+      }
+
+      // 12. Transaction ledger commission plateforme
+      if (platformWallet && commission > 0) {
+        const txCommission = em.create(TransactionEntity, {
+          walletSource: null,
+          walletDestination: platformWallet.id,
+          type: TransactionType.SOUSCRIPTION,
+          montant: commission,
+          devise: platformWallet.devise,
+          statut: TransactionStatus.REUSSI,
+          fournisseur: TransactionFournisseur.INTERNE,
+          investissementId: ordre.investissementId,
+          projetId,
+          idempotencyKey: `secmarket:commission:order:${ordre.id}`,
+          fraisPsp: 0,
+          fraisPlateforme: 0,
+        });
+        await em.save(TransactionEntity, txCommission);
       }
 
       return { buyerInvestId: buyerInvest.id, fusionnee: !!existingInvest };
