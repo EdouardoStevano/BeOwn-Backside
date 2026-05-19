@@ -9,8 +9,10 @@ import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entit
 import { CalculateDistributionPeriodeUseCase } from './usecases/calculate-distribution-periode.usecase';
 import { ValidatePeriodeDistributionUseCase } from './usecases/validate-periode-distribution.usecase';
 import { ExecuteDistributionUseCase } from './usecases/execute-distribution.usecase';
+import { GetInvestisseurDistributionHistoryUseCase } from './usecases/get-investisseur-distribution-history.usecase';
 import { DistributionsCronService } from './distributions-cron.service';
 import { AdminDistributionsController } from '../presenters/http/admin-distributions.controller';
+import { InvestisseurDistributionsController } from '../presenters/http/investisseur-distributions.controller';
 
 @Module({
   imports: [
@@ -20,11 +22,15 @@ import { AdminDistributionsController } from '../presenters/http/admin-distribut
     InvestmentsInfrastructureModule,
     TypeOrmModule.forFeature([WalletEntity, TransactionEntity]),
   ],
-  controllers: [AdminDistributionsController],
+  controllers: [
+    AdminDistributionsController,
+    InvestisseurDistributionsController,
+  ],
   providers: [
     CalculateDistributionPeriodeUseCase,
     ValidatePeriodeDistributionUseCase,
     ExecuteDistributionUseCase,
+    GetInvestisseurDistributionHistoryUseCase,
     DistributionsCronService,
   ],
   exports: [
@@ -32,6 +38,7 @@ import { AdminDistributionsController } from '../presenters/http/admin-distribut
     CalculateDistributionPeriodeUseCase,
     ValidatePeriodeDistributionUseCase,
     ExecuteDistributionUseCase,
+    GetInvestisseurDistributionHistoryUseCase,
     DistributionsCronService,
   ],
 })

@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { IsNull, Repository } from 'typeorm';
+import { In, IsNull, Repository } from 'typeorm';
 import { DistributionPart } from '../../../domains/distribution-part';
 import { DistributionPartRepository } from '../../../applications/ports/repositories/distribution-part.repository';
 import { DistributionPartEntity } from '../entities/distribution-part.entity';
@@ -31,6 +31,17 @@ export class DistributionPartTypeOrmRepository implements DistributionPartReposi
   ): Promise<DistributionPart[]> {
     const list = await this.repo.find({
       where: { investissementId },
+      order: { createdAt: 'DESC' },
+    });
+    return list.map(DistributionPartMapper.toDomain);
+  }
+
+  async findByInvestissementIds(
+    investissementIds: string[],
+  ): Promise<DistributionPart[]> {
+    if (investissementIds.length === 0) return [];
+    const list = await this.repo.find({
+      where: { investissementId: In(investissementIds) },
       order: { createdAt: 'DESC' },
     });
     return list.map(DistributionPartMapper.toDomain);
