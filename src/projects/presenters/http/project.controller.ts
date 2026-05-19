@@ -38,6 +38,7 @@ import {
 import type { ProjectRepository } from 'src/projects/applications/ports/repositories/project.repository';
 import { PROJECT_REPOSITORY } from 'src/projects/applications/ports/repositories/project.repository';
 import { Spv } from 'src/projects/domains/spv';
+import { RegimeFiscal } from 'src/projects/domains/enums/regime-fiscal.enum';
 import { INVESTMENT_REPOSITORY } from 'src/investments/applications/ports/repositories/investment.repository';
 import type { InvestmentRepository } from 'src/investments/applications/ports/repositories/investment.repository';
 import { DOCUMENT_REPOSITORY } from 'src/documents/applications/ports/repositories/document.repository';
@@ -213,6 +214,11 @@ export class ProjectController {
     spv.capitalSocial = dto.capitalSocial ?? null;
     spv.siegeAdresse = dto.siegeAdresse ?? null;
     spv.iban = null;
+    // Equity-locatif fields (optional)
+    spv.dateConstitution = dto.dateConstitution ? new Date(dto.dateConstitution) : null;
+    spv.statutsPdfUrl = dto.statutsPdfUrl ?? null;
+    spv.regimeFiscal = dto.regimeFiscal ?? RegimeFiscal.IS;
+    spv.gestionnaireUserId = dto.gestionnaireUserId ?? null;
     return this.projectRepository.saveSpv(spv);
   }
 
