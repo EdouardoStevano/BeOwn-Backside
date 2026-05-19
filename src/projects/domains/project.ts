@@ -3,6 +3,7 @@ import {
   ProjectStatus,
   ProjectType,
 } from './enums/project-status.enum';
+import { ModeleEconomique } from './enums/modele-economique.enum';
 import type {
   EtapeChronologie,
   Garantie,
@@ -43,6 +44,9 @@ export class Project {
   previsionnel: PrevisionnelFinancier | null;
   chronologie: EtapeChronologie[];
   garanties: Garantie[];
+  // Equity-locatif extension (Phase 1)
+  modeleEconomique: ModeleEconomique;
+  nbUnitesLouables: number | null;
   createdAt: Date;
   updatedAt: Date;
 }

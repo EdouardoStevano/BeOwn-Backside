@@ -1,5 +1,6 @@
 import { Project } from 'src/projects/domains/project';
 import { Spv } from 'src/projects/domains/spv';
+import { ModeleEconomique } from 'src/projects/domains/enums/modele-economique.enum';
 import { ProjectEntity } from '../entities/project.entity';
 import { SpvEntity } from '../entities/spv.entity';
 
@@ -34,6 +35,8 @@ export class ProjectMapper {
     domain.dateCloturePrevue = entity.dateCloturePrevue;
     domain.descriptionMd = entity.descriptionMd;
     domain.avertissementMd = entity.avertissementMd;
+    domain.modeleEconomique = entity.modeleEconomique ?? ModeleEconomique.OBLIGATAIRE;
+    domain.nbUnitesLouables = entity.nbUnitesLouables ?? null;
     domain.createdAt = entity.createdAt;
     domain.updatedAt = entity.updatedAt;
     return domain;
@@ -65,6 +68,8 @@ export class ProjectMapper {
     entity.dateCloturePrevue = domain.dateCloturePrevue;
     entity.descriptionMd = domain.descriptionMd;
     entity.avertissementMd = domain.avertissementMd;
+    entity.modeleEconomique = domain.modeleEconomique ?? ModeleEconomique.OBLIGATAIRE;
+    entity.nbUnitesLouables = domain.nbUnitesLouables ?? null;
     return entity;
   }
 

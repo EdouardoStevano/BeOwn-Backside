@@ -14,6 +14,7 @@ import {
   ProjectStatus,
   ProjectType,
 } from 'src/projects/domains/enums/project-status.enum';
+import { ModeleEconomique } from 'src/projects/domains/enums/modele-economique.enum';
 
 @Entity('projet')
 export class ProjectEntity {
@@ -93,6 +94,13 @@ export class ProjectEntity {
 
   @Column({ type: 'text', nullable: true })
   avertissementMd: string | null;
+
+  // Equity-locatif extension (Phase 1) — default OBLIGATAIRE pour rétrocompat
+  @Column({ type: 'varchar', default: ModeleEconomique.OBLIGATAIRE })
+  modeleEconomique: ModeleEconomique;
+
+  @Column({ type: 'integer', nullable: true })
+  nbUnitesLouables: number | null;
 
   @CreateDateColumn()
   createdAt: Date;

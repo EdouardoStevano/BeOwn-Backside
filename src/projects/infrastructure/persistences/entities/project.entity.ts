@@ -14,6 +14,7 @@ import {
   ProjectStatus,
   ProjectType,
 } from 'src/projects/domains/enums/project-status.enum';
+import { ModeleEconomique } from 'src/projects/domains/enums/modele-economique.enum';
 
 export interface PrevisionnelFinancier {
   operation: {
@@ -179,6 +180,13 @@ export class ProjectEntity {
 
   @Column({ type: 'jsonb', nullable: true, default: [] })
   echeancierEmprunteur: EcheanceEmprunteur[];
+
+  // Equity-locatif extension (Phase 1) — default OBLIGATAIRE pour rétrocompat
+  @Column({ type: 'varchar', default: ModeleEconomique.OBLIGATAIRE })
+  modeleEconomique: ModeleEconomique;
+
+  @Column({ type: 'integer', nullable: true })
+  nbUnitesLouables: number | null;
 
   @Column({ type: 'text', nullable: true })
   motifAnnulation: string | null;
