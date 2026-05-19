@@ -66,6 +66,10 @@ export class RedisImplService implements OtpService {
     return !!record;
   }
 
+  async invalidate(key: string): Promise<void> {
+    await this.cacheManagerService.remove(key);
+  }
+
   generateSecretTotp(email: string): SecretOtpPayload {
     const secret = generateSecret();
     const appName = this.configService.getOrThrow('TFA_APP_NAME');
