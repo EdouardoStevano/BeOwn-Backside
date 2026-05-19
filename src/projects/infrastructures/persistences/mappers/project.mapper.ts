@@ -35,7 +35,8 @@ export class ProjectMapper {
     domain.dateCloturePrevue = entity.dateCloturePrevue;
     domain.descriptionMd = entity.descriptionMd;
     domain.avertissementMd = entity.avertissementMd;
-    domain.modeleEconomique = entity.modeleEconomique ?? ModeleEconomique.OBLIGATAIRE;
+    domain.modeleEconomique =
+      entity.modeleEconomique ?? ModeleEconomique.OBLIGATAIRE;
     domain.nbUnitesLouables = entity.nbUnitesLouables ?? null;
     domain.createdAt = entity.createdAt;
     domain.updatedAt = entity.updatedAt;
@@ -68,7 +69,8 @@ export class ProjectMapper {
     entity.dateCloturePrevue = domain.dateCloturePrevue;
     entity.descriptionMd = domain.descriptionMd;
     entity.avertissementMd = domain.avertissementMd;
-    entity.modeleEconomique = domain.modeleEconomique ?? ModeleEconomique.OBLIGATAIRE;
+    entity.modeleEconomique =
+      domain.modeleEconomique ?? ModeleEconomique.OBLIGATAIRE;
     entity.nbUnitesLouables = domain.nbUnitesLouables ?? null;
     return entity;
   }

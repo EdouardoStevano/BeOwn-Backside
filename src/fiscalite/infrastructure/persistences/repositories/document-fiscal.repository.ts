@@ -7,9 +7,7 @@ import { DocumentFiscalEntity } from '../entities/document-fiscal.entity';
 import { DocumentFiscalMapper } from '../mappers/document-fiscal.mapper';
 
 @Injectable()
-export class DocumentFiscalTypeOrmRepository
-  implements DocumentFiscalRepository
-{
+export class DocumentFiscalTypeOrmRepository implements DocumentFiscalRepository {
   constructor(
     @InjectRepository(DocumentFiscalEntity)
     private readonly repo: Repository<DocumentFiscalEntity>,

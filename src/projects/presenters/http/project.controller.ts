@@ -78,8 +78,10 @@ export class ProjectController {
   ) {}
 
   @ApiOperation({
-    summary: 'Projets publics visibles (en collecte, pré-investissement, financés)',
-    description: 'Retourne les projets ouverts aux investisseurs : en_collecte, pre_investissement et finance. Filtrable par type, paginable.',
+    summary:
+      'Projets publics visibles (en collecte, pré-investissement, financés)',
+    description:
+      'Retourne les projets ouverts aux investisseurs : en_collecte, pre_investissement et finance. Filtrable par type, paginable.',
   })
   @ApiResponse({ status: 200, description: 'Liste des projets publics actifs' })
   @ApiQuery({ name: 'type', enum: ProjectType, required: false })
@@ -130,7 +132,10 @@ export class ProjectController {
     return { ...result, data: await this.enrichFractions(result.data) };
   }
 
-  @ApiOperation({ summary: 'Obtenir un projet complet par ID (images, documents, avis, stats)' })
+  @ApiOperation({
+    summary:
+      'Obtenir un projet complet par ID (images, documents, avis, stats)',
+  })
   @ApiParam({ name: 'id', description: 'UUID du projet' })
   @ApiResponse({ status: 200, description: 'Projet complet' })
   @ApiResponse({ status: 404, description: 'Projet introuvable' })
@@ -182,7 +187,7 @@ export class ProjectController {
     return project;
   }
 
-  @ApiOperation({ summary: 'Mettre à jour les champs d\'un projet (admin)' })
+  @ApiOperation({ summary: "Mettre à jour les champs d'un projet (admin)" })
   @ApiParam({ name: 'id', description: 'UUID du projet' })
   @ApiResponse({ status: 200, description: 'Projet mis à jour' })
   @ApiResponse({ status: 404, description: 'Projet introuvable' })
@@ -215,7 +220,9 @@ export class ProjectController {
     spv.siegeAdresse = dto.siegeAdresse ?? null;
     spv.iban = null;
     // Equity-locatif fields (optional)
-    spv.dateConstitution = dto.dateConstitution ? new Date(dto.dateConstitution) : null;
+    spv.dateConstitution = dto.dateConstitution
+      ? new Date(dto.dateConstitution)
+      : null;
     spv.statutsPdfUrl = dto.statutsPdfUrl ?? null;
     spv.regimeFiscal = dto.regimeFiscal ?? RegimeFiscal.IS;
     spv.gestionnaireUserId = dto.gestionnaireUserId ?? null;
@@ -230,7 +237,7 @@ export class ProjectController {
 
   // ─── Partage ───────────────────────────────────────────────────────────────
 
-  @ApiOperation({ summary: 'Obtenir le lien de partage d\'un projet' })
+  @ApiOperation({ summary: "Obtenir le lien de partage d'un projet" })
   @ApiParam({ name: 'id', description: 'UUID du projet' })
   @ApiResponse({ status: 200, description: 'Token de partage retourné' })
   @ApiResponse({ status: 404, description: 'Projet introuvable' })
@@ -254,7 +261,9 @@ export class ProjectController {
     };
   }
 
-  @ApiOperation({ summary: 'Obtenir un projet via son token de partage (accès public)' })
+  @ApiOperation({
+    summary: 'Obtenir un projet via son token de partage (accès public)',
+  })
   @ApiParam({ name: 'token', description: 'Token de partage (16 caractères)' })
   @ApiResponse({ status: 200, description: 'Données publiques du projet' })
   @ApiResponse({ status: 404, description: 'Projet introuvable' })
@@ -281,13 +290,16 @@ export class ProjectController {
         .substring(0, 16);
       return expected === token;
     });
-    if (!project) throw new NotFoundException('Lien de partage invalide ou projet introuvable.');
+    if (!project)
+      throw new NotFoundException(
+        'Lien de partage invalide ou projet introuvable.',
+      );
     return this.buildProjectDetail(project.id);
   }
 
   // ─── Avis ──────────────────────────────────────────────────────────────────
 
-  @ApiOperation({ summary: 'Lister les avis d\'un projet' })
+  @ApiOperation({ summary: "Lister les avis d'un projet" })
   @ApiParam({ name: 'id', description: 'UUID du projet' })
   @ApiResponse({ status: 200, description: 'Liste des avis' })
   @Public()
@@ -302,11 +314,16 @@ export class ProjectController {
     return { ...stats, avis };
   }
 
-  @ApiOperation({ summary: 'Donner un avis sur un projet (un seul par utilisateur)' })
+  @ApiOperation({
+    summary: 'Donner un avis sur un projet (un seul par utilisateur)',
+  })
   @ApiParam({ name: 'id', description: 'UUID du projet' })
   @ApiBody({ type: CreateAvisDto })
   @ApiResponse({ status: 201, description: 'Avis enregistré' })
-  @ApiResponse({ status: 400, description: 'Avis déjà soumis ou projet non éligible' })
+  @ApiResponse({
+    status: 400,
+    description: 'Avis déjà soumis ou projet non éligible',
+  })
   @ApiResponse({ status: 404, description: 'Projet introuvable' })
   @Post(':id/avis')
   async createAvis(
@@ -317,9 +334,14 @@ export class ProjectController {
     const project = await this.projectRepository.findProjectById(id);
     if (!project) throw new NotFoundException('Projet introuvable.');
 
-    const existing = await this.avisRepository.findByUserAndProjet(user.userId, id);
+    const existing = await this.avisRepository.findByUserAndProjet(
+      user.userId,
+      id,
+    );
     if (existing) {
-      throw new BadRequestException('Vous avez déjà soumis un avis pour ce projet.');
+      throw new BadRequestException(
+        'Vous avez déjà soumis un avis pour ce projet.',
+      );
     }
 
     const avis = new Avis();
@@ -344,7 +366,10 @@ export class ProjectController {
       const nbFractionsTotal =
         p.nbFractions ?? Math.floor(Number(p.capitalCible) / prixFraction);
       const fractionsVendues = venduesMap[p.id] ?? 0;
-      const fractionsDisponibles = Math.max(0, nbFractionsTotal - fractionsVendues);
+      const fractionsDisponibles = Math.max(
+        0,
+        nbFractionsTotal - fractionsVendues,
+      );
       const tauxRemplissage =
         nbFractionsTotal > 0
           ? Math.min(
@@ -378,7 +403,8 @@ export class ProjectController {
       const images = imagesByProject[i]
         .filter((d) => d.type === DocumentType.PHOTO_PROJET)
         .sort((a, b) => {
-          if (a.estPrincipale !== b.estPrincipale) return a.estPrincipale ? -1 : 1;
+          if (a.estPrincipale !== b.estPrincipale)
+            return a.estPrincipale ? -1 : 1;
           return (a.ordre ?? 999) - (b.ordre ?? 999);
         });
       return { ...p, images };
@@ -399,7 +425,8 @@ export class ProjectController {
 
     const prixFraction = Number(project.ticketMinimum);
     const nbFractionsTotal =
-      project.nbFractions ?? Math.floor(Number(project.capitalCible) / prixFraction);
+      project.nbFractions ??
+      Math.floor(Number(project.capitalCible) / prixFraction);
 
     const activeStatuses: InvestmentStatus[] = [
       InvestmentStatus.CONFIRME,
@@ -422,11 +449,14 @@ export class ProjectController {
     const images = allDocs
       .filter((d) => d.type === DocumentType.PHOTO_PROJET)
       .sort((a, b) => {
-        if (a.estPrincipale !== b.estPrincipale) return a.estPrincipale ? -1 : 1;
+        if (a.estPrincipale !== b.estPrincipale)
+          return a.estPrincipale ? -1 : 1;
         return (a.ordre ?? 999) - (b.ordre ?? 999);
       });
 
-    const documents = allDocs.filter((d) => d.type !== DocumentType.PHOTO_PROJET);
+    const documents = allDocs.filter(
+      (d) => d.type !== DocumentType.PHOTO_PROJET,
+    );
 
     return {
       ...project,
@@ -453,7 +483,10 @@ export class ProjectController {
         nbInvestisseurs,
         tauxRemplissage:
           nbFractionsTotal > 0
-            ? Math.min(100, Math.round((fractionsVendues / nbFractionsTotal) * 1000) / 10)
+            ? Math.min(
+                100,
+                Math.round((fractionsVendues / nbFractionsTotal) * 1000) / 10,
+              )
             : null,
       },
     };

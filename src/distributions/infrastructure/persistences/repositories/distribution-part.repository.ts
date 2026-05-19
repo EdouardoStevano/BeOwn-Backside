@@ -7,9 +7,7 @@ import { DistributionPartEntity } from '../entities/distribution-part.entity';
 import { DistributionPartMapper } from '../mappers/distribution-part.mapper';
 
 @Injectable()
-export class DistributionPartTypeOrmRepository
-  implements DistributionPartRepository
-{
+export class DistributionPartTypeOrmRepository implements DistributionPartRepository {
   constructor(
     @InjectRepository(DistributionPartEntity)
     private readonly repo: Repository<DistributionPartEntity>,

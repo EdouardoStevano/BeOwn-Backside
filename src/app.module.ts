@@ -66,8 +66,10 @@ function requireEnv(name: string): string {
       type: 'postgres',
       host: process.env.DATABASE_HOST,
       port: parseInt(process.env.DATABASE_PORT ?? '5432', 10),
-      username: process.env.DATABASE_USERNAME ?? requireEnv('DATABASE_USERNAME'),
-      password: process.env.DATABASE_PASSWORD ?? requireEnv('DATABASE_PASSWORD'),
+      username:
+        process.env.DATABASE_USERNAME ?? requireEnv('DATABASE_USERNAME'),
+      password:
+        process.env.DATABASE_PASSWORD ?? requireEnv('DATABASE_PASSWORD'),
       database: process.env.DATABASE_DB ?? requireEnv('DATABASE_DB'),
       autoLoadEntities: true,
       synchronize: process.env.NODE_ENV !== 'production',

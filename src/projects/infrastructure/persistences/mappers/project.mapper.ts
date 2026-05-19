@@ -18,7 +18,8 @@ export class ProjectMapper {
     domain.pays = entity.pays;
     domain.adresseComplete = entity.adresseComplete;
     domain.latitude = entity.latitude != null ? Number(entity.latitude) : null;
-    domain.longitude = entity.longitude != null ? Number(entity.longitude) : null;
+    domain.longitude =
+      entity.longitude != null ? Number(entity.longitude) : null;
     domain.youtubeUrl = entity.youtubeUrl;
     domain.capitalCible = Number(entity.capitalCible);
     domain.capitalMinimum = Number(entity.capitalMinimum);
@@ -45,7 +46,8 @@ export class ProjectMapper {
     domain.previsionnel = entity.previsionnel ?? null;
     domain.chronologie = entity.chronologie ?? [];
     domain.garanties = entity.garanties ?? [];
-    domain.modeleEconomique = entity.modeleEconomique ?? ModeleEconomique.OBLIGATAIRE;
+    domain.modeleEconomique =
+      entity.modeleEconomique ?? ModeleEconomique.OBLIGATAIRE;
     domain.nbUnitesLouables = entity.nbUnitesLouables ?? null;
     domain.createdAt = entity.createdAt;
     domain.updatedAt = entity.updatedAt;
@@ -87,7 +89,8 @@ export class ProjectMapper {
     entity.previsionnel = domain.previsionnel;
     entity.chronologie = domain.chronologie ?? [];
     entity.garanties = domain.garanties ?? [];
-    entity.modeleEconomique = domain.modeleEconomique ?? ModeleEconomique.OBLIGATAIRE;
+    entity.modeleEconomique =
+      domain.modeleEconomique ?? ModeleEconomique.OBLIGATAIRE;
     entity.nbUnitesLouables = domain.nbUnitesLouables ?? null;
     return entity;
   }

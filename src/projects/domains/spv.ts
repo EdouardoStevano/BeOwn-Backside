@@ -16,7 +16,7 @@ export class Spv {
   id: string;
   raisonSociale: string;
   siren: string | null;
-  forme: string | null;            // ex. 'SCI', 'SARL', 'SAS'
+  forme: string | null; // ex. 'SCI', 'SARL', 'SAS'
   capitalSocial: number | null;
   siegeAdresse: string | null;
   iban: string | null;
@@ -24,7 +24,7 @@ export class Spv {
   // Champs equity-locatif
   dateConstitution: Date | null;
   statutsPdfUrl: string | null;
-  regimeFiscal: RegimeFiscal;      // default IS
+  regimeFiscal: RegimeFiscal; // default IS
   gestionnaireUserId: number | null;
 
   createdAt: Date;

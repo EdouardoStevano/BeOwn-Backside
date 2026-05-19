@@ -37,8 +37,12 @@ export class CreateProjectUseCase {
     project.statut = dto.statut ?? ProjectStatus.BROUILLON;
     project.estPreInvestissable = dto.estPreInvestissable ?? false;
     project.plafondPreInvestissement = dto.plafondPreInvestissement ?? null;
-    project.datePublication = dto.datePublication ? new Date(dto.datePublication) : null;
-    project.dateOuvertureCollecte = dto.dateOuvertureCollecte ? new Date(dto.dateOuvertureCollecte) : null;
+    project.datePublication = dto.datePublication
+      ? new Date(dto.datePublication)
+      : null;
+    project.dateOuvertureCollecte = dto.dateOuvertureCollecte
+      ? new Date(dto.dateOuvertureCollecte)
+      : null;
     project.dateCloturePrevue = dto.dateCloturePrevue
       ? new Date(dto.dateCloturePrevue)
       : null;

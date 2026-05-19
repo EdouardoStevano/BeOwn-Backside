@@ -8,9 +8,7 @@ import { PeriodeDistributionMapper } from '../mappers/periode-distribution.mappe
 import { StatutPeriodeDistribution } from '../../../domains/enums/statut-periode-distribution.enum';
 
 @Injectable()
-export class PeriodeDistributionTypeOrmRepository
-  implements PeriodeDistributionRepository
-{
+export class PeriodeDistributionTypeOrmRepository implements PeriodeDistributionRepository {
   constructor(
     @InjectRepository(PeriodeDistributionEntity)
     private readonly repo: Repository<PeriodeDistributionEntity>,
