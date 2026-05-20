@@ -30,6 +30,9 @@ import {
   TransactionType,
   WalletType,
 } from 'src/wallets/domains/enums/wallet.enum';
+import { computePerformanceFee } from 'src/common/platform-fees/platform-fees.constants';
+import { AuditLogService } from 'src/notifications/applications/audit-log.service';
+import { UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
 
 const TAUX_IR_PV = 0.19; // PV immobilière 19 %
 const TAUX_CSG_PV = 0.172; // CSG 17.2 %
@@ -41,6 +44,7 @@ export interface ExecuteSortieResult {
   nbInvestisseursPayes: number;
   totalCapitalRembourse: number;
   totalPlusValueDistribuee: number;
+  performanceFeePrelevee: number;
   totalIR: number;
   totalCSG: number;
 }
@@ -83,9 +87,13 @@ export class ExecuteSortieUseCase {
     @InjectRepository(TransactionEntity)
     private readonly txRepo: Repository<TransactionEntity>,
     private readonly dataSource: DataSource,
+    private readonly auditLog: AuditLogService,
   ) {}
 
-  async execute(sortieId: string): Promise<ExecuteSortieResult> {
+  async execute(
+    sortieId: string,
+    adminUserId?: number,
+  ): Promise<ExecuteSortieResult> {
     const sortie = await this.sortieRepo.findById(sortieId);
     if (!sortie) throw new NotFoundException('Sortie introuvable.');
     if (sortie.statut !== StatutSortie.ACTEE) {
@@ -108,6 +116,11 @@ export class ExecuteSortieUseCase {
       (i) => i.statut === InvestmentStatus.CONFIRME,
     );
 
+    // Performance fee (Phase 9) — prélevée par la plateforme sur la PV positive
+    // AVANT distribution aux investisseurs.
+    const performanceFee = computePerformanceFee(sortie.plusValueBrute);
+    const plusValueDistribuable = round2(sortie.plusValueBrute - performanceFee);
+
     let nbInvestisseursPayes = 0;
     let totalCapitalRembourse = 0;
     let totalPlusValueDistribuee = 0;
@@ -117,6 +130,45 @@ export class ExecuteSortieUseCase {
     await this.dataSource.transaction(async (em) => {
       let walletIR: WalletEntity | null = null;
       let walletCSG: WalletEntity | null = null;
+
+      // Crédit du wallet FRAIS_PLATEFORME avec la performance fee
+      if (performanceFee > 0) {
+        let walletPlat = await em.findOne(WalletEntity, {
+          where: { type: WalletType.FRAIS_PLATEFORME },
+        });
+        // Devise sera prise sur le premier wallet investisseur, fallback XOF
+        const fallbackDevise = 'XOF';
+        if (!walletPlat) {
+          walletPlat = await em.save(
+            WalletEntity,
+            em.create(WalletEntity, {
+              type: WalletType.FRAIS_PLATEFORME,
+              proprietaireUserId: null,
+              fournisseurRef: 'PLAT-FEES-001',
+              devise: fallbackDevise,
+              solde: 0,
+            }),
+          );
+        }
+        walletPlat.solde = Number(walletPlat.solde) + performanceFee;
+        await em.save(WalletEntity, walletPlat);
+
+        await em.save(
+          TransactionEntity,
+          em.create(TransactionEntity, {
+            walletDestination: walletPlat.id,
+            type: TransactionType.SOUSCRIPTION,
+            montant: performanceFee,
+            devise: walletPlat.devise,
+            statut: TransactionStatus.REUSSI,
+            fournisseur: TransactionFournisseur.INTERNE,
+            projetId: sortie.projetId,
+            idempotencyKey: `sortie:performance-fee:${sortieId}`,
+            fraisPsp: 0,
+            fraisPlateforme: 0,
+          }),
+        );
+      }
 
       for (const inv of eligibles) {
         const wallet = await em.findOne(WalletEntity, {
@@ -134,7 +186,8 @@ export class ExecuteSortieUseCase {
 
         const capitalRembourse = round2(Number(inv.montant));
         const pourcentage = Number(inv.montant) / capitalCible;
-        const plusValuePart = round2(sortie.plusValueBrute * pourcentage);
+        // PV distribuée = PV NETTE de performance fee × pourcentage détention
+        const plusValuePart = round2(plusValueDistribuable * pourcentage);
 
         let irPV = 0;
         let csgPV = 0;
@@ -292,12 +345,38 @@ export class ExecuteSortieUseCase {
       nbInvestisseursPayes,
       totalCapitalRembourse: round2(totalCapitalRembourse),
       totalPlusValueDistribuee: round2(totalPlusValueDistribuee),
+      performanceFeePrelevee: performanceFee,
       totalIR: round2(totalIR),
       totalCSG: round2(totalCSG),
     };
     this.logger.log(
-      `Sortie exécutée : sortie=${sortieId} payés=${nbInvestisseursPayes} capital=${result.totalCapitalRembourse} PV=${result.totalPlusValueDistribuee}`,
+      `Sortie exécutée : sortie=${sortieId} payés=${nbInvestisseursPayes} capital=${result.totalCapitalRembourse} PV nette=${result.totalPlusValueDistribuee} perf.fee=${performanceFee}`,
     );
+
+    // Audit log — Phase 10
+    if (adminUserId != null) {
+      await this.auditLog
+        .create(
+          String(adminUserId),
+          UserRole.ADMIN,
+          'equity.sortie.execute',
+          'sortie_projet',
+          sortieId,
+          undefined,
+          undefined,
+          {
+            projetId: sortie.projetId,
+            prixRevente: sortie.prixRevente,
+            plusValueBrute: sortie.plusValueBrute,
+            performanceFee: result.performanceFeePrelevee,
+            nbInvestisseursPayes,
+            totalCapitalRembourse: result.totalCapitalRembourse,
+            totalPlusValueDistribuee: result.totalPlusValueDistribuee,
+          },
+        )
+        .catch(() => {});
+    }
+
     return result;
   }
 }

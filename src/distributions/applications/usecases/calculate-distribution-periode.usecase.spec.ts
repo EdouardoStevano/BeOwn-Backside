@@ -45,7 +45,7 @@ describe('CalculateDistributionPeriodeUseCase', () => {
     );
   });
 
-  it('calcule revenuNet = totalLoyers - totalCharges et statut CALCULEE', async () => {
+  it('calcule revenuNet = (totalLoyers − charges) − management fee 1%/12 et statut CALCULEE', async () => {
     loyerRepo.findValidesParProjetEtPeriode.mockResolvedValue([
       { montant: 600_000 },
       { montant: 400_000 },
@@ -55,8 +55,10 @@ describe('CalculateDistributionPeriodeUseCase', () => {
     ]);
     const r = await useCase.execute('proj-1', '2026-06');
     expect(r.periode.totalLoyers).toBe(1_000_000);
-    expect(r.periode.totalCharges).toBe(150_000);
-    expect(r.periode.revenuNet).toBe(850_000);
+    // totalCharges = 150_000 + management fee (1/12 du 1%/an sur revenu avant gestion 850_000)
+    //              = 150_000 + 708.33
+    expect(r.periode.totalCharges).toBeCloseTo(150_708.33, 2);
+    expect(r.periode.revenuNet).toBeCloseTo(849_291.67, 2);
     expect(r.periode.statut).toBe(StatutPeriodeDistribution.CALCULEE);
   });
 
@@ -72,12 +74,13 @@ describe('CalculateDistributionPeriodeUseCase', () => {
     const r = await useCase.execute('proj-1', '2026-06');
     expect(r.parts).toHaveLength(2);
     expect(r.parts[0].pourcentageDetention).toBe(0.5);
-    expect(r.parts[0].montantBrut).toBe(500_000);
+    // Avec management fee 833.33, revenuNet = 999_166.67 → inv-1 (50%) ≈ 499_583.33
+    expect(r.parts[0].montantBrut).toBeCloseTo(499_583.33, 1);
     expect(r.parts[1].pourcentageDetention).toBe(0.3);
-    expect(r.parts[1].montantBrut).toBe(300_000);
+    expect(r.parts[1].montantBrut).toBeCloseTo(299_750, 1);
   });
 
-  it('applique IR 12.8% + CSG 17.2% sur brut positif', async () => {
+  it('applique IR 12.8% + CSG 17.2% sur brut positif (après management fee)', async () => {
     loyerRepo.findValidesParProjetEtPeriode.mockResolvedValue([
       { montant: 100_000 },
     ]);
@@ -85,10 +88,11 @@ describe('CalculateDistributionPeriodeUseCase', () => {
       { id: 'inv-1', montant: 1_000_000, statut: InvestmentStatus.CONFIRME },
     ]);
     const r = await useCase.execute('proj-1', '2026-06');
-    expect(r.parts[0].montantBrut).toBe(100_000);
-    expect(r.parts[0].prelevementIR).toBe(12_800);
-    expect(r.parts[0].prelevementCSG).toBe(17_200);
-    expect(r.parts[0].montantNet).toBe(70_000);
+    // managementFee = 100_000 × 0.01/12 = 83.33 → revenuNet = 99_916.67
+    expect(r.parts[0].montantBrut).toBeCloseTo(99_916.67, 2);
+    expect(r.parts[0].prelevementIR).toBeCloseTo(12_789.33, 2);
+    expect(r.parts[0].prelevementCSG).toBeCloseTo(17_185.67, 2);
+    expect(r.parts[0].montantNet).toBeCloseTo(69_941.67, 2);
   });
 
   it('ne prélève pas IR/CSG sur revenu négatif (mois déficitaire)', async () => {

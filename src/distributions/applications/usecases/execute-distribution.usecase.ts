@@ -29,6 +29,8 @@ import {
   TransactionType,
   WalletType,
 } from 'src/wallets/domains/enums/wallet.enum';
+import { AuditLogService } from 'src/notifications/applications/audit-log.service';
+import { UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
 
 export interface ExecuteDistributionResult {
   periode: PeriodeDistribution;
@@ -72,9 +74,13 @@ export class ExecuteDistributionUseCase {
     @InjectRepository(TransactionEntity)
     private readonly txRepo: Repository<TransactionEntity>,
     private readonly dataSource: DataSource,
+    private readonly auditLog: AuditLogService,
   ) {}
 
-  async execute(periodeId: string): Promise<ExecuteDistributionResult> {
+  async execute(
+    periodeId: string,
+    adminUserId?: number,
+  ): Promise<ExecuteDistributionResult> {
     const periode = await this.periodeRepo.findById(periodeId);
     if (!periode) {
       throw new NotFoundException('Période de distribution introuvable.');
@@ -269,6 +275,34 @@ export class ExecuteDistributionUseCase {
     this.logger.log(
       `Distribution exécutée : période=${periodeId} payées=${nbPartsPayees} skipped=${nbPartsSkipped} net=${result.totalNetVerse}`,
     );
+
+    // Audit log — Phase 10 (traçabilité réglementaire pour mouvements de fonds)
+    if (adminUserId != null) {
+      await this.auditLog
+        .create(
+          String(adminUserId),
+          UserRole.ADMIN,
+          'equity.distribution.execute',
+          'periode_distribution',
+          periodeId,
+          undefined,
+          undefined,
+          {
+            projetId: periode.projetId,
+            periode: periode.periode,
+            nbPartsPayees,
+            nbPartsSkipped,
+            totalNetVerse: result.totalNetVerse,
+            totalIR: result.totalIR,
+            totalCSG: result.totalCSG,
+          },
+        )
+        .catch(() => {
+          // L'audit échoue silencieusement — on ne veut pas annuler une
+          // distribution réussie pour un échec d'audit.
+        });
+    }
+
     return result;
   }
 }

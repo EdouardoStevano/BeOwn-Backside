@@ -36,6 +36,7 @@ import {
 import { ModeleEconomique } from 'src/projects/domains/enums/modele-economique.enum';
 import { ProjectStatus } from 'src/projects/domains/enums/project-status.enum';
 import { InvestmentStatus } from 'src/investments/domains/enums/investment-status.enum';
+import { computeMonthlyManagementFee } from 'src/common/platform-fees/platform-fees.constants';
 
 const PERIODE_REGEX = /^\d{4}-(0[1-9]|1[0-2])$/;
 const TAUX_IR = 0.128;
@@ -124,7 +125,16 @@ export class CalculateDistributionPeriodeUseCase {
       this.chargeRepo.findValidesParProjetEtPeriode(projetId, periode),
     ]);
     const totalLoyers = round2(loyers.reduce((s, l) => s + l.montant, 0));
-    const totalCharges = round2(charges.reduce((s, c) => s + c.montant, 0));
+    const totalChargesOperationnelles = round2(
+      charges.reduce((s, c) => s + c.montant, 0),
+    );
+    // Commission de gestion mensuelle (1/12 du taux annuel) — Phase 9.
+    // Prélevée AVANT distribution aux investisseurs sur revenu opérationnel positif.
+    // Cumulée dans totalCharges pour rester cohérent avec l'entity existante
+    // (qui n'a pas de colonne dédiée managementFee — pas de migration).
+    const revenuAvantGestion = round2(totalLoyers - totalChargesOperationnelles);
+    const managementFee = computeMonthlyManagementFee(revenuAvantGestion);
+    const totalCharges = round2(totalChargesOperationnelles + managementFee);
     const revenuNet = round2(totalLoyers - totalCharges);
 
     // Créer la période

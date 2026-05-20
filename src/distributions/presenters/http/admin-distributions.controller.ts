@@ -11,6 +11,8 @@ import {
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
 import { Roles } from 'src/common/auth/roles.decorator';
+import { CurrentUser } from 'src/common/auth/current-user.decorator';
+import type { ActiveUser } from 'src/common/auth/current-user.decorator';
 import { UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
 import { CalculateDistributionPeriodeUseCase } from '../../applications/usecases/calculate-distribution-periode.usecase';
 import { ValidatePeriodeDistributionUseCase } from '../../applications/usecases/validate-periode-distribution.usecase';
@@ -103,8 +105,8 @@ export class AdminDistributionsController {
     summary:
       'Exécuter le versement des parts (crédit wallets, débit séquestres IR/CSG)',
   })
-  execute(@Param('id') id: string) {
-    return this.executeUseCase.execute(id);
+  execute(@Param('id') id: string, @CurrentUser() user: ActiveUser) {
+    return this.executeUseCase.execute(id, user.userId);
   }
 
   @Get('historique/projet/:projetId')
