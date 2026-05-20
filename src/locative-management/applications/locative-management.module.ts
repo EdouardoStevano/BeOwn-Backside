@@ -4,6 +4,8 @@ import { NotificationsModule } from 'src/notifications/notifications.module';
 import { CloudStorageModule } from 'src/common/cloud-storage/cloud-storage.module';
 import { AddUniteLouableUseCase } from './usecases/add-unite-louable.usecase';
 import { CreateBailUseCase } from './usecases/create-bail.usecase';
+import { UpdateBailUseCase } from './usecases/update-bail.usecase';
+import { ResilierBailUseCase } from './usecases/resilier-bail.usecase';
 import { DeclareLoyerEncaisseUseCase } from './usecases/declare-loyer-encaisse.usecase';
 import { DeclareChargeUseCase } from './usecases/declare-charge.usecase';
 import { GetProjectOccupationUseCase } from './usecases/get-project-occupation.usecase';
@@ -23,6 +25,8 @@ import { AdminLocativeController } from '../presenters/http/admin-locative.contr
   providers: [
     AddUniteLouableUseCase,
     CreateBailUseCase,
+    UpdateBailUseCase,
+    ResilierBailUseCase,
     DeclareLoyerEncaisseUseCase,
     DeclareChargeUseCase,
     GetProjectOccupationUseCase,
@@ -34,6 +38,8 @@ import { AdminLocativeController } from '../presenters/http/admin-locative.contr
     LocativeManagementInfrastructureModule,
     AddUniteLouableUseCase,
     CreateBailUseCase,
+    UpdateBailUseCase,
+    ResilierBailUseCase,
     DeclareLoyerEncaisseUseCase,
     DeclareChargeUseCase,
     GetProjectOccupationUseCase,

@@ -31,6 +31,7 @@ import {
 } from 'src/wallets/domains/enums/wallet.enum';
 import { AuditLogService } from 'src/notifications/applications/audit-log.service';
 import { UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
+import { AmlMonitorService } from 'src/common/aml/aml-monitor.service';
 
 export interface ExecuteDistributionResult {
   periode: PeriodeDistribution;
@@ -75,6 +76,7 @@ export class ExecuteDistributionUseCase {
     private readonly txRepo: Repository<TransactionEntity>,
     private readonly dataSource: DataSource,
     private readonly auditLog: AuditLogService,
+    private readonly amlMonitor: AmlMonitorService,
   ) {}
 
   async execute(
@@ -251,6 +253,16 @@ export class ExecuteDistributionUseCase {
 
         // Marquer la part payée
         await this.partRepo.markPaid(part.id, new Date());
+
+        // AML check sur ce versement individuel
+        await this.amlMonitor
+          .check({
+            userId: inv.utilisateurId,
+            amount: part.montantNet,
+            context: 'distribution',
+            reference: part.id,
+          })
+          .catch(() => {});
 
         nbPartsPayees++;
         totalNetVerse += part.montantNet;

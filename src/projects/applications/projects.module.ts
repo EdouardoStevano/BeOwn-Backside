@@ -5,6 +5,7 @@ import { InvestmentsInfrastructureModule } from 'src/investments/infrastructure/
 import { DocumentsInfrastructureModule } from 'src/documents/infrastructure/documents-infrastructure.module';
 import { AvisInfrastructureModule } from 'src/avis/infrastructure/avis-infrastructure.module';
 import { NotificationsModule } from 'src/notifications/notifications.module';
+import { AmlModule } from 'src/common/aml/aml.module';
 import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/wallet.entity';
 import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entities/transaction.entity';
 import { CreateProjectUseCase } from './usecases/create-project.usecase';
@@ -23,6 +24,7 @@ import { AdminSortiesController } from '../presenters/http/admin-sorties.control
     DocumentsInfrastructureModule,
     AvisInfrastructureModule,
     NotificationsModule,
+    AmlModule,
     TypeOrmModule.forFeature([WalletEntity, TransactionEntity]),
   ],
   providers: [

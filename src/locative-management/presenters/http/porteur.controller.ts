@@ -5,6 +5,7 @@ import {
   Get,
   Inject,
   Param,
+  Patch,
   Post,
   UploadedFile,
   UseGuards,
@@ -20,6 +21,8 @@ import { UserRole } from 'src/users/infrastructure/persistences/entities/user.en
 import { CloudStorageService } from 'src/common/cloud-storage/cloud-storage.service';
 import { AddUniteLouableUseCase } from '../../applications/usecases/add-unite-louable.usecase';
 import { CreateBailUseCase } from '../../applications/usecases/create-bail.usecase';
+import { UpdateBailUseCase } from '../../applications/usecases/update-bail.usecase';
+import { ResilierBailUseCase } from '../../applications/usecases/resilier-bail.usecase';
 import { DeclareLoyerEncaisseUseCase } from '../../applications/usecases/declare-loyer-encaisse.usecase';
 import { DeclareChargeUseCase } from '../../applications/usecases/declare-charge.usecase';
 import { GetProjectOccupationUseCase } from '../../applications/usecases/get-project-occupation.usecase';
@@ -40,6 +43,8 @@ import { AddUniteLouableDto } from '../dto/unite-louable.dto';
 import { CreateBailDto } from '../dto/bail.dto';
 import { DeclareLoyerDto } from '../dto/loyer-encaisse.dto';
 import { DeclareChargeDto } from '../dto/charge.dto';
+import { UpdateBailDto, ResilierBailDto } from '../dto/update-bail.dto';
+import { StatutBail } from '../../domains/enums/statut-bail.enum';
 
 @ApiTags('Porteur — Gestion locative')
 @ApiBearerAuth()
@@ -50,6 +55,8 @@ export class PorteurController {
   constructor(
     private readonly addUniteLouable: AddUniteLouableUseCase,
     private readonly createBail: CreateBailUseCase,
+    private readonly updateBail: UpdateBailUseCase,
+    private readonly resilierBail: ResilierBailUseCase,
     private readonly declareLoyer: DeclareLoyerEncaisseUseCase,
     private readonly declareCharge: DeclareChargeUseCase,
     private readonly getOccupation: GetProjectOccupationUseCase,
@@ -153,6 +160,34 @@ export class PorteurController {
   @ApiOperation({ summary: "Lister les locataires d'une SCI" })
   listLocataires(@Param('spvId') spvId: string) {
     return this.locataireRepo.findBySpv(spvId);
+  }
+
+  @Patch('baux/:id')
+  @ApiOperation({ summary: 'Modifier un bail (loyer, date fin, contrat PDF)' })
+  updateBailEndpoint(
+    @Param('id') id: string,
+    @Body() dto: UpdateBailDto,
+  ) {
+    return this.updateBail.execute({
+      id,
+      loyerMensuel: dto.loyerMensuel,
+      dateFin: dto.dateFin === undefined ? undefined : dto.dateFin === null ? null : new Date(dto.dateFin),
+      contratPdfUrl: dto.contratPdfUrl,
+    });
+  }
+
+  @Post('baux/:id/resilier')
+  @ApiOperation({
+    summary: 'Résilier ou terminer un bail (statut RESILIE ou TERMINE)',
+  })
+  resilierBailEndpoint(
+    @Param('id') id: string,
+    @Body() dto: ResilierBailDto,
+    @CurrentUser() user: ActiveUser,
+  ) {
+    const finalStatus =
+      dto.statutFinal === 'termine' ? StatutBail.TERMINE : StatutBail.RESILIE;
+    return this.resilierBail.execute(id, user.userId, dto.motif, finalStatus);
   }
 
   @Post('upload-proof')

@@ -33,6 +33,7 @@ import {
 import { computePerformanceFee } from 'src/common/platform-fees/platform-fees.constants';
 import { AuditLogService } from 'src/notifications/applications/audit-log.service';
 import { UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
+import { AmlMonitorService } from 'src/common/aml/aml-monitor.service';
 
 const TAUX_IR_PV = 0.19; // PV immobilière 19 %
 const TAUX_CSG_PV = 0.172; // CSG 17.2 %
@@ -88,6 +89,7 @@ export class ExecuteSortieUseCase {
     private readonly txRepo: Repository<TransactionEntity>,
     private readonly dataSource: DataSource,
     private readonly auditLog: AuditLogService,
+    private readonly amlMonitor: AmlMonitorService,
   ) {}
 
   async execute(
@@ -321,6 +323,16 @@ export class ExecuteSortieUseCase {
             }),
           );
         }
+
+        // AML check sur le versement final (capital + PV nette)
+        await this.amlMonitor
+          .check({
+            userId: inv.utilisateurId,
+            amount: netVerse,
+            context: 'sortie',
+            reference: `${sortieId}:${inv.id}`,
+          })
+          .catch(() => {});
 
         nbInvestisseursPayes++;
         totalCapitalRembourse += capitalRembourse;
