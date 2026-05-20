@@ -13,12 +13,15 @@ describe('ValidateLoyerEncaisseUseCase', () => {
     motifRejet: null,
   });
 
+  let auditLog: any;
+
   beforeEach(() => {
     loyerRepo = {
       findById: jest.fn().mockResolvedValue(declarePending()),
       save: jest.fn().mockImplementation((l) => Promise.resolve(l)),
     };
-    useCase = new ValidateLoyerEncaisseUseCase(loyerRepo);
+    auditLog = { create: jest.fn().mockResolvedValue(undefined) };
+    useCase = new ValidateLoyerEncaisseUseCase(loyerRepo, auditLog);
   });
 
   describe('validate', () => {

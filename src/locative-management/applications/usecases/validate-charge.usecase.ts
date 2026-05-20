@@ -10,11 +10,14 @@ import {
   CHARGE_REPOSITORY,
   type ChargeRepository,
 } from '../ports/repositories/charge.repository';
+import { AuditLogService } from 'src/notifications/applications/audit-log.service';
+import { UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
 
 @Injectable()
 export class ValidateChargeUseCase {
   constructor(
     @Inject(CHARGE_REPOSITORY) private readonly chargeRepo: ChargeRepository,
+    private readonly auditLog: AuditLogService,
   ) {}
 
   async validate(id: string, adminUserId: number): Promise<Charge> {
@@ -29,7 +32,20 @@ export class ValidateChargeUseCase {
     c.valideParUserId = adminUserId;
     c.valideLe = new Date();
     c.motifRejet = null;
-    return this.chargeRepo.save(c);
+    const saved = await this.chargeRepo.save(c);
+    await this.auditLog
+      .create(
+        String(adminUserId),
+        UserRole.ADMIN,
+        'equity.charge.validate',
+        'charge',
+        id,
+        undefined,
+        undefined,
+        { projetId: c.projetId, periode: c.periode, type: c.type, montant: c.montant },
+      )
+      .catch(() => {});
+    return saved;
   }
 
   async reject(
@@ -51,6 +67,19 @@ export class ValidateChargeUseCase {
     c.valideParUserId = adminUserId;
     c.valideLe = new Date();
     c.motifRejet = motif.trim();
-    return this.chargeRepo.save(c);
+    const saved = await this.chargeRepo.save(c);
+    await this.auditLog
+      .create(
+        String(adminUserId),
+        UserRole.ADMIN,
+        'equity.charge.reject',
+        'charge',
+        id,
+        undefined,
+        undefined,
+        { projetId: c.projetId, periode: c.periode, type: c.type, montant: c.montant, motif: motif.trim() },
+      )
+      .catch(() => {});
+    return saved;
   }
 }

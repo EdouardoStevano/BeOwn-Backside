@@ -1,5 +1,7 @@
 import { Module } from '@nestjs/common';
 import { LocativeManagementInfrastructureModule } from '../infrastructure/locative-management-infrastructure.module';
+import { NotificationsModule } from 'src/notifications/notifications.module';
+import { CloudStorageModule } from 'src/common/cloud-storage/cloud-storage.module';
 import { AddUniteLouableUseCase } from './usecases/add-unite-louable.usecase';
 import { CreateBailUseCase } from './usecases/create-bail.usecase';
 import { DeclareLoyerEncaisseUseCase } from './usecases/declare-loyer-encaisse.usecase';
@@ -12,7 +14,11 @@ import { PorteurController } from '../presenters/http/porteur.controller';
 import { AdminLocativeController } from '../presenters/http/admin-locative.controller';
 
 @Module({
-  imports: [LocativeManagementInfrastructureModule],
+  imports: [
+    LocativeManagementInfrastructureModule,
+    NotificationsModule,
+    CloudStorageModule,
+  ],
   controllers: [PorteurController, AdminLocativeController],
   providers: [
     AddUniteLouableUseCase,

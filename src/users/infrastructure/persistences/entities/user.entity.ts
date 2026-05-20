@@ -88,6 +88,17 @@ export class UserEntity {
   @Column({ type: 'varchar', nullable: true, unique: true })
   cgpReferralCode: string | null;
 
+  /**
+   * PEP (Politically Exposed Person) — flag manuel posé par l'équipe
+   * compliance après screening (vendor à brancher en Phase 10+).
+   * Phase 10 stub : champ disponible, à activer via endpoint admin.
+   */
+  @Column({ type: 'boolean', default: false })
+  pepFlagged: boolean;
+
+  @Column({ type: 'varchar', length: 500, nullable: true })
+  pepNote: string | null;
+
   @CreateDateColumn()
   createdAt: Date;
 

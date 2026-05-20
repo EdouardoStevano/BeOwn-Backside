@@ -10,12 +10,15 @@ import {
   LOYER_ENCAISSE_REPOSITORY,
   type LoyerEncaisseRepository,
 } from '../ports/repositories/loyer-encaisse.repository';
+import { AuditLogService } from 'src/notifications/applications/audit-log.service';
+import { UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
 
 @Injectable()
 export class ValidateLoyerEncaisseUseCase {
   constructor(
     @Inject(LOYER_ENCAISSE_REPOSITORY)
     private readonly loyerRepo: LoyerEncaisseRepository,
+    private readonly auditLog: AuditLogService,
   ) {}
 
   async validate(id: string, adminUserId: number): Promise<LoyerEncaisse> {
@@ -30,7 +33,20 @@ export class ValidateLoyerEncaisseUseCase {
     l.valideParUserId = adminUserId;
     l.valideLe = new Date();
     l.motifRejet = null;
-    return this.loyerRepo.save(l);
+    const saved = await this.loyerRepo.save(l);
+    await this.auditLog
+      .create(
+        String(adminUserId),
+        UserRole.ADMIN,
+        'equity.loyer.validate',
+        'loyer_encaisse',
+        id,
+        undefined,
+        undefined,
+        { bailId: l.bailId, periode: l.periode, montant: l.montant },
+      )
+      .catch(() => {});
+    return saved;
   }
 
   async reject(
@@ -52,6 +68,19 @@ export class ValidateLoyerEncaisseUseCase {
     l.valideParUserId = adminUserId;
     l.valideLe = new Date();
     l.motifRejet = motif.trim();
-    return this.loyerRepo.save(l);
+    const saved = await this.loyerRepo.save(l);
+    await this.auditLog
+      .create(
+        String(adminUserId),
+        UserRole.ADMIN,
+        'equity.loyer.reject',
+        'loyer_encaisse',
+        id,
+        undefined,
+        undefined,
+        { bailId: l.bailId, periode: l.periode, montant: l.montant, motif: motif.trim() },
+      )
+      .catch(() => {});
+    return saved;
   }
 }

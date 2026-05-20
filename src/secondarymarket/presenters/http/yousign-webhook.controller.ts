@@ -26,6 +26,7 @@ import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entit
 import { InvestmentStatus, EcheanceStatus } from 'src/investments/domains/enums/investment-status.enum';
 import { OrdreMarcheStatus } from 'src/secondarymarket/domains/ordre-marche';
 import { computeSecondaryMarketCommission } from 'src/secondarymarket/domains/commission';
+import { computeEntryFee } from 'src/common/platform-fees/platform-fees.constants';
 import {
   TransactionFournisseur,
   TransactionStatus,
@@ -394,14 +395,20 @@ export class YouSignWebhookController {
 
     const project = await this.projectRepo.findOne({ where: { id: investment.projetId } });
     const montant = Number(investment.montant);
+    // Phase 9 — frais d'entrée 2% : prélevés sur le wallet en plus du montant
+    // souscrit. Crédités sur le wallet FRAIS_PLATEFORME.
+    const entryFee = computeEntryFee(montant);
+    const totalDebit = Math.round((montant + entryFee) * 100) / 100;
 
     await this.dataSource.transaction(async (em) => {
       const wallet = await em.findOne(WalletEntity, {
         where: { proprietaireUserId: investment.utilisateurId, type: WalletType.INVESTISSEUR },
       });
       if (!wallet) throw new Error(`Wallet introuvable pour user ${investment.utilisateurId}`);
-      if (Number(wallet.solde) < montant) {
-        throw new Error(`Solde insuffisant: ${wallet.solde} < ${montant}`);
+      if (Number(wallet.solde) < totalDebit) {
+        throw new Error(
+          `Solde insuffisant pour souscription + frais d'entrée : ${wallet.solde} < ${totalDebit} (${montant} + ${entryFee})`,
+        );
       }
 
       // Confirmer l'investissement
@@ -409,11 +416,11 @@ export class YouSignWebhookController {
       investment.signatureId = signature.id;
       await em.save(InvestmentEntity, investment);
 
-      // Débiter wallet
-      wallet.solde = Number(wallet.solde) - montant;
+      // Débiter wallet (montant + entry fee)
+      wallet.solde = Number(wallet.solde) - totalDebit;
       await em.save(WalletEntity, wallet);
 
-      // Transaction ledger
+      // Transaction ledger principale (souscription)
       const tx = em.create(TransactionEntity, {
         walletSource: wallet.id,
         walletDestination: null,
@@ -426,9 +433,48 @@ export class YouSignWebhookController {
         projetId: investment.projetId,
         idempotencyKey: `invest:${investment.utilisateurId}:${investment.id}`,
         fraisPsp: 0,
-        fraisPlateforme: 0,
+        fraisPlateforme: entryFee,
       });
       await em.save(TransactionEntity, tx);
+
+      // Crédit wallet FRAIS_PLATEFORME + ledger tx
+      if (entryFee > 0) {
+        let walletPlatform = await em.findOne(WalletEntity, {
+          where: { type: WalletType.FRAIS_PLATEFORME },
+        });
+        if (!walletPlatform) {
+          walletPlatform = await em.save(
+            WalletEntity,
+            em.create(WalletEntity, {
+              type: WalletType.FRAIS_PLATEFORME,
+              proprietaireUserId: null,
+              fournisseurRef: 'PLAT-FEES-001',
+              devise: wallet.devise,
+              solde: 0,
+            }),
+          );
+        }
+        walletPlatform.solde = Number(walletPlatform.solde) + entryFee;
+        await em.save(WalletEntity, walletPlatform);
+
+        await em.save(
+          TransactionEntity,
+          em.create(TransactionEntity, {
+            walletSource: wallet.id,
+            walletDestination: walletPlatform.id,
+            type: TransactionType.SOUSCRIPTION,
+            montant: entryFee,
+            devise: wallet.devise,
+            statut: TransactionStatus.REUSSI,
+            fournisseur: TransactionFournisseur.INTERNE,
+            investissementId: investment.id,
+            projetId: investment.projetId,
+            idempotencyKey: `invest:entry-fee:${investment.id}`,
+            fraisPsp: 0,
+            fraisPlateforme: 0,
+          }),
+        );
+      }
 
       // Générer les écheances (in_fine par défaut)
       if (project) {

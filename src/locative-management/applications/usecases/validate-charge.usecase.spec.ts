@@ -13,12 +13,15 @@ describe('ValidateChargeUseCase', () => {
     motifRejet: null,
   });
 
+  let auditLog: any;
+
   beforeEach(() => {
     chargeRepo = {
       findById: jest.fn().mockResolvedValue(declarePending()),
       save: jest.fn().mockImplementation((c) => Promise.resolve(c)),
     };
-    useCase = new ValidateChargeUseCase(chargeRepo);
+    auditLog = { create: jest.fn().mockResolvedValue(undefined) };
+    useCase = new ValidateChargeUseCase(chargeRepo, auditLog);
   });
 
   it('validate passe en VALIDE', async () => {
