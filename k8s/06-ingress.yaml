@@ -1,0 +1,35 @@
+# Ingress Traefik – natif k3s
+# Remplacer "api.beown.com" par votre vrai domaine
+#
+# Pour activer HTTPS avec cert-manager (Let's Encrypt) :
+#   1. kubectl apply -f https://github.com/cert-manager/cert-manager/releases/latest/download/cert-manager.yaml
+#   2. Décommenter les annotations et le tls block ci-dessous
+#
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: beown-ingress
+  namespace: beown
+  annotations:
+    kubernetes.io/ingress.class: "traefik"
+    # Décommenter pour HTTPS automatique via cert-manager + Let's Encrypt :
+    # cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    # traefik.ingress.kubernetes.io/router.entrypoints: "websecure"
+    # traefik.ingress.kubernetes.io/router.tls: "true"
+spec:
+  rules:
+    - host: api.beown.com   # <-- remplacer par votre domaine
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: beown-backend-service
+                port:
+                  number: 80
+  # Décommenter pour TLS (HTTPS) :
+  # tls:
+  #   - hosts:
+  #       - api.beown.com
+  #     secretName: beown-tls-cert
