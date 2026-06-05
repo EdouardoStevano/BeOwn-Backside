@@ -44,7 +44,7 @@ spec:
       containers:
         - name: beown-backend
           # Remplacer par l'image buildée et poussée dans votre registry
-          image: your-registry/beown-backend:latest
+          image: ravikazaha/beown-backside:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 3002

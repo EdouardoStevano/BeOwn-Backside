@@ -9,7 +9,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { ProjectEntity } from 'src/projects/infrastructures/persistences/entities/project.entity';
-import { UserEntity } from 'src/users/infrastructures/persistences/entities/user.entity';
+import { UserEntity } from 'src/users/infrastructure/persistences/entities/user.entity';
 import { ReservationStatus } from 'src/reservations/domains/enums/reservation-status.enum';
 
 @Entity('reservation')

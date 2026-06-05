@@ -4,7 +4,7 @@ import { Repository } from 'typeorm';
 import { ProfilRepository } from 'src/profiles/applications/ports/repositories/profil.repository';
 import { ProfilPP } from 'src/profiles/domains/profil-pp';
 import { ProfilPM } from 'src/profiles/domains/profil-pm';
-import { Kyc } from 'src/profiles/domains/kyc';
+import { Kyc, KycIdentiteExtrait } from 'src/profiles/domains/kyc';
 import { KycStatus } from 'src/profiles/domains/enums/kyc-status.enum';
 import { ProfilPPEntity } from '../entities/profil-pp.entity';
 import { ProfilPMEntity } from '../entities/profil-pm.entity';
@@ -75,6 +75,64 @@ export class ProfilTypeOrmRepository implements ProfilRepository {
     await this.kycRepo.update(kycId, {
       statut: status,
       motifRefus: motifRefus ?? null,
+    });
+    const updated = await this.kycRepo.findOneOrFail({ where: { id: kycId } });
+    return ProfilMapper.kycToDomain(updated);
+  }
+
+  async findAllKyc(
+    params?: { page?: number; limit?: number },
+  ): Promise<{ items: Kyc[]; total: number }> {
+    const page = params?.page ?? 1;
+    const limit = params?.limit ?? 20;
+    const [entities, total] = await this.kycRepo.findAndCount({
+      relations: { utilisateur: { userEmail: true } },
+      order: { createdAt: 'DESC' },
+      skip: (page - 1) * limit,
+      take: limit,
+    });
+    const items = entities.map((e) => {
+      const domain = ProfilMapper.kycToDomain(e);
+      if (e.utilisateur) {
+        const u = e.utilisateur as any;
+        domain.utilisateur = {
+          userId: u.userId,
+          firstname: u.firstname,
+          lastname: u.lastname,
+          role: u.role,
+          status: u.status,
+          createdAt: u.createdAt,
+          userEmail: u.userEmail
+            ? { email: u.userEmail.email }
+            : undefined,
+        };
+      }
+      return domain;
+    });
+    return { items, total };
+  }
+
+  async updateKycSession(
+    kycId: string,
+    sessionId: string,
+    status: KycStatus,
+  ): Promise<Kyc> {
+    await this.kycRepo.update(kycId, {
+      fournisseurRef: sessionId,
+      statut: status,
+    });
+    const updated = await this.kycRepo.findOneOrFail({ where: { id: kycId } });
+    return ProfilMapper.kycToDomain(updated);
+  }
+
+  async updateKycReportData(
+    kycId: string,
+    reportId: string,
+    identiteExtrait: KycIdentiteExtrait,
+  ): Promise<Kyc> {
+    await this.kycRepo.update(kycId, {
+      stripeReportId: reportId,
+      identiteExtrait,
     });
     const updated = await this.kycRepo.findOneOrFail({ where: { id: kycId } });
     return ProfilMapper.kycToDomain(updated);

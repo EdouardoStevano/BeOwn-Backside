@@ -9,7 +9,7 @@ services:
     env_file:
       - ./.env.production
     ports:
-      - '80:3002'
+      - '${PORT}:3002'
 
   db-prod:
     image: postgres

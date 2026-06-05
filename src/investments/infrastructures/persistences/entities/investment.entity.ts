@@ -10,7 +10,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { ProjectEntity } from 'src/projects/infrastructures/persistences/entities/project.entity';
-import { UserEntity } from 'src/users/infrastructures/persistences/entities/user.entity';
+import { UserEntity } from 'src/users/infrastructure/persistences/entities/user.entity';
 import { InvestmentStatus } from 'src/investments/domains/enums/investment-status.enum';
 import { EcheanceEntity } from './echeance.entity';
 

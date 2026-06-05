@@ -8,11 +8,12 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { UserEntity } from 'src/users/infrastructures/persistences/entities/user.entity';
+import { UserEntity } from 'src/users/infrastructure/persistences/entities/user.entity';
 import {
   KycNiveau,
   KycStatus,
 } from 'src/profiles/domains/enums/kyc-status.enum';
+import { KycIdentiteExtrait } from 'src/profiles/domains/kyc';
 
 @Entity('kyc')
 export class KycEntity {
@@ -47,6 +48,12 @@ export class KycEntity {
 
   @Column({ type: 'varchar', nullable: true })
   motifRefus: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  stripeReportId: string | null;
+
+  @Column({ type: 'jsonb', nullable: true })
+  identiteExtrait: KycIdentiteExtrait | null;
 
   @CreateDateColumn()
   createdAt: Date;

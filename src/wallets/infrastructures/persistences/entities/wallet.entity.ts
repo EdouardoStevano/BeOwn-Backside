@@ -7,8 +7,9 @@ import {
   ManyToOne,
   PrimaryGeneratedColumn,
 } from 'typeorm';
-import { UserEntity } from 'src/users/infrastructures/persistences/entities/user.entity';
+// import { UserEntity } from '../../../../users/infrastructures/persistences/entities/user.entity';
 import { WalletType } from 'src/wallets/domains/enums/wallet.enum';
+import { UserEntity } from 'src/users/infrastructure/persistences/entities/user.entity';
 
 @Entity('wallet')
 export class WalletEntity {

@@ -9,6 +9,8 @@ import { InvestmentEntity } from '../entities/investment.entity';
 import { EcheanceEntity } from '../entities/echeance.entity';
 import { InvestmentMapper } from '../mappers/investment.mapper';
 
+const EXCLUDED_STATUTS = [InvestmentStatus.ANNULE, InvestmentStatus.RETRACTE];
+
 @Injectable()
 export class InvestmentTypeOrmRepository implements InvestmentRepository {
   constructor(
@@ -68,5 +70,53 @@ export class InvestmentTypeOrmRepository implements InvestmentRepository {
       order: { numero: 'ASC' },
     });
     return entities.map(InvestmentMapper.echeanceToDomain);
+  }
+
+  async countFractionsVendues(projetId: string): Promise<number> {
+    const result = await this.investRepo
+      .createQueryBuilder('inv')
+      .select('COALESCE(SUM(inv.nbTitres), 0)', 'total')
+      .where('inv.projetId = :projetId', { projetId })
+      .andWhere('inv.statut NOT IN (:...excluded)', { excluded: EXCLUDED_STATUTS })
+      .getRawOne<{ total: string }>();
+    return parseInt(result?.total ?? '0', 10);
+  }
+
+  async countFractionsVenduesBatch(
+    projetIds: string[],
+  ): Promise<Record<string, number>> {
+    if (projetIds.length === 0) return {};
+    const rows = await this.investRepo
+      .createQueryBuilder('inv')
+      .select('inv.projetId', 'projetId')
+      .addSelect('COALESCE(SUM(inv.nbTitres), 0)', 'total')
+      .where('inv.projetId IN (:...projetIds)', { projetIds })
+      .andWhere('inv.statut NOT IN (:...excluded)', { excluded: EXCLUDED_STATUTS })
+      .groupBy('inv.projetId')
+      .getRawMany<{ projetId: string; total: string }>();
+    return Object.fromEntries(rows.map((r) => [r.projetId, parseInt(r.total, 10)]));
+  }
+
+  async updateBulletinDocId(
+    investmentId: string,
+    bulletinDocId: string,
+  ): Promise<void> {
+    await this.investRepo.update(investmentId, { bulletinDocId });
+  }
+
+  async updateTopUp(
+    id: string,
+    nbTitresTotal: number,
+    montantTotal: number,
+  ): Promise<Investment> {
+    await this.investRepo.update(id, { nbTitres: nbTitresTotal, montant: montantTotal });
+    const updated = await this.investRepo.findOneOrFail({ where: { id } });
+    return InvestmentMapper.toDomain(updated);
+  }
+
+  async deleteEcheancesByInvestissementId(
+    investissementId: string,
+  ): Promise<void> {
+    await this.echeanceRepo.delete({ investissementId });
   }
 }

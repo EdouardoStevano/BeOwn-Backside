@@ -10,25 +10,32 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule, { rawBody: true });
   app.useWebSocketAdapter(new IoAdapter(app));
 
-  app.use(helmet({
-    crossOriginEmbedderPolicy: false,
-    contentSecurityPolicy: {
-      directives: {
-        defaultSrc: ["'self'"],
-        scriptSrc: ["'self'", "'unsafe-inline'", 'https://*.stripe.com', 'https://js.stripe.com'],
-        styleSrc: ["'self'", "'unsafe-inline'"],
-        imgSrc: ["'self'", 'data:', 'https:'],
-        frameSrc: ["'self'", 'https://*.stripe.com'],
-        connectSrc: [
-          "'self'",
-          process.env.FRONTEND_URL ?? 'http://localhost:5173',
-          process.env.ADMIN_URL ?? 'http://localhost:5174',
-          'https://*.stripe.com',
-          'https://*.stripe.network',
-        ],
+  app.use(
+    helmet({
+      crossOriginEmbedderPolicy: false,
+      contentSecurityPolicy: {
+        directives: {
+          defaultSrc: ["'self'"],
+          scriptSrc: [
+            "'self'",
+            "'unsafe-inline'",
+            'https://*.stripe.com',
+            'https://js.stripe.com',
+          ],
+          styleSrc: ["'self'", "'unsafe-inline'"],
+          imgSrc: ["'self'", 'data:', 'https:'],
+          frameSrc: ["'self'", 'https://*.stripe.com'],
+          connectSrc: [
+            "'self'",
+            process.env.FRONTEND_URL ?? 'http://localhost:5173',
+            process.env.ADMIN_URL ?? 'http://localhost:5174',
+            'https://*.stripe.com',
+            'https://*.stripe.network',
+          ],
+        },
       },
-    },
-  }));
+    }),
+  );
 
   app.use(
     '/payments/webhook/stripe',
@@ -120,7 +127,10 @@ async function bootstrap() {
   ];
 
   app.enableCors({
-    origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+    origin: (
+      origin: string | undefined,
+      callback: (err: Error | null, allow?: boolean) => void,
+    ) => {
       if (!origin || allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
@@ -131,7 +141,6 @@ async function bootstrap() {
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
   });
-
 
   await app.listen(process.env.PORT ?? 3001);
 }

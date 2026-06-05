@@ -5,48 +5,82 @@ metadata:
   namespace: beown
 data:
   NODE_ENV: "production"
-  PORT: "3000"
+  PORT: "3002"
 
-  # Database (host = service name interne k8s)
+  # Database (nom = Service k8s défini dans 03-postgres.yaml)
   DATABASE_HOST: "postgres-service"
   DATABASE_PORT: "5432"
   DATABASE_DB: "beown"
 
-  # Redis (host = service name interne k8s)
+  # Redis (nom = Service k8s défini dans 04-redis.yaml)
   REDIS_HOST: "redis-service"
   REDIS_PORT: "6379"
 
   # JWT (durées en secondes)
-  JWT_TOKEN_AUDIENCE: "https://api.beown.com"
+  JWT_TOKEN_AUDIENCE: "https://app.beown.com"
   JWT_TOKEN_ISSUER: "https://api.beown.com"
-  JWT_ACCESS_TOKEN_TTL: "900"
-  JWT_REFRESH_TOKEN_TTL: "604800"
-  JWT_TOKEN_EMAIL_TTL: "604800"
+  JWT_ACCESS_TOKEN_TTL: "3600"
+  JWT_REFRESH_TOKEN_TTL: "86400"
+  JWT_TOKEN_EMAIL_TTL: "86400"
 
-  # Mail
+  # OTP
+  OTP_TTL: "300"
+  MAX_ATTEMPTS: "5"
+
+  # Mail (MAIL_USER est dans les secrets car c'est un compte email)
   MAIL_HOST: "smtp.gmail.com"
   MAIL_PORT: "587"
-  MAIL_FROM: "no-reply@beown.com"
+  MAIL_FROM: "beown@mail.com"
 
   # Brevo
-  BREVO_SENDER_EMAIL: "no-reply@beown.com"
+  BREVO_SENDER_EMAIL: "edouardostevano@gmail.com"
   BREVO_SENDER_NAME: "BeOwn"
 
   # Twilio
-  TWILIO_PHONE_NUMBER: "+33XXXXXXXXX"
+  TWILIO_PHONE_NUMBER: "+261326507613"
 
-  # OAuth callbacks (remplacer par le vrai domaine)
-  GOOGLE_CALLBACK_URL: "https://api.beown.com/iam/auth/google/callback"
-  FACEBOOK_CALLBACK_URL: "https://api.beown.com/iam/auth/facebook/callback"
-  LINKEDIN_CALLBACK_URL: "https://api.beown.com/iam/auth/linkedin/callback"
+  # OAuth callbacks
+  GOOGLE_CALLBACK_URL: "https://api.beown.com/auth/google/callback"
+  FACEBOOK_CALLBACK_URL: "https://api.beown.com/auth/facebook/callback"
+  LINKEDIN_CALLBACK_URL: "https://api.beown.com/auth/linkedin/callback"
 
   # App
   FRONTEND_URL: "https://app.beown.com"
+  ADMIN_URL: "https://admin.beown.com"
+  API_URL: "https://api.beown.com"
   TFA_APP_NAME: "BeOwn"
+  CONFIRM_EMAIL_URL: "https://api.beown.com/email/verify"
+
+  # reCAPTCHA (clé de test Google — toujours valide)
+  RECAPTCHA_SECRET_KEY: "6LeIxAcTAAAAAGG-vFI1TnRWxMZNFuojJ4WifJWe"
+
+  # KYC
+  KYC_PROVIDER: "stripe"
+  SUMSUB_LEVEL_NAME: "id-and-liveness"
+
+  # Payment providers
+  FEDAPAY_ENV: "sandbox"
+  CINETPAY_API_KEY: "your-cinetpay-api-key"
+  CINETPAY_SITE_ID: "your-cinetpay-site-id"
+
+  # Cloudinary
+  CLOUDINARY_CLOUD_NAME: "dcneqd0dz"
 
   # PSFP / Régulation
   PLAFOND_INVESTISSEMENT_NON_AVERTI_EUR: "1000"
   PLAFOND_INVESTISSEMENT_AVERTI_EUR: "100000"
 
-  # KYC
-  KYC_PROVIDER: "sumsubapp"
+  # Les variables suivantes sont sensibles → à mettre dans un Secret k8s :
+  # DATABASE_USERNAME, DATABASE_PASSWORD
+  # JWT_SECRET, PROJECT_SHARE_SECRET
+  # MAIL_USER_PASSWORD
+  # GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET
+  # FACEBOOK_APP_ID, FACEBOOK_APP_SECRET
+  # LINKEDIN_CLIENT_ID, LINKEDIN_CLIENT_SECRET
+  # SUMSUB_APP_TOKEN, SUMSUB_SECRET_KEY, SUMSUB_WEBHOOK_SECRET
+  # BREVO_API_KEY
+  # TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN
+  # STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET
+  # CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET
+  # YOUSIGN_API_KEY, YOUSIGN_WEBHOOK_SECRET
+  # FEDAPAY_SECRET_KEY

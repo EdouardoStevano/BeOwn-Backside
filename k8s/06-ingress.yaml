@@ -10,13 +10,13 @@ kind: Ingress
 metadata:
   name: beown-ingress
   namespace: beown
-  annotations:
-    kubernetes.io/ingress.class: "traefik"
+  annotations: {}
     # Décommenter pour HTTPS automatique via cert-manager + Let's Encrypt :
     # cert-manager.io/cluster-issuer: "letsencrypt-prod"
     # traefik.ingress.kubernetes.io/router.entrypoints: "websecure"
     # traefik.ingress.kubernetes.io/router.tls: "true"
 spec:
+  ingressClassName: traefik
   rules:
     - host: api.beown.com   # <-- remplacer par votre domaine
       http:

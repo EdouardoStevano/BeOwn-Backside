@@ -8,7 +8,7 @@ import {
   PrimaryGeneratedColumn,
 } from 'typeorm';
 import { InvestmentEntity } from 'src/investments/infrastructures/persistences/entities/investment.entity';
-import { UserEntity } from 'src/users/infrastructures/persistences/entities/user.entity';
+import { UserEntity } from 'src/users/infrastructure/persistences/entities/user.entity';
 import {
   OrdreMarcheSens,
   OrdreMarcheStatus,
