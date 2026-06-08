@@ -3,7 +3,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
 export class CreateBeneficiaireEffectif1747530500000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`
-      CREATE TABLE "beneficiaire_effectif" (
+      CREATE TABLE IF NOT EXISTS "beneficiaire_effectif" (
         "id" uuid NOT NULL DEFAULT gen_random_uuid(),
         "profilPMId" integer NOT NULL,
         "prenom" character varying NOT NULL,
@@ -21,7 +21,7 @@ export class CreateBeneficiaireEffectif1747530500000 implements MigrationInterfa
       )
     `);
     await queryRunner.query(`
-      CREATE INDEX "IDX_beneficiaire_effectif_profilPMId"
+      CREATE INDEX IF NOT EXISTS "IDX_beneficiaire_effectif_profilPMId"
       ON "beneficiaire_effectif" ("profilPMId")
     `);
   }
