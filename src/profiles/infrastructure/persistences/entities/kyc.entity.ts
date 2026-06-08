@@ -24,7 +24,7 @@ export class KycEntity {
   utilisateurId: number;
 
   @ManyToOne(() => UserEntity)
-  @JoinColumn({ name: 'utilisateur_id' })
+  @JoinColumn({ name: 'utilisateurId' })
   utilisateur: UserEntity;
 
   @Column({ type: 'varchar', default: KycStatus.NON_DEMARRE })

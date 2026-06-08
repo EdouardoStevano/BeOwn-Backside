@@ -16,9 +16,10 @@ data:
   REDIS_HOST: "redis-service"
   REDIS_PORT: "6379"
 
-  # JWT (durées en secondes)
-  JWT_TOKEN_AUDIENCE: "https://app.beown.com"
-  JWT_TOKEN_ISSUER: "https://api.beown.com"
+# ─── JWT ─────────────────────────────────────────────────
+  JWT_SECRET: "79mFjUzt6dgHblTsmvw3ML4dWWrxy4NVkKCMptX2pr6"
+  JWT_TOKEN_AUDIENCE: "http://localhost:5173"
+  JWT_TOKEN_ISSUER: "http://localhost:5173"
   JWT_ACCESS_TOKEN_TTL: "3600"
   JWT_REFRESH_TOKEN_TTL: "86400"
   JWT_TOKEN_EMAIL_TTL: "86400"
@@ -40,16 +41,16 @@ data:
   TWILIO_PHONE_NUMBER: "+261326507613"
 
   # OAuth callbacks
-  GOOGLE_CALLBACK_URL: "https://api.beown.com/auth/google/callback"
-  FACEBOOK_CALLBACK_URL: "https://api.beown.com/auth/facebook/callback"
-  LINKEDIN_CALLBACK_URL: "https://api.beown.com/auth/linkedin/callback"
+  GOOGLE_CALLBACK_URL: "http://localhost:3002/auth/google/callback"
+  FACEBOOK_CALLBACK_URL: "http://localhost:3002/auth/facebook/callback"
+  LINKEDIN_CALLBACK_URL: "http://localhost:3002/auth/linkedin/callback"
 
   # App
-  FRONTEND_URL: "https://app.beown.com"
-  ADMIN_URL: "https://admin.beown.com"
-  API_URL: "https://api.beown.com"
+  FRONTEND_URL: "http://localhost:5173"
+  ADMIN_URL: "http://localhost:5174"
+  API_URL: "http://localhost:3002"
   TFA_APP_NAME: "BeOwn"
-  CONFIRM_EMAIL_URL: "https://api.beown.com/email/verify"
+  CONFIRM_EMAIL_URL: "http://localhost:3002/email/verify"
 
   # reCAPTCHA (clé de test Google — toujours valide)
   RECAPTCHA_SECRET_KEY: "6LeIxAcTAAAAAGG-vFI1TnRWxMZNFuojJ4WifJWe"

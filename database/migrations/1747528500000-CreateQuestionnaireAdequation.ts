@@ -3,7 +3,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
 export class CreateQuestionnaireAdequation1747528500000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`
-      CREATE TABLE "questionnaire_adequation" (
+      CREATE TABLE IF NOT EXISTS "questionnaire_adequation" (
         "id" uuid NOT NULL DEFAULT gen_random_uuid(),
         "utilisateurId" integer NOT NULL,
         "workInFinancialSector" boolean NOT NULL DEFAULT false,
@@ -26,7 +26,7 @@ export class CreateQuestionnaireAdequation1747528500000 implements MigrationInte
       )
     `);
     await queryRunner.query(`
-      CREATE UNIQUE INDEX "UQ_questionnaire_adequation_utilisateurId"
+      CREATE UNIQUE INDEX IF NOT EXISTS "UQ_questionnaire_adequation_utilisateurId"
       ON "questionnaire_adequation" ("utilisateurId")
     `);
   }

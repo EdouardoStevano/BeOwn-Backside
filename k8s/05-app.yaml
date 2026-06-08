@@ -82,6 +82,7 @@ metadata:
   name: beown-backend-service
   namespace: beown
 spec:
+  type: LoadBalancer
   selector:
     app: beown-backend
   ports:

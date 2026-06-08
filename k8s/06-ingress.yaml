@@ -18,8 +18,7 @@ metadata:
 spec:
   ingressClassName: traefik
   rules:
-    - host: api.beown.com   # <-- remplacer par votre domaine
-      http:
+    - http:
         paths:
           - path: /
             pathType: Prefix

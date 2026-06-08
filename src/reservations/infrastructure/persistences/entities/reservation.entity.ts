@@ -22,7 +22,7 @@ export class ReservationEntity {
   projetId: string;
 
   @ManyToOne(() => ProjectEntity)
-  @JoinColumn({ name: 'projet_id' })
+  @JoinColumn({ name: 'projetId' })
   projet: ProjectEntity;
 
   @Column({ type: 'integer' })
@@ -30,7 +30,7 @@ export class ReservationEntity {
   utilisateurId: number;
 
   @ManyToOne(() => UserEntity)
-  @JoinColumn({ name: 'utilisateur_id' })
+  @JoinColumn({ name: 'utilisateurId' })
   utilisateur: UserEntity;
 
   @Column({ type: 'decimal', precision: 18, scale: 2 })
