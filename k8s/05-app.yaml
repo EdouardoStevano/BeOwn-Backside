@@ -47,7 +47,7 @@ spec:
           image: ravikazaha/beown-backside:latest
           imagePullPolicy: Always
           ports:
-            - containerPort: 3002
+            - containerPort: 8080
           envFrom:
             - configMapRef:
                 name: beown-config
@@ -56,14 +56,14 @@ spec:
           livenessProbe:
             httpGet:
               path: /health
-              port: 3002
+              port: 8080
             initialDelaySeconds: 30
             periodSeconds: 15
             failureThreshold: 3
           readinessProbe:
             httpGet:
               path: /health
-              port: 3002
+              port: 8080
             initialDelaySeconds: 10
             periodSeconds: 5
             failureThreshold: 3
@@ -86,4 +86,4 @@ spec:
     app: beown-backend
   ports:
     - port: 80
-      targetPort: 3002
+      targetPort: 8080

@@ -84,7 +84,7 @@ export class ProjectEntity {
   spvId: string | null;
 
   @ManyToOne(() => SpvEntity, { nullable: true })
-  @JoinColumn({ name: 'spv_id' })
+  @JoinColumn({ name: 'spvId' })
   spv: SpvEntity;
 
   @Column({ type: 'integer', nullable: true })

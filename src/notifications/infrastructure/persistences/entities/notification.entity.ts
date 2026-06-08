@@ -45,7 +45,7 @@ export class NotificationEntity {
   utilisateurId: number | null;
 
   @ManyToOne(() => UserEntity, { nullable: true })
-  @JoinColumn({ name: 'utilisateur_id' })
+  @JoinColumn({ name: 'utilisateurId' })
   utilisateur: UserEntity;
 
   @Column({ type: 'varchar', nullable: true })

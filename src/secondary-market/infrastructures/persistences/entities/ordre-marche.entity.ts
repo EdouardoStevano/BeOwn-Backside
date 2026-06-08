@@ -24,7 +24,7 @@ export class OrdreMarcheEntity {
   investissementId: string;
 
   @ManyToOne(() => InvestmentEntity)
-  @JoinColumn({ name: 'investissement_id' })
+  @JoinColumn({ name: 'investissementId' })
   investissement: InvestmentEntity;
 
   @Column({ type: 'integer' })
@@ -32,7 +32,7 @@ export class OrdreMarcheEntity {
   vendeurId: number;
 
   @ManyToOne(() => UserEntity)
-  @JoinColumn({ name: 'vendeur_id' })
+  @JoinColumn({ name: 'vendeurId' })
   vendeur: UserEntity;
 
   @Column({ type: 'integer', nullable: true })

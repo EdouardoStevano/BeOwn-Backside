@@ -17,10 +17,14 @@ WORKDIR /app
 
 COPY package*.json ./
 
-RUN npm install --omit=dev
+RUN npm install
 
 COPY --from=builder /app/dist ./dist
 
-EXPOSE 3002
+COPY tsconfig.json ./
+COPY src/ ./src/
+COPY database/ ./database/
+
+EXPOSE 8080
 
 CMD ["node", "./dist/main.js"]

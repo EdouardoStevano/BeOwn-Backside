@@ -16,7 +16,7 @@ export class ProfilPPEntity {
   utilisateurId: number;
 
   @OneToOne(() => UserEntity)
-  @JoinColumn({ name: 'utilisateur_id' })
+  @JoinColumn({ name: 'utilisateurId' })
   utilisateur: UserEntity;
 
   @Column({ type: 'varchar', nullable: true })

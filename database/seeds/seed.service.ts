@@ -631,19 +631,73 @@ export class SeedService {
     // ── Données enrichies pour chaque projet ──────────────────────────────────
 
     const chronologieType = (dureeMois: number) => [
-      { etape: 'Publication du projet', date: new Date(Date.now() - 45 * 86400000).toISOString().slice(0, 10), statut: 'done', description: 'Dossier validé par le comité BeOwn.' },
-      { etape: 'Ouverture de la collecte', date: new Date(Date.now() - 15 * 86400000).toISOString().slice(0, 10), statut: 'done', description: 'Mise en ligne sur la plateforme.' },
-      { etape: 'Clôture de la collecte', date: new Date(Date.now() + 75 * 86400000).toISOString().slice(0, 10), statut: 'pending', description: 'Objectif 100 % atteint → projet financé.' },
-      { etape: 'Acquisition du bien', date: new Date(Date.now() + 90 * 86400000).toISOString().slice(0, 10), statut: 'pending', description: 'Signature acte authentique chez le notaire.' },
-      { etape: 'Travaux & aménagement', date: new Date(Date.now() + 120 * 86400000).toISOString().slice(0, 10), statut: 'pending', description: 'Durée estimée : 3 à 6 mois.' },
-      { etape: 'Mise en exploitation', date: new Date(Date.now() + (dureeMois - 2) * 30 * 86400000).toISOString().slice(0, 10), statut: 'pending', description: 'Perception des loyers ou revente.' },
-      { etape: 'Remboursement investisseurs', date: new Date(Date.now() + dureeMois * 30 * 86400000).toISOString().slice(0, 10), statut: 'pending', description: 'Remboursement du capital + intérêts.' },
+      {
+        etape: 'Publication du projet',
+        date: new Date(Date.now() - 45 * 86400000).toISOString().slice(0, 10),
+        statut: 'done',
+        description: 'Dossier validé par le comité BeOwn.',
+      },
+      {
+        etape: 'Ouverture de la collecte',
+        date: new Date(Date.now() - 15 * 86400000).toISOString().slice(0, 10),
+        statut: 'done',
+        description: 'Mise en ligne sur la plateforme.',
+      },
+      {
+        etape: 'Clôture de la collecte',
+        date: new Date(Date.now() + 75 * 86400000).toISOString().slice(0, 10),
+        statut: 'pending',
+        description: 'Objectif 100 % atteint → projet financé.',
+      },
+      {
+        etape: 'Acquisition du bien',
+        date: new Date(Date.now() + 90 * 86400000).toISOString().slice(0, 10),
+        statut: 'pending',
+        description: 'Signature acte authentique chez le notaire.',
+      },
+      {
+        etape: 'Travaux & aménagement',
+        date: new Date(Date.now() + 120 * 86400000).toISOString().slice(0, 10),
+        statut: 'pending',
+        description: 'Durée estimée : 3 à 6 mois.',
+      },
+      {
+        etape: 'Mise en exploitation',
+        date: new Date(Date.now() + (dureeMois - 2) * 30 * 86400000)
+          .toISOString()
+          .slice(0, 10),
+        statut: 'pending',
+        description: 'Perception des loyers ou revente.',
+      },
+      {
+        etape: 'Remboursement investisseurs',
+        date: new Date(Date.now() + dureeMois * 30 * 86400000)
+          .toISOString()
+          .slice(0, 10),
+        statut: 'pending',
+        description: 'Remboursement du capital + intérêts.',
+      },
     ];
 
     const garantiesStandard = [
-      { type: 'Hypothèque 1er rang', description: "Inscription hypothécaire de premier rang sur le bien financé, au profit des obligataires.", rang: 1 },
-      { type: 'Caution solidaire du promoteur', description: "Le promoteur s'engage solidairement au remboursement du principal en cas de défaillance de la SPV.", rang: 2 },
-      { type: "Garantie d'achèvement travaux", description: "Garantie bancaire couvrant la livraison du programme à hauteur du coût total des travaux.", rang: 3 },
+      {
+        type: 'Hypothèque 1er rang',
+        description:
+          'Inscription hypothécaire de premier rang sur le bien financé, au profit des obligataires.',
+        rang: 1,
+      },
+      {
+        type: 'Caution solidaire du promoteur',
+        description:
+          "Le promoteur s'engage solidairement au remboursement du principal en cas de défaillance de la SPV.",
+        rang: 2,
+      },
+      {
+        type: "Garantie d'achèvement travaux",
+        description:
+          'Garantie bancaire couvrant la livraison du programme à hauteur du coût total des travaux.',
+        rang: 3,
+      },
     ];
 
     const projectsData = [
@@ -696,8 +750,20 @@ L'opération est portée par la **SPV BeOwn Immo 1 SAS**, détentrice de l'immeu
         chronologie: chronologieType(24),
         garanties: garantiesStandard,
         previsionnel: {
-          operation: { acquisition: 35000000, fraisNotaire: 1750000, travaux: 6000000, sequestre: 2000000, fraisHypotheque: 500000, fraisFinanciers: 1200000, autresCharges: 800000 },
-          financement: { apport: 5000000, financementBancaire: 0, montantInvestisseurs: 50000000 },
+          operation: {
+            acquisition: 35000000,
+            fraisNotaire: 1750000,
+            travaux: 6000000,
+            sequestre: 2000000,
+            fraisHypotheque: 500000,
+            fraisFinanciers: 1200000,
+            autresCharges: 800000,
+          },
+          financement: {
+            apport: 5000000,
+            financementBancaire: 0,
+            montantInvestisseurs: 50000000,
+          },
           resultat: { montantRevente: 72000000, coutOperation: 47250000 },
         },
       },
@@ -744,8 +810,20 @@ Obligations amortissables à **9 % / an** — remboursement mensuel du capital e
         chronologie: chronologieType(36),
         garanties: garantiesStandard,
         previsionnel: {
-          operation: { acquisition: 55000000, fraisNotaire: 2750000, travaux: 8000000, sequestre: 3000000, fraisHypotheque: 800000, fraisFinanciers: 2000000, autresCharges: 1200000 },
-          financement: { apport: 8000000, financementBancaire: 0, montantInvestisseurs: 80000000 },
+          operation: {
+            acquisition: 55000000,
+            fraisNotaire: 2750000,
+            travaux: 8000000,
+            sequestre: 3000000,
+            fraisHypotheque: 800000,
+            fraisFinanciers: 2000000,
+            autresCharges: 1200000,
+          },
+          financement: {
+            apport: 8000000,
+            financementBancaire: 0,
+            montantInvestisseurs: 80000000,
+          },
           resultat: { montantRevente: 115000000, coutOperation: 72750000 },
         },
       },
@@ -791,20 +869,83 @@ La rareté des biens de standing en état neuf génère une prime significative.
 - Risque politique (contexte malien) — mitigé par la nature physique de l'actif
 - Risque de délai de revente`,
         chronologie: [
-          { etape: 'Acquisition du foncier ACI', date: new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10), statut: 'done', description: 'Acte de cession signé avec l\'ACI.' },
-          { etape: 'Ouverture de la collecte', date: new Date(Date.now() - 10 * 86400000).toISOString().slice(0, 10), statut: 'done', description: 'Lancement de la souscription investisseurs.' },
-          { etape: 'Démarrage des travaux', date: new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10), statut: 'pending', description: 'Gros œuvre et fondations.' },
-          { etape: 'Livraison des villas', date: new Date(Date.now() + 270 * 86400000).toISOString().slice(0, 10), statut: 'pending', description: 'Finitions et réception.' },
-          { etape: 'Commercialisation et revente', date: new Date(Date.now() + 300 * 86400000).toISOString().slice(0, 10), statut: 'pending', description: 'Agents immobiliers partenaires.' },
-          { etape: 'Remboursement investisseurs', date: new Date(Date.now() + 540 * 86400000).toISOString().slice(0, 10), statut: 'pending', description: 'Capital + quote-part de plus-value.' },
+          {
+            etape: 'Acquisition du foncier ACI',
+            date: new Date(Date.now() - 30 * 86400000)
+              .toISOString()
+              .slice(0, 10),
+            statut: 'done',
+            description: "Acte de cession signé avec l'ACI.",
+          },
+          {
+            etape: 'Ouverture de la collecte',
+            date: new Date(Date.now() - 10 * 86400000)
+              .toISOString()
+              .slice(0, 10),
+            statut: 'done',
+            description: 'Lancement de la souscription investisseurs.',
+          },
+          {
+            etape: 'Démarrage des travaux',
+            date: new Date(Date.now() + 30 * 86400000)
+              .toISOString()
+              .slice(0, 10),
+            statut: 'pending',
+            description: 'Gros œuvre et fondations.',
+          },
+          {
+            etape: 'Livraison des villas',
+            date: new Date(Date.now() + 270 * 86400000)
+              .toISOString()
+              .slice(0, 10),
+            statut: 'pending',
+            description: 'Finitions et réception.',
+          },
+          {
+            etape: 'Commercialisation et revente',
+            date: new Date(Date.now() + 300 * 86400000)
+              .toISOString()
+              .slice(0, 10),
+            statut: 'pending',
+            description: 'Agents immobiliers partenaires.',
+          },
+          {
+            etape: 'Remboursement investisseurs',
+            date: new Date(Date.now() + 540 * 86400000)
+              .toISOString()
+              .slice(0, 10),
+            statut: 'pending',
+            description: 'Capital + quote-part de plus-value.',
+          },
         ],
         garanties: [
-          { type: 'Hypothèque 1er rang', description: 'Inscription sur les 3 parcelles dès la signature.', rang: 1 },
-          { type: 'Garantie bancaire de bonne fin', description: 'Garantie émise par Ecobank Mali couvrant 80 % du coût travaux.', rang: 2 },
+          {
+            type: 'Hypothèque 1er rang',
+            description: 'Inscription sur les 3 parcelles dès la signature.',
+            rang: 1,
+          },
+          {
+            type: 'Garantie bancaire de bonne fin',
+            description:
+              'Garantie émise par Ecobank Mali couvrant 80 % du coût travaux.',
+            rang: 2,
+          },
         ],
         previsionnel: {
-          operation: { acquisition: 12000000, fraisNotaire: 600000, travaux: 15000000, sequestre: 1500000, fraisHypotheque: 300000, fraisFinanciers: 800000, autresCharges: 500000 },
-          financement: { apport: 3000000, financementBancaire: 0, montantInvestisseurs: 35000000 },
+          operation: {
+            acquisition: 12000000,
+            fraisNotaire: 600000,
+            travaux: 15000000,
+            sequestre: 1500000,
+            fraisHypotheque: 300000,
+            fraisFinanciers: 800000,
+            autresCharges: 500000,
+          },
+          financement: {
+            apport: 3000000,
+            financementBancaire: 0,
+            montantInvestisseurs: 35000000,
+          },
           resultat: { montantRevente: 52000000, coutOperation: 30700000 },
         },
       },
@@ -817,8 +958,8 @@ La rareté des biens de standing en état neuf génère une prime significative.
         region: 'Dakar',
         pays: 'SN',
         adresseComplete: 'Route de la Corniche Ouest, Les Almadies, Dakar',
-        latitude: 14.7290,
-        longitude: -17.5210,
+        latitude: 14.729,
+        longitude: -17.521,
         youtubeUrl: 'https://www.youtube.com/watch?v=ScMzIvxBSi4',
         capitalCible: 45000000,
         capitalMinimum: 25000000,
@@ -851,8 +992,20 @@ Obligations à taux fixe **10,5 % / an**, coupon versé trimestriellement, rembo
         chronologie: chronologieType(30),
         garanties: garantiesStandard,
         previsionnel: {
-          operation: { acquisition: 28000000, fraisNotaire: 1400000, travaux: 7000000, sequestre: 2000000, fraisHypotheque: 600000, fraisFinanciers: 1500000, autresCharges: 1000000 },
-          financement: { apport: 6000000, financementBancaire: 0, montantInvestisseurs: 45000000 },
+          operation: {
+            acquisition: 28000000,
+            fraisNotaire: 1400000,
+            travaux: 7000000,
+            sequestre: 2000000,
+            fraisHypotheque: 600000,
+            fraisFinanciers: 1500000,
+            autresCharges: 1000000,
+          },
+          financement: {
+            apport: 6000000,
+            financementBancaire: 0,
+            montantInvestisseurs: 45000000,
+          },
           resultat: { montantRevente: 68000000, coutOperation: 41500000 },
         },
       },
@@ -898,20 +1051,84 @@ Propriétaire unique, 72 ans, bien sans hypothèque, situé dans un quartier ré
 
 > Ce projet est en phase de pré-investissement. Les réservations sont ouvertes.`,
         chronologie: [
-          { etape: 'Audit juridique et évaluation', date: new Date(Date.now() - 20 * 86400000).toISOString().slice(0, 10), statut: 'done', description: 'Évaluation contradictoire par deux experts.' },
-          { etape: 'Ouverture des réservations', date: new Date(Date.now() - 5 * 86400000).toISOString().slice(0, 10), statut: 'done', description: 'Pré-souscriptions acceptées.' },
-          { etape: 'Ouverture de la collecte', date: new Date(Date.now() + 25 * 86400000).toISOString().slice(0, 10), statut: 'pending', description: 'Démarrage officiel de la collecte.' },
-          { etape: 'Signature acte viager', date: new Date(Date.now() + 60 * 86400000).toISOString().slice(0, 10), statut: 'pending', description: 'Chez le notaire à Ouagadougou.' },
-          { etape: 'Perception des loyers / rentes', date: new Date(Date.now() + 90 * 86400000).toISOString().slice(0, 10), statut: 'pending', description: 'Flux trimestriels reversés aux investisseurs.' },
-          { etape: 'Revente et clôture', date: new Date(Date.now() + 1440 * 86400000).toISOString().slice(0, 10), statut: 'pending', description: 'Horizon estimé : 48 mois.' },
+          {
+            etape: 'Audit juridique et évaluation',
+            date: new Date(Date.now() - 20 * 86400000)
+              .toISOString()
+              .slice(0, 10),
+            statut: 'done',
+            description: 'Évaluation contradictoire par deux experts.',
+          },
+          {
+            etape: 'Ouverture des réservations',
+            date: new Date(Date.now() - 5 * 86400000)
+              .toISOString()
+              .slice(0, 10),
+            statut: 'done',
+            description: 'Pré-souscriptions acceptées.',
+          },
+          {
+            etape: 'Ouverture de la collecte',
+            date: new Date(Date.now() + 25 * 86400000)
+              .toISOString()
+              .slice(0, 10),
+            statut: 'pending',
+            description: 'Démarrage officiel de la collecte.',
+          },
+          {
+            etape: 'Signature acte viager',
+            date: new Date(Date.now() + 60 * 86400000)
+              .toISOString()
+              .slice(0, 10),
+            statut: 'pending',
+            description: 'Chez le notaire à Ouagadougou.',
+          },
+          {
+            etape: 'Perception des loyers / rentes',
+            date: new Date(Date.now() + 90 * 86400000)
+              .toISOString()
+              .slice(0, 10),
+            statut: 'pending',
+            description: 'Flux trimestriels reversés aux investisseurs.',
+          },
+          {
+            etape: 'Revente et clôture',
+            date: new Date(Date.now() + 1440 * 86400000)
+              .toISOString()
+              .slice(0, 10),
+            statut: 'pending',
+            description: 'Horizon estimé : 48 mois.',
+          },
         ],
         garanties: [
-          { type: 'Acte notarié de viager', description: 'Transfert de propriété juridiquement sécurisé dès le bouquet.', rang: 1 },
-          { type: 'Assurance décès invalidité', description: 'Police d\'assurance couvrant le risque de longévité du vendeur.', rang: 2 },
+          {
+            type: 'Acte notarié de viager',
+            description:
+              'Transfert de propriété juridiquement sécurisé dès le bouquet.',
+            rang: 1,
+          },
+          {
+            type: 'Assurance décès invalidité',
+            description:
+              "Police d'assurance couvrant le risque de longévité du vendeur.",
+            rang: 2,
+          },
         ],
         previsionnel: {
-          operation: { acquisition: 18000000, fraisNotaire: 900000, travaux: 500000, sequestre: 1000000, fraisHypotheque: 0, fraisFinanciers: 600000, autresCharges: 800000 },
-          financement: { apport: 2000000, financementBancaire: 0, montantInvestisseurs: 25000000 },
+          operation: {
+            acquisition: 18000000,
+            fraisNotaire: 900000,
+            travaux: 500000,
+            sequestre: 1000000,
+            fraisHypotheque: 0,
+            fraisFinanciers: 600000,
+            autresCharges: 800000,
+          },
+          financement: {
+            apport: 2000000,
+            financementBancaire: 0,
+            montantInvestisseurs: 25000000,
+          },
           resultat: { montantRevente: 38000000, coutOperation: 21800000 },
         },
       },
@@ -954,20 +1171,80 @@ TRI de **18 %** sur 12 mois, distribué en une seule fois à l'issue de la reven
 
 > Projet en cours d'instruction — ouverture de la collecte prévue dans 30 jours.`,
         chronologie: [
-          { etape: 'Instruction du dossier BeOwn', date: new Date(Date.now() - 10 * 86400000).toISOString().slice(0, 10), statut: 'in_progress', description: 'Due diligence juridique et technique en cours.' },
-          { etape: 'Ouverture de la collecte', date: new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10), statut: 'pending', description: 'Date prévisionnelle.' },
-          { etape: 'Acquisition', date: new Date(Date.now() + 60 * 86400000).toISOString().slice(0, 10), statut: 'pending' },
-          { etape: 'Travaux de rénovation', date: new Date(Date.now() + 90 * 86400000).toISOString().slice(0, 10), statut: 'pending', description: '4 mois de chantier.' },
-          { etape: 'Commercialisation', date: new Date(Date.now() + 210 * 86400000).toISOString().slice(0, 10), statut: 'pending' },
-          { etape: 'Remboursement investisseurs', date: new Date(Date.now() + 360 * 86400000).toISOString().slice(0, 10), statut: 'pending' },
+          {
+            etape: 'Instruction du dossier BeOwn',
+            date: new Date(Date.now() - 10 * 86400000)
+              .toISOString()
+              .slice(0, 10),
+            statut: 'in_progress',
+            description: 'Due diligence juridique et technique en cours.',
+          },
+          {
+            etape: 'Ouverture de la collecte',
+            date: new Date(Date.now() + 30 * 86400000)
+              .toISOString()
+              .slice(0, 10),
+            statut: 'pending',
+            description: 'Date prévisionnelle.',
+          },
+          {
+            etape: 'Acquisition',
+            date: new Date(Date.now() + 60 * 86400000)
+              .toISOString()
+              .slice(0, 10),
+            statut: 'pending',
+          },
+          {
+            etape: 'Travaux de rénovation',
+            date: new Date(Date.now() + 90 * 86400000)
+              .toISOString()
+              .slice(0, 10),
+            statut: 'pending',
+            description: '4 mois de chantier.',
+          },
+          {
+            etape: 'Commercialisation',
+            date: new Date(Date.now() + 210 * 86400000)
+              .toISOString()
+              .slice(0, 10),
+            statut: 'pending',
+          },
+          {
+            etape: 'Remboursement investisseurs',
+            date: new Date(Date.now() + 360 * 86400000)
+              .toISOString()
+              .slice(0, 10),
+            statut: 'pending',
+          },
         ],
         garanties: [
-          { type: 'Hypothèque 1er rang', description: 'Inscrite dès l\'acquisition au profit de la SPV.', rang: 1 },
-          { type: 'Garantie de rachat promoteur', description: 'Engagement de rachat à 95 % si la revente n\'est pas réalisée à 12 mois.', rang: 2 },
+          {
+            type: 'Hypothèque 1er rang',
+            description: "Inscrite dès l'acquisition au profit de la SPV.",
+            rang: 1,
+          },
+          {
+            type: 'Garantie de rachat promoteur',
+            description:
+              "Engagement de rachat à 95 % si la revente n'est pas réalisée à 12 mois.",
+            rang: 2,
+          },
         ],
         previsionnel: {
-          operation: { acquisition: 35000000, fraisNotaire: 1750000, travaux: 10000000, sequestre: 2000000, fraisHypotheque: 500000, fraisFinanciers: 1500000, autresCharges: 1200000 },
-          financement: { apport: 5000000, financementBancaire: 0, montantInvestisseurs: 60000000 },
+          operation: {
+            acquisition: 35000000,
+            fraisNotaire: 1750000,
+            travaux: 10000000,
+            sequestre: 2000000,
+            fraisHypotheque: 500000,
+            fraisFinanciers: 1500000,
+            autresCharges: 1200000,
+          },
+          financement: {
+            apport: 5000000,
+            financementBancaire: 0,
+            montantInvestisseurs: 60000000,
+          },
           resultat: { montantRevente: 96000000, coutOperation: 51950000 },
         },
       },
@@ -1012,16 +1289,49 @@ Ce projet a atteint son objectif de collecte. Les 400 fractions ont été intég
 Les premiers coupons semestriels ont été versés dans les délais convenus.`,
         chronologie: [
           { etape: 'Publication', date: '2025-01-10', statut: 'done' },
-          { etape: 'Collecte (400 fractions vendues)', date: '2025-01-28', statut: 'done', description: 'Financé en 18 jours.' },
-          { etape: 'Acquisition et démarrage travaux', date: '2025-02-15', statut: 'done' },
-          { etape: 'Livraison', date: '2026-03-01', statut: 'in_progress', description: 'Avancement 68 %.' },
-          { etape: 'Exploitation et loyers', date: '2026-04-01', statut: 'pending' },
-          { etape: 'Remboursement final', date: '2030-02-01', statut: 'pending' },
+          {
+            etape: 'Collecte (400 fractions vendues)',
+            date: '2025-01-28',
+            statut: 'done',
+            description: 'Financé en 18 jours.',
+          },
+          {
+            etape: 'Acquisition et démarrage travaux',
+            date: '2025-02-15',
+            statut: 'done',
+          },
+          {
+            etape: 'Livraison',
+            date: '2026-03-01',
+            statut: 'in_progress',
+            description: 'Avancement 68 %.',
+          },
+          {
+            etape: 'Exploitation et loyers',
+            date: '2026-04-01',
+            statut: 'pending',
+          },
+          {
+            etape: 'Remboursement final',
+            date: '2030-02-01',
+            statut: 'pending',
+          },
         ],
         garanties: garantiesStandard,
         previsionnel: {
-          operation: { acquisition: 26000000, fraisNotaire: 1300000, travaux: 5000000, sequestre: 1500000, fraisHypotheque: 400000, fraisFinanciers: 900000 },
-          financement: { apport: 5000000, financementBancaire: 0, montantInvestisseurs: 40000000 },
+          operation: {
+            acquisition: 26000000,
+            fraisNotaire: 1300000,
+            travaux: 5000000,
+            sequestre: 1500000,
+            fraisHypotheque: 400000,
+            fraisFinanciers: 900000,
+          },
+          financement: {
+            apport: 5000000,
+            financementBancaire: 0,
+            montantInvestisseurs: 40000000,
+          },
           resultat: { montantRevente: 58000000, coutOperation: 35100000 },
         },
       },
@@ -1034,8 +1344,8 @@ Les premiers coupons semestriels ont été versés dans les délais convenus.`,
         region: 'Dakar',
         pays: 'SN',
         adresseComplete: '8 Rue Tolbiac, Médina, Dakar',
-        latitude: 14.7010,
-        longitude: -17.4640,
+        latitude: 14.701,
+        longitude: -17.464,
         youtubeUrl: null,
         capitalCible: 55000000,
         capitalMinimum: 35000000,
@@ -1062,17 +1372,43 @@ Collecte clôturée avec succès : **1 100 fractions vendues** à 213 investisse
 ### Performances
 Aucun retard à date. Le chantier avance conformément au planning initial.`,
         chronologie: [
-          { etape: 'Collecte finalisée', date: '2025-02-05', statut: 'done', description: '1 100 / 1 100 fractions vendues.' },
+          {
+            etape: 'Collecte finalisée',
+            date: '2025-02-05',
+            statut: 'done',
+            description: '1 100 / 1 100 fractions vendues.',
+          },
           { etape: 'Acquisition notariée', date: '2025-02-20', statut: 'done' },
           { etape: 'Démarrage chantier', date: '2025-03-01', statut: 'done' },
-          { etape: 'Livraison', date: '2026-08-01', statut: 'in_progress', description: 'Avancement 35 %.' },
+          {
+            etape: 'Livraison',
+            date: '2026-08-01',
+            statut: 'in_progress',
+            description: 'Avancement 35 %.',
+          },
           { etape: 'Mise en location', date: '2026-09-01', statut: 'pending' },
-          { etape: 'Remboursement final', date: '2026-11-01', statut: 'pending' },
+          {
+            etape: 'Remboursement final',
+            date: '2026-11-01',
+            statut: 'pending',
+          },
         ],
         garanties: garantiesStandard,
         previsionnel: {
-          operation: { acquisition: 36000000, fraisNotaire: 1800000, travaux: 8000000, sequestre: 2500000, fraisHypotheque: 700000, fraisFinanciers: 1500000, autresCharges: 1000000 },
-          financement: { apport: 7000000, financementBancaire: 0, montantInvestisseurs: 55000000 },
+          operation: {
+            acquisition: 36000000,
+            fraisNotaire: 1800000,
+            travaux: 8000000,
+            sequestre: 2500000,
+            fraisHypotheque: 700000,
+            fraisFinanciers: 1500000,
+            autresCharges: 1000000,
+          },
+          financement: {
+            apport: 7000000,
+            financementBancaire: 0,
+            montantInvestisseurs: 55000000,
+          },
           resultat: { montantRevente: 82000000, coutOperation: 51500000 },
         },
       },
@@ -1114,16 +1450,49 @@ Ce projet de 16 appartements locatifs est entré en phase d'exploitation depuis 
 
 Les investisseurs perçoivent leur coupon trimestriel depuis 4 trimestres consécutifs, sans retard.`,
         chronologie: [
-          { etape: 'Collecte et financement', date: '2023-09-15', statut: 'done' },
-          { etape: 'Construction', date: '2023-10-01', statut: 'done', description: '5 mois de travaux.' },
-          { etape: 'Livraison et première mise en location', date: '2024-03-01', statut: 'done' },
-          { etape: 'Exploitation locative', date: '2024-03-15', statut: 'in_progress', description: 'Loyers trimestriels reversés depuis mars 2024.' },
-          { etape: 'Remboursement final', date: '2026-09-01', statut: 'pending' },
+          {
+            etape: 'Collecte et financement',
+            date: '2023-09-15',
+            statut: 'done',
+          },
+          {
+            etape: 'Construction',
+            date: '2023-10-01',
+            statut: 'done',
+            description: '5 mois de travaux.',
+          },
+          {
+            etape: 'Livraison et première mise en location',
+            date: '2024-03-01',
+            statut: 'done',
+          },
+          {
+            etape: 'Exploitation locative',
+            date: '2024-03-15',
+            statut: 'in_progress',
+            description: 'Loyers trimestriels reversés depuis mars 2024.',
+          },
+          {
+            etape: 'Remboursement final',
+            date: '2026-09-01',
+            statut: 'pending',
+          },
         ],
         garanties: garantiesStandard,
         previsionnel: {
-          operation: { acquisition: 18000000, fraisNotaire: 900000, travaux: 5000000, sequestre: 1200000, fraisHypotheque: 300000, fraisFinanciers: 800000 },
-          financement: { apport: 4000000, financementBancaire: 0, montantInvestisseurs: 30000000 },
+          operation: {
+            acquisition: 18000000,
+            fraisNotaire: 900000,
+            travaux: 5000000,
+            sequestre: 1200000,
+            fraisHypotheque: 300000,
+            fraisFinanciers: 800000,
+          },
+          financement: {
+            apport: 4000000,
+            financementBancaire: 0,
+            montantInvestisseurs: 30000000,
+          },
           resultat: { montantRevente: 42000000, coutOperation: 26200000 },
         },
       },
@@ -1137,7 +1506,7 @@ Les investisseurs perçoivent leur coupon trimestriel depuis 4 trimestres consé
         pays: 'CI',
         adresseComplete: 'Rue des Jardins, Zone 4, Marcory, Abidjan',
         latitude: 5.3003,
-        longitude: -3.9850,
+        longitude: -3.985,
         youtubeUrl: null,
         capitalCible: 70000000,
         capitalMinimum: 45000000,
@@ -1165,14 +1534,40 @@ L'immeuble est entré en phase de stabilisation optimale.`,
         chronologie: [
           { etape: 'Collecte finalisée', date: '2023-01-20', statut: 'done' },
           { etape: 'Construction livrée', date: '2023-06-01', statut: 'done' },
-          { etape: 'Baux signés', date: '2023-06-15', statut: 'done', description: 'Taux d\'occupation 100 %.' },
-          { etape: 'Exploitation en cours', date: '2023-07-01', statut: 'in_progress', description: 'Coupons semestriels versés.' },
-          { etape: 'Remboursement final', date: '2027-07-01', statut: 'pending' },
+          {
+            etape: 'Baux signés',
+            date: '2023-06-15',
+            statut: 'done',
+            description: "Taux d'occupation 100 %.",
+          },
+          {
+            etape: 'Exploitation en cours',
+            date: '2023-07-01',
+            statut: 'in_progress',
+            description: 'Coupons semestriels versés.',
+          },
+          {
+            etape: 'Remboursement final',
+            date: '2027-07-01',
+            statut: 'pending',
+          },
         ],
         garanties: garantiesStandard,
         previsionnel: {
-          operation: { acquisition: 45000000, fraisNotaire: 2250000, travaux: 9000000, sequestre: 3000000, fraisHypotheque: 800000, fraisFinanciers: 2000000, autresCharges: 1500000 },
-          financement: { apport: 10000000, financementBancaire: 0, montantInvestisseurs: 70000000 },
+          operation: {
+            acquisition: 45000000,
+            fraisNotaire: 2250000,
+            travaux: 9000000,
+            sequestre: 3000000,
+            fraisHypotheque: 800000,
+            fraisFinanciers: 2000000,
+            autresCharges: 1500000,
+          },
+          financement: {
+            apport: 10000000,
+            financementBancaire: 0,
+            montantInvestisseurs: 70000000,
+          },
           resultat: { montantRevente: 105000000, coutOperation: 63550000 },
         },
       },
@@ -1208,15 +1603,44 @@ L'immeuble est entré en phase de stabilisation optimale.`,
 **Remboursement total effectué** en décembre 2023. Les 800 investisseurs ont récupéré leur capital et les intérêts cumulés sur 18 mois, soit un TRI réalisé de **12,3 %** (légèrement supérieur à la cible de 12 %).`,
         chronologie: [
           { etape: 'Collecte', date: '2022-06-01', statut: 'done' },
-          { etape: 'Construction et livraison', date: '2022-12-01', statut: 'done' },
-          { etape: 'Exploitation et loyers', date: '2023-01-01', statut: 'done' },
-          { etape: 'Revente de l\'immeuble', date: '2023-11-15', statut: 'done', description: 'Prix de revente : 58 M XOF.' },
-          { etape: 'Remboursement investisseurs', date: '2023-12-01', statut: 'done', description: 'TRI réalisé : 12,3 %.' },
+          {
+            etape: 'Construction et livraison',
+            date: '2022-12-01',
+            statut: 'done',
+          },
+          {
+            etape: 'Exploitation et loyers',
+            date: '2023-01-01',
+            statut: 'done',
+          },
+          {
+            etape: "Revente de l'immeuble",
+            date: '2023-11-15',
+            statut: 'done',
+            description: 'Prix de revente : 58 M XOF.',
+          },
+          {
+            etape: 'Remboursement investisseurs',
+            date: '2023-12-01',
+            statut: 'done',
+            description: 'TRI réalisé : 12,3 %.',
+          },
         ],
         garanties: garantiesStandard,
         previsionnel: {
-          operation: { acquisition: 25000000, fraisNotaire: 1250000, travaux: 5500000, sequestre: 1500000, fraisHypotheque: 400000, fraisFinanciers: 1000000 },
-          financement: { apport: 5000000, financementBancaire: 0, montantInvestisseurs: 40000000 },
+          operation: {
+            acquisition: 25000000,
+            fraisNotaire: 1250000,
+            travaux: 5500000,
+            sequestre: 1500000,
+            fraisHypotheque: 400000,
+            fraisFinanciers: 1000000,
+          },
+          financement: {
+            apport: 5000000,
+            financementBancaire: 0,
+            montantInvestisseurs: 40000000,
+          },
           resultat: { montantRevente: 58000000, coutOperation: 34650000 },
         },
       },
@@ -1230,7 +1654,7 @@ L'immeuble est entré en phase de stabilisation optimale.`,
         pays: 'CI',
         adresseComplete: 'Rue des Bâtisseurs, Yopougon, Abidjan',
         latitude: 5.3438,
-        longitude: -4.0740,
+        longitude: -4.074,
         youtubeUrl: null,
         capitalCible: 25000000,
         capitalMinimum: 15000000,
@@ -1252,14 +1676,41 @@ Cette opération courte de 6 mois (achat–rénovation légère–revente) a dé
 Les 1 000 investisseurs ont été intégralement remboursés en **novembre 2024**.`,
         chronologie: [
           { etape: 'Acquisition', date: '2024-05-10', statut: 'done' },
-          { etape: 'Rénovation', date: '2024-06-01', statut: 'done', description: '6 semaines de travaux.' },
-          { etape: 'Revente', date: '2024-10-15', statut: 'done', description: '38,5 M XOF.' },
-          { etape: 'Remboursement', date: '2024-11-01', statut: 'done', description: 'TRI réalisé : 21,4 %.' },
+          {
+            etape: 'Rénovation',
+            date: '2024-06-01',
+            statut: 'done',
+            description: '6 semaines de travaux.',
+          },
+          {
+            etape: 'Revente',
+            date: '2024-10-15',
+            statut: 'done',
+            description: '38,5 M XOF.',
+          },
+          {
+            etape: 'Remboursement',
+            date: '2024-11-01',
+            statut: 'done',
+            description: 'TRI réalisé : 21,4 %.',
+          },
         ],
         garanties: [],
         previsionnel: {
-          operation: { acquisition: 16000000, fraisNotaire: 800000, travaux: 2500000, sequestre: 800000, fraisHypotheque: 0, fraisFinanciers: 500000, autresCharges: 400000 },
-          financement: { apport: 3000000, financementBancaire: 0, montantInvestisseurs: 25000000 },
+          operation: {
+            acquisition: 16000000,
+            fraisNotaire: 800000,
+            travaux: 2500000,
+            sequestre: 800000,
+            fraisHypotheque: 0,
+            fraisFinanciers: 500000,
+            autresCharges: 400000,
+          },
+          financement: {
+            apport: 3000000,
+            financementBancaire: 0,
+            montantInvestisseurs: 25000000,
+          },
           resultat: { montantRevente: 38500000, coutOperation: 21000000 },
         },
       },
@@ -1371,7 +1822,9 @@ Les 1 000 investisseurs ont été intégralement remboursés en **novembre 2024*
           ? new Date(Date.now() + 75 * 24 * 60 * 60 * 1000)
           : null,
       } as any);
-      const saved = await this.projectRepo.save(project as any) as ProjectEntity;
+      const saved = (await this.projectRepo.save(
+        project as any,
+      )) as ProjectEntity;
       savedProjects.push(saved);
     }
 
@@ -1502,15 +1955,17 @@ Les 1 000 investisseurs ont été intégralement remboursés en **novembre 2024*
         const maxFractionsParInvest = project.ticketMaximum
           ? Math.floor(Number(project.ticketMaximum) / prixFraction)
           : 20;
-        const nbTitres = Math.floor(Math.random() * Math.min(maxFractionsParInvest, 10)) + 1;
+        const nbTitres =
+          Math.floor(Math.random() * Math.min(maxFractionsParInvest, 10)) + 1;
         const montant = nbTitres * prixFraction;
 
         // Statut pondéré selon le statut du projet
         let statut: InvestmentStatus;
         if (project.statut === ProjectStatus.CLOTURE) {
-          statut = Math.random() > 0.2
-            ? InvestmentStatus.REMBOURSE_TOTAL
-            : InvestmentStatus.REMBOURSE_CAPITAL;
+          statut =
+            Math.random() > 0.2
+              ? InvestmentStatus.REMBOURSE_TOTAL
+              : InvestmentStatus.REMBOURSE_CAPITAL;
         } else if (project.statut === ProjectStatus.EN_EXPLOITATION) {
           statut = InvestmentStatus.PAYE;
         } else if (project.statut === ProjectStatus.FINANCE) {
@@ -1934,7 +2389,9 @@ Les 1 000 investisseurs ont été intégralement remboursés en **novembre 2024*
       const user = savedUsers[Math.floor(Math.random() * savedUsers.length)];
       await this.documentRepo.save(
         this.documentRepo.create({
-          type: kycDocTypes[Math.floor(Math.random() * kycDocTypes.length)] as any,
+          type: kycDocTypes[
+            Math.floor(Math.random() * kycDocTypes.length)
+          ] as any,
           relatedTo: DocumentRelatedTo.USER as any,
           userId: user.userId,
           projectId: null,
@@ -1969,7 +2426,9 @@ Les 1 000 investisseurs ont été intégralement remboursés en **novembre 2024*
       for (let i = 0; i < numDocs; i++) {
         await this.documentRepo.save(
           this.documentRepo.create({
-            type: projectDocTypes[Math.floor(Math.random() * projectDocTypes.length)] as any,
+            type: projectDocTypes[
+              Math.floor(Math.random() * projectDocTypes.length)
+            ] as any,
             relatedTo: DocumentRelatedTo.PROJECT as any,
             userId: null,
             projectId: project.id,
@@ -2065,15 +2524,15 @@ Les 1 000 investisseurs ont été intégralement remboursés en **novembre 2024*
 
     const avisCommentaires = [
       'Très bon projet, équipe sérieuse et transparente.',
-      'Rendement attractif, j\'ai investi sans hésiter.',
+      "Rendement attractif, j'ai investi sans hésiter.",
       'Bonne localisation, quartier en forte demande.',
       'Projet solide, documentation claire et complète.',
-      'J\'apprécie la régularité des reporting.',
+      "J'apprécie la régularité des reporting.",
       'Taux de rendement compétitif pour le marché local.',
       'Projet bien structuré, promoteur fiable.',
       null,
       null,
-      'Délais respectés jusqu\'ici, je recommande.',
+      "Délais respectés jusqu'ici, je recommande.",
     ];
 
     let avisCount = 0;
@@ -2095,7 +2554,9 @@ Les 1 000 investisseurs ont été intégralement remboursés en **novembre 2024*
             userId: user.userId,
             note: Math.floor(Math.random() * 3) + 3,
             commentaire:
-              avisCommentaires[Math.floor(Math.random() * avisCommentaires.length)],
+              avisCommentaires[
+                Math.floor(Math.random() * avisCommentaires.length)
+              ],
           }),
         );
         avisCount++;
@@ -2176,7 +2637,9 @@ Les 1 000 investisseurs ont été intégralement remboursés en **novembre 2024*
         nbFractions,
         userId: ordre.acheteurId,
         statut: SignatureStatus.SIGNED,
-        expiresAt: new Date(ordre.createdAt.getTime() + 7 * 24 * 60 * 60 * 1000),
+        expiresAt: new Date(
+          ordre.createdAt.getTime() + 7 * 24 * 60 * 60 * 1000,
+        ),
         signedAt: new Date(ordre.createdAt.getTime() + 12 * 60_000),
       });
     }
