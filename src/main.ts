@@ -57,7 +57,7 @@ async function bootstrap() {
         `BeOwn est une plateforme PSFP (Prestataire de Services de Financement Participatif) ` +
         `permettant l'investissement fractionné dans l'immobilier africain.\n\n` +
         `### Authentification\n` +
-        `La majorité des routes nécessitent un **JWT Bearer token** obtenu via \`POST /auth/sign-in\`.\n` +
+        `La majorité des routes nécessitent un **JWT Bearer token** okay obtenu via \`POST /auth/sign-in\`.\n` +
         `Utilisez le bouton **Authorize** ci-dessus pour renseigner votre token.\n\n` +
         `### Flux principal\n` +
         `1. \`POST /auth/sign-up\` — Créer un compte\n` +
