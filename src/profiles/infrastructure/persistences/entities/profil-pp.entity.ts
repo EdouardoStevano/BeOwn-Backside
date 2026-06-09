@@ -22,11 +22,23 @@ export class ProfilPPEntity {
   @Column({ type: 'varchar', nullable: true })
   civilite: string | null;
 
+  @Column({ type: 'varchar' })
+  prenom: string;
+
+  @Column({ type: 'varchar' })
+  nom: string;
+
+  @Column({ type: 'varchar', nullable: true })
+  nomNaissance: string | null;
+
   @Column({ type: 'date', nullable: true })
   dateNaissance: Date | null;
 
   @Column({ type: 'varchar', nullable: true })
   lieuNaissance: string | null;
+
+  @Column({ type: 'char', length: 2, nullable: true })
+  paysNaissance: string | null;
 
   @Column({ type: 'char', length: 2, nullable: true })
   nationalite: string | null;

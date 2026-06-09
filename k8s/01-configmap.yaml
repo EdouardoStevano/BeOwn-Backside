@@ -1,11 +1,11 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: beown-config
+  name: beown-backend-config
   namespace: beown
 data:
   NODE_ENV: "production"
-  PORT: "3002"
+  PORT: "8080"
 
   # Database (nom = Service k8s défini dans 03-postgres.yaml)
   DATABASE_HOST: "postgres-service"
@@ -16,9 +16,9 @@ data:
   REDIS_HOST: "redis-service"
   REDIS_PORT: "6379"
 
-  # JWT (durées en secondes)
-  JWT_TOKEN_AUDIENCE: "https://app.beown.com"
-  JWT_TOKEN_ISSUER: "https://api.beown.com"
+# ─── JWT ─────────────────────────────────────────────────
+  JWT_TOKEN_AUDIENCE: "http://34.35.29.154"
+  JWT_TOKEN_ISSUER: "http://34.35.29.154"
   JWT_ACCESS_TOKEN_TTL: "3600"
   JWT_REFRESH_TOKEN_TTL: "86400"
   JWT_TOKEN_EMAIL_TTL: "86400"
@@ -40,16 +40,16 @@ data:
   TWILIO_PHONE_NUMBER: "+261326507613"
 
   # OAuth callbacks
-  GOOGLE_CALLBACK_URL: "https://api.beown.com/auth/google/callback"
-  FACEBOOK_CALLBACK_URL: "https://api.beown.com/auth/facebook/callback"
-  LINKEDIN_CALLBACK_URL: "https://api.beown.com/auth/linkedin/callback"
+  GOOGLE_CALLBACK_URL: "http://34.35.29.154:8080/auth/google/callback"
+  FACEBOOK_CALLBACK_URL: "http://34.35.29.154:8080/auth/facebook/callback"
+  LINKEDIN_CALLBACK_URL: "http://34.35.29.154:8080/auth/linkedin/callback"
 
   # App
-  FRONTEND_URL: "https://app.beown.com"
-  ADMIN_URL: "https://admin.beown.com"
-  API_URL: "https://api.beown.com"
+  FRONTEND_URL: "http://34.35.29.154"
+  ADMIN_URL: "http://34.35.29.154"
+  API_URL: "http://34.35.29.154:8080"
   TFA_APP_NAME: "BeOwn"
-  CONFIRM_EMAIL_URL: "https://api.beown.com/email/verify"
+  CONFIRM_EMAIL_URL: "http://localhost:3002/email/verify"
 
   # reCAPTCHA (clé de test Google — toujours valide)
   RECAPTCHA_SECRET_KEY: "6LeIxAcTAAAAAGG-vFI1TnRWxMZNFuojJ4WifJWe"
@@ -69,18 +69,3 @@ data:
   # PSFP / Régulation
   PLAFOND_INVESTISSEMENT_NON_AVERTI_EUR: "1000"
   PLAFOND_INVESTISSEMENT_AVERTI_EUR: "100000"
-
-  # Les variables suivantes sont sensibles → à mettre dans un Secret k8s :
-  # DATABASE_USERNAME, DATABASE_PASSWORD
-  # JWT_SECRET, PROJECT_SHARE_SECRET
-  # MAIL_USER_PASSWORD
-  # GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET
-  # FACEBOOK_APP_ID, FACEBOOK_APP_SECRET
-  # LINKEDIN_CLIENT_ID, LINKEDIN_CLIENT_SECRET
-  # SUMSUB_APP_TOKEN, SUMSUB_SECRET_KEY, SUMSUB_WEBHOOK_SECRET
-  # BREVO_API_KEY
-  # TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN
-  # STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET
-  # CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET
-  # YOUSIGN_API_KEY, YOUSIGN_WEBHOOK_SECRET
-  # FEDAPAY_SECRET_KEY

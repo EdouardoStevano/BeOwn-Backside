@@ -2,6 +2,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
 
 export class AddFiscalFieldsToEcheance1747528000000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
+    if (!(await queryRunner.hasTable('echeance'))) return;
     await queryRunner.query(
       `ALTER TABLE "echeance" ADD COLUMN IF NOT EXISTS "prelevementIR" decimal(14,2) NOT NULL DEFAULT 0`,
     );

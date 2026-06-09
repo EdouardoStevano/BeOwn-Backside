@@ -7,7 +7,7 @@ metadata:
 spec:
   accessModes:
     - ReadWriteOnce
-  storageClassName: standard
+  storageClassName: local_path
   resources:
     requests:
       storage: 10Gi
@@ -38,17 +38,17 @@ spec:
             - name: POSTGRES_USER
               valueFrom:
                 secretKeyRef:
-                  name: beown-secrets
+                  name: beown-backend-secrets
                   key: DATABASE_USERNAME
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: beown-secrets
+                  name: beown-backend-secrets
                   key: DATABASE_PASSWORD
             - name: POSTGRES_DB
               valueFrom:
                 configMapKeyRef:
-                  name: beown-config
+                  name: beown-backend-config
                   key: DATABASE_DB
           volumeMounts:
             - name: postgres-storage

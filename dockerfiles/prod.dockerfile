@@ -20,10 +20,9 @@ COPY package*.json ./
 RUN npm install
 
 COPY --from=builder /app/dist ./dist
-
-COPY tsconfig.json ./
-COPY src/ ./src/
-COPY database/ ./database/
+COPY tsconfig*.json ./
+COPY src ./src
+COPY database ./database
 
 EXPOSE 8080
 

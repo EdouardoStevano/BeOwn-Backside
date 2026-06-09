@@ -50,9 +50,9 @@ spec:
             - containerPort: 8080
           envFrom:
             - configMapRef:
-                name: beown-config
+                name: beown-backend-config
             - secretRef:
-                name: beown-secrets
+                name: beown-backend-secrets
           livenessProbe:
             httpGet:
               path: /health
@@ -82,8 +82,9 @@ metadata:
   name: beown-backend-service
   namespace: beown
 spec:
+  type: LoadBalancer
   selector:
     app: beown-backend
   ports:
-    - port: 80
+    - port: 8080
       targetPort: 8080
