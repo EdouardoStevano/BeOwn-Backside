@@ -151,12 +151,11 @@ pipeline {
 
                         sshCommand remote: host, command: """
                             kubectl create namespace ${env.K8S_NS_STG} --dry-run=client -o yaml | kubectl apply -f -
-                            sed 's/namespace: ${env.K8S_NS_PROD}/namespace: ${env.K8S_NS_STG}/g' /tmp/beown-k8s/k8s/*.yaml | kubectl apply -f -
-                            kubectl set image deployment/${env.K8S_DEPLOYMENT} \
-                                ${env.K8S_DEPLOYMENT}=${env.IMAGE_TAG} \
-                                -n ${env.K8S_NS_STG}
-                            kubectl rollout status deployment/${env.K8S_DEPLOYMENT} \
-                                -n ${env.K8S_NS_STG} --timeout=120s
+                            for f in /tmp/beown-k8s/k8s/*.yaml; do
+                                sed 's/namespace: ${env.K8S_NS_PROD}/namespace: ${env.K8S_NS_STG}/g' "\$f" | tr -d '\\r' | kubectl apply -f -
+                            done
+                            kubectl set image deployment/${env.K8S_DEPLOYMENT} ${env.K8S_DEPLOYMENT}=${env.IMAGE_TAG} -n ${env.K8S_NS_STG}
+                            kubectl rollout status deployment/${env.K8S_DEPLOYMENT} -n ${env.K8S_NS_STG} --timeout=120s
                             rm -rf /tmp/beown-k8s
                         """
                     }
@@ -191,12 +190,11 @@ pipeline {
                         sshPut remote: host, from: 'k8s', into: '/tmp/beown-k8s'
 
                         sshCommand remote: host, command: """
-                            kubectl apply -f /tmp/beown-k8s/k8s/
-                            kubectl set image deployment/${env.K8S_DEPLOYMENT} \
-                                ${env.K8S_DEPLOYMENT}=${env.IMAGE_TAG} \
-                                -n ${env.K8S_NS_PROD}
-                            kubectl rollout status deployment/${env.K8S_DEPLOYMENT} \
-                                -n ${env.K8S_NS_PROD} --timeout=180s
+                            for f in /tmp/beown-k8s/k8s/*.yaml; do
+                                tr -d '\\r' < "\$f" | kubectl apply -f -
+                            done
+                            kubectl set image deployment/${env.K8S_DEPLOYMENT} ${env.K8S_DEPLOYMENT}=${env.IMAGE_TAG} -n ${env.K8S_NS_PROD}
+                            kubectl rollout status deployment/${env.K8S_DEPLOYMENT} -n ${env.K8S_NS_PROD} --timeout=180s
                             rm -rf /tmp/beown-k8s
                         """
                     }
