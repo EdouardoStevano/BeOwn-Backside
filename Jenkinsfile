@@ -53,36 +53,22 @@ pipeline {
         }
 
         // ─────────────────────────────────────────────────────────
-        // 1. INSTALL  (container Linux → sh valide)
+        // 1. INSTALL  (bat — Node.js installé sur le serveur Jenkins Windows)
         // ─────────────────────────────────────────────────────────
         stage('Install') {
-            agent {
-                docker {
-                    image "node:${NODE_VERSION}-alpine"
-                    args  '-u root'
-                    reuseNode true
-                }
-            }
             steps {
-                sh 'npm ci --prefer-offline'
+                bat 'npm ci --prefer-offline'
             }
         }
 
         // ─────────────────────────────────────────────────────────
-        // 2. LINT  (container Linux)
+        // 2. LINT
         // ─────────────────────────────────────────────────────────
-        // stage('Lint') {
-        //     agent {
-        //         docker {
-        //             image "node:${NODE_VERSION}-alpine"
-        //             args  '-u root'
-        //             reuseNode true
-        //         }
-        //     }
-        //     steps {
-        //         sh 'npm run lint'
-        //     }
-        // }
+        stage('Lint') {
+            steps {
+                bat 'npm run lint'
+            }
+        }
 
         // ─────────────────────────────────────────────────────────
         // 4. BUILD & PUSH DOCKER IMAGE
