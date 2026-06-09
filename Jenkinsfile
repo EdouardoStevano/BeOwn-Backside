@@ -1,29 +1,32 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Jenkins CI/CD — BeOwn Backend
 //
-// Plugins requis :
-//   - Docker Pipeline
-//   - SSH Pipeline Steps  (sshCommand / sshPut)
-//   - HTML Publisher
-//   - JUnit
+// Jenkins tourne sur le serveur Linux/Debian (Google Cloud) dans Docker.
+// kubectl est exécuté directement sur ce serveur (plus de SSH).
+// Staging et Production tournent sur le même cluster Kubernetes,
+// séparés par namespace : beown-staging  /  beown
 //
-// Credentials à créer dans Jenkins (Manage Jenkins > Credentials) :
+// Prérequis sur le serveur (à configurer une seule fois) :
+//   1. Container Jenkins monté avec le socket Docker et le kubeconfig :
+//        -v /var/run/docker.sock:/var/run/docker.sock
+//        -v /root/.kube:/root/.kube
+//   2. kubectl installé dans le container Jenkins ou disponible sur l'hôte
+//
+// Plugins Jenkins requis :
+//   - Docker Pipeline
+//   - HTML Publisher (optionnel)
+//
+// Credentials Jenkins (Manage Jenkins > Credentials) :
 //   dockerhub-credentials  — Username/Password  (Docker Hub)
-//   ssh-prod-key           — SSH Username with private key  (serveur prod Linux/Debian)
-//   ssh-staging-key        — SSH Username with private key  (serveur staging)
 // ─────────────────────────────────────────────────────────────────────────────
 pipeline {
-    // Jenkins tourne sur Windows → agent any = exécuteur Windows
-    // Les stages Node.js utilisent un agent Docker Linux (sh valide à l'intérieur)
     agent any
 
     environment {
         DOCKER_IMAGE   = 'ravikazaha/beown-backside'
-        K8S_NAMESPACE  = 'beown'
         K8S_DEPLOYMENT = 'beown-backend'
-        NODE_VERSION   = '22'
-        REMOTE_HOST    = '34.35.29.154'   // IP du serveur distant (depuis k8s/01-configmap.yaml)
-        REMOTE_K8S_DIR = '/tmp/beown-k8s' // Dossier temporaire sur le serveur distant
+        K8S_NS_PROD    = 'beown'
+        K8S_NS_STG     = 'beown-staging'
     }
 
     options {
@@ -35,17 +38,15 @@ pipeline {
     stages {
 
         // ─────────────────────────────────────────────────────────
-        // 0. INIT — récupérer le hash git (bat car agent Windows)
+        // 0. INIT — récupérer le hash git et le nom de branche
         // ─────────────────────────────────────────────────────────
         stage('Init') {
             steps {
                 script {
-                    env.GIT_COMMIT_SHORT = bat(
-                        script: '@git rev-parse --short HEAD',
+                    env.GIT_COMMIT_SHORT = sh(
+                        script: 'git rev-parse --short HEAD',
                         returnStdout: true
                     ).trim()
-                    // GIT_BRANCH est injecté par Jenkins (ex: "origin/develop")
-                    // on supprime le préfixe "origin/" pour obtenir "develop"
                     env.GIT_BRANCH_NAME = (env.GIT_BRANCH ?: env.BRANCH_NAME ?: '')
                         .replaceAll('origin/', '')
                         .trim()
@@ -56,26 +57,7 @@ pipeline {
         }
 
         // ─────────────────────────────────────────────────────────
-        // 1. INSTALL  (bat — Node.js installé sur le serveur Jenkins Windows)
-        // ─────────────────────────────────────────────────────────
-        stage('Install') {
-            steps {
-                bat 'npm ci --prefer-offline'
-            }
-        }
-
-        // ─────────────────────────────────────────────────────────
-        // 2. LINT
-        // ─────────────────────────────────────────────────────────
-        // stage('Lint') {
-        //     steps {
-        //         bat 'npm run lint'
-        //     }
-        // }
-
-        // ─────────────────────────────────────────────────────────
-        // 4. BUILD & PUSH DOCKER IMAGE
-        //    bat car Docker Desktop tourne sur l'agent Windows
+        // 1. BUILD & PUSH DOCKER IMAGE
         // ─────────────────────────────────────────────────────────
         stage('Build & Push Image') {
             when {
@@ -91,26 +73,22 @@ pipeline {
                     passwordVariable: 'DOCKER_PASS'
                 )]) {
                     script {
-                        // Build de l'image
-                        bat "docker build -f dockerfiles/prod.dockerfile -t %IMAGE_TAG% ."
+                        sh "docker build -f dockerfiles/prod.dockerfile -t ${env.IMAGE_TAG} ."
 
-                        // Login Docker Hub
-                        bat "echo %DOCKER_PASS%| docker login -u %DOCKER_USER% --password-stdin"
+                        sh 'echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin'
 
-                        // Push du tag commit
-                        bat "docker push %IMAGE_TAG%"
+                        sh "docker push ${env.IMAGE_TAG}"
 
-                        // Tags supplémentaires selon la branche
                         if (env.GIT_BRANCH_NAME == 'main') {
-                            bat """
-                                docker tag %IMAGE_TAG% %DOCKER_IMAGE%:latest
-                                docker push %DOCKER_IMAGE%:latest
+                            sh """
+                                docker tag ${env.IMAGE_TAG} ${env.DOCKER_IMAGE}:latest
+                                docker push ${env.DOCKER_IMAGE}:latest
                             """
                         }
                         if (env.GIT_BRANCH_NAME == 'develop') {
-                            bat """
-                                docker tag %IMAGE_TAG% %DOCKER_IMAGE%:develop
-                                docker push %DOCKER_IMAGE%:develop
+                            sh """
+                                docker tag ${env.IMAGE_TAG} ${env.DOCKER_IMAGE}:develop
+                                docker push ${env.DOCKER_IMAGE}:develop
                             """
                         }
                     }
@@ -118,51 +96,43 @@ pipeline {
             }
             post {
                 always {
-                    bat 'docker logout'
-                    // Libérer l'espace disque de l'agent
-                    bat "docker rmi %IMAGE_TAG% 2>nul & exit 0"
+                    sh 'docker logout'
+                    sh "docker rmi ${env.IMAGE_TAG} || true"
                 }
             }
         }
 
         // ─────────────────────────────────────────────────────────
-        // 5. DEPLOY — STAGING  (branche develop)
+        // 2. DEPLOY — STAGING  (branche develop)
+        //    Namespace : beown-staging
+        //    Les manifests k8s/ sont appliqués avec le namespace
+        //    substitué à la volée via sed (évite de dupliquer les fichiers)
         // ─────────────────────────────────────────────────────────
         stage('Deploy – Staging') {
             when { expression { env.GIT_BRANCH_NAME == 'develop' } }
             steps {
-                withCredentials([sshUserPrivateKey(
-                    credentialsId: 'ssh-staging-key',
-                    keyFileVariable: 'SSH_KEY',
-                    usernameVariable: 'SSH_USER'
-                )]) {
-                    script {
-                        def remote = [
-                            name          : 'staging',
-                            host          : env.REMOTE_HOST,
-                            user          : env.SSH_USER,
-                            identityFile  : env.SSH_KEY,
-                            allowAnyHosts : true
-                        ]
+                script {
+                    // Créer le namespace staging s'il n'existe pas encore
+                    sh "kubectl create namespace ${env.K8S_NS_STG} --dry-run=client -o yaml | kubectl apply -f -"
 
-                        sshCommand remote: remote, command: "mkdir -p ${env.REMOTE_K8S_DIR}"
-                        sshPut    remote: remote, from: 'k8s', into: env.REMOTE_K8S_DIR
+                    // Appliquer les manifests en remplaçant le namespace à la volée
+                    sh "sed 's/namespace: ${env.K8S_NS_PROD}/namespace: ${env.K8S_NS_STG}/g' k8s/*.yaml | kubectl apply -f -"
 
-                        sshCommand remote: remote, command: """
-                            kubectl apply -f ${env.REMOTE_K8S_DIR}/k8s/
-                            kubectl set image deployment/${env.K8S_DEPLOYMENT} \
-                                ${env.K8S_DEPLOYMENT}=${env.IMAGE_TAG} \
-                                -n ${env.K8S_NAMESPACE}
-                            kubectl rollout status deployment/${env.K8S_DEPLOYMENT} \
-                                -n ${env.K8S_NAMESPACE} --timeout=120s
-                        """
-                    }
+                    // Mettre à jour l'image du déploiement
+                    sh """
+                        kubectl set image deployment/${env.K8S_DEPLOYMENT} \
+                            ${env.K8S_DEPLOYMENT}=${env.IMAGE_TAG} \
+                            -n ${env.K8S_NS_STG}
+                        kubectl rollout status deployment/${env.K8S_DEPLOYMENT} \
+                            -n ${env.K8S_NS_STG} --timeout=120s
+                    """
                 }
             }
         }
 
         // ─────────────────────────────────────────────────────────
-        // 6. DEPLOY — PRODUCTION  (branche main)
+        // 3. DEPLOY — PRODUCTION  (branche main)
+        //    Namespace : beown
         //    Confirmation manuelle avant déploiement
         // ─────────────────────────────────────────────────────────
         stage('Deploy – Production') {
@@ -170,34 +140,16 @@ pipeline {
             steps {
                 input message: "Déployer ${env.GIT_COMMIT_SHORT} en production ?", ok: 'Déployer'
 
-                withCredentials([sshUserPrivateKey(
-                    credentialsId: 'ssh-prod-key',
-                    keyFileVariable: 'SSH_KEY',
-                    usernameVariable: 'SSH_USER'
-                )]) {
-                    script {
-                        def remote = [
-                            name          : 'production',
-                            host          : env.REMOTE_HOST,
-                            user          : env.SSH_USER,
-                            identityFile  : env.SSH_KEY,
-                            allowAnyHosts : true
-                        ]
+                script {
+                    sh "kubectl apply -f k8s/"
 
-                        // Copier les manifests k8s sur le serveur distant
-                        sshCommand remote: remote, command: "mkdir -p ${env.REMOTE_K8S_DIR}"
-                        sshPut    remote: remote, from: 'k8s', into: env.REMOTE_K8S_DIR
-
-                        // Appliquer tous les manifests puis mettre à jour l'image
-                        sshCommand remote: remote, command: """
-                            kubectl apply -f ${env.REMOTE_K8S_DIR}/k8s/
-                            kubectl set image deployment/${env.K8S_DEPLOYMENT} \
-                                ${env.K8S_DEPLOYMENT}=${env.IMAGE_TAG} \
-                                -n ${env.K8S_NAMESPACE}
-                            kubectl rollout status deployment/${env.K8S_DEPLOYMENT} \
-                                -n ${env.K8S_NAMESPACE} --timeout=180s
-                        """
-                    }
+                    sh """
+                        kubectl set image deployment/${env.K8S_DEPLOYMENT} \
+                            ${env.K8S_DEPLOYMENT}=${env.IMAGE_TAG} \
+                            -n ${env.K8S_NS_PROD}
+                        kubectl rollout status deployment/${env.K8S_DEPLOYMENT} \
+                            -n ${env.K8S_NS_PROD} --timeout=180s
+                    """
                 }
             }
         }
@@ -213,7 +165,7 @@ pipeline {
         }
         failure {
             echo "Échec sur ${env.GIT_BRANCH_NAME} (${env.GIT_COMMIT_SHORT})"
-            // emailext subject: "ECHEC CI/CD — BeOwn [${env.BRANCH_NAME}]",
+            // emailext subject: "ECHEC CI/CD — BeOwn [${env.GIT_BRANCH_NAME}]",
             //          body:    "Build #${env.BUILD_NUMBER} a échoué.\n${env.BUILD_URL}",
             //          to:      'team@beown.com'
         }
