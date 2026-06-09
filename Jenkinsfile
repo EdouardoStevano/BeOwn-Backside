@@ -52,34 +52,20 @@ pipeline {
         }
 
         // ─────────────────────────────────────────────────────────
-        // 1. INSTALL  (container Linux → sh valide)
+        // 1. INSTALL  (bat car agent Windows, Node.js requis sur le serveur)
         // ─────────────────────────────────────────────────────────
         stage('Install') {
-            agent {
-                docker {
-                    image "node:${NODE_VERSION}-alpine"
-                    args  '-u root'
-                    reuseNode true
-                }
-            }
             steps {
-                sh 'npm ci --prefer-offline'
+                bat 'npm ci --prefer-offline'
             }
         }
 
         // ─────────────────────────────────────────────────────────
-        // 2. LINT  (container Linux)
+        // 2. LINT
         // ─────────────────────────────────────────────────────────
         stage('Lint') {
-            agent {
-                docker {
-                    image "node:${NODE_VERSION}-alpine"
-                    args  '-u root'
-                    reuseNode true
-                }
-            }
             steps {
-                sh 'npm run lint'
+                bat 'npm run lint'
             }
         }
 
