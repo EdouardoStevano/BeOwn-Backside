@@ -1,23 +1,23 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Jenkins CI/CD — BeOwn Backend
 //
-// Jenkins tourne sur le serveur Linux/Debian (Google Cloud) dans Docker.
-// kubectl est exécuté directement sur ce serveur (plus de SSH).
-// Staging et Production tournent sur le même cluster Kubernetes,
-// séparés par namespace : beown-staging  /  beown
+// Jenkins tourne dans Docker sur le serveur Linux/Debian (Google Cloud).
+// Toutes les commandes docker et kubectl sont exécutées via SSH sur l'hôte,
+// ce qui évite d'installer docker CLI à l'intérieur du container Jenkins.
 //
 // Prérequis sur le serveur (à configurer une seule fois) :
-//   1. Container Jenkins monté avec le socket Docker et le kubeconfig :
-//        -v /var/run/docker.sock:/var/run/docker.sock
-//        -v /root/.kube:/root/.kube
-//   2. kubectl installé dans le container Jenkins ou disponible sur l'hôte
+//   1. Générer une clé SSH et l'autoriser sur l'hôte :
+//        ssh-keygen -t ed25519 -f /root/.ssh/jenkins_key -N ""
+//        cat /root/.ssh/jenkins_key.pub >> /root/.ssh/authorized_keys
+//   2. Lancer Jenkins avec --add-host pour joindre l'hôte :
+//        docker run --add-host=host.server:host-gateway ...
 //
 // Plugins Jenkins requis :
-//   - Docker Pipeline
-//   - HTML Publisher (optionnel)
+//   - SSH Pipeline Steps  (sshCommand)
 //
 // Credentials Jenkins (Manage Jenkins > Credentials) :
-//   dockerhub-credentials  — Username/Password  (Docker Hub)
+//   dockerhub-credentials  — Username/Password        (Docker Hub)
+//   ssh-host-key           — SSH Username with private key  (hôte du serveur)
 // ─────────────────────────────────────────────────────────────────────────────
 pipeline {
     agent any
@@ -27,6 +27,7 @@ pipeline {
         K8S_DEPLOYMENT = 'beown-backend'
         K8S_NS_PROD    = 'beown'
         K8S_NS_STG     = 'beown-staging'
+        HOST_NAME      = 'host.server'   // résolu vers l'IP hôte via --add-host
     }
 
     options {
@@ -58,6 +59,7 @@ pipeline {
 
         // ─────────────────────────────────────────────────────────
         // 1. BUILD & PUSH DOCKER IMAGE
+        //    Exécuté via SSH sur l'hôte — docker CLI disponible nativement
         // ─────────────────────────────────────────────────────────
         stage('Build & Push Image') {
             when {
@@ -67,37 +69,58 @@ pipeline {
                 }
             }
             steps {
-                withCredentials([usernamePassword(
-                    credentialsId: 'dockerhub-credentials',
-                    usernameVariable: 'DOCKER_USER',
-                    passwordVariable: 'DOCKER_PASS'
-                )]) {
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'dockerhub-credentials',
+                        usernameVariable: 'DOCKER_USER',
+                        passwordVariable: 'DOCKER_PASS'
+                    ),
+                    sshUserPrivateKey(
+                        credentialsId: 'ssh-host-key',
+                        keyFileVariable: 'SSH_KEY',
+                        usernameVariable: 'SSH_USER'
+                    )
+                ]) {
                     script {
-                        sh "docker build -f dockerfiles/prod.dockerfile -t ${env.IMAGE_TAG} ."
+                        def host = [
+                            name         : 'host',
+                            host         : env.HOST_NAME,
+                            user         : env.SSH_USER,
+                            identityFile : env.SSH_KEY,
+                            allowAnyHosts: true
+                        ]
 
-                        sh 'echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin'
+                        // Copier les sources sur l'hôte
+                        sshCommand remote: host, command: "mkdir -p /tmp/beown-build"
+                        sshPut remote: host, from: '.', into: '/tmp/beown-build'
 
-                        sh "docker push ${env.IMAGE_TAG}"
+                        // Build, login, push
+                        sshCommand remote: host, command: """
+                            cd /tmp/beown-build
+                            docker build -f dockerfiles/prod.dockerfile -t ${env.IMAGE_TAG} .
+                            echo '${env.DOCKER_PASS}' | docker login -u '${env.DOCKER_USER}' --password-stdin
+                            docker push ${env.IMAGE_TAG}
+                        """
 
                         if (env.GIT_BRANCH_NAME == 'main') {
-                            sh """
+                            sshCommand remote: host, command: """
                                 docker tag ${env.IMAGE_TAG} ${env.DOCKER_IMAGE}:latest
                                 docker push ${env.DOCKER_IMAGE}:latest
                             """
                         }
                         if (env.GIT_BRANCH_NAME == 'develop') {
-                            sh """
+                            sshCommand remote: host, command: """
                                 docker tag ${env.IMAGE_TAG} ${env.DOCKER_IMAGE}:develop
                                 docker push ${env.DOCKER_IMAGE}:develop
                             """
                         }
+
+                        sshCommand remote: host, command: """
+                            docker logout
+                            docker rmi ${env.IMAGE_TAG} || true
+                            rm -rf /tmp/beown-build
+                        """
                     }
-                }
-            }
-            post {
-                always {
-                    sh 'docker logout'
-                    sh "docker rmi ${env.IMAGE_TAG} || true"
                 }
             }
         }
@@ -105,51 +128,78 @@ pipeline {
         // ─────────────────────────────────────────────────────────
         // 2. DEPLOY — STAGING  (branche develop)
         //    Namespace : beown-staging
-        //    Les manifests k8s/ sont appliqués avec le namespace
-        //    substitué à la volée via sed (évite de dupliquer les fichiers)
         // ─────────────────────────────────────────────────────────
         stage('Deploy – Staging') {
             when { expression { env.GIT_BRANCH_NAME == 'develop' } }
             steps {
-                script {
-                    // Créer le namespace staging s'il n'existe pas encore
-                    sh "kubectl create namespace ${env.K8S_NS_STG} --dry-run=client -o yaml | kubectl apply -f -"
+                withCredentials([sshUserPrivateKey(
+                    credentialsId: 'ssh-host-key',
+                    keyFileVariable: 'SSH_KEY',
+                    usernameVariable: 'SSH_USER'
+                )]) {
+                    script {
+                        def host = [
+                            name         : 'host',
+                            host         : env.HOST_NAME,
+                            user         : env.SSH_USER,
+                            identityFile : env.SSH_KEY,
+                            allowAnyHosts: true
+                        ]
 
-                    // Appliquer les manifests en remplaçant le namespace à la volée
-                    sh "sed 's/namespace: ${env.K8S_NS_PROD}/namespace: ${env.K8S_NS_STG}/g' k8s/*.yaml | kubectl apply -f -"
+                        sshCommand remote: host, command: "mkdir -p /tmp/beown-k8s"
+                        sshPut remote: host, from: 'k8s', into: '/tmp/beown-k8s'
 
-                    // Mettre à jour l'image du déploiement
-                    sh """
-                        kubectl set image deployment/${env.K8S_DEPLOYMENT} \
-                            ${env.K8S_DEPLOYMENT}=${env.IMAGE_TAG} \
-                            -n ${env.K8S_NS_STG}
-                        kubectl rollout status deployment/${env.K8S_DEPLOYMENT} \
-                            -n ${env.K8S_NS_STG} --timeout=120s
-                    """
+                        sshCommand remote: host, command: """
+                            kubectl create namespace ${env.K8S_NS_STG} --dry-run=client -o yaml | kubectl apply -f -
+                            sed 's/namespace: ${env.K8S_NS_PROD}/namespace: ${env.K8S_NS_STG}/g' /tmp/beown-k8s/k8s/*.yaml | kubectl apply -f -
+                            kubectl set image deployment/${env.K8S_DEPLOYMENT} \
+                                ${env.K8S_DEPLOYMENT}=${env.IMAGE_TAG} \
+                                -n ${env.K8S_NS_STG}
+                            kubectl rollout status deployment/${env.K8S_DEPLOYMENT} \
+                                -n ${env.K8S_NS_STG} --timeout=120s
+                            rm -rf /tmp/beown-k8s
+                        """
+                    }
                 }
             }
         }
 
         // ─────────────────────────────────────────────────────────
         // 3. DEPLOY — PRODUCTION  (branche main)
-        //    Namespace : beown
-        //    Confirmation manuelle avant déploiement
+        //    Namespace : beown — confirmation manuelle requise
         // ─────────────────────────────────────────────────────────
         stage('Deploy – Production') {
             when { expression { env.GIT_BRANCH_NAME == 'main' } }
             steps {
                 input message: "Déployer ${env.GIT_COMMIT_SHORT} en production ?", ok: 'Déployer'
 
-                script {
-                    sh "kubectl apply -f k8s/"
+                withCredentials([sshUserPrivateKey(
+                    credentialsId: 'ssh-host-key',
+                    keyFileVariable: 'SSH_KEY',
+                    usernameVariable: 'SSH_USER'
+                )]) {
+                    script {
+                        def host = [
+                            name         : 'host',
+                            host         : env.HOST_NAME,
+                            user         : env.SSH_USER,
+                            identityFile : env.SSH_KEY,
+                            allowAnyHosts: true
+                        ]
 
-                    sh """
-                        kubectl set image deployment/${env.K8S_DEPLOYMENT} \
-                            ${env.K8S_DEPLOYMENT}=${env.IMAGE_TAG} \
-                            -n ${env.K8S_NS_PROD}
-                        kubectl rollout status deployment/${env.K8S_DEPLOYMENT} \
-                            -n ${env.K8S_NS_PROD} --timeout=180s
-                    """
+                        sshCommand remote: host, command: "mkdir -p /tmp/beown-k8s"
+                        sshPut remote: host, from: 'k8s', into: '/tmp/beown-k8s'
+
+                        sshCommand remote: host, command: """
+                            kubectl apply -f /tmp/beown-k8s/k8s/
+                            kubectl set image deployment/${env.K8S_DEPLOYMENT} \
+                                ${env.K8S_DEPLOYMENT}=${env.IMAGE_TAG} \
+                                -n ${env.K8S_NS_PROD}
+                            kubectl rollout status deployment/${env.K8S_DEPLOYMENT} \
+                                -n ${env.K8S_NS_PROD} --timeout=180s
+                            rm -rf /tmp/beown-k8s
+                        """
+                    }
                 }
             }
         }
