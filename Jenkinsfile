@@ -44,11 +44,11 @@ pipeline {
                         script: '@git rev-parse --short HEAD',
                         returnStdout: true
                     ).trim()
-                    // Récupère le nom de branche depuis git (fiable sur tous les types de jobs)
-                    env.GIT_BRANCH_NAME = bat(
-                        script: '@git rev-parse --abbrev-ref HEAD',
-                        returnStdout: true
-                    ).trim()
+                    // GIT_BRANCH est injecté par Jenkins (ex: "origin/develop")
+                    // on supprime le préfixe "origin/" pour obtenir "develop"
+                    env.GIT_BRANCH_NAME = (env.GIT_BRANCH ?: env.BRANCH_NAME ?: '')
+                        .replaceAll('origin/', '')
+                        .trim()
                     env.IMAGE_TAG = "${env.DOCKER_IMAGE}:${env.GIT_COMMIT_SHORT}"
                     echo "Branche : ${env.GIT_BRANCH_NAME}  |  Image : ${env.IMAGE_TAG}"
                 }
