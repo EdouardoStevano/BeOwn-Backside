@@ -96,7 +96,7 @@ pipeline {
 
                         // Build, login, push
                         sshCommand remote: host, command: """
-                            cd /tmp/beown-build
+                            cd /tmp/beown-build/beown-backend_
                             docker build -f dockerfiles/prod.dockerfile -t ${env.IMAGE_TAG} .
                             echo '${env.DOCKER_PASS}' | docker login -u '${env.DOCKER_USER}' --password-stdin
                             docker push ${env.IMAGE_TAG}
