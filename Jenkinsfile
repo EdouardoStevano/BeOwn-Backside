@@ -40,16 +40,19 @@ pipeline {
         stage('Init') {
             steps {
                 script {
-                    // Le @ supprime l'écho de la commande dans bat
                     env.GIT_COMMIT_SHORT = bat(
                         script: '@git rev-parse --short HEAD',
                         returnStdout: true
                     ).trim()
+                    // Récupère le nom de branche depuis git (fiable sur tous les types de jobs)
+                    env.GIT_BRANCH_NAME = bat(
+                        script: '@git rev-parse --abbrev-ref HEAD',
+                        returnStdout: true
+                    ).trim()
                     env.IMAGE_TAG = "${env.DOCKER_IMAGE}:${env.GIT_COMMIT_SHORT}"
-                    echo "Branche : ${env.BRANCH_NAME}  |  Image : ${env.IMAGE_TAG}"
+                    echo "Branche : ${env.GIT_BRANCH_NAME}  |  Image : ${env.IMAGE_TAG}"
                 }
             }
-            
         }
 
         // ─────────────────────────────────────────────────────────
@@ -76,10 +79,9 @@ pipeline {
         // ─────────────────────────────────────────────────────────
         stage('Build & Push Image') {
             when {
-                anyOf {
-                    branch 'main'
-                    branch 'develop'
-                    branch pattern: 'release/.*', comparator: 'REGEXP'
+                expression {
+                    env.GIT_BRANCH_NAME in ['main', 'develop'] ||
+                    env.GIT_BRANCH_NAME?.startsWith('release/')
                 }
             }
             steps {
@@ -99,13 +101,13 @@ pipeline {
                         bat "docker push %IMAGE_TAG%"
 
                         // Tags supplémentaires selon la branche
-                        if (env.BRANCH_NAME == 'main') {
+                        if (env.GIT_BRANCH_NAME == 'main') {
                             bat """
                                 docker tag %IMAGE_TAG% %DOCKER_IMAGE%:latest
                                 docker push %DOCKER_IMAGE%:latest
                             """
                         }
-                        if (env.BRANCH_NAME == 'develop') {
+                        if (env.GIT_BRANCH_NAME == 'develop') {
                             bat """
                                 docker tag %IMAGE_TAG% %DOCKER_IMAGE%:develop
                                 docker push %DOCKER_IMAGE%:develop
@@ -127,7 +129,7 @@ pipeline {
         // 5. DEPLOY — STAGING  (branche develop)
         // ─────────────────────────────────────────────────────────
         stage('Deploy – Staging') {
-            when { branch 'develop' }
+            when { expression { env.GIT_BRANCH_NAME == 'develop' } }
             steps {
                 withCredentials([sshUserPrivateKey(
                     credentialsId: 'ssh-staging-key',
@@ -164,7 +166,7 @@ pipeline {
         //    Confirmation manuelle avant déploiement
         // ─────────────────────────────────────────────────────────
         stage('Deploy – Production') {
-            when { branch 'main' }
+            when { expression { env.GIT_BRANCH_NAME == 'main' } }
             steps {
                 input message: "Déployer ${env.GIT_COMMIT_SHORT} en production ?", ok: 'Déployer'
 
@@ -210,7 +212,7 @@ pipeline {
             echo "Pipeline réussi — ${env.IMAGE_TAG}"
         }
         failure {
-            echo "Échec sur ${env.BRANCH_NAME} (${env.GIT_COMMIT_SHORT})"
+            echo "Échec sur ${env.GIT_BRANCH_NAME} (${env.GIT_COMMIT_SHORT})"
             // emailext subject: "ECHEC CI/CD — BeOwn [${env.BRANCH_NAME}]",
             //          body:    "Build #${env.BUILD_NUMBER} a échoué.\n${env.BUILD_URL}",
             //          to:      'team@beown.com'
