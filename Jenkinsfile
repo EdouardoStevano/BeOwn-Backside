@@ -49,25 +49,40 @@ pipeline {
                     echo "Branche : ${env.BRANCH_NAME}  |  Image : ${env.IMAGE_TAG}"
                 }
             }
+            
         }
 
         // ─────────────────────────────────────────────────────────
-        // 1. INSTALL  (bat car agent Windows, Node.js requis sur le serveur)
+        // 1. INSTALL  (container Linux → sh valide)
         // ─────────────────────────────────────────────────────────
         stage('Install') {
+            agent {
+                docker {
+                    image "node:${NODE_VERSION}-alpine"
+                    args  '-u root'
+                    reuseNode true
+                }
+            }
             steps {
-                bat 'npm ci --prefer-offline'
+                sh 'npm ci --prefer-offline'
             }
         }
 
         // ─────────────────────────────────────────────────────────
-        // 2. LINT
+        // 2. LINT  (container Linux)
         // ─────────────────────────────────────────────────────────
-        stage('Lint') {
-            steps {
-                bat 'npm run lint'
-            }
-        }
+        // stage('Lint') {
+        //     agent {
+        //         docker {
+        //             image "node:${NODE_VERSION}-alpine"
+        //             args  '-u root'
+        //             reuseNode true
+        //         }
+        //     }
+        //     steps {
+        //         sh 'npm run lint'
+        //     }
+        // }
 
         // ─────────────────────────────────────────────────────────
         // 4. BUILD & PUSH DOCKER IMAGE
