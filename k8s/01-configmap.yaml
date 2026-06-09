@@ -16,7 +16,7 @@ data:
   REDIS_HOST: "redis-service"
   REDIS_PORT: "6379"
 
-# ─── JWT ─────────────────────────────────────────────────
+  # JWT
   JWT_TOKEN_AUDIENCE: "http://34.35.29.154"
   JWT_TOKEN_ISSUER: "http://34.35.29.154"
   JWT_ACCESS_TOKEN_TTL: "3600"

@@ -152,6 +152,7 @@ pipeline {
                         sshCommand remote: host, command: """
                             kubectl create namespace ${env.K8S_NS_STG} --dry-run=client -o yaml | kubectl apply -f -
                             for f in /tmp/beown-k8s/k8s/*.yaml; do
+                                if [[ "$(basename $f)" != "02-secrets.yaml" ]]; then
                                 sed 's/namespace: ${env.K8S_NS_PROD}/namespace: ${env.K8S_NS_STG}/g' "\$f" | tr -d '\\r' | kubectl apply -f -
                             done
                             kubectl set image deployment/${env.K8S_DEPLOYMENT} ${env.K8S_DEPLOYMENT}=${env.IMAGE_TAG} -n ${env.K8S_NS_STG}
