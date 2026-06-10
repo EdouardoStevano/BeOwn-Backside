@@ -158,7 +158,8 @@ pipeline {
                             done
                             kubectl set image deployment/${env.K8S_DEPLOYMENT} ${env.K8S_DEPLOYMENT}=${env.IMAGE_TAG} -n ${env.K8S_NS_STG}
                             kubectl rollout status deployment/${env.K8S_DEPLOYMENT} -n ${env.K8S_NS_STG} --timeout=120s
-                            kubectl exec -it deployment/${env.K8S_DEPLOYMENT} -n ${env.k8S_NS_STG} -- npm run seed --timeout=180s
+                            kubectl exec deployment/${env.K8S_DEPLOYMENT} -n ${env.K8S_NS_STG} -- npm run migration:run
+                            kubectl exec deployment/${env.K8S_DEPLOYMENT} -n ${env.K8S_NS_STG} -- npm run seed
                             rm -rf /tmp/beown-k8s
                         """
                     }
