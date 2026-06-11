@@ -7,7 +7,7 @@ metadata:
   labels:
     app: beown-backend
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app: beown-backend
@@ -82,7 +82,7 @@ metadata:
   name: beown-backend-service
   namespace: beown
 spec:
-  type: LoadBalancer
+  # type: LoadBalancer
   selector:
     app: beown-backend
   ports:
