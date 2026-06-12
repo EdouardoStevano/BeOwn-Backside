@@ -3,6 +3,7 @@ import { LocativeManagementInfrastructureModule } from '../infrastructure/locati
 import { NotificationsModule } from 'src/notifications/notifications.module';
 import { CloudStorageModule } from 'src/common/cloud-storage/cloud-storage.module';
 import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructure.module';
+import { ProjectsInfrastructureModule } from 'src/projects/infrastructure/projects-infrastructure.module';
 import { AddUniteLouableUseCase } from './usecases/add-unite-louable.usecase';
 import { CreateBailUseCase } from './usecases/create-bail.usecase';
 import { UpdateBailUseCase } from './usecases/update-bail.usecase';
@@ -22,6 +23,7 @@ import { AdminLocativeController } from '../presenters/http/admin-locative.contr
     NotificationsModule,
     CloudStorageModule,
     IamInfrastructureModule,
+    ProjectsInfrastructureModule,
   ],
   controllers: [PorteurController, AdminLocativeController],
   providers: [

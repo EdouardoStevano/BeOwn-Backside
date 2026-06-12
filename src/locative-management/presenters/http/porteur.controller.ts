@@ -2,8 +2,10 @@ import {
   BadRequestException,
   Body,
   Controller,
+  ForbiddenException,
   Get,
   Inject,
+  NotFoundException,
   Param,
   Patch,
   Post,
@@ -45,6 +47,10 @@ import { DeclareLoyerDto } from '../dto/loyer-encaisse.dto';
 import { DeclareChargeDto } from '../dto/charge.dto';
 import { UpdateBailDto, ResilierBailDto } from '../dto/update-bail.dto';
 import { StatutBail } from '../../domains/enums/statut-bail.enum';
+import {
+  PROJECT_REPOSITORY,
+  type ProjectRepository,
+} from 'src/projects/applications/ports/repositories/project.repository';
 
 @ApiTags('Porteur — Gestion locative')
 @ApiBearerAuth()
@@ -67,12 +73,74 @@ export class PorteurController {
     private readonly bailRepo: BailRepository,
     @Inject(LOCATAIRE_REPOSITORY)
     private readonly locataireRepo: LocataireRepository,
+    @Inject(PROJECT_REPOSITORY)
+    private readonly projectRepo: ProjectRepository,
     private readonly cloudStorage: CloudStorageService,
   ) {}
 
+  /** Anti-IDOR : le projet doit exister ET appartenir au porteur connecté. */
+  private async assertOwnsProject(
+    projetId: string,
+    userId: number,
+  ): Promise<void> {
+    const project = await this.projectRepo.findProjectById(projetId);
+    if (!project) throw new NotFoundException('Projet introuvable.');
+    if (project.porteurId !== userId) {
+      throw new ForbiddenException(
+        "Ce projet n'est pas rattaché à votre compte porteur.",
+      );
+    }
+  }
+
+  /** Remonte bail → unité → projet et vérifie la propriété. */
+  private async assertOwnsBail(bailId: string, userId: number): Promise<void> {
+    const bail = await this.bailRepo.findById(bailId);
+    if (!bail) throw new NotFoundException('Bail introuvable.');
+    const unite = await this.uniteRepo.findById(bail.uniteLouableId);
+    if (!unite) throw new NotFoundException('Unité louable introuvable.');
+    await this.assertOwnsProject(unite.projetId, userId);
+  }
+
+  /** Vérifie unité → projet. */
+  private async assertOwnsUnite(
+    uniteLouableId: string,
+    userId: number,
+  ): Promise<void> {
+    const unite = await this.uniteRepo.findById(uniteLouableId);
+    if (!unite) throw new NotFoundException('Unité louable introuvable.');
+    await this.assertOwnsProject(unite.projetId, userId);
+  }
+
+  /** Vérifie que la SCI est rattachée à au moins un projet du porteur. */
+  private async assertOwnsSpv(spvId: string, userId: number): Promise<void> {
+    const { data } = await this.projectRepo.findAllProjects({
+      porteurId: userId,
+      limit: 200,
+    });
+    if (!data.some((p) => p.spvId === spvId)) {
+      throw new ForbiddenException(
+        "Cette SCI n'est rattachée à aucun de vos projets.",
+      );
+    }
+  }
+
+  @Get('projects')
+  @ApiOperation({ summary: 'Lister les projets rattachés au porteur connecté' })
+  async listMyProjects(@CurrentUser() user: ActiveUser) {
+    const { data } = await this.projectRepo.findAllProjects({
+      porteurId: user.userId,
+      limit: 200,
+    });
+    return data;
+  }
+
   @Post('unites')
   @ApiOperation({ summary: 'Créer une unité louable' })
-  createUnite(@Body() dto: AddUniteLouableDto) {
+  async createUnite(
+    @Body() dto: AddUniteLouableDto,
+    @CurrentUser() user: ActiveUser,
+  ) {
+    await this.assertOwnsProject(dto.projetId, user.userId);
     return this.addUniteLouable.execute({
       projetId: dto.projetId,
       reference: dto.reference,
@@ -83,7 +151,11 @@ export class PorteurController {
 
   @Post('baux')
   @ApiOperation({ summary: 'Créer un bail (avec locataire inline)' })
-  createBailEndpoint(@Body() dto: CreateBailDto) {
+  async createBailEndpoint(
+    @Body() dto: CreateBailDto,
+    @CurrentUser() user: ActiveUser,
+  ) {
+    await this.assertOwnsUnite(dto.uniteLouableId, user.userId);
     return this.createBail.execute({
       uniteLouableId: dto.uniteLouableId,
       locataire: dto.locataire,
@@ -97,10 +169,11 @@ export class PorteurController {
 
   @Post('loyers')
   @ApiOperation({ summary: 'Déclarer un loyer encaissé (statut DECLARE)' })
-  declareLoyerEndpoint(
+  async declareLoyerEndpoint(
     @Body() dto: DeclareLoyerDto,
     @CurrentUser() user: ActiveUser,
   ) {
+    await this.assertOwnsBail(dto.bailId, user.userId);
     return this.declareLoyer.execute({
       bailId: dto.bailId,
       periode: dto.periode,
@@ -113,10 +186,11 @@ export class PorteurController {
 
   @Post('charges')
   @ApiOperation({ summary: 'Déclarer une charge (statut DECLARE)' })
-  declareChargeEndpoint(
+  async declareChargeEndpoint(
     @Body() dto: DeclareChargeDto,
     @CurrentUser() user: ActiveUser,
   ) {
+    await this.assertOwnsProject(dto.projetId, user.userId);
     return this.declareCharge.execute({
       projetId: dto.projetId,
       type: dto.type,
@@ -131,43 +205,63 @@ export class PorteurController {
 
   @Get('projects/:id/occupation')
   @ApiOperation({ summary: "Taux d'occupation actuel du projet" })
-  getOccupationEndpoint(@Param('id') projetId: string) {
+  async getOccupationEndpoint(
+    @Param('id') projetId: string,
+    @CurrentUser() user: ActiveUser,
+  ) {
+    await this.assertOwnsProject(projetId, user.userId);
     return this.getOccupation.execute(projetId);
   }
 
   @Get('projects/:id/etat-financier/:periode')
   @ApiOperation({ summary: 'P&L validé du projet pour une période (YYYY-MM)' })
-  getEtatFinancierEndpoint(
+  async getEtatFinancierEndpoint(
     @Param('id') projetId: string,
     @Param('periode') periode: string,
+    @CurrentUser() user: ActiveUser,
   ) {
+    await this.assertOwnsProject(projetId, user.userId);
     return this.getEtatFinancier.execute(projetId, periode);
   }
 
   @Get('projects/:id/unites')
   @ApiOperation({ summary: "Lister les unités louables d'un projet" })
-  listUnites(@Param('id') projetId: string) {
+  async listUnites(
+    @Param('id') projetId: string,
+    @CurrentUser() user: ActiveUser,
+  ) {
+    await this.assertOwnsProject(projetId, user.userId);
     return this.uniteRepo.findByProjet(projetId);
   }
 
   @Get('projects/:id/baux')
   @ApiOperation({ summary: "Lister les baux actifs d'un projet" })
-  listBauxActifs(@Param('id') projetId: string) {
+  async listBauxActifs(
+    @Param('id') projetId: string,
+    @CurrentUser() user: ActiveUser,
+  ) {
+    await this.assertOwnsProject(projetId, user.userId);
     return this.bailRepo.findActifsByProjet(projetId);
   }
 
   @Get('spv/:spvId/locataires')
   @ApiOperation({ summary: "Lister les locataires d'une SCI" })
-  listLocataires(@Param('spvId') spvId: string) {
+  async listLocataires(
+    @Param('spvId') spvId: string,
+    @CurrentUser() user: ActiveUser,
+  ) {
+    await this.assertOwnsSpv(spvId, user.userId);
     return this.locataireRepo.findBySpv(spvId);
   }
 
   @Patch('baux/:id')
   @ApiOperation({ summary: 'Modifier un bail (loyer, date fin, contrat PDF)' })
-  updateBailEndpoint(
+  async updateBailEndpoint(
     @Param('id') id: string,
     @Body() dto: UpdateBailDto,
+    @CurrentUser() user: ActiveUser,
   ) {
+    await this.assertOwnsBail(id, user.userId);
     return this.updateBail.execute({
       id,
       loyerMensuel: dto.loyerMensuel,
@@ -180,11 +274,12 @@ export class PorteurController {
   @ApiOperation({
     summary: 'Résilier ou terminer un bail (statut RESILIE ou TERMINE)',
   })
-  resilierBailEndpoint(
+  async resilierBailEndpoint(
     @Param('id') id: string,
     @Body() dto: ResilierBailDto,
     @CurrentUser() user: ActiveUser,
   ) {
+    await this.assertOwnsBail(id, user.userId);
     const finalStatus =
       dto.statutFinal === 'termine' ? StatutBail.TERMINE : StatutBail.RESILIE;
     return this.resilierBail.execute(id, user.userId, dto.motif, finalStatus);
