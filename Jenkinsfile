@@ -90,13 +90,15 @@ pipeline {
                             allowAnyHosts: true
                         ]
 
-                        // Copier les sources sur l'hôte
-                        sshCommand remote: host, command: "mkdir -p /tmp/beown-build"
-                        sshPut remote: host, from: '.', into: '/tmp/beown-build'
+                        // Archiver uniquement les fichiers trackés (exclut node_modules, .git, etc.)
+                        sh "git archive --format=tar.gz HEAD -o beown-source.tar.gz"
+                        sshCommand remote: host, command: "mkdir -p /tmp/beown-build/src"
+                        sshPut remote: host, from: 'beown-source.tar.gz', into: '/tmp/beown-build'
+                        sshCommand remote: host, command: "tar -xzf /tmp/beown-build/beown-source.tar.gz -C /tmp/beown-build/src"
 
                         // Build, login, push
                         sshCommand remote: host, command: """
-                            cd /tmp/beown-build/beown-backend_${env.GIT_BRANCH_NAME}
+                            cd /tmp/beown-build/src
                             docker build -f dockerfiles/prod.dockerfile -t ${env.IMAGE_TAG} .
                             echo '${env.DOCKER_PASS}' | docker login -u '${env.DOCKER_USER}' --password-stdin
                             docker push ${env.IMAGE_TAG}
