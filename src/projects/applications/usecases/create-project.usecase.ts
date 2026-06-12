@@ -32,6 +32,7 @@ export class CreateProjectUseCase {
     project.ticketMinimum = dto.ticketMinimum ?? 100;
     project.ticketMaximum = dto.ticketMaximum ?? null;
     project.triCible = dto.triCible ?? null;
+    project.indiceRisque = dto.indiceRisque ?? 3;
     project.dureeMois = dto.dureeMois;
     project.instrument = dto.instrument;
     project.statut = dto.statut ?? ProjectStatus.BROUILLON;

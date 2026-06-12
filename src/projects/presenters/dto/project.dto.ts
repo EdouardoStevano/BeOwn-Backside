@@ -141,6 +141,18 @@ export class CreateProjectDto {
   @IsNumber()
   triCible?: number;
 
+  @ApiPropertyOptional({
+    example: 3,
+    description: 'Échelle de risque du projet : 1 (très faible) à 5 (très élevé)',
+  })
+  @IsOptional()
+  @toNumber()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(5)
+  indiceRisque?: number;
+
   @ApiProperty({ example: 24 })
   @toNumber()
   @Type(() => Number)

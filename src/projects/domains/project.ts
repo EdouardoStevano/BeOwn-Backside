@@ -29,6 +29,8 @@ export class Project {
   ticketMinimum: number;
   ticketMaximum: number | null;
   triCible: number | null;
+  /** Échelle de risque 1 (très faible) à 5 (très élevé). */
+  indiceRisque: number;
   dureeMois: number;
   instrument: ProjectInstrument;
   statut: ProjectStatus;

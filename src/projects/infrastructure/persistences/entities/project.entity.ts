@@ -130,6 +130,10 @@ export class ProjectEntity {
   @Column({ type: 'decimal', precision: 5, scale: 2, nullable: true })
   triCible: number | null;
 
+  /** Échelle de risque du projet (1 = très faible … 5 = très élevé), fixée par l'admin lors de l'analyse. */
+  @Column({ type: 'integer', default: 3 })
+  indiceRisque: number;
+
   @Column({ type: 'integer' })
   dureeMois: number;
 

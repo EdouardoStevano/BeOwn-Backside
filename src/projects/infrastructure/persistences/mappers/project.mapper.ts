@@ -27,6 +27,7 @@ export class ProjectMapper {
     domain.ticketMaximum =
       entity.ticketMaximum != null ? Number(entity.ticketMaximum) : null;
     domain.triCible = entity.triCible != null ? Number(entity.triCible) : null;
+    domain.indiceRisque = entity.indiceRisque != null ? Number(entity.indiceRisque) : 3;
     domain.dureeMois = entity.dureeMois;
     domain.instrument = entity.instrument;
     domain.statut = entity.statut;
@@ -74,6 +75,7 @@ export class ProjectMapper {
     entity.ticketMinimum = domain.ticketMinimum;
     entity.ticketMaximum = domain.ticketMaximum;
     entity.triCible = domain.triCible;
+    entity.indiceRisque = domain.indiceRisque ?? 3;
     entity.dureeMois = domain.dureeMois;
     entity.instrument = domain.instrument;
     entity.statut = domain.statut;
