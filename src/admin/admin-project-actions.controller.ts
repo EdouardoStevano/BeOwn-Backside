@@ -17,7 +17,7 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository, DataSource } from 'typeorm';
+import { Repository } from 'typeorm';
 import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
 import { Roles } from 'src/common/auth/roles.decorator';
 import { CurrentUser } from 'src/common/auth/current-user.decorator';
@@ -30,14 +30,7 @@ import { ProjectEntity } from 'src/projects/infrastructure/persistences/entities
 import { ProjectStatus } from 'src/projects/domains/enums/project-status.enum';
 import { InvestmentEntity } from 'src/investments/infrastructure/persistences/entities/investment.entity';
 import { InvestmentStatus } from 'src/investments/domains/enums/investment-status.enum';
-import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/wallet.entity';
-import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entities/transaction.entity';
-import {
-  TransactionFournisseur,
-  TransactionStatus,
-  TransactionType,
-  WalletType,
-} from 'src/wallets/domains/enums/wallet.enum';
+import { RefundCollecteService } from 'src/investments/applications/refund-collecte.service';
 import { NotificationService } from 'src/notifications/applications/notification.service';
 import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
 
@@ -47,15 +40,6 @@ const ADMIN_ROLES: string[] = [
   UserRole.COMPLIANCE,
   UserRole.FINANCIER,
   UserRole.RCCI,
-];
-
-const REFUNDABLE_INVESTMENT_STATUSES = [
-  InvestmentStatus.CONFIRME,
-  InvestmentStatus.SIGNE,
-  InvestmentStatus.PAYE,
-  InvestmentStatus.INITIE,
-  InvestmentStatus.ADEQUATION_OK,
-  InvestmentStatus.PAIEMENT_ATTENDU,
 ];
 
 class CancelCollecteDto {
@@ -75,12 +59,8 @@ export class AdminProjectActionsController {
     private readonly projectRepo: Repository<ProjectEntity>,
     @InjectRepository(InvestmentEntity)
     private readonly investRepo: Repository<InvestmentEntity>,
-    @InjectRepository(WalletEntity)
-    private readonly walletRepo: Repository<WalletEntity>,
-    @InjectRepository(TransactionEntity)
-    private readonly txRepo: Repository<TransactionEntity>,
     private readonly notif: NotificationService,
-    private readonly dataSource: DataSource,
+    private readonly refundService: RefundCollecteService,
   ) {}
 
   private async ensureAdmin(currentUser: ActiveUser): Promise<UserEntity> {
@@ -115,103 +95,96 @@ export class AdminProjectActionsController {
       );
     }
 
-    return this.dataSource.transaction(async (manager) => {
-      const investments = await manager.find(InvestmentEntity, {
-        where: {
-          projetId: id,
-          statut: In(REFUNDABLE_INVESTMENT_STATUSES),
-        },
-      });
+    const result = await this.refundService.refundProjectCollecte(id, {
+      targetStatus: ProjectStatus.ANNULE,
+      reason: dto.reason ?? null,
+      triggeredByUserId: currentUser.userId,
+    });
 
-      let refundedCount = 0;
-      let refundedAmount = 0;
+    return {
+      projectId: id,
+      newStatus: ProjectStatus.ANNULE,
+      refundedCount: result.refundedCount,
+      refundedAmount: result.refundedAmount,
+    };
+  }
 
-      for (const inv of investments) {
-        // Find investor wallet (auto-create if missing — defensive)
-        let wallet = await manager.findOne(WalletEntity, {
-          where: { proprietaireUserId: inv.utilisateurId, type: WalletType.INVESTISSEUR },
-        });
-        if (!wallet) {
-          wallet = manager.create(WalletEntity, {
-            proprietaireUserId: inv.utilisateurId,
-            type: WalletType.INVESTISSEUR,
-            devise: 'XOF',
-            solde: 0,
-          } as Partial<WalletEntity>);
-          wallet = await manager.save(wallet);
-        }
-
-        const amount = Number(inv.montant);
-
-        // Credit wallet
-        await manager.update(
-          WalletEntity,
-          { id: wallet.id },
-          { solde: () => `solde + ${amount}` } as never,
-        );
-
-        // Record transaction
-        const tx = manager.create(TransactionEntity, {
-          walletSource: null,
-          walletDestination: wallet.id,
-          montant: amount,
-          devise: 'XOF',
-          type: TransactionType.REMBOURSEMENT_COLLECTE_ECHEC,
-          fournisseur: TransactionFournisseur.INTERNE,
-          statut: TransactionStatus.REUSSI,
-          investissementId: inv.id,
-          projetId: project.id,
-          metadata: { reason: dto.reason ?? null, triggeredBy: currentUser.userId },
-        } as Partial<TransactionEntity>);
-        await manager.save(tx);
-
-        // Update investment status
-        await manager.update(
-          InvestmentEntity,
-          { id: inv.id },
-          { statut: InvestmentStatus.ANNULE },
-        );
-
-        // Notify investor (in-app via WebSocket + DB)
-        try {
-          await this.notif.push({
-            utilisateurId: inv.utilisateurId,
-            type: NotificationType.AUTRE,
-            titre: `Projet annulé : ${project.titre}`,
-            message: `La collecte a été annulée. ${amount.toLocaleString('fr-FR')} XOF ont été recrédités sur votre wallet.${dto.reason ? ` Motif : ${dto.reason}` : ''}`,
-            metadata: {
-              projectId: project.id,
-              projectSlug: project.slug,
-              amount,
-              reason: dto.reason ?? null,
-            },
-          });
-        } catch {
-          // Notification failure non-blocking
-        }
-
-        refundedCount += 1;
-        refundedAmount += amount;
-      }
-
-      // Update project status
-      await manager.update(
-        ProjectEntity,
-        { id },
-        {
-          statut: ProjectStatus.ANNULE,
-          motifAnnulation: dto.reason ?? null,
-          annuleLe: new Date(),
-        },
+  @ApiOperation({
+    summary:
+      'Clôturer la collecte selon le seuil minimum (tout ou rien crowdfunding)',
+  })
+  @ApiResponse({
+    status: 200,
+    description:
+      'Si l\'objectif minimum est atteint → FINANCE, sinon → ÉCHEC + remboursement intégral',
+  })
+  @Post('projects/:id/close-collecte')
+  @HttpCode(HttpStatus.OK)
+  async closeCollecte(
+    @Param('id') id: string,
+    @CurrentUser() currentUser: ActiveUser,
+  ) {
+    await this.ensureAdmin(currentUser);
+    const project = await this.projectRepo.findOne({ where: { id } });
+    if (!project) throw new NotFoundException('Projet introuvable.');
+    if (project.statut !== ProjectStatus.EN_COLLECTE) {
+      throw new ForbiddenException(
+        `Clôture possible uniquement depuis le statut "en_collecte" (actuel : "${project.statut}").`,
       );
+    }
 
+    const raisedRow = await this.investRepo
+      .createQueryBuilder('i')
+      .select('COALESCE(SUM(i.montant), 0)', 'total')
+      .where('i.projetId = :id', { id })
+      .andWhere('i.statut NOT IN (:...excluded)', {
+        excluded: [
+          InvestmentStatus.RETRACTE,
+          InvestmentStatus.ANNULE,
+          InvestmentStatus.INITIE,
+        ],
+      })
+      .getRawOne<{ total: string }>();
+    const raised = Number(raisedRow?.total ?? 0);
+    const target = Number(project.capitalCible ?? 0);
+    const minimum = Number(project.capitalMinimum ?? 0) || target;
+
+    if (minimum > 0 && raised >= minimum) {
+      await this.projectRepo.update({ id }, { statut: ProjectStatus.FINANCE });
+      await this.notif
+        .pushToAdmins({
+          type: NotificationType.AUTRE,
+          titre: 'Collecte financée — créer l\'échéancier',
+          message: `« ${project.titre} » a atteint son objectif minimum (${raised} / min ${minimum} XOF). Créez l'échéancier emprunteur.`,
+          roles: [UserRole.ADMIN, UserRole.FINANCIER, UserRole.COMPLIANCE],
+          metadata: { projectId: id, raised, minimum, target },
+        })
+        .catch(() => {});
       return {
         projectId: id,
-        newStatus: ProjectStatus.ANNULE,
-        refundedCount,
-        refundedAmount,
+        outcome: 'finance',
+        newStatus: ProjectStatus.FINANCE,
+        raised,
+        minimum,
+        target,
       };
+    }
+
+    const result = await this.refundService.refundProjectCollecte(id, {
+      targetStatus: ProjectStatus.ECHEC,
+      reason: `Objectif minimum de collecte non atteint (${raised} / min ${minimum} XOF).`,
+      triggeredByUserId: currentUser.userId,
     });
+    return {
+      projectId: id,
+      outcome: 'echec',
+      newStatus: ProjectStatus.ECHEC,
+      raised,
+      minimum,
+      target,
+      refundedCount: result.refundedCount,
+      refundedAmount: result.refundedAmount,
+    };
   }
 
   @ApiOperation({ summary: 'Publier un projet en mode "annonce" (vitrine)' })
