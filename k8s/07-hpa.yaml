@@ -16,7 +16,7 @@ spec:
     apiVersion: apps/v1
     kind: Deployment
     name: beown-backend
-  minReplicas: 2
+  minReplicas: 1
   maxReplicas: 6
   metrics:
     # Scale dès que l'utilisation CPU moyenne dépasse 70 % des requests
