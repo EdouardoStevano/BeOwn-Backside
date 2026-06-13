@@ -155,7 +155,12 @@ export class ProjectController {
   @Get('slug/:slug')
   async findBySlug(@Param('slug') slug: string) {
     const project = await this.getProjects.executeBySlug(slug);
-    if (!project) throw new NotFoundException('Projet introuvable.');
+    // Un brouillon (soumis par un porteur, pas encore validé/publié par un
+    // admin) ne doit pas être exposé sur le site public via son slug — celui-ci
+    // est dérivé du titre, donc devinable. L'admin et le porteur consultent le
+    // dossier par id (UUID non devinable) ou via leurs espaces dédiés.
+    if (!project || project.statut === ProjectStatus.BROUILLON)
+      throw new NotFoundException('Projet introuvable.');
     return this.buildProjectDetail(project.id);
   }
 
