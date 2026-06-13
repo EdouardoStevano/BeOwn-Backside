@@ -70,7 +70,7 @@ async function bootstrap() {
     )
     .setVersion('1.0.0')
     .addServer(
-      `http://localhost:${process.env.PORT ?? 3002}`,
+      `http://localhost:${process.env.API_URL ?? 3002}`,
       'Développement local',
     )
     .addServer('https://api.beown.com', 'Production')

@@ -1,0 +1,55 @@
+---
+# Horizontal Pod Autoscaler pour le backend BeOwn
+# K3s embarque metrics-server par défaut : les métriques CPU/mémoire
+# sont donc disponibles sans installation supplémentaire.
+# Prérequis : le Deployment cible doit définir resources.requests
+# (déjà le cas dans 05-app.yaml : cpu 250m / memory 256Mi).
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: beown-backend-hpa
+  namespace: beown
+  labels:
+    app: beown-backend
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: beown-backend
+  minReplicas: 2
+  maxReplicas: 6
+  metrics:
+    # Scale dès que l'utilisation CPU moyenne dépasse 70 % des requests
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    # Scale dès que l'utilisation mémoire moyenne dépasse 80 % des requests
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+  behavior:
+    scaleUp:
+      # Réaction rapide à la montée en charge
+      stabilizationWindowSeconds: 30
+      policies:
+        - type: Pods
+          value: 2
+          periodSeconds: 60
+        - type: Percent
+          value: 100
+          periodSeconds: 60
+      selectPolicy: Max
+    scaleDown:
+      # Descente prudente pour éviter les oscillations (flapping)
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 120
+      selectPolicy: Max

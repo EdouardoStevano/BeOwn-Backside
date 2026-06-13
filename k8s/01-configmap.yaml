@@ -46,10 +46,10 @@ data:
 
   # App
   FRONTEND_URL: "http://34.35.29.154"
-  ADMIN_URL: "http://34.35.29.154"
+  ADMIN_URL: "http://34.35.29.154:8081"
   API_URL: "http://34.35.29.154:8080"
   TFA_APP_NAME: "BeOwn"
-  CONFIRM_EMAIL_URL: "http://localhost:3002/email/verify"
+  CONFIRM_EMAIL_URL: "http://34.35.29.154:8080/email/verify"
 
   # reCAPTCHA (clé de test Google — toujours valide)
   RECAPTCHA_SECRET_KEY: "6LeIxAcTAAAAAGG-vFI1TnRWxMZNFuojJ4WifJWe"

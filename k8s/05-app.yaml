@@ -7,7 +7,9 @@ metadata:
   labels:
     app: beown-backend
 spec:
-  replicas: 1
+  # replicas géré par le HorizontalPodAutoscaler (voir 07-hpa.yaml).
+  # On ne fixe pas replicas ici pour éviter qu'un kubectl apply ne réinitialise
+  # le nombre de pods décidé par le HPA.
   selector:
     matchLabels:
       app: beown-backend
