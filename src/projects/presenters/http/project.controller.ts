@@ -190,6 +190,46 @@ export class ProjectController {
     return project;
   }
 
+  @ApiOperation({
+    summary: 'Soumettre un projet pour revue (porteur)',
+    description:
+      "Le porteur soumet son projet : il est créé en BROUILLON, rattaché à son compte, et les administrateurs sont notifiés pour due diligence avant publication. Le porteur ne peut pas auto-publier.",
+  })
+  @ApiResponse({ status: 201, description: 'Projet soumis pour revue' })
+  @Roles(UserRole.PORTEUR)
+  @Post('submit')
+  async submitByPorteur(
+    @Body() dto: CreateProjectDto,
+    @CurrentUser() user: ActiveUser,
+  ) {
+    // Le porteur ne contrôle ni le statut ni la visibilité : toujours brouillon
+    const project = await this.createProject.execute(
+      { ...dto, statut: ProjectStatus.BROUILLON },
+      user.userId,
+    );
+
+    const lieu = [project.ville, project.pays].filter(Boolean).join(', ');
+    this.notificationService
+      .pushToAdmins({
+        type: NotificationType.NOUVEAU_PROJET,
+        titre: 'Nouveau projet soumis par un porteur',
+        message: lieu
+          ? `« ${project.titre} » (${lieu}) a été soumis pour revue. Vérifiez le dossier avant publication.`
+          : `« ${project.titre} » a été soumis pour revue. Vérifiez le dossier avant publication.`,
+        roles: [UserRole.ADMIN, UserRole.COMPLIANCE, UserRole.FINANCIER],
+        metadata: {
+          projectId: project.id,
+          slug: project.slug,
+          porteurId: user.userId,
+          type: project.type,
+          ville: project.ville,
+        },
+      })
+      .catch(() => {});
+
+    return project;
+  }
+
   @ApiOperation({ summary: "Mettre à jour les champs d'un projet (admin)" })
   @ApiParam({ name: 'id', description: 'UUID du projet' })
   @ApiResponse({ status: 200, description: 'Projet mis à jour' })
