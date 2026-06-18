@@ -41,7 +41,7 @@ export class ProfilMapper {
     entity.prenom = domain.prenom;
     entity.nom = domain.nom;
     entity.nomNaissance = domain.nomNaissance;
-    entity.dateNaissance = domain.dateNaissance;
+    entity.dateNaissance = domain.dateNaissance!;
     entity.lieuNaissance = domain.lieuNaissance;
     entity.paysNaissance = domain.paysNaissance;
     entity.nationalite = domain.nationalite;
@@ -101,6 +101,8 @@ export class ProfilMapper {
     domain.fournisseurRef = entity.fournisseurRef;
     domain.valideJusquAu = entity.valideJusquAu;
     domain.motifRefus = entity.motifRefus;
+    domain.stripeReportId = entity.stripeReportId;
+    domain.identiteExtrait = entity.identiteExtrait;
     domain.createdAt = entity.createdAt;
     domain.updatedAt = entity.updatedAt;
     return domain;
@@ -117,6 +119,8 @@ export class ProfilMapper {
     entity.fournisseurRef = domain.fournisseurRef;
     entity.valideJusquAu = domain.valideJusquAu;
     entity.motifRefus = domain.motifRefus;
+    entity.stripeReportId = domain.stripeReportId ?? null;
+    entity.identiteExtrait = domain.identiteExtrait ?? null;
     return entity;
   }
 }

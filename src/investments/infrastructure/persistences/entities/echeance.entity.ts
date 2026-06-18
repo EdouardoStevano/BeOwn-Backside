@@ -19,7 +19,7 @@ export class EcheanceEntity {
   investissementId: string;
 
   @ManyToOne(() => InvestmentEntity, (i) => i.echeances)
-  @JoinColumn({ name: 'investissement_id' })
+  @JoinColumn({ name: 'investissementId' })
   investissement: InvestmentEntity;
 
   @Column({ type: 'integer' })

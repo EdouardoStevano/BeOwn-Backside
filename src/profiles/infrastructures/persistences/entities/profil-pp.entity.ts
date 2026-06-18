@@ -7,7 +7,7 @@ import {
   PrimaryColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { UserEntity } from 'src/users/infrastructures/persistences/entities/user.entity';
+import { UserEntity } from 'src/users/infrastructure/persistences/entities/user.entity';
 import { CategoriePsfp } from 'src/profiles/domains/enums/kyc-status.enum';
 
 @Entity('profil_personne_physique')
@@ -16,7 +16,7 @@ export class ProfilPPEntity {
   utilisateurId: number;
 
   @OneToOne(() => UserEntity)
-  @JoinColumn({ name: 'utilisateur_id' })
+  @JoinColumn({ name: 'utilisateurId' })
   utilisateur: UserEntity;
 
   @Column({ type: 'varchar', nullable: true })

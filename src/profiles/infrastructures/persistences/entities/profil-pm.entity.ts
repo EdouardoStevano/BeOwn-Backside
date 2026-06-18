@@ -7,7 +7,7 @@ import {
   PrimaryColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { UserEntity } from 'src/users/infrastructures/persistences/entities/user.entity';
+import { UserEntity } from 'src/users/infrastructure/persistences/entities/user.entity';
 
 @Entity('profil_personne_morale')
 export class ProfilPMEntity {
@@ -15,7 +15,7 @@ export class ProfilPMEntity {
   utilisateurId: number;
 
   @OneToOne(() => UserEntity)
-  @JoinColumn({ name: 'utilisateur_id' })
+  @JoinColumn({ name: 'utilisateurId' })
   utilisateur: UserEntity;
 
   @Column({ type: 'varchar' })

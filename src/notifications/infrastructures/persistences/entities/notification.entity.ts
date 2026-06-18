@@ -6,7 +6,7 @@ import {
   ManyToOne,
   PrimaryGeneratedColumn,
 } from 'typeorm';
-import { UserEntity } from 'src/users/infrastructures/persistences/entities/user.entity';
+import { UserEntity } from 'src/users/infrastructure/persistences/entities/user.entity';
 
 export enum NotificationCanal {
   EMAIL = 'email',
@@ -25,7 +25,7 @@ export class NotificationEntity {
   utilisateurId: number | null;
 
   @ManyToOne(() => UserEntity, { nullable: true })
-  @JoinColumn({ name: 'utilisateur_id' })
+  @JoinColumn({ name: 'utilisateurId' })
   utilisateur: UserEntity;
 
   @Column({ type: 'varchar', nullable: true })

@@ -6,8 +6,8 @@ import {
   UserEntity,
   UserRole,
   UserStatus,
-} from 'src/users/infrastructures/persistences/entities/user.entity';
-import { UserEmailEntity } from 'src/users/infrastructures/persistences/entities/user-email.entity';
+} from 'src/users/infrastructure/persistences/entities/user.entity';
+import { UserEmailEntity } from 'src/users/infrastructure/persistences/entities/user-email.entity';
 import { SpvEntity } from 'src/projects/infrastructures/persistences/entities/spv.entity';
 import { ProjectEntity } from 'src/projects/infrastructures/persistences/entities/project.entity';
 import {

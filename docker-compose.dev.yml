@@ -4,7 +4,7 @@ services:
       context: .
       dockerfile: ./dockerfiles/dev.dockerfile
     env_file:
-      - ./.env.development.local
+      - ./.env.development
     volumes:
       - ./:/app
       - /app/node_modules

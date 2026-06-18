@@ -9,7 +9,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { ProjectEntity } from 'src/projects/infrastructures/persistences/entities/project.entity';
-import { UserEntity } from 'src/users/infrastructures/persistences/entities/user.entity';
+import { UserEntity } from 'src/users/infrastructure/persistences/entities/user.entity';
 import { ReservationStatus } from 'src/reservations/domains/enums/reservation-status.enum';
 
 @Entity('reservation')
@@ -22,7 +22,7 @@ export class ReservationEntity {
   projetId: string;
 
   @ManyToOne(() => ProjectEntity)
-  @JoinColumn({ name: 'projet_id' })
+  @JoinColumn({ name: 'projetId' })
   projet: ProjectEntity;
 
   @Column({ type: 'integer' })
@@ -30,7 +30,7 @@ export class ReservationEntity {
   utilisateurId: number;
 
   @ManyToOne(() => UserEntity)
-  @JoinColumn({ name: 'utilisateur_id' })
+  @JoinColumn({ name: 'utilisateurId' })
   utilisateur: UserEntity;
 
   @Column({ type: 'decimal', precision: 18, scale: 2 })

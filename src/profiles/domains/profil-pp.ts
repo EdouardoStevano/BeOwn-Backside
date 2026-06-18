@@ -3,6 +3,10 @@ import { CategoriePsfp } from './enums/kyc-status.enum';
 export class ProfilPP {
   utilisateurId: number;
   civilite: string | null;
+  prenom: string;
+  nom: string;
+  nomNaissance: string | null;
+  paysNaissance: string | null;
   dateNaissance: Date | null;
   lieuNaissance: string | null;
   nationalite: string | null;

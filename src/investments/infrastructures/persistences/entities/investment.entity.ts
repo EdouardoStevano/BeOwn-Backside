@@ -10,7 +10,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { ProjectEntity } from 'src/projects/infrastructures/persistences/entities/project.entity';
-import { UserEntity } from 'src/users/infrastructures/persistences/entities/user.entity';
+import { UserEntity } from 'src/users/infrastructure/persistences/entities/user.entity';
 import { InvestmentStatus } from 'src/investments/domains/enums/investment-status.enum';
 import { EcheanceEntity } from './echeance.entity';
 
@@ -24,7 +24,7 @@ export class InvestmentEntity {
   projetId: string;
 
   @ManyToOne(() => ProjectEntity)
-  @JoinColumn({ name: 'projet_id' })
+  @JoinColumn({ name: 'projetId' })
   projet: ProjectEntity;
 
   @Column({ type: 'integer' })
@@ -32,7 +32,7 @@ export class InvestmentEntity {
   utilisateurId: number;
 
   @ManyToOne(() => UserEntity)
-  @JoinColumn({ name: 'utilisateur_id' })
+  @JoinColumn({ name: 'utilisateurId' })
   utilisateur: UserEntity;
 
   @Column({ type: 'decimal', precision: 18, scale: 2 })
