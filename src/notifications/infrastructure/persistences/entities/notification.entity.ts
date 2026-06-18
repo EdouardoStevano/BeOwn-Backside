@@ -33,6 +33,7 @@ export enum NotificationType {
   COMPTE_SUPPRIME = 'compte_supprime',
   NOUVELLE_INSCRIPTION = 'nouvelle_inscription',
   PROFIL_MODIFIE = 'profil_modifie',
+  SECURITE = 'securite',
 }
 
 @Entity('notification')

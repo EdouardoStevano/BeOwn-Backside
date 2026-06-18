@@ -26,6 +26,10 @@ import { CgpModule } from './cgp/cgp.module';
 import { AvisModule } from './avis/applications/avis.module';
 import { NewsModule } from './news/news.module';
 import { KpiModule } from './kpi/kpi.module';
+import { LocativeManagementModule } from './locative-management/applications/locative-management.module';
+import { DistributionsModule } from './distributions/applications/distributions.module';
+import { FiscaliteModule } from './fiscalite/applications/fiscalite.module';
+import { AmlModule } from './common/aml/aml.module';
 import { MailerModule } from '@nestjs-modules/mailer';
 import { HandlebarsAdapter } from '@nestjs-modules/mailer/adapters/handlebars.adapter';
 import { join } from 'path';
@@ -63,8 +67,10 @@ function requireEnv(name: string): string {
       type: 'postgres',
       host: process.env.DATABASE_HOST,
       port: parseInt(process.env.DATABASE_PORT ?? '5432', 10),
-      username: process.env.DATABASE_USERNAME ?? requireEnv('DATABASE_USERNAME'),
-      password: process.env.DATABASE_PASSWORD ?? requireEnv('DATABASE_PASSWORD'),
+      username:
+        process.env.DATABASE_USERNAME ?? requireEnv('DATABASE_USERNAME'),
+      password:
+        process.env.DATABASE_PASSWORD ?? requireEnv('DATABASE_PASSWORD'),
       database: process.env.DATABASE_DB ?? requireEnv('DATABASE_DB'),
       autoLoadEntities: true,
       synchronize: process.env.NODE_ENV !== 'production',
@@ -107,6 +113,10 @@ function requireEnv(name: string): string {
     KpiModule,
     AdminModule,
     CgpModule,
+    LocativeManagementModule,
+    DistributionsModule,
+    FiscaliteModule,
+    AmlModule,
     ...(process.env.NODE_ENV !== 'production' ? [NotificationTestModule] : []),
   ],
   controllers: [HealthController],

@@ -15,6 +15,7 @@ export interface ProjectRepository {
     statut?: ProjectStatus;
     statuts?: ProjectStatus[];
     type?: ProjectType;
+    porteurId?: number;
     page?: number;
     limit?: number;
   }): Promise<{ data: Project[]; total: number }>;

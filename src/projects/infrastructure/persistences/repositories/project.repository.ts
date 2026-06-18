@@ -41,6 +41,7 @@ export class ProjectTypeOrmRepository implements ProjectRepository {
     statut?: ProjectStatus;
     statuts?: ProjectStatus[];
     type?: ProjectType;
+    porteurId?: number;
     page?: number;
     limit?: number;
   }): Promise<{ data: Project[]; total: number }> {
@@ -53,6 +54,9 @@ export class ProjectTypeOrmRepository implements ProjectRepository {
       qb.andWhere('p.statut = :statut', { statut: filters.statut });
     }
     if (filters?.type) qb.andWhere('p.type = :type', { type: filters.type });
+    if (filters?.porteurId != null) {
+      qb.andWhere('p.porteurId = :porteurId', { porteurId: filters.porteurId });
+    }
     qb.orderBy('p.createdAt', 'DESC')
       .skip((page - 1) * limit)
       .take(limit);

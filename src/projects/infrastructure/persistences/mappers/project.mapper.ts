@@ -1,5 +1,6 @@
 import { Project } from 'src/projects/domains/project';
 import { Spv } from 'src/projects/domains/spv';
+import { ModeleEconomique } from 'src/projects/domains/enums/modele-economique.enum';
 import { ProjectEntity } from '../entities/project.entity';
 import { SpvEntity } from '../entities/spv.entity';
 
@@ -17,7 +18,8 @@ export class ProjectMapper {
     domain.pays = entity.pays;
     domain.adresseComplete = entity.adresseComplete;
     domain.latitude = entity.latitude != null ? Number(entity.latitude) : null;
-    domain.longitude = entity.longitude != null ? Number(entity.longitude) : null;
+    domain.longitude =
+      entity.longitude != null ? Number(entity.longitude) : null;
     domain.youtubeUrl = entity.youtubeUrl;
     domain.capitalCible = Number(entity.capitalCible);
     domain.capitalMinimum = Number(entity.capitalMinimum);
@@ -25,6 +27,7 @@ export class ProjectMapper {
     domain.ticketMaximum =
       entity.ticketMaximum != null ? Number(entity.ticketMaximum) : null;
     domain.triCible = entity.triCible != null ? Number(entity.triCible) : null;
+    domain.indiceRisque = entity.indiceRisque != null ? Number(entity.indiceRisque) : 3;
     domain.dureeMois = entity.dureeMois;
     domain.instrument = entity.instrument;
     domain.statut = entity.statut;
@@ -44,6 +47,9 @@ export class ProjectMapper {
     domain.previsionnel = entity.previsionnel ?? null;
     domain.chronologie = entity.chronologie ?? [];
     domain.garanties = entity.garanties ?? [];
+    domain.modeleEconomique =
+      entity.modeleEconomique ?? ModeleEconomique.OBLIGATAIRE;
+    domain.nbUnitesLouables = entity.nbUnitesLouables ?? null;
     domain.createdAt = entity.createdAt;
     domain.updatedAt = entity.updatedAt;
     return domain;
@@ -69,6 +75,7 @@ export class ProjectMapper {
     entity.ticketMinimum = domain.ticketMinimum;
     entity.ticketMaximum = domain.ticketMaximum;
     entity.triCible = domain.triCible;
+    entity.indiceRisque = domain.indiceRisque ?? 3;
     entity.dureeMois = domain.dureeMois;
     entity.instrument = domain.instrument;
     entity.statut = domain.statut;
@@ -84,6 +91,9 @@ export class ProjectMapper {
     entity.previsionnel = domain.previsionnel;
     entity.chronologie = domain.chronologie ?? [];
     entity.garanties = domain.garanties ?? [];
+    entity.modeleEconomique =
+      domain.modeleEconomique ?? ModeleEconomique.OBLIGATAIRE;
+    entity.nbUnitesLouables = domain.nbUnitesLouables ?? null;
     return entity;
   }
 
@@ -97,7 +107,13 @@ export class ProjectMapper {
       entity.capitalSocial != null ? Number(entity.capitalSocial) : null;
     domain.siegeAdresse = entity.siegeAdresse;
     domain.iban = entity.iban;
+    // Equity-locatif fields
+    domain.dateConstitution = entity.dateConstitution;
+    domain.statutsPdfUrl = entity.statutsPdfUrl;
+    domain.regimeFiscal = entity.regimeFiscal;
+    domain.gestionnaireUserId = entity.gestionnaireUserId;
     domain.createdAt = entity.createdAt;
+    domain.updatedAt = entity.updatedAt;
     return domain;
   }
 
@@ -110,6 +126,11 @@ export class ProjectMapper {
     entity.capitalSocial = domain.capitalSocial;
     entity.siegeAdresse = domain.siegeAdresse;
     entity.iban = domain.iban;
+    // Equity-locatif fields
+    entity.dateConstitution = domain.dateConstitution;
+    entity.statutsPdfUrl = domain.statutsPdfUrl;
+    entity.regimeFiscal = domain.regimeFiscal;
+    entity.gestionnaireUserId = domain.gestionnaireUserId;
     return entity;
   }
 }

@@ -3,6 +3,7 @@ import {
   ProjectStatus,
   ProjectType,
 } from './enums/project-status.enum';
+import { ModeleEconomique } from './enums/modele-economique.enum';
 import type {
   EtapeChronologie,
   Garantie,
@@ -28,6 +29,8 @@ export class Project {
   ticketMinimum: number;
   ticketMaximum: number | null;
   triCible: number | null;
+  /** Échelle de risque 1 (très faible) à 5 (très élevé). */
+  indiceRisque: number;
   dureeMois: number;
   instrument: ProjectInstrument;
   statut: ProjectStatus;
@@ -43,6 +46,9 @@ export class Project {
   previsionnel: PrevisionnelFinancier | null;
   chronologie: EtapeChronologie[];
   garanties: Garantie[];
+  // Equity-locatif extension (Phase 1)
+  modeleEconomique: ModeleEconomique;
+  nbUnitesLouables: number | null;
   createdAt: Date;
   updatedAt: Date;
 }
