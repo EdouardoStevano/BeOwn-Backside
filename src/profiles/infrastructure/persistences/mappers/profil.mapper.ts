@@ -9,6 +9,9 @@ export class ProfilMapper {
   static ppToDomain(entity: ProfilPPEntity): ProfilPP {
     const domain = new ProfilPP();
     domain.utilisateurId = entity.utilisateurId;
+    domain.prenom = entity.prenom;
+    domain.nom = entity.nom;
+    domain.nomNaissance = entity.nomNaissance;
     domain.civilite = entity.civilite;
     domain.dateNaissance = entity.dateNaissance;
     domain.lieuNaissance = entity.lieuNaissance;
@@ -33,6 +36,9 @@ export class ProfilMapper {
   static ppToEntity(domain: ProfilPP): ProfilPPEntity {
     const entity = new ProfilPPEntity();
     entity.utilisateurId = domain.utilisateurId;
+    entity.prenom = domain.prenom;
+    entity.nom = domain.nom;
+    entity.nomNaissance = domain.nomNaissance;
     entity.civilite = domain.civilite;
     entity.dateNaissance = domain.dateNaissance;
     entity.lieuNaissance = domain.lieuNaissance;
