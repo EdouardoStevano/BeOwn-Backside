@@ -16,12 +16,14 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, ILike, Repository } from 'typeorm';
 import { SkipThrottle } from '@nestjs/throttler';
 import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
+import { Roles } from 'src/common/auth/roles.decorator';
 import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
 import { OrdreMarcheEntity } from 'src/secondarymarket/infrastructure/persistences/entities/ordre-marche.entity';
 import { InvestmentEntity } from 'src/investments/infrastructure/persistences/entities/investment.entity';
 import { UserEntity, UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
 import { OrdreMarcheStatus } from 'src/secondarymarket/domains/ordre-marche';
+import { computeSecondaryMarketCommission } from 'src/secondarymarket/domains/commission';
 import { InvestmentStatus } from 'src/investments/domains/enums/investment-status.enum';
 import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/wallet.entity';
 import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entities/transaction.entity';
@@ -49,6 +51,7 @@ const ADMIN_ROLES = [
 @ApiBearerAuth()
 @Controller('admin/secondary-market')
 @UseGuards(JwtAuthGuard)
+@Roles(UserRole.ADMIN, UserRole.SUPPORT, UserRole.COMPLIANCE, UserRole.FINANCIER, UserRole.RCCI)
 export class AdminSecondaryMarketController {
   constructor(
     @InjectRepository(OrdreMarcheEntity)
@@ -163,8 +166,16 @@ export class AdminSecondaryMarketController {
     const projetId = ordre.investissement.projetId;
     const buyerUserId = ordre.acheteurId!;
     const sellerUserId = ordre.vendeurId;
+    const commissionKey = `secmarket:commission:order:${id}`;
 
     await this.dataSource.transaction(async (em) => {
+      // Lookup de la commission réellement prélevée pour cet ordre (legacy = 0)
+      const commissionTx = await em.findOne(TransactionEntity, {
+        where: { idempotencyKey: commissionKey, statut: TransactionStatus.REUSSI },
+      });
+      const commissionPrelevee = commissionTx ? Number(commissionTx.montant) : 0;
+      const montantNetVendeurInitial = montantTotal - commissionPrelevee;
+
       // 1. Restaurer fractions vendeur sur son investissement source
       const sellerInvest = await em.findOne(InvestmentEntity, {
         where: { id: ordre.investissementId },
@@ -190,7 +201,9 @@ export class AdminSecondaryMarketController {
         await em.save(InvestmentEntity, buyerInvest);
       }
 
-      // 3. Wallets : recréditer acheteur, débiter vendeur
+      // 3. Wallets : rembourser acheteur (montant total), débiter vendeur
+      // (du net qu'il avait reçu), rembourser la commission depuis le wallet
+      // plateforme s'il y en avait une de prélevée.
       const buyerWallet = await em.findOne(WalletEntity, {
         where: { proprietaireUserId: buyerUserId, type: WalletType.INVESTISSEUR },
       });
@@ -202,8 +215,22 @@ export class AdminSecondaryMarketController {
         await em.save(WalletEntity, buyerWallet);
       }
       if (sellerWallet) {
-        sellerWallet.solde = Math.max(0, Number(sellerWallet.solde) - montantTotal);
+        sellerWallet.solde = Math.max(0, Number(sellerWallet.solde) - montantNetVendeurInitial);
         await em.save(WalletEntity, sellerWallet);
+      }
+
+      let platformWallet: WalletEntity | null = null;
+      if (commissionPrelevee > 0) {
+        platformWallet = await em.findOne(WalletEntity, {
+          where: { type: WalletType.FRAIS_PLATEFORME },
+        });
+        if (platformWallet) {
+          platformWallet.solde = Math.max(
+            0,
+            Number(platformWallet.solde) - commissionPrelevee,
+          );
+          await em.save(WalletEntity, platformWallet);
+        }
       }
 
       // 4. Ledger transactions (reverse)
@@ -221,6 +248,23 @@ export class AdminSecondaryMarketController {
         fraisPsp: 0,
         fraisPlateforme: 0,
       }));
+
+      if (platformWallet && commissionPrelevee > 0) {
+        await em.save(TransactionEntity, em.create(TransactionEntity, {
+          walletSource: platformWallet.id,
+          walletDestination: null,
+          type: TransactionType.SOUSCRIPTION,
+          montant: commissionPrelevee,
+          devise: platformWallet.devise,
+          statut: TransactionStatus.REUSSI,
+          fournisseur: TransactionFournisseur.INTERNE,
+          investissementId: ordre.investissementId,
+          projetId,
+          idempotencyKey: `secmarket:commission-reverse:order:${id}`,
+          fraisPsp: 0,
+          fraisPlateforme: 0,
+        }));
+      }
 
       // 5. Statut de l'ordre
       ordre.statut = OrdreMarcheStatus.ANNULE;
@@ -275,6 +319,8 @@ export class AdminSecondaryMarketController {
     const nbFractions = ordre.nbFractions;
     const prixUnitaire = Number(ordre.prixUnitaire);
     const montantTotal = nbFractions * prixUnitaire;
+    const commission = computeSecondaryMarketCommission(montantTotal);
+    const montantNetVendeur = montantTotal - commission;
     const projetId = ordre.investissement.projetId;
     const buyerUserId = ordre.acheteurId;
 
@@ -334,11 +380,33 @@ export class AdminSecondaryMarketController {
       buyerWallet.solde = Number(buyerWallet.solde) - montantTotal;
       await em.save(WalletEntity, buyerWallet);
       if (sellerWallet) {
-        sellerWallet.solde = Number(sellerWallet.solde) + montantTotal;
+        sellerWallet.solde = Number(sellerWallet.solde) + montantNetVendeur;
         await em.save(WalletEntity, sellerWallet);
       }
 
-      // Ledger transactions
+      // Commission plateforme — wallet system-wide créé à la volée si absent.
+      let platformWallet: WalletEntity | null = null;
+      if (commission > 0) {
+        platformWallet = await em.findOne(WalletEntity, {
+          where: { type: WalletType.FRAIS_PLATEFORME },
+        });
+        if (!platformWallet) {
+          platformWallet = await em.save(
+            WalletEntity,
+            em.create(WalletEntity, {
+              type: WalletType.FRAIS_PLATEFORME,
+              proprietaireUserId: null,
+              fournisseurRef: 'PLAT-FEES-001',
+              devise: buyerWallet.devise,
+              solde: 0,
+            }),
+          );
+        }
+        platformWallet.solde = Number(platformWallet.solde) + commission;
+        await em.save(WalletEntity, platformWallet);
+      }
+
+      // Ledger transactions (buyer débité)
       await em.save(TransactionEntity, em.create(TransactionEntity, {
         walletSource: buyerWallet.id,
         walletDestination: sellerWallet?.id ?? null,
@@ -351,8 +419,26 @@ export class AdminSecondaryMarketController {
         projetId,
         idempotencyKey: `admin-force:buyer:${id}`,
         fraisPsp: 0,
-        fraisPlateforme: 0,
+        fraisPlateforme: commission,
       }));
+
+      // Ledger transaction commission plateforme
+      if (platformWallet && commission > 0) {
+        await em.save(TransactionEntity, em.create(TransactionEntity, {
+          walletSource: null,
+          walletDestination: platformWallet.id,
+          type: TransactionType.SOUSCRIPTION,
+          montant: commission,
+          devise: platformWallet.devise,
+          statut: TransactionStatus.REUSSI,
+          fournisseur: TransactionFournisseur.INTERNE,
+          investissementId: ordre.investissementId,
+          projetId,
+          idempotencyKey: `secmarket:commission:order:${id}`,
+          fraisPsp: 0,
+          fraisPlateforme: 0,
+        }));
+      }
 
       return { buyerInvestId: buyerInvest.id };
     });

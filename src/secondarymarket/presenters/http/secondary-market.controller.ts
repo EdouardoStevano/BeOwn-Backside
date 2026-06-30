@@ -113,41 +113,63 @@ export class SecondaryMarketController {
     @Body() dto: CreateOrdreMarcheDto,
     @CurrentUser() user: ActiveUser,
   ) {
-    // Validate ownership
-    const investment = await this.investRepo.findOne({ where: { id: dto.investissementId } });
-    if (!investment) throw new NotFoundException('Investissement introuvable');
-    if (investment.utilisateurId !== user.userId) {
-      throw new ForbiddenException("Cet investissement ne vous appartient pas");
-    }
+    // Phase 10 — Pessimistic lock sur l'investissement vendeur pour empêcher
+    // les race conditions : si deux requêtes concurrentes tentent de créer
+    // des ordres sur le même investissement, SELECT FOR UPDATE garantit
+    // la sérialisation des lectures de fractions disponibles. Sans lock,
+    // les deux validations pouvaient passer et créer un overselling.
+    const saved = await this.dataSource.transaction(async (em) => {
+      const investment = await em
+        .createQueryBuilder(InvestmentEntity, 'inv')
+        .setLock('pessimistic_write')
+        .where('inv.id = :id', { id: dto.investissementId })
+        .getOne();
+      if (!investment) throw new NotFoundException('Investissement introuvable');
+      if (investment.utilisateurId !== user.userId) {
+        throw new ForbiddenException("Cet investissement ne vous appartient pas");
+      }
 
-    // Check available fractions (total - already listed in active orders)
-    const activeOrders = await this.ordreRepo.find({
-      where: { investissementId: dto.investissementId, statut: OrdreMarcheStatus.EN_CARNET },
-    });
-    const alreadyListed = activeOrders.reduce((sum, o) => sum + Number(o.nbFractions), 0);
-    const available = Number(investment.nbTitres ?? 0) - alreadyListed;
-
-    if (dto.nbFractions > available) {
-      throw new BadRequestException(
-        `Seulement ${available} fraction(s) disponible(s) pour la vente (${alreadyListed} déjà en carnet)`,
+      // Compter les fractions déjà en carnet — la lecture est sérialisée par
+      // le lock acquis ci-dessus sur l'investment row.
+      const activeOrders = await em.find(OrdreMarcheEntity, {
+        where: {
+          investissementId: dto.investissementId,
+          statut: OrdreMarcheStatus.EN_CARNET,
+        },
+      });
+      const alreadyListed = activeOrders.reduce(
+        (sum, o) => sum + Number(o.nbFractions),
+        0,
       );
-    }
+      const available = Number(investment.nbTitres ?? 0) - alreadyListed;
 
-    const montant = dto.nbFractions * dto.prixUnitaire;
-    const ordre = this.ordreRepo.create({
-      investissementId: dto.investissementId,
-      vendeurId: user.userId,
-      sens: OrdreMarcheSens.VENTE,
-      nbFractions: dto.nbFractions,
-      prixUnitaire: dto.prixUnitaire,
-      montant,
-      statut: OrdreMarcheStatus.EN_CARNET,
-      valideJusquAu: dto.valideJusquAu ? new Date(dto.valideJusquAu) : null,
+      if (dto.nbFractions > available) {
+        throw new BadRequestException(
+          `Seulement ${available} fraction(s) disponible(s) pour la vente (${alreadyListed} déjà en carnet)`,
+        );
+      }
+
+      const montant = dto.nbFractions * dto.prixUnitaire;
+      const ordre = em.create(OrdreMarcheEntity, {
+        investissementId: dto.investissementId,
+        vendeurId: user.userId,
+        sens: OrdreMarcheSens.VENTE,
+        nbFractions: dto.nbFractions,
+        prixUnitaire: dto.prixUnitaire,
+        montant,
+        statut: OrdreMarcheStatus.EN_CARNET,
+        valideJusquAu: dto.valideJusquAu ? new Date(dto.valideJusquAu) : null,
+      });
+      return em.save(OrdreMarcheEntity, ordre);
     });
-    const saved = await this.ordreRepo.save(ordre);
 
+    const investment = await this.investRepo.findOne({
+      where: { id: dto.investissementId },
+    });
     const [project, vendeur] = await Promise.all([
-      this.projectRepo.findOne({ where: { id: investment.projetId } }),
+      investment
+        ? this.projectRepo.findOne({ where: { id: investment.projetId } })
+        : null,
       this.userRepo.findOne({ where: { userId: user.userId } }),
     ]);
     if (project && vendeur) {

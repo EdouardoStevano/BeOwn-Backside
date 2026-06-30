@@ -23,7 +23,44 @@ import { DocumentEntity } from 'src/documents/infrastructure/persistences/entiti
 import { OrdreMarcheEntity } from 'src/secondarymarket/infrastructure/persistences/entities/ordre-marche.entity';
 import { AvisEntity } from 'src/avis/infrastructure/persistences/entities/avis.entity';
 import { SignatureEntity } from 'src/signatures/infrastructure/persistences/entities/signature.entity';
+import { UniteLouableEntity } from 'src/locative-management/infrastructure/persistences/entities/unite-louable.entity';
+import { LocataireEntity } from 'src/locative-management/infrastructure/persistences/entities/locataire.entity';
+import { BailEntity } from 'src/locative-management/infrastructure/persistences/entities/bail.entity';
+import { LoyerEncaisseEntity } from 'src/locative-management/infrastructure/persistences/entities/loyer-encaisse.entity';
+import { PeriodeDistributionEntity } from 'src/distributions/infrastructure/persistences/entities/periode-distribution.entity';
+import { DistributionPartEntity } from 'src/distributions/infrastructure/persistences/entities/distribution-part.entity';
 import { SeedService } from './seed.service';
+
+const SEED_ENTITIES = [
+  UserEntity,
+  UserEmailEntity,
+  TFAMethodEntity,
+  EmailMethodEntity,
+  SMSMethodEntity,
+  TOTPMethodEntity,
+  SpvEntity,
+  ProjectEntity,
+  WalletEntity,
+  TransactionEntity,
+  InvestmentEntity,
+  EcheanceEntity,
+  ReservationEntity,
+  ProfilPPEntity,
+  ProfilPMEntity,
+  KycEntity,
+  NotificationEntity,
+  AuditLogEntity,
+  DocumentEntity,
+  OrdreMarcheEntity,
+  AvisEntity,
+  SignatureEntity,
+  UniteLouableEntity,
+  LocataireEntity,
+  BailEntity,
+  LoyerEncaisseEntity,
+  PeriodeDistributionEntity,
+  DistributionPartEntity,
+];
 
 @Module({
   imports: [
@@ -35,56 +72,12 @@ import { SeedService } from './seed.service';
       username: process.env.DATABASE_USERNAME || 'postgres',
       password: process.env.DATABASE_PASSWORD || 'pass123',
       database: process.env.DATABASE_DB || 'postgres',
-      entities: [
-        UserEntity,
-        UserEmailEntity,
-        TFAMethodEntity,
-        EmailMethodEntity,
-        SMSMethodEntity,
-        TOTPMethodEntity,
-        SpvEntity,
-        ProjectEntity,
-        WalletEntity,
-        TransactionEntity,
-        InvestmentEntity,
-        EcheanceEntity,
-        ReservationEntity,
-        ProfilPPEntity,
-        ProfilPMEntity,
-        KycEntity,
-        NotificationEntity,
-        AuditLogEntity,
-        DocumentEntity,
-        OrdreMarcheEntity,
-        AvisEntity,
-        SignatureEntity,
-      ],
-      synchronize: false,
+      entities: SEED_ENTITIES,
+      // Datafake dev : on aligne le schéma sur les entités (crée notamment les
+      // tables locatif/distribution absentes des migrations historiques).
+      synchronize: true,
     }),
-    TypeOrmModule.forFeature([
-      UserEntity,
-      UserEmailEntity,
-      TFAMethodEntity,
-      EmailMethodEntity,
-      SMSMethodEntity,
-      TOTPMethodEntity,
-      SpvEntity,
-      ProjectEntity,
-      WalletEntity,
-      TransactionEntity,
-      InvestmentEntity,
-      EcheanceEntity,
-      ReservationEntity,
-      ProfilPPEntity,
-      ProfilPMEntity,
-      KycEntity,
-      NotificationEntity,
-      AuditLogEntity,
-      DocumentEntity,
-      OrdreMarcheEntity,
-      AvisEntity,
-      SignatureEntity,
-    ]),
+    TypeOrmModule.forFeature(SEED_ENTITIES),
   ],
   providers: [SeedService],
 })

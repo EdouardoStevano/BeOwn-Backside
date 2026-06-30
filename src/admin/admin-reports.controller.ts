@@ -17,6 +17,7 @@ import type { Response } from 'express';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
+import { Roles } from 'src/common/auth/roles.decorator';
 import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
 import {
@@ -50,6 +51,7 @@ const REPORT_LABEL: Record<ReportType, string> = {
 @ApiBearerAuth()
 @Controller('admin/reports')
 @UseGuards(JwtAuthGuard)
+@Roles(UserRole.ADMIN, UserRole.FINANCIER, UserRole.RCCI, UserRole.COMPLIANCE)
 export class AdminReportsController {
   constructor(
     @InjectRepository(UserEntity)
@@ -70,10 +72,25 @@ export class AdminReportsController {
   async list(@CurrentUser() user: ActiveUser) {
     await this.ensureAdmin(user);
     return REPORT_TYPES.map((type) => ({
+      id: type,
       type,
       label: REPORT_LABEL[type],
-      downloadUrl: `/admin/reports/${type}/generate`,
+      downloadUrl: `/admin/reports/${type}/download`,
     }));
+  }
+
+  @ApiOperation({
+    summary: 'Télécharger un rapport (alias de generate, identifié par son id/type)',
+    description: 'Les rapports BeOwn sont générés à la volée — :id correspond donc au type de rapport.',
+  })
+  @ApiResponse({ status: 200, description: 'PDF binary stream' })
+  @Get(':id/download')
+  async download(
+    @Param('id') id: string,
+    @CurrentUser() user: ActiveUser,
+    @Res() res: Response,
+  ) {
+    return this.generate(id, user, res);
   }
 
   @ApiOperation({ summary: 'Générer et télécharger un rapport PDF' })

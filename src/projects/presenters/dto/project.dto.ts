@@ -24,9 +24,13 @@ import {
   ProjectStatus,
   ProjectType,
 } from 'src/projects/domains/enums/project-status.enum';
+import { RegimeFiscal } from 'src/projects/domains/enums/regime-fiscal.enum';
 
 // Helper: coerce string → number (sent by multipart or form)
-const toNumber = () => Transform(({ value }) => (value != null && value !== '' ? Number(value) : value));
+const toNumber = () =>
+  Transform(({ value }) =>
+    value != null && value !== '' ? Number(value) : value,
+  );
 
 export class EtapeChronologieDto {
   @ApiProperty()
@@ -103,7 +107,9 @@ export class CreateProjectDto {
   @Type(() => Number)
   @IsNumber()
   @IsPositive()
-  @Max(5_000_000, { message: 'Capital cible maximum : 5 000 000 € (limite PSFP)' })
+  @Max(5_000_000, {
+    message: 'Capital cible maximum : 5 000 000 € (limite PSFP)',
+  })
   capitalCible: number;
 
   @ApiProperty({ example: 300000 })
@@ -135,6 +141,18 @@ export class CreateProjectDto {
   @IsNumber()
   triCible?: number;
 
+  @ApiPropertyOptional({
+    example: 3,
+    description: 'Échelle de risque du projet : 1 (très faible) à 5 (très élevé)',
+  })
+  @IsOptional()
+  @toNumber()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(5)
+  indiceRisque?: number;
+
   @ApiProperty({ example: 24 })
   @toNumber()
   @Type(() => Number)
@@ -146,7 +164,10 @@ export class CreateProjectDto {
   @IsEnum(ProjectInstrument)
   instrument: ProjectInstrument;
 
-  @ApiPropertyOptional({ enum: ProjectStatus, description: 'Statut initial (défaut : brouillon)' })
+  @ApiPropertyOptional({
+    enum: ProjectStatus,
+    description: 'Statut initial (défaut : brouillon)',
+  })
   @IsOptional()
   @IsEnum(ProjectStatus)
   statut?: ProjectStatus;
@@ -208,7 +229,7 @@ export class CreateProjectDto {
   @IsUrl()
   youtubeUrl?: string;
 
-  @ApiPropertyOptional({ description: 'Nombre total de fractions d\'actif' })
+  @ApiPropertyOptional({ description: "Nombre total de fractions d'actif" })
   @IsOptional()
   @toNumber()
   @Type(() => Number)
@@ -216,7 +237,7 @@ export class CreateProjectDto {
   @IsPositive()
   nbFractions?: number;
 
-  @ApiPropertyOptional({ description: 'Prix unitaire d\'une fraction' })
+  @ApiPropertyOptional({ description: "Prix unitaire d'une fraction" })
   @IsOptional()
   @toNumber()
   @Type(() => Number)
@@ -224,18 +245,26 @@ export class CreateProjectDto {
   @IsPositive()
   prixFraction?: number;
 
-  @ApiPropertyOptional({ description: 'Prévisionnel financier (objet JSON libre)' })
+  @ApiPropertyOptional({
+    description: 'Prévisionnel financier (objet JSON libre)',
+  })
   @IsOptional()
   previsionnel?: any;
 
-  @ApiPropertyOptional({ description: 'Chronologie du projet', type: [EtapeChronologieDto] })
+  @ApiPropertyOptional({
+    description: 'Chronologie du projet',
+    type: [EtapeChronologieDto],
+  })
   @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => EtapeChronologieDto)
   chronologie?: EtapeChronologieDto[];
 
-  @ApiPropertyOptional({ description: 'Garanties offertes', type: [GarantieDto] })
+  @ApiPropertyOptional({
+    description: 'Garanties offertes',
+    type: [GarantieDto],
+  })
   @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
@@ -274,4 +303,28 @@ export class CreateSpvDto {
   @IsOptional()
   @IsString()
   siegeAdresse?: string;
+
+  @ApiProperty({ required: false, example: '2026-01-15' })
+  @IsOptional()
+  @IsDateString()
+  dateConstitution?: string;
+
+  @ApiProperty({ required: false, example: 'https://storage/statuts.pdf' })
+  @IsOptional()
+  @IsString()
+  statutsPdfUrl?: string;
+
+  @ApiProperty({
+    required: false,
+    enum: RegimeFiscal,
+    example: RegimeFiscal.IS,
+  })
+  @IsOptional()
+  @IsEnum(RegimeFiscal)
+  regimeFiscal?: RegimeFiscal;
+
+  @ApiProperty({ required: false, example: 42 })
+  @IsOptional()
+  @IsInt()
+  gestionnaireUserId?: number;
 }

@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -9,10 +10,16 @@ import {
   Patch,
   Post,
   Query,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
 import {
   ApiBearerAuth,
+  ApiBody,
+  ApiConsumes,
   ApiOperation,
   ApiProperty,
   ApiPropertyOptional,
@@ -20,7 +27,10 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import { CloudStorageService } from 'src/common/cloud-storage/cloud-storage.service';
 import {
+  ArrayMaxSize,
+  IsArray,
   IsDateString,
   IsEnum,
   IsNotEmpty,
@@ -31,6 +41,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Public } from 'src/common/auth/public.decorator';
 import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
+import { Roles } from 'src/common/auth/roles.decorator';
 import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
 import {
@@ -76,10 +87,17 @@ class CreateNewsDto {
   @IsString()
   resumeEn?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ description: "Hero image (1ère image, conservée pour compat)" })
   @IsOptional()
   @IsString()
   imageUrl?: string;
+
+  @ApiPropertyOptional({ type: [String], description: 'Liste complète des images (URLs Cloudinary)' })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(20)
+  @IsString({ each: true })
+  imageUrls?: string[];
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -137,6 +155,13 @@ class UpdateNewsDto {
   @IsOptional()
   @IsString()
   imageUrl?: string;
+
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(20)
+  @IsString({ each: true })
+  imageUrls?: string[];
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -212,22 +237,63 @@ export class PublicNewsController {
 // ────────────────────────────────────────────────────────────────────────────
 // Admin CRUD
 
+const NEWS_IMAGE_MAX_BYTES = 5 * 1024 * 1024; // 5 MB
+const NEWS_IMAGE_MIME = ['image/jpeg', 'image/png', 'image/webp'];
+
 @ApiTags('Admin – News')
 @ApiBearerAuth()
 @Controller('admin/news')
 @UseGuards(JwtAuthGuard)
+@Roles(UserRole.ADMIN, UserRole.SUPPORT, UserRole.COMPLIANCE)
 export class AdminNewsController {
   constructor(
     @InjectRepository(UserEntity)
     private readonly userRepo: Repository<UserEntity>,
     @InjectRepository(NewsEntity)
     private readonly newsRepo: Repository<NewsEntity>,
+    private readonly cloudStorage: CloudStorageService,
   ) {}
 
   private async ensureAdmin(currentUser: ActiveUser): Promise<UserEntity> {
     const u = await this.userRepo.findOne({ where: { userId: currentUser.userId } });
     if (!u || !ADMIN_ROLES.includes(u.role)) throw new ForbiddenException();
     return u;
+  }
+
+  @ApiOperation({ summary: "Uploader une image pour une actualité (cover)" })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: { file: { type: 'string', format: 'binary' } },
+      required: ['file'],
+    },
+  })
+  @ApiResponse({ status: 201, description: 'URL Cloudinary du fichier uploadé' })
+  @Post('upload')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      limits: { fileSize: NEWS_IMAGE_MAX_BYTES },
+      fileFilter: (_req, file, cb) => {
+        if (NEWS_IMAGE_MIME.includes(file.mimetype)) cb(null, true);
+        else cb(new BadRequestException('Formats acceptés : JPEG, PNG, WEBP'), false);
+      },
+    }),
+  )
+  async upload(
+    @UploadedFile() file: Express.Multer.File,
+    @CurrentUser() user: ActiveUser,
+  ): Promise<{ url: string }> {
+    await this.ensureAdmin(user);
+    if (!file) throw new BadRequestException('Fichier manquant.');
+    const { publicUrl } = await this.cloudStorage.upload(
+      file.buffer,
+      file.originalname,
+      file.mimetype,
+      'news',
+    );
+    return { url: publicUrl };
   }
 
   @ApiOperation({ summary: 'Lister toutes les actualités (admin)' })
@@ -256,8 +322,14 @@ export class AdminNewsController {
     const slug = dto.slug || slugify(dto.titreFr);
     const exists = await this.newsRepo.findOne({ where: { slug } });
     const finalSlug = exists ? `${slug}-${Date.now().toString(36)}` : slug;
+
+    const imageUrls = dto.imageUrls ?? (dto.imageUrl ? [dto.imageUrl] : []);
+    const imageUrl = dto.imageUrl ?? imageUrls[0] ?? null;
+
     const news = this.newsRepo.create({
       ...dto,
+      imageUrl,
+      imageUrls,
       slug: finalSlug,
       authorId: u.userId,
       publishedAt:
@@ -295,6 +367,13 @@ export class AdminNewsController {
     if (dto.titreFr && !dto.slug && existing.slug === slugify(existing.titreFr)) {
       // Resync slug if user didn't customize it
       patch.slug = slugify(dto.titreFr);
+    }
+
+    // Keep imageUrl in sync with imageUrls[0] for backward compatibility
+    if (dto.imageUrls) {
+      patch.imageUrl = dto.imageUrls[0] ?? null;
+    } else if (dto.imageUrl !== undefined && !dto.imageUrls) {
+      patch.imageUrls = dto.imageUrl ? [dto.imageUrl] : [];
     }
 
     await this.newsRepo.update({ id }, patch);

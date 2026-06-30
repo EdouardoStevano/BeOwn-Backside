@@ -65,7 +65,7 @@ export class UpdateProjectStatusUseCase {
       this.notificationService
         .pushToInvestors({
           type: NotificationType.NOUVEAU_PROJET,
-          titre: 'Projet ouvert à l\'investissement',
+          titre: "Projet ouvert à l'investissement",
           message: lieu
             ? `« ${updated.titre} » (${lieu}) est ouvert à l'investissement.`
             : `« ${updated.titre} » est ouvert à l'investissement.`,

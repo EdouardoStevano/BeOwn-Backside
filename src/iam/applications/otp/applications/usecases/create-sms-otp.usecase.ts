@@ -2,6 +2,8 @@ import {
   BadRequestException,
   Inject,
   Injectable,
+  InternalServerErrorException,
+  Logger,
 } from '@nestjs/common';
 import { ApiProperty } from '@nestjs/swagger';
 import { IsString } from 'class-validator';
@@ -29,6 +31,8 @@ const normalize = (p: string): string => p.replace(/\s+/g, '').trim();
 
 @Injectable()
 export class CreateSmsOtpUseCase {
+  private readonly logger = new Logger(CreateSmsOtpUseCase.name);
+
   constructor(
     @Inject(OTP_SERVICE) private readonly otpService: OtpService,
     @Inject(SMS_SERVICE) private readonly smsService: SmsService,
@@ -51,7 +55,22 @@ export class CreateSmsOtpUseCase {
     }
 
     const otp = await this.otpService.generateOtp(key);
-    await this.smsService.sendOtp(phone, otp);
+
+    try {
+      await this.smsService.sendOtp(phone, otp);
+    } catch (err) {
+      // Si l'envoi SMS échoue, on invalide l'OTP en cache pour permettre
+      // une nouvelle tentative immédiate (sinon l'utilisateur reste
+      // bloqué pendant tout le TTL alors qu'il n'a jamais reçu de SMS).
+      await this.otpService.invalidate(key);
+      this.logger.error(
+        `Échec de l'envoi du SMS OTP à ${phone} — OTP invalidé pour autoriser un retry.`,
+        err instanceof Error ? err.stack : String(err),
+      );
+      throw new InternalServerErrorException(
+        'Impossible d\'envoyer le code par SMS. Réessayez dans un instant.',
+      );
+    }
   }
 
   async verify(dto: VerifySmsOtpDto): Promise<boolean> {

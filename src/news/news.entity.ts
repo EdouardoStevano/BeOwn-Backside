@@ -43,6 +43,9 @@ export class NewsEntity {
   @Column({ type: 'varchar', nullable: true })
   imageUrl: string | null;
 
+  @Column({ type: 'jsonb', default: () => "'[]'" })
+  imageUrls: string[];
+
   @Column({ type: 'varchar', nullable: true })
   category: string | null;
 
