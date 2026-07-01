@@ -17,8 +17,8 @@ data:
   REDIS_PORT: '6379'
 
   # JWT
-  JWT_TOKEN_AUDIENCE: 'http://34.35.29.154'
-  JWT_TOKEN_ISSUER: 'http://34.35.29.154'
+  JWT_TOKEN_AUDIENCE: 'https://api.beown.fr'
+  JWT_TOKEN_ISSUER: 'https://api.beown.fr'
   JWT_ACCESS_TOKEN_TTL: '3600'
   JWT_REFRESH_TOKEN_TTL: '86400'
   JWT_TOKEN_EMAIL_TTL: '86400'
@@ -40,16 +40,16 @@ data:
   TWILIO_PHONE_NUMBER: '+261326507613'
 
   # OAuth callbacks
-  GOOGLE_CALLBACK_URL: 'http://34.35.29.154:8080/auth/google/callback'
-  FACEBOOK_CALLBACK_URL: 'http://34.35.29.154:8080/auth/facebook/callback'
-  LINKEDIN_CALLBACK_URL: 'http://34.35.29.154:8080/auth/linkedin/callback'
+  GOOGLE_CALLBACK_URL: 'https://api.beown.fr/auth/google/callback'
+  FACEBOOK_CALLBACK_URL: 'https://api.beown.fr/auth/facebook/callback'
+  LINKEDIN_CALLBACK_URL: 'https://api.beown.fr/auth/linkedin/callback'
 
   # App
-  FRONTEND_URL: 'http://beown.fr'
+  FRONTEND_URL: 'https://beown.fr'
   ADMIN_URL: 'http://34.35.29.154:8081'
-  API_URL: 'http://34.35.29.154:8080'
+  API_URL: 'https://api.beown.fr'
   TFA_APP_NAME: 'BeOwn'
-  CONFIRM_EMAIL_URL: 'http://34.35.29.154:8080/email/verify'
+  CONFIRM_EMAIL_URL: 'https://api.beown.fr/email/verify'
 
   # reCAPTCHA (clé de test Google — toujours valide)
   RECAPTCHA_SECRET_KEY: '6LeIxAcTAAAAAGG-vFI1TnRWxMZNFuojJ4WifJWe'
@@ -69,4 +69,3 @@ data:
   # PSFP / Régulation
   PLAFOND_INVESTISSEMENT_NON_AVERTI_EUR: '1000'
   PLAFOND_INVESTISSEMENT_AVERTI_EUR: '100000'
-
