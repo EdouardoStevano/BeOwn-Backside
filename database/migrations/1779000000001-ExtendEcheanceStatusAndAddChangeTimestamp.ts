@@ -13,22 +13,22 @@ export class ExtendEcheanceStatusAndAddChangeTimestamp1779000000001
 
     // 2. Add timestamp column to detect status transitions
     await queryRunner.query(
-      `ALTER TABLE "echeance" ADD COLUMN "statutChangeLe" timestamptz NULL`,
+      `ALTER TABLE "echeance" ADD COLUMN IF NOT EXISTS "statutChangeLe" timestamptz NULL`,
     );
 
     // 3. Helpful indexes for cron filtering
     await queryRunner.query(
-      `CREATE INDEX "IDX_echeance_statut" ON "echeance" ("statut")`,
+      `CREATE INDEX IF NOT EXISTS "IDX_echeance_statut" ON "echeance" ("statut")`,
     );
     await queryRunner.query(
-      `CREATE INDEX "IDX_echeance_datePrevue_statut" ON "echeance" ("datePrevue", "statut")`,
+      `CREATE INDEX IF NOT EXISTS "IDX_echeance_datePrevue_statut" ON "echeance" ("datePrevue", "statut")`,
     );
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`DROP INDEX IF EXISTS "IDX_echeance_datePrevue_statut"`);
     await queryRunner.query(`DROP INDEX IF EXISTS "IDX_echeance_statut"`);
-    await queryRunner.query(`ALTER TABLE "echeance" DROP COLUMN "statutChangeLe"`);
+    await queryRunner.query(`ALTER TABLE "echeance" DROP COLUMN IF EXISTS "statutChangeLe"`);
     await queryRunner.query(
       `UPDATE "echeance" SET "statut" = 'retard'
         WHERE "statut" IN ('retard_leger', 'retard_significatif', 'defaut', 'perte_definitive')`,
