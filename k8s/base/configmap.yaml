@@ -2,23 +2,22 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: beown-backend-config
-  namespace: beown
 data:
-  NODE_ENV: 'production'
+  # ─── Valeurs COMMUNES à tous les environnements ───────────
+  # Les clés spécifiques à un environnement (NODE_ENV + toutes les URLs)
+  # sont définies dans overlays/<env>/configmap-patch.yaml
   PORT: '8080'
 
-  # Database (nom = Service k8s défini dans 03-postgres.yaml)
+  # Database (Service k8s défini dans postgres.yaml)
   DATABASE_HOST: 'postgres-service'
   DATABASE_PORT: '5432'
   DATABASE_DB: 'beown'
 
-  # Redis (nom = Service k8s défini dans 04-redis.yaml)
+  # Redis (Service k8s défini dans redis.yaml)
   REDIS_HOST: 'redis-service'
   REDIS_PORT: '6379'
 
-  # JWT
-  JWT_TOKEN_AUDIENCE: 'https://api.beown.fr'
-  JWT_TOKEN_ISSUER: 'https://api.beown.fr'
+  # JWT (les URLs audience/issuer sont dans l'overlay)
   JWT_ACCESS_TOKEN_TTL: '3600'
   JWT_REFRESH_TOKEN_TTL: '86400'
   JWT_TOKEN_EMAIL_TTL: '86400'
@@ -27,7 +26,7 @@ data:
   OTP_TTL: '300'
   MAX_ATTEMPTS: '5'
 
-  # Mail (MAIL_USER est dans les secrets car c'est un compte email)
+  # Mail (MAIL_USER est dans les secrets)
   MAIL_HOST: 'smtp.gmail.com'
   MAIL_PORT: '587'
   MAIL_FROM: 'beown@mail.com'
@@ -39,17 +38,8 @@ data:
   # Twilio
   TWILIO_PHONE_NUMBER: '+261326507613'
 
-  # OAuth callbacks
-  GOOGLE_CALLBACK_URL: 'https://api.beown.fr/auth/google/callback'
-  FACEBOOK_CALLBACK_URL: 'https://api.beown.fr/auth/facebook/callback'
-  LINKEDIN_CALLBACK_URL: 'https://api.beown.fr/auth/linkedin/callback'
-
   # App
-  FRONTEND_URL: 'https://beown.fr'
-  ADMIN_URL: 'https://admin.beown.fr'
-  API_URL: 'https://api.beown.fr'
   TFA_APP_NAME: 'BeOwn'
-  CONFIRM_EMAIL_URL: 'https://api.beown.fr/email/verify'
 
   # reCAPTCHA (clé de test Google — toujours valide)
   RECAPTCHA_SECRET_KEY: '6LeIxAcTAAAAAGG-vFI1TnRWxMZNFuojJ4WifJWe'

@@ -3,11 +3,10 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: beown-backend
-  namespace: beown
   labels:
     app: beown-backend
 spec:
-  # replicas géré par le HorizontalPodAutoscaler (voir 07-hpa.yaml).
+  # replicas géré par le HorizontalPodAutoscaler (voir hpa.yaml).
   # On ne fixe pas replicas ici pour éviter qu'un kubectl apply ne réinitialise
   # le nombre de pods décidé par le HPA.
   selector:
@@ -45,7 +44,7 @@ spec:
               done
       containers:
         - name: beown-backend
-          # Remplacer par l'image buildée et poussée dans votre registry
+          # Le tag est surchargé par overlay (images:) et/ou par `kubectl set image` dans le pipeline
           image: ravikazaha/beown-backside:latest
           imagePullPolicy: Always
           ports:
@@ -76,17 +75,3 @@ spec:
             limits:
               cpu: '1000m'
               memory: '512Mi'
-
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: beown-backend-service
-  namespace: beown
-spec:
-  type: ClusterIP
-  selector:
-    app: beown-backend
-  ports:
-    - port: 8080
-      targetPort: 8080
