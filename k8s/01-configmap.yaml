@@ -46,7 +46,7 @@ data:
 
   # App
   FRONTEND_URL: 'https://beown.fr'
-  ADMIN_URL: 'http://34.35.29.154:8081'
+  ADMIN_URL: 'https://admin.beown.fr'
   API_URL: 'https://api.beown.fr'
   TFA_APP_NAME: 'BeOwn'
   CONFIRM_EMAIL_URL: 'https://api.beown.fr/email/verify'
