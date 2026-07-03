@@ -36,12 +36,12 @@ spec:
             - name: POSTGRES_USER
               valueFrom:
                 secretKeyRef:
-                  name: beown-backend-secrets
+                  name: beown-secrets
                   key: DATABASE_USERNAME
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: beown-backend-secrets
+                  name: beown-secrets
                   key: DATABASE_PASSWORD
             - name: POSTGRES_DB
               valueFrom:
@@ -53,21 +53,21 @@ spec:
               mountPath: /var/lib/postgresql/data
           livenessProbe:
             exec:
-              command: ["sh", "-c", "pg_isready -U $POSTGRES_USER"]
+              command: ['sh', '-c', 'pg_isready -U $POSTGRES_USER']
             initialDelaySeconds: 30
             periodSeconds: 10
           readinessProbe:
             exec:
-              command: ["sh", "-c", "pg_isready -U $POSTGRES_USER"]
+              command: ['sh', '-c', 'pg_isready -U $POSTGRES_USER']
             initialDelaySeconds: 5
             periodSeconds: 5
           resources:
             requests:
-              cpu: "250m"
-              memory: "256Mi"
+              cpu: '250m'
+              memory: '256Mi'
             limits:
-              cpu: "500m"
-              memory: "512Mi"
+              cpu: '500m'
+              memory: '512Mi'
       volumes:
         - name: postgres-storage
           persistentVolumeClaim:
@@ -84,4 +84,4 @@ spec:
   ports:
     - port: 5432
       targetPort: 5432
-  clusterIP: None   # Headless service pour StatefulSet
+  clusterIP: None # Headless service pour StatefulSet

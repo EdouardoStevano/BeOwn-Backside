@@ -53,7 +53,7 @@ spec:
             - configMapRef:
                 name: beown-backend-config
             - secretRef:
-                name: beown-backend-secrets
+                name: beown-secrets
           livenessProbe:
             httpGet:
               path: /health
