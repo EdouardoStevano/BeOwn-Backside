@@ -109,6 +109,17 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[] | [Wildcard]> = {
   [UserRole.CGP]: [],
 };
 
+Object.freeze(CIO_PERMISSIONS);
+for (const perms of Object.values(ROLE_PERMISSIONS)) Object.freeze(perms);
+Object.freeze(ROLE_PERMISSIONS);
+
+/**
+ * Vérifie qu'un rôle détient une permission.
+ * Accepte volontairement un rôle `string` brut (JWT `request.user.role`) :
+ * tout rôle inconnu — y compris l'ancien 'admin' d'un token émis avant la
+ * migration — est refusé par défaut (le guard renverra 403, forçant une
+ * reconnexion). Ne pas restreindre la signature à UserRole.
+ */
 export function hasPermission(
   role: UserRole | string | undefined,
   permission: Permission,

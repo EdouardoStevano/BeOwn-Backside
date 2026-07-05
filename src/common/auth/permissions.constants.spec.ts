@@ -58,4 +58,25 @@ describe('permissions.constants', () => {
   it('la matrice couvre tous les rôles (snapshot anti-régression)', () => {
     expect(ROLE_PERMISSIONS).toMatchSnapshot();
   });
+
+  it('permissions exclusives super_admin : aucune liste explicite ne les contient', () => {
+    const explicit = new Set(
+      Object.values(ROLE_PERMISSIONS)
+        .filter((p) => p[0] !== '*')
+        .flat(),
+    );
+    const wildcardOnly = [
+      'roles:assign',
+      'projects:validate',
+      'echeancier:pay',
+      'platform:wallet',
+      'settings:manage',
+    ];
+    for (const perm of wildcardOnly) expect(explicit.has(perm)).toBe(false);
+  });
+
+  it("un rôle inconnu (ex. ancien 'admin') est refusé par défaut", () => {
+    expect(hasPermission('admin', 'users:read')).toBe(false);
+    expect(hasPermission(undefined, 'users:read')).toBe(false);
+  });
 });
