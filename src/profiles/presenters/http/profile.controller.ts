@@ -74,7 +74,7 @@ export class ProfileController {
   private async assertKycReviewer(user: ActiveUser): Promise<void> {
     const u = await this.userRepo.findOne({ where: { userId: user.userId } });
     const allowed: string[] = [
-      UserRole.ADMIN,
+      UserRole.SUPER_ADMIN,
       UserRole.SUPPORT,
       UserRole.COMPLIANCE,
       UserRole.RCCI,

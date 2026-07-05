@@ -166,7 +166,7 @@ export class ProjectController {
 
   @ApiOperation({ summary: 'Créer un nouveau projet (admin)' })
   @ApiResponse({ status: 201, description: 'Projet créé' })
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.SUPER_ADMIN)
   @Post()
   async create(@Body() dto: CreateProjectDto) {
     const project = await this.createProject.execute(dto);
@@ -221,7 +221,7 @@ export class ProjectController {
         message: lieu
           ? `« ${project.titre} » (${lieu}) a été soumis pour revue. Vérifiez le dossier avant publication.`
           : `« ${project.titre} » a été soumis pour revue. Vérifiez le dossier avant publication.`,
-        roles: [UserRole.ADMIN, UserRole.COMPLIANCE, UserRole.FINANCIER],
+        roles: [UserRole.SUPER_ADMIN, UserRole.COMPLIANCE, UserRole.FINANCIER],
         metadata: {
           projectId: project.id,
           slug: project.slug,
@@ -240,7 +240,7 @@ export class ProjectController {
   @ApiResponse({ status: 200, description: 'Projet mis à jour' })
   @ApiResponse({ status: 404, description: 'Projet introuvable' })
   @HttpCode(HttpStatus.OK)
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.SUPER_ADMIN)
   @Patch(':id')
   update(@Param('id') id: string, @Body() dto: Partial<CreateProjectDto>) {
     return this.updateProject.execute(id, dto);
@@ -252,7 +252,7 @@ export class ProjectController {
   @ApiResponse({ status: 400, description: 'Transition de statut invalide' })
   @ApiResponse({ status: 404, description: 'Projet introuvable' })
   @HttpCode(HttpStatus.OK)
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.SUPER_ADMIN)
   @Patch(':id/status')
   patchStatus(@Param('id') id: string, @Body() dto: UpdateProjectStatusDto) {
     return this.updateStatus.execute(id, dto.statut);
@@ -260,7 +260,7 @@ export class ProjectController {
 
   @ApiOperation({ summary: 'Créer une SPV' })
   @ApiResponse({ status: 201, description: 'SPV créée' })
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.SUPER_ADMIN)
   @Post('spv')
   async createSpv(@Body() dto: CreateSpvDto): Promise<Spv> {
     const spv = new Spv();

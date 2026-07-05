@@ -358,7 +358,7 @@ export class YouSignWebhookController {
           type: NotificationType.MARCHE_SECONDAIRE,
           titre: 'Vente marché secondaire',
           message: `User #${signature.userId} a acheté ${nbFractions} fraction(s) à User #${ordre.vendeurId}.`,
-          roles: [UserRole.ADMIN, UserRole.FINANCIER, UserRole.COMPLIANCE],
+          roles: [UserRole.SUPER_ADMIN, UserRole.FINANCIER, UserRole.COMPLIANCE],
           metadata: { ordreId: ordre.id, buyerInvestId, sellerId: ordre.vendeurId, buyerId: signature.userId, nbFractions },
         })
         .catch(() => {});
@@ -533,7 +533,7 @@ export class YouSignWebhookController {
         type: NotificationType.INVESTISSEMENT,
         titre: 'Nouvel investissement',
         message: `User #${investment.utilisateurId} a investi ${montant} XOF dans "${project?.titre ?? 'projet'}".`,
-        roles: [UserRole.ADMIN, UserRole.FINANCIER, UserRole.COMPLIANCE],
+        roles: [UserRole.SUPER_ADMIN, UserRole.FINANCIER, UserRole.COMPLIANCE],
         metadata: { investissementId: investment.id, projetId: investment.projetId, montant, userId: investment.utilisateurId },
       })
       .catch(() => {});

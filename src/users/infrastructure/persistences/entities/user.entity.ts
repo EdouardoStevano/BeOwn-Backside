@@ -12,15 +12,22 @@ import { UserEmailEntity } from './user-email.entity';
 import { TFAMethodEntity } from './tfa-method.entity';
 
 export enum UserRole {
+  // Utilisateurs plateforme
   INVESTISSEUR = 'investisseur',
   PORTEUR = 'porteur',
-  ADMIN = 'admin',
+  CGP = 'cgp',
+  // Back-office — nouveaux rôles (2026-07)
+  SUPER_ADMIN = 'super_admin',
+  CIO = 'cio',
+  MARKETING = 'marketing',
+  ANALYSTE_FINANCIER = 'analyste_financier',
+  CHARGE_RELATION_INVESTISSEUR = 'charge_relation_investisseur',
+  // Back-office — legacy conservés
   SUPPORT = 'support',
   COMPLIANCE = 'compliance',
   DPO = 'dpo',
   RCCI = 'rcci',
   FINANCIER = 'financier',
-  CGP = 'cgp',
 }
 
 export enum UserStatus {

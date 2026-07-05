@@ -51,7 +51,7 @@ import {
 import { NewsEntity, NewsStatus } from './news.entity';
 
 const ADMIN_ROLES: string[] = [
-  UserRole.ADMIN,
+  UserRole.SUPER_ADMIN,
   UserRole.SUPPORT,
   UserRole.COMPLIANCE,
 ];
@@ -244,7 +244,7 @@ const NEWS_IMAGE_MIME = ['image/jpeg', 'image/png', 'image/webp'];
 @ApiBearerAuth()
 @Controller('admin/news')
 @UseGuards(JwtAuthGuard)
-@Roles(UserRole.ADMIN, UserRole.SUPPORT, UserRole.COMPLIANCE)
+@Roles(UserRole.SUPER_ADMIN, UserRole.SUPPORT, UserRole.COMPLIANCE)
 export class AdminNewsController {
   constructor(
     @InjectRepository(UserEntity)

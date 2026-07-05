@@ -273,7 +273,7 @@ export class SeedService {
       'Awa',
       'Diallo',
       'admin@beown.com',
-      UserRole.ADMIN,
+      UserRole.SUPER_ADMIN,
       pwdAdmin,
       null,
     );

@@ -53,7 +53,7 @@ import { WalletType } from 'src/wallets/domains/enums/wallet.enum';
 import { SkipThrottle } from '@nestjs/throttler';
 
 const ADMIN_ROLES: string[] = [
-  UserRole.ADMIN,
+  UserRole.SUPER_ADMIN,
   UserRole.SUPPORT,
   UserRole.COMPLIANCE,
   UserRole.FINANCIER,

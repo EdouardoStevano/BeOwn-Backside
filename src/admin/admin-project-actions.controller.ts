@@ -35,7 +35,7 @@ import { NotificationService } from 'src/notifications/applications/notification
 import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
 
 const ADMIN_ROLES: string[] = [
-  UserRole.ADMIN,
+  UserRole.SUPER_ADMIN,
   UserRole.SUPPORT,
   UserRole.COMPLIANCE,
   UserRole.FINANCIER,
@@ -50,7 +50,7 @@ class CancelCollecteDto {
 @ApiBearerAuth()
 @Controller('admin')
 @UseGuards(JwtAuthGuard)
-@Roles(UserRole.ADMIN, UserRole.SUPPORT, UserRole.COMPLIANCE, UserRole.FINANCIER, UserRole.RCCI)
+@Roles(UserRole.SUPER_ADMIN, UserRole.SUPPORT, UserRole.COMPLIANCE, UserRole.FINANCIER, UserRole.RCCI)
 export class AdminProjectActionsController {
   constructor(
     @InjectRepository(UserEntity)
@@ -156,7 +156,7 @@ export class AdminProjectActionsController {
           type: NotificationType.AUTRE,
           titre: 'Collecte financée — créer l\'échéancier',
           message: `« ${project.titre} » a atteint son objectif minimum (${raised} / min ${minimum} XOF). Créez l'échéancier emprunteur.`,
-          roles: [UserRole.ADMIN, UserRole.FINANCIER, UserRole.COMPLIANCE],
+          roles: [UserRole.SUPER_ADMIN, UserRole.FINANCIER, UserRole.COMPLIANCE],
           metadata: { projectId: id, raised, minimum, target },
         })
         .catch(() => {});

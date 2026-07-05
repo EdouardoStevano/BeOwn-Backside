@@ -293,7 +293,7 @@ export class ExecuteDistributionUseCase {
       await this.auditLog
         .create(
           String(adminUserId),
-          UserRole.ADMIN,
+          UserRole.SUPER_ADMIN,
           'equity.distribution.execute',
           'periode_distribution',
           periodeId,

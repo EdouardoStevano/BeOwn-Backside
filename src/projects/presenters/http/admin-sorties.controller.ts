@@ -27,7 +27,7 @@ import { DeclareSortieDto, MarkSortieActeeDto } from '../dto/sortie.dto';
 @ApiBearerAuth()
 @Controller('admin/sorties')
 @UseGuards(JwtAuthGuard)
-@Roles(UserRole.ADMIN, UserRole.FINANCIER, UserRole.COMPLIANCE)
+@Roles(UserRole.SUPER_ADMIN, UserRole.FINANCIER, UserRole.COMPLIANCE)
 export class AdminSortiesController {
   constructor(
     private readonly declareUseCase: DeclareSortieUseCase,

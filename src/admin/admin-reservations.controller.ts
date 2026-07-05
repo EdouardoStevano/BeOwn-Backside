@@ -35,7 +35,7 @@ import { NotificationService } from 'src/notifications/applications/notification
 import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
 
 const ADMIN_ROLES: string[] = [
-  UserRole.ADMIN,
+  UserRole.SUPER_ADMIN,
   UserRole.SUPPORT,
   UserRole.COMPLIANCE,
   UserRole.FINANCIER,
@@ -76,7 +76,7 @@ const mapStatus = (s: ReservationStatus): string => {
 @ApiBearerAuth()
 @Controller('admin')
 @UseGuards(JwtAuthGuard)
-@Roles(UserRole.ADMIN, UserRole.SUPPORT, UserRole.COMPLIANCE, UserRole.FINANCIER)
+@Roles(UserRole.SUPER_ADMIN, UserRole.SUPPORT, UserRole.COMPLIANCE, UserRole.FINANCIER)
 export class AdminReservationsController {
   constructor(
     @InjectRepository(UserEntity)

@@ -40,7 +40,7 @@ export class SetPepFlagDto {
 @ApiBearerAuth()
 @Controller('admin/compliance')
 @UseGuards(JwtAuthGuard)
-@Roles(UserRole.ADMIN, UserRole.COMPLIANCE, UserRole.RCCI)
+@Roles(UserRole.SUPER_ADMIN, UserRole.COMPLIANCE, UserRole.RCCI)
 export class AdminComplianceController {
   constructor(
     @InjectRepository(UserEntity)

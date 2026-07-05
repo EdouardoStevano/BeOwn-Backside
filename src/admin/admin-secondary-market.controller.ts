@@ -39,7 +39,7 @@ import { NotificationEventService } from 'src/notifications/applications/notific
 import { ProjectEntity } from 'src/projects/infrastructure/persistences/entities/project.entity';
 
 const ADMIN_ROLES = [
-  UserRole.ADMIN,
+  UserRole.SUPER_ADMIN,
   UserRole.SUPPORT,
   UserRole.COMPLIANCE,
   UserRole.FINANCIER,
@@ -51,7 +51,7 @@ const ADMIN_ROLES = [
 @ApiBearerAuth()
 @Controller('admin/secondary-market')
 @UseGuards(JwtAuthGuard)
-@Roles(UserRole.ADMIN, UserRole.SUPPORT, UserRole.COMPLIANCE, UserRole.FINANCIER, UserRole.RCCI)
+@Roles(UserRole.SUPER_ADMIN, UserRole.SUPPORT, UserRole.COMPLIANCE, UserRole.FINANCIER, UserRole.RCCI)
 export class AdminSecondaryMarketController {
   constructor(
     @InjectRepository(OrdreMarcheEntity)

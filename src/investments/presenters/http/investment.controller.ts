@@ -146,7 +146,7 @@ export class InvestmentController {
   @ApiResponse({ status: 200, description: 'Statut mis à jour' })
   @ApiResponse({ status: 404, description: 'Investissement introuvable' })
   @HttpCode(HttpStatus.OK)
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.SUPER_ADMIN)
   @Patch(':id/status')
   patchStatus(@Param('id') id: string, @Body() dto: UpdateInvestmentStatusDto) {
     return this.investmentRepository.updateInvestmentStatus(id, dto.statut);

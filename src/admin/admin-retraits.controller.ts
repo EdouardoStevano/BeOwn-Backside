@@ -23,13 +23,13 @@ import { TransactionStatus, TransactionType } from 'src/wallets/domains/enums/wa
 import { NotificationEventService } from 'src/notifications/applications/notification-event.service';
 import { AuditLogService } from 'src/notifications/applications/audit-log.service';
 
-const ADMIN_ROLES: string[] = [UserRole.ADMIN, UserRole.FINANCIER];
+const ADMIN_ROLES: string[] = [UserRole.SUPER_ADMIN, UserRole.FINANCIER];
 
 @ApiTags('Admin — Retraits')
 @ApiBearerAuth()
 @Controller('admin/retraits')
 @UseGuards(JwtAuthGuard)
-@Roles(UserRole.ADMIN, UserRole.FINANCIER)
+@Roles(UserRole.SUPER_ADMIN, UserRole.FINANCIER)
 export class AdminRetraitsController {
   constructor(
     @InjectRepository(UserEntity)
@@ -78,7 +78,7 @@ export class AdminRetraitsController {
     }
     await this.auditLog.create(
       String(admin.userId),
-      UserRole.ADMIN,
+      UserRole.SUPER_ADMIN,
       'retrait.process',
       'transaction',
       tx.id,

@@ -27,9 +27,9 @@ import {
   AdminSettingsBlob,
 } from './entities/admin-settings.entity';
 
-const ADMIN_WRITE_ROLES: string[] = [UserRole.ADMIN];
+const ADMIN_WRITE_ROLES: string[] = [UserRole.SUPER_ADMIN];
 const ADMIN_READ_ROLES: string[] = [
-  UserRole.ADMIN,
+  UserRole.SUPER_ADMIN,
   UserRole.SUPPORT,
   UserRole.COMPLIANCE,
   UserRole.FINANCIER,
@@ -70,7 +70,7 @@ const DEFAULT_SETTINGS: AdminSettingsBlob = {
 @ApiBearerAuth()
 @Controller('admin/settings')
 @UseGuards(JwtAuthGuard)
-@Roles(UserRole.ADMIN, UserRole.SUPPORT, UserRole.COMPLIANCE, UserRole.FINANCIER, UserRole.RCCI)
+@Roles(UserRole.SUPER_ADMIN, UserRole.SUPPORT, UserRole.COMPLIANCE, UserRole.FINANCIER, UserRole.RCCI)
 export class AdminSettingsController {
   constructor(
     @InjectRepository(UserEntity)

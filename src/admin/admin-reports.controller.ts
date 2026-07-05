@@ -30,7 +30,7 @@ import { InvestmentStatus } from 'src/investments/domains/enums/investment-statu
 import PDFDocument = require('pdfkit');
 
 const ADMIN_ROLES: string[] = [
-  UserRole.ADMIN,
+  UserRole.SUPER_ADMIN,
   UserRole.FINANCIER,
   UserRole.RCCI,
   UserRole.COMPLIANCE,
@@ -51,7 +51,7 @@ const REPORT_LABEL: Record<ReportType, string> = {
 @ApiBearerAuth()
 @Controller('admin/reports')
 @UseGuards(JwtAuthGuard)
-@Roles(UserRole.ADMIN, UserRole.FINANCIER, UserRole.RCCI, UserRole.COMPLIANCE)
+@Roles(UserRole.SUPER_ADMIN, UserRole.FINANCIER, UserRole.RCCI, UserRole.COMPLIANCE)
 export class AdminReportsController {
   constructor(
     @InjectRepository(UserEntity)

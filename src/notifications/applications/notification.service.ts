@@ -142,7 +142,7 @@ export class NotificationService {
     opts: PushAdminNotificationOptions,
   ): Promise<NotificationEntity[]> {
     const roles = opts.roles ?? [
-      UserRole.ADMIN,
+      UserRole.SUPER_ADMIN,
       UserRole.SUPPORT,
       UserRole.COMPLIANCE,
       UserRole.FINANCIER,

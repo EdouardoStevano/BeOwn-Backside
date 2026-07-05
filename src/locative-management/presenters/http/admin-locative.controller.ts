@@ -30,7 +30,7 @@ import { RejectDeclarationDto } from '../dto/admin-validate.dto';
 @ApiBearerAuth()
 @Controller('admin/locative')
 @UseGuards(JwtAuthGuard)
-@Roles(UserRole.ADMIN, UserRole.FINANCIER, UserRole.COMPLIANCE)
+@Roles(UserRole.SUPER_ADMIN, UserRole.FINANCIER, UserRole.COMPLIANCE)
 export class AdminLocativeController {
   constructor(
     @Inject(LOYER_ENCAISSE_REPOSITORY)

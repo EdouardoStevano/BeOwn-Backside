@@ -36,7 +36,7 @@ export class ValidateChargeUseCase {
     await this.auditLog
       .create(
         String(adminUserId),
-        UserRole.ADMIN,
+        UserRole.SUPER_ADMIN,
         'equity.charge.validate',
         'charge',
         id,
@@ -71,7 +71,7 @@ export class ValidateChargeUseCase {
     await this.auditLog
       .create(
         String(adminUserId),
-        UserRole.ADMIN,
+        UserRole.SUPER_ADMIN,
         'equity.charge.reject',
         'charge',
         id,

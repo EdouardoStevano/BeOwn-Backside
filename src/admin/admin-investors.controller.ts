@@ -11,13 +11,13 @@ import type { ActiveUser } from 'src/common/auth/current-user.decorator';
 import { UserEntity, UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
 import { RiskScoringService } from 'src/profiles/applications/risk-scoring.service';
 
-const ADMIN_ROLES: string[] = [UserRole.ADMIN, UserRole.COMPLIANCE, UserRole.SUPPORT];
+const ADMIN_ROLES: string[] = [UserRole.SUPER_ADMIN, UserRole.COMPLIANCE, UserRole.SUPPORT];
 
 @ApiTags('Admin — Suivi investisseurs')
 @ApiBearerAuth()
 @Controller('admin/investors')
 @UseGuards(JwtAuthGuard)
-@Roles(UserRole.ADMIN, UserRole.COMPLIANCE, UserRole.SUPPORT)
+@Roles(UserRole.SUPER_ADMIN, UserRole.COMPLIANCE, UserRole.SUPPORT)
 export class AdminInvestorsController {
   constructor(
     @InjectRepository(UserEntity)

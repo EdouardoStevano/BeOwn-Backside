@@ -33,7 +33,7 @@ import { CalculateDistributionDto } from '../dto/calculate-distribution.dto';
 @ApiBearerAuth()
 @Controller('admin/distributions')
 @UseGuards(JwtAuthGuard)
-@Roles(UserRole.ADMIN, UserRole.FINANCIER, UserRole.COMPLIANCE)
+@Roles(UserRole.SUPER_ADMIN, UserRole.FINANCIER, UserRole.COMPLIANCE)
 export class AdminDistributionsController {
   constructor(
     private readonly calculateUseCase: CalculateDistributionPeriodeUseCase,

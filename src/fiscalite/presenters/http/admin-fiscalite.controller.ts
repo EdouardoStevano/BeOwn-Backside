@@ -16,7 +16,7 @@ import { GenerateInvestisseurIfuUseCase } from '../../applications/usecases/gene
 @ApiBearerAuth()
 @Controller('admin/fiscalite')
 @UseGuards(JwtAuthGuard)
-@Roles(UserRole.ADMIN, UserRole.FINANCIER, UserRole.COMPLIANCE)
+@Roles(UserRole.SUPER_ADMIN, UserRole.FINANCIER, UserRole.COMPLIANCE)
 export class AdminFiscaliteController {
   constructor(
     private readonly cronService: IfuCronService,

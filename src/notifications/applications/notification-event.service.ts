@@ -156,7 +156,7 @@ export class NotificationEventService {
         type: NotificationType.ECHEANCE,
         titre: 'Échéance en retard',
         message: `L'échéance n°${echeance.numero} de ${echeance.montantTotal} XOF pour "${project.titre}" est en retard.`,
-        roles: [UserRole.ADMIN, UserRole.FINANCIER],
+        roles: [UserRole.SUPER_ADMIN, UserRole.FINANCIER],
         metadata: {
           echeanceId: echeance.id,
           investissementId: echeance.investissementId,
@@ -196,7 +196,7 @@ export class NotificationEventService {
         type: NotificationType.COMPTE_SUPPRIME,
         titre: 'Compte supprimé',
         message: `${this.displayName(user)} (${email}) a supprimé son compte (soft-delete).`,
-        roles: [UserRole.ADMIN, UserRole.COMPLIANCE, UserRole.SUPPORT],
+        roles: [UserRole.SUPER_ADMIN, UserRole.COMPLIANCE, UserRole.SUPPORT],
         metadata: { userId: user.userId, email },
       });
     } catch (err) {
@@ -211,7 +211,7 @@ export class NotificationEventService {
         type: NotificationType.NOUVELLE_INSCRIPTION,
         titre: 'Nouvelle inscription',
         message: `${this.displayName(user)} (${email}) vient de s'inscrire sur la plateforme.`,
-        roles: [UserRole.ADMIN, UserRole.SUPPORT],
+        roles: [UserRole.SUPER_ADMIN, UserRole.SUPPORT],
         metadata: { userId: user.userId, email },
       });
     } catch (err) {
@@ -225,7 +225,7 @@ export class NotificationEventService {
         type: NotificationType.MARCHE_SECONDAIRE,
         titre: 'Nouvelle annonce marché secondaire',
         message: `${this.displayName(vendeur)} a mis en vente ${ordre.nbFractions} fraction(s) de "${project.titre}" à ${Number(ordre.prixUnitaire)} XOF/fraction.`,
-        roles: [UserRole.ADMIN, UserRole.COMPLIANCE, UserRole.FINANCIER],
+        roles: [UserRole.SUPER_ADMIN, UserRole.COMPLIANCE, UserRole.FINANCIER],
         metadata: {
           ordreId: ordre.id,
           projetId: project.id,
@@ -263,7 +263,7 @@ export class NotificationEventService {
         type: NotificationType.INVESTISSEMENT,
         titre: 'Nouvel investissement',
         message: `${this.displayName(user)} a investi ${montant} XOF dans "${project.titre}" (${nbFractions} fraction(s)).`,
-        roles: [UserRole.ADMIN, UserRole.FINANCIER, UserRole.COMPLIANCE],
+        roles: [UserRole.SUPER_ADMIN, UserRole.FINANCIER, UserRole.COMPLIANCE],
         metadata: {
           investissementId: investment.id,
           projetId: project.id,
@@ -307,7 +307,7 @@ export class NotificationEventService {
         type: NotificationType.INVESTISSEMENT,
         titre: 'Top-up investissement',
         message: `${this.displayName(user)} a ajouté ${nbFractions} fraction(s) dans "${project.titre}" (+${montantDelta} XOF).`,
-        roles: [UserRole.ADMIN, UserRole.FINANCIER],
+        roles: [UserRole.SUPER_ADMIN, UserRole.FINANCIER],
         metadata: {
           investissementId: investment.id,
           projetId: project.id,
@@ -378,7 +378,7 @@ export class NotificationEventService {
         type: NotificationType.MARCHE_SECONDAIRE,
         titre: 'Trade marché secondaire',
         message: `${this.displayName(buyer)} a acheté ${nbFractions} fraction(s) à ${this.displayName(seller)} pour "${project.titre}".`,
-        roles: [UserRole.ADMIN, UserRole.FINANCIER, UserRole.COMPLIANCE],
+        roles: [UserRole.SUPER_ADMIN, UserRole.FINANCIER, UserRole.COMPLIANCE],
         metadata: meta,
       });
     } catch (err) {

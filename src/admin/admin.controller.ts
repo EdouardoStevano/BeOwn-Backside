@@ -43,7 +43,7 @@ import { SkipThrottle } from '@nestjs/throttler';
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const ADMIN_ROLES: string[] = [
-  UserRole.ADMIN,
+  UserRole.SUPER_ADMIN,
   UserRole.SUPPORT,
   UserRole.COMPLIANCE,
   UserRole.FINANCIER,
@@ -70,7 +70,7 @@ const MONTH_LABELS: Record<number, string> = {
 @ApiBearerAuth()
 @Controller('admin')
 @UseGuards(JwtAuthGuard)
-@Roles(UserRole.ADMIN, UserRole.SUPPORT, UserRole.COMPLIANCE, UserRole.FINANCIER, UserRole.RCCI)
+@Roles(UserRole.SUPER_ADMIN, UserRole.SUPPORT, UserRole.COMPLIANCE, UserRole.FINANCIER, UserRole.RCCI)
 export class AdminController {
   constructor(
     @InjectRepository(UserEntity)

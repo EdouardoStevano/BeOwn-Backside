@@ -52,7 +52,7 @@ import { PayEcheanceUseCase } from 'src/investments/applications/usecases/pay-ec
 import { ProjectScheduleGeneratorService } from 'src/investments/applications/project-schedule-generator.service';
 
 const ADMIN_ROLES = [
-  UserRole.ADMIN,
+  UserRole.SUPER_ADMIN,
   UserRole.FINANCIER,
   UserRole.COMPLIANCE,
   UserRole.RCCI,
@@ -82,7 +82,7 @@ class InitializeScheduleDto {
 @ApiBearerAuth()
 @Controller('admin/projects/:projectId/echeances')
 @UseGuards(JwtAuthGuard)
-@Roles(UserRole.ADMIN, UserRole.FINANCIER, UserRole.COMPLIANCE, UserRole.RCCI)
+@Roles(UserRole.SUPER_ADMIN, UserRole.FINANCIER, UserRole.COMPLIANCE, UserRole.RCCI)
 export class AdminEcheancesController {
   constructor(
     @InjectRepository(UserEntity) private readonly userRepo: Repository<UserEntity>,
@@ -215,7 +215,7 @@ export class AdminEcheancesController {
         type: NotificationType.ECHEANCE,
         titre: `Échéance #${numero} déclenchée`,
         message: `Admin a déclenché l'échéance ${numero} : ${paidCount} investisseur(s) crédité(s) pour ${totalAmount} XOF.`,
-        roles: [UserRole.ADMIN, UserRole.FINANCIER, UserRole.COMPLIANCE],
+        roles: [UserRole.SUPER_ADMIN, UserRole.FINANCIER, UserRole.COMPLIANCE],
         metadata: { projectId, numero, paidCount, totalAmount, triggeredBy: admin.userId },
       })
       .catch(() => {});
@@ -531,7 +531,7 @@ export class AdminEcheancesController {
 @ApiBearerAuth()
 @Controller('admin/echeances')
 @UseGuards(JwtAuthGuard)
-@Roles(UserRole.ADMIN, UserRole.FINANCIER, UserRole.COMPLIANCE, UserRole.RCCI)
+@Roles(UserRole.SUPER_ADMIN, UserRole.FINANCIER, UserRole.COMPLIANCE, UserRole.RCCI)
 export class AdminEcheancesItemController {
   constructor(
     @InjectRepository(UserEntity) private readonly userRepo: Repository<UserEntity>,

@@ -184,7 +184,7 @@ describe('NotificationEventService.echeance', () => {
     expect(notifications.pushToRoles).toHaveBeenCalledWith(expect.objectContaining({
       type: NotificationType.ECHEANCE,
       titre: 'Échéance en retard',
-      roles: [UserRole.ADMIN, UserRole.FINANCIER],
+      roles: [UserRole.SUPER_ADMIN, UserRole.FINANCIER],
     }));
   });
 });
@@ -228,7 +228,7 @@ describe('NotificationEventService.accountDeletedByUser', () => {
       type: NotificationType.COMPTE_SUPPRIME,
       titre: 'Compte supprimé',
       message: 'Jean Dupont (jean@example.com) a supprimé son compte (soft-delete).',
-      roles: [UserRole.ADMIN, UserRole.COMPLIANCE, UserRole.SUPPORT],
+      roles: [UserRole.SUPER_ADMIN, UserRole.COMPLIANCE, UserRole.SUPPORT],
       metadata: { userId: 42, email: 'jean@example.com' },
     }));
   });
@@ -254,7 +254,7 @@ describe('NotificationEventService.userRegistered', () => {
       type: NotificationType.NOUVELLE_INSCRIPTION,
       titre: 'Nouvelle inscription',
       message: "Alice Martin (alice@example.com) vient de s'inscrire sur la plateforme.",
-      roles: [UserRole.ADMIN, UserRole.SUPPORT],
+      roles: [UserRole.SUPER_ADMIN, UserRole.SUPPORT],
       metadata: { userId: 42, email: 'alice@example.com' },
     }));
   });
@@ -277,7 +277,7 @@ describe('NotificationEventService.secondaryOrderCreated', () => {
       type: NotificationType.MARCHE_SECONDAIRE,
       titre: 'Nouvelle annonce marché secondaire',
       message: 'Jean Dupont a mis en vente 5 fraction(s) de "Résidence Pelican" à 1000 XOF/fraction.',
-      roles: [UserRole.ADMIN, UserRole.COMPLIANCE, UserRole.FINANCIER],
+      roles: [UserRole.SUPER_ADMIN, UserRole.COMPLIANCE, UserRole.FINANCIER],
       metadata: { ordreId: 'o-uuid', projetId: 'p-uuid', vendeurId: 42, nbFractions: 5, prixUnitaire: 1000 },
     }));
   });
@@ -306,7 +306,7 @@ describe('NotificationEventService.investmentCreated', () => {
       type: NotificationType.INVESTISSEMENT,
       titre: 'Nouvel investissement',
       message: 'Jean Dupont a investi 250000 XOF dans "Résidence Pelican" (5 fraction(s)).',
-      roles: [UserRole.ADMIN, UserRole.FINANCIER, UserRole.COMPLIANCE],
+      roles: [UserRole.SUPER_ADMIN, UserRole.FINANCIER, UserRole.COMPLIANCE],
     }));
   });
 });
@@ -331,7 +331,7 @@ describe('NotificationEventService.fractionsToppedUp', () => {
     }));
     expect(notifications.pushToRoles).toHaveBeenCalledWith(expect.objectContaining({
       titre: 'Top-up investissement',
-      roles: [UserRole.ADMIN, UserRole.FINANCIER],
+      roles: [UserRole.SUPER_ADMIN, UserRole.FINANCIER],
       message: 'Jean Dupont a ajouté 3 fraction(s) dans "Résidence Pelican" (+30000 XOF).',
     }));
   });
@@ -363,7 +363,7 @@ describe('NotificationEventService.secondaryTradeExecuted', () => {
     expect(notifications.pushToRoles).toHaveBeenCalledWith(expect.objectContaining({
       titre: 'Trade marché secondaire',
       message: 'Alice Martin a acheté 5 fraction(s) à Jean Dupont pour "Résidence Pelican".',
-      roles: [UserRole.ADMIN, UserRole.FINANCIER, UserRole.COMPLIANCE],
+      roles: [UserRole.SUPER_ADMIN, UserRole.FINANCIER, UserRole.COMPLIANCE],
     }));
   });
 });

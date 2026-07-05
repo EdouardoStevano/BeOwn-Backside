@@ -18,13 +18,13 @@ import type { ActiveUser } from 'src/common/auth/current-user.decorator';
 import { UserEntity, UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
 import { IfuGenerationService } from 'src/investments/applications/ifu-generation.service';
 
-const ADMIN_ROLES: string[] = [UserRole.ADMIN, UserRole.FINANCIER, UserRole.COMPLIANCE];
+const ADMIN_ROLES: string[] = [UserRole.SUPER_ADMIN, UserRole.FINANCIER, UserRole.COMPLIANCE];
 
 @ApiTags('Admin — Fiscal')
 @ApiBearerAuth()
 @Controller('admin/fiscal')
 @UseGuards(JwtAuthGuard)
-@Roles(UserRole.ADMIN, UserRole.FINANCIER, UserRole.COMPLIANCE)
+@Roles(UserRole.SUPER_ADMIN, UserRole.FINANCIER, UserRole.COMPLIANCE)
 export class AdminFiscalController {
   constructor(
     @InjectRepository(UserEntity)
