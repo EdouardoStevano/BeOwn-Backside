@@ -233,9 +233,9 @@ export class SeedService {
     const pwdInvestisseur = await bcrypt.hash(this.INVESTISSEUR_PASSWORD, 12);
 
     // ════════════════════════════════════════════════════════════════════════
-    // 1. UTILISATEURS — 1 admin, 2 porteurs, 3 investisseurs (1 email unique)
+    // 1. UTILISATEURS — 1 admin, 4 staff, 2 porteurs, 3 investisseurs
     // ════════════════════════════════════════════════════════════════════════
-    this.logger.log('👥 Création des 6 utilisateurs...');
+    this.logger.log('👥 Création des 10 utilisateurs...');
 
     const createUser = async (
       firstname: string,
@@ -274,6 +274,38 @@ export class SeedService {
       'Diallo',
       'admin@beown.com',
       UserRole.SUPER_ADMIN,
+      pwdAdmin,
+      null,
+    );
+    await createUser(
+      'Chloé',
+      'CIO',
+      'cio@beown.com',
+      UserRole.CIO,
+      pwdAdmin,
+      null,
+    );
+    await createUser(
+      'Marc',
+      'Marketing',
+      'marketing@beown.com',
+      UserRole.MARKETING,
+      pwdAdmin,
+      null,
+    );
+    await createUser(
+      'Awa',
+      'Analyste',
+      'analyste@beown.com',
+      UserRole.ANALYSTE_FINANCIER,
+      pwdAdmin,
+      null,
+    );
+    await createUser(
+      'Paul',
+      'Relation',
+      'relation@beown.com',
+      UserRole.CHARGE_RELATION_INVESTISSEUR,
       pwdAdmin,
       null,
     );
@@ -319,7 +351,7 @@ export class SeedService {
     );
     const investors = [inv1, inv2, inv3];
 
-    this.logger.log('✅ 6 utilisateurs créés (emails uniques)');
+    this.logger.log('✅ 10 utilisateurs créés (emails uniques)');
 
     // ════════════════════════════════════════════════════════════════════════
     // 2. PROFILS & KYC
@@ -865,6 +897,10 @@ Immeuble résidentiel de 6 appartements loués, détenu via la SPV **BeOwn Les J
     this.logger.log(line);
     this.logger.log('Comptes (mot de passe) :');
     this.logger.log(`  ADMIN        admin@beown.com         → ${this.ADMIN_PASSWORD}`);
+    this.logger.log(`  CIO          cio@beown.com           → ${this.ADMIN_PASSWORD}`);
+    this.logger.log(`  MARKETING    marketing@beown.com     → ${this.ADMIN_PASSWORD}`);
+    this.logger.log(`  ANALYSTE     analyste@beown.com      → ${this.ADMIN_PASSWORD}`);
+    this.logger.log(`  RELATION     relation@beown.com      → ${this.ADMIN_PASSWORD}`);
     this.logger.log(`  PORTEUR 1    porteur1@beown.com      → ${this.PORTEUR_PASSWORD}`);
     this.logger.log(`  PORTEUR 2    porteur2@beown.com      → ${this.PORTEUR_PASSWORD}`);
     this.logger.log(`  INVESTISSEUR investisseur1@beown.com → ${this.INVESTISSEUR_PASSWORD}`);
