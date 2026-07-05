@@ -105,7 +105,7 @@ export class AdminDistributionsController {
       'Exécuter le versement des parts (crédit wallets, débit séquestres IR/CSG)',
   })
   execute(@Param('id') id: string, @CurrentUser() user: ActiveUser) {
-    return this.executeUseCase.execute(id, user.userId);
+    return this.executeUseCase.execute(id, user.userId, user.role);
   }
 
   @Get('historique/projet/:projetId')

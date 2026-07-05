@@ -82,6 +82,7 @@ export class ExecuteDistributionUseCase {
   async execute(
     periodeId: string,
     adminUserId?: number,
+    adminRole?: string,
   ): Promise<ExecuteDistributionResult> {
     const periode = await this.periodeRepo.findById(periodeId);
     if (!periode) {
@@ -293,7 +294,7 @@ export class ExecuteDistributionUseCase {
       await this.auditLog
         .create(
           String(adminUserId),
-          UserRole.SUPER_ADMIN,
+          (adminRole ?? UserRole.SUPER_ADMIN) as any,
           'equity.distribution.execute',
           'periode_distribution',
           periodeId,

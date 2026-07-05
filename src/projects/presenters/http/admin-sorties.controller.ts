@@ -109,6 +109,6 @@ export class AdminSortiesController {
       'Exécuter la sortie : rembourser capital + distribuer plus-value, clôturer le projet',
   })
   execute(@Param('id') id: string, @CurrentUser() user: ActiveUser) {
-    return this.executeUseCase.execute(id, user.userId);
+    return this.executeUseCase.execute(id, user.userId, user.role);
   }
 }

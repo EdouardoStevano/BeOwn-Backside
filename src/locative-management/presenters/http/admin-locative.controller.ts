@@ -51,7 +51,7 @@ export class AdminLocativeController {
     @Param('id') id: string,
     @CurrentUser() user: ActiveUser,
   ) {
-    return this.validateLoyer.validate(id, user.userId);
+    return this.validateLoyer.validate(id, user.userId, user.role);
   }
 
   @Post('loyers/:id/reject')
@@ -61,7 +61,7 @@ export class AdminLocativeController {
     @Body() dto: RejectDeclarationDto,
     @CurrentUser() user: ActiveUser,
   ) {
-    return this.validateLoyer.reject(id, user.userId, dto.motif);
+    return this.validateLoyer.reject(id, user.userId, dto.motif, user.role);
   }
 
   @Get('charges/pending')
@@ -76,7 +76,7 @@ export class AdminLocativeController {
     @Param('id') id: string,
     @CurrentUser() user: ActiveUser,
   ) {
-    return this.validateCharge.validate(id, user.userId);
+    return this.validateCharge.validate(id, user.userId, user.role);
   }
 
   @Post('charges/:id/reject')
@@ -86,6 +86,6 @@ export class AdminLocativeController {
     @Body() dto: RejectDeclarationDto,
     @CurrentUser() user: ActiveUser,
   ) {
-    return this.validateCharge.reject(id, user.userId, dto.motif);
+    return this.validateCharge.reject(id, user.userId, dto.motif, user.role);
   }
 }

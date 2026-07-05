@@ -227,7 +227,7 @@ export class AdminEcheancesController {
   @Post(':id/pay')
   async markPaid(@Param('id') id: string, @CurrentUser() user: ActiveUser) {
     await this.assertAdmin(user);
-    return this.payEcheance.execute(id, user.userId);
+    return this.payEcheance.execute(id, user.userId, user.role);
   }
 
   @ApiOperation({

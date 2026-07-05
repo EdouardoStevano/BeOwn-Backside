@@ -28,7 +28,7 @@ export class PayEcheanceUseCase {
     private readonly auditLog: AuditLogService,
   ) {}
 
-  async execute(echeanceId: string, adminId: number): Promise<EcheanceEntity> {
+  async execute(echeanceId: string, adminId: number, adminRole?: string): Promise<EcheanceEntity> {
     const echeance = await this.echeanceRepo.findOne({
       where: { id: echeanceId },
       relations: ['investissement', 'investissement.projet'],
@@ -154,7 +154,7 @@ export class PayEcheanceUseCase {
     await this.notificationEvents.echeancePaid(echeance, project);
     await this.auditLog.create(
       String(adminId),
-      UserRole.SUPER_ADMIN,
+      (adminRole ?? UserRole.SUPER_ADMIN) as any,
       'echeance.pay',
       'echeance',
       echeance.id,
