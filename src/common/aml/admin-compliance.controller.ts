@@ -14,7 +14,7 @@ import { Repository } from 'typeorm';
 import { ApiProperty } from '@nestjs/swagger';
 import { IsBoolean, IsOptional, IsString } from 'class-validator';
 import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
-import { Roles } from 'src/common/auth/roles.decorator';
+import { RequirePermission } from 'src/common/auth/require-permission.decorator';
 import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
 import {
@@ -40,7 +40,7 @@ export class SetPepFlagDto {
 @ApiBearerAuth()
 @Controller('admin/compliance')
 @UseGuards(JwtAuthGuard)
-@Roles(UserRole.SUPER_ADMIN, UserRole.COMPLIANCE, UserRole.RCCI)
+@RequirePermission('aml:manage')
 export class AdminComplianceController {
   constructor(
     @InjectRepository(UserEntity)
@@ -67,6 +67,7 @@ export class AdminComplianceController {
   }
 
   @Post('pep/:userId')
+  @RequirePermission('kyc:validate')
   @ApiOperation({ summary: 'Activer ou désactiver le flag PEP sur un utilisateur' })
   async setPep(
     @Param('userId') userIdStr: string,

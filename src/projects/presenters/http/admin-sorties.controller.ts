@@ -10,10 +10,9 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
-import { Roles } from 'src/common/auth/roles.decorator';
+import { RequirePermission } from 'src/common/auth/require-permission.decorator';
 import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
-import { UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
 import { DeclareSortieUseCase } from '../../applications/usecases/declare-sortie.usecase';
 import { ExecuteSortieUseCase } from '../../applications/usecases/execute-sortie.usecase';
 import {
@@ -27,7 +26,7 @@ import { DeclareSortieDto, MarkSortieActeeDto } from '../dto/sortie.dto';
 @ApiBearerAuth()
 @Controller('admin/sorties')
 @UseGuards(JwtAuthGuard)
-@Roles(UserRole.SUPER_ADMIN, UserRole.FINANCIER, UserRole.COMPLIANCE)
+@RequirePermission('sorties:execute')
 export class AdminSortiesController {
   constructor(
     private readonly declareUseCase: DeclareSortieUseCase,

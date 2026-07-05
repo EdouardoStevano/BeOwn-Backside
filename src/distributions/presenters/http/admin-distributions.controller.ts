@@ -10,10 +10,9 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
-import { Roles } from 'src/common/auth/roles.decorator';
+import { RequirePermission } from 'src/common/auth/require-permission.decorator';
 import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
-import { UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
 import { CalculateDistributionPeriodeUseCase } from '../../applications/usecases/calculate-distribution-periode.usecase';
 import { ValidatePeriodeDistributionUseCase } from '../../applications/usecases/validate-periode-distribution.usecase';
 import { ExecuteDistributionUseCase } from '../../applications/usecases/execute-distribution.usecase';
@@ -33,7 +32,7 @@ import { CalculateDistributionDto } from '../dto/calculate-distribution.dto';
 @ApiBearerAuth()
 @Controller('admin/distributions')
 @UseGuards(JwtAuthGuard)
-@Roles(UserRole.SUPER_ADMIN, UserRole.FINANCIER, UserRole.COMPLIANCE)
+@RequirePermission('distributions:execute')
 export class AdminDistributionsController {
   constructor(
     private readonly calculateUseCase: CalculateDistributionPeriodeUseCase,

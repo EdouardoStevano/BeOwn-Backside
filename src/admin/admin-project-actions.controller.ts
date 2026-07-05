@@ -19,7 +19,8 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
-import { Roles } from 'src/common/auth/roles.decorator';
+import { RequirePermission } from 'src/common/auth/require-permission.decorator';
+import { rolesWithPermission } from 'src/common/auth/permissions.constants';
 import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
 import {
@@ -34,13 +35,7 @@ import { RefundCollecteService } from 'src/investments/applications/refund-colle
 import { NotificationService } from 'src/notifications/applications/notification.service';
 import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
 
-const ADMIN_ROLES: string[] = [
-  UserRole.SUPER_ADMIN,
-  UserRole.SUPPORT,
-  UserRole.COMPLIANCE,
-  UserRole.FINANCIER,
-  UserRole.RCCI,
-];
+const ADMIN_ROLES: string[] = rolesWithPermission('projects:manage');
 
 class CancelCollecteDto {
   reason?: string;
@@ -50,7 +45,7 @@ class CancelCollecteDto {
 @ApiBearerAuth()
 @Controller('admin')
 @UseGuards(JwtAuthGuard)
-@Roles(UserRole.SUPER_ADMIN, UserRole.SUPPORT, UserRole.COMPLIANCE, UserRole.FINANCIER, UserRole.RCCI)
+@RequirePermission('projects:manage')
 export class AdminProjectActionsController {
   constructor(
     @InjectRepository(UserEntity)
@@ -188,6 +183,7 @@ export class AdminProjectActionsController {
   }
 
   @ApiOperation({ summary: 'Publier un projet en mode "annonce" (vitrine)' })
+  @RequirePermission('projects:publish')
   @Post('projects/:id/publish-annonce')
   @HttpCode(HttpStatus.OK)
   async publishAnnonce(

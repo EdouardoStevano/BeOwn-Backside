@@ -25,7 +25,8 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, Repository } from 'typeorm';
 import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
-import { Roles } from 'src/common/auth/roles.decorator';
+import { RequirePermission } from 'src/common/auth/require-permission.decorator';
+import { rolesWithPermission } from 'src/common/auth/permissions.constants';
 import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
 import {
@@ -51,12 +52,7 @@ import { NotificationType } from 'src/notifications/infrastructure/persistences/
 import { PayEcheanceUseCase } from 'src/investments/applications/usecases/pay-echeance.usecase';
 import { ProjectScheduleGeneratorService } from 'src/investments/applications/project-schedule-generator.service';
 
-const ADMIN_ROLES = [
-  UserRole.SUPER_ADMIN,
-  UserRole.FINANCIER,
-  UserRole.COMPLIANCE,
-  UserRole.RCCI,
-];
+const ADMIN_ROLES = rolesWithPermission('echeancier:read');
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -82,7 +78,7 @@ class InitializeScheduleDto {
 @ApiBearerAuth()
 @Controller('admin/projects/:projectId/echeances')
 @UseGuards(JwtAuthGuard)
-@Roles(UserRole.SUPER_ADMIN, UserRole.FINANCIER, UserRole.COMPLIANCE, UserRole.RCCI)
+@RequirePermission('echeancier:read')
 export class AdminEcheancesController {
   constructor(
     @InjectRepository(UserEntity) private readonly userRepo: Repository<UserEntity>,
@@ -105,6 +101,7 @@ export class AdminEcheancesController {
 
   @Post(':numero/trigger-payment')
   @HttpCode(HttpStatus.OK)
+  @RequirePermission('echeancier:pay')
   @ApiOperation({
     summary: "Déclencher manuellement le paiement d'une échéance pour tous les investisseurs",
   })
@@ -226,6 +223,7 @@ export class AdminEcheancesController {
   @ApiOperation({ summary: "Marquer une échéance comme payée (crédite le wallet)" })
   @ApiParam({ name: 'id', description: "UUID de l'échéance" })
   @HttpCode(HttpStatus.OK)
+  @RequirePermission('echeancier:pay')
   @Post(':id/pay')
   async markPaid(@Param('id') id: string, @CurrentUser() user: ActiveUser) {
     await this.assertAdmin(user);
@@ -531,7 +529,7 @@ export class AdminEcheancesController {
 @ApiBearerAuth()
 @Controller('admin/echeances')
 @UseGuards(JwtAuthGuard)
-@Roles(UserRole.SUPER_ADMIN, UserRole.FINANCIER, UserRole.COMPLIANCE, UserRole.RCCI)
+@RequirePermission('echeancier:read')
 export class AdminEcheancesItemController {
   constructor(
     @InjectRepository(UserEntity) private readonly userRepo: Repository<UserEntity>,

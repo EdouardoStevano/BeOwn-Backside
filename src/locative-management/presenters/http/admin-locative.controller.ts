@@ -9,10 +9,9 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
-import { Roles } from 'src/common/auth/roles.decorator';
+import { RequirePermission } from 'src/common/auth/require-permission.decorator';
 import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
-import { UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
 import {
   LOYER_ENCAISSE_REPOSITORY,
   type LoyerEncaisseRepository,
@@ -30,7 +29,7 @@ import { RejectDeclarationDto } from '../dto/admin-validate.dto';
 @ApiBearerAuth()
 @Controller('admin/locative')
 @UseGuards(JwtAuthGuard)
-@Roles(UserRole.SUPER_ADMIN, UserRole.FINANCIER, UserRole.COMPLIANCE)
+@RequirePermission('locatif:manage')
 export class AdminLocativeController {
   constructor(
     @Inject(LOYER_ENCAISSE_REPOSITORY)

@@ -41,6 +41,7 @@ import { UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
 import { KycValidatedGuard } from 'src/common/auth/kyc-validated.guard';
 import { Roles } from 'src/common/auth/roles.decorator';
+import { RequirePermission } from 'src/common/auth/require-permission.decorator';
 import { UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
 import { SkipThrottle } from '@nestjs/throttler';
 import { EcheanceEntity } from 'src/investments/infrastructure/persistences/entities/echeance.entity';
@@ -146,7 +147,7 @@ export class InvestmentController {
   @ApiResponse({ status: 200, description: 'Statut mis à jour' })
   @ApiResponse({ status: 404, description: 'Investissement introuvable' })
   @HttpCode(HttpStatus.OK)
-  @Roles(UserRole.SUPER_ADMIN)
+  @RequirePermission('funds:disburse')
   @Patch(':id/status')
   patchStatus(@Param('id') id: string, @Body() dto: UpdateInvestmentStatusDto) {
     return this.investmentRepository.updateInvestmentStatus(id, dto.statut);

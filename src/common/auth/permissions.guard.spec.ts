@@ -3,11 +3,13 @@ import { Reflector } from '@nestjs/core';
 import { PermissionsGuard } from './permissions.guard';
 import { UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
 import { IS_PUBLIC_KEY } from './public.decorator';
+import type { Permission } from './permissions.constants';
 
 const ctx = (role?: string): ExecutionContext =>
   ({
     getHandler: () => ({}),
     getClass: () => ({}),
+    // getResponse/getNext omis — le guard n'utilise que getRequest
     switchToHttp: () => ({ getRequest: () => ({ user: role ? { role } : undefined }) }),
   }) as unknown as ExecutionContext;
 
@@ -20,7 +22,7 @@ describe('PermissionsGuard', () => {
     guard = new PermissionsGuard(reflector);
   });
 
-  const withMeta = (perms: string[] | undefined, isPublic = false) => {
+  const withMeta = (perms: Permission[] | undefined, isPublic = false) => {
     jest
       .spyOn(reflector, 'getAllAndOverride')
       .mockImplementation((key: unknown) =>

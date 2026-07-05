@@ -41,7 +41,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Public } from 'src/common/auth/public.decorator';
 import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
-import { Roles } from 'src/common/auth/roles.decorator';
+import { RequirePermission } from 'src/common/auth/require-permission.decorator';
+import { rolesWithPermission } from 'src/common/auth/permissions.constants';
 import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
 import {
@@ -50,11 +51,7 @@ import {
 } from 'src/users/infrastructure/persistences/entities/user.entity';
 import { NewsEntity, NewsStatus } from './news.entity';
 
-const ADMIN_ROLES: string[] = [
-  UserRole.SUPER_ADMIN,
-  UserRole.SUPPORT,
-  UserRole.COMPLIANCE,
-];
+const ADMIN_ROLES: string[] = rolesWithPermission('news:manage');
 
 class CreateNewsDto {
   @ApiProperty({ example: "Lancement de la plateforme BeOwn" })
@@ -244,7 +241,7 @@ const NEWS_IMAGE_MIME = ['image/jpeg', 'image/png', 'image/webp'];
 @ApiBearerAuth()
 @Controller('admin/news')
 @UseGuards(JwtAuthGuard)
-@Roles(UserRole.SUPER_ADMIN, UserRole.SUPPORT, UserRole.COMPLIANCE)
+@RequirePermission('news:manage')
 export class AdminNewsController {
   constructor(
     @InjectRepository(UserEntity)

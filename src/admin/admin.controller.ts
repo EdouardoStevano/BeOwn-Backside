@@ -22,7 +22,8 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In, ILike } from 'typeorm';
 import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
-import { Roles } from 'src/common/auth/roles.decorator';
+import { RequirePermission } from 'src/common/auth/require-permission.decorator';
+import { rolesWithPermission } from 'src/common/auth/permissions.constants';
 import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
 import { NotificationEventService } from 'src/notifications/applications/notification-event.service';
@@ -42,13 +43,7 @@ import { SkipThrottle } from '@nestjs/throttler';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const ADMIN_ROLES: string[] = [
-  UserRole.SUPER_ADMIN,
-  UserRole.SUPPORT,
-  UserRole.COMPLIANCE,
-  UserRole.FINANCIER,
-  UserRole.RCCI,
-];
+const ADMIN_ROLES: string[] = rolesWithPermission('reports:read');
 
 const ACTIVE_INVESTMENT_STATUSES = [
   InvestmentStatus.CONFIRME,
@@ -70,7 +65,7 @@ const MONTH_LABELS: Record<number, string> = {
 @ApiBearerAuth()
 @Controller('admin')
 @UseGuards(JwtAuthGuard)
-@Roles(UserRole.SUPER_ADMIN, UserRole.SUPPORT, UserRole.COMPLIANCE, UserRole.FINANCIER, UserRole.RCCI)
+@RequirePermission('reports:read')
 export class AdminController {
   constructor(
     @InjectRepository(UserEntity)

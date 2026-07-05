@@ -16,7 +16,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, ILike, Repository } from 'typeorm';
 import { SkipThrottle } from '@nestjs/throttler';
 import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
-import { Roles } from 'src/common/auth/roles.decorator';
+import { RequirePermission } from 'src/common/auth/require-permission.decorator';
+import { rolesWithPermission } from 'src/common/auth/permissions.constants';
 import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
 import { OrdreMarcheEntity } from 'src/secondarymarket/infrastructure/persistences/entities/ordre-marche.entity';
@@ -38,20 +39,14 @@ import { NotificationType } from 'src/notifications/infrastructure/persistences/
 import { NotificationEventService } from 'src/notifications/applications/notification-event.service';
 import { ProjectEntity } from 'src/projects/infrastructure/persistences/entities/project.entity';
 
-const ADMIN_ROLES = [
-  UserRole.SUPER_ADMIN,
-  UserRole.SUPPORT,
-  UserRole.COMPLIANCE,
-  UserRole.FINANCIER,
-  UserRole.RCCI,
-];
+const ADMIN_ROLES = rolesWithPermission('market:manage');
 
 @SkipThrottle()
 @ApiTags('Admin — Marché Secondaire')
 @ApiBearerAuth()
 @Controller('admin/secondary-market')
 @UseGuards(JwtAuthGuard)
-@Roles(UserRole.SUPER_ADMIN, UserRole.SUPPORT, UserRole.COMPLIANCE, UserRole.FINANCIER, UserRole.RCCI)
+@RequirePermission('market:manage')
 export class AdminSecondaryMarketController {
   constructor(
     @InjectRepository(OrdreMarcheEntity)

@@ -15,26 +15,17 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
-import { Roles } from 'src/common/auth/roles.decorator';
+import { RequirePermission } from 'src/common/auth/require-permission.decorator';
+import { rolesWithPermission } from 'src/common/auth/permissions.constants';
 import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
-import {
-  UserEntity,
-  UserRole,
-} from 'src/users/infrastructure/persistences/entities/user.entity';
+import { UserEntity } from 'src/users/infrastructure/persistences/entities/user.entity';
 import {
   AdminSettingsEntity,
   AdminSettingsBlob,
 } from './entities/admin-settings.entity';
 
-const ADMIN_WRITE_ROLES: string[] = [UserRole.SUPER_ADMIN];
-const ADMIN_READ_ROLES: string[] = [
-  UserRole.SUPER_ADMIN,
-  UserRole.SUPPORT,
-  UserRole.COMPLIANCE,
-  UserRole.FINANCIER,
-  UserRole.RCCI,
-];
+const ALLOWED_ROLES: string[] = rolesWithPermission('settings:manage');
 
 const DEFAULT_SETTINGS: AdminSettingsBlob = {
   platform: {
@@ -70,7 +61,7 @@ const DEFAULT_SETTINGS: AdminSettingsBlob = {
 @ApiBearerAuth()
 @Controller('admin/settings')
 @UseGuards(JwtAuthGuard)
-@Roles(UserRole.SUPER_ADMIN, UserRole.SUPPORT, UserRole.COMPLIANCE, UserRole.FINANCIER, UserRole.RCCI)
+@RequirePermission('settings:manage')
 export class AdminSettingsController {
   constructor(
     @InjectRepository(UserEntity)
@@ -101,7 +92,7 @@ export class AdminSettingsController {
   @ApiOperation({ summary: 'Récupérer les paramètres plateforme' })
   @Get()
   async get(@CurrentUser() user: ActiveUser) {
-    await this.ensureRole(user, ADMIN_READ_ROLES);
+    await this.ensureRole(user, ALLOWED_ROLES);
     const row = await this.getOrCreate();
     return { ...DEFAULT_SETTINGS, ...row.settings, updatedAt: row.updatedAt };
   }
@@ -112,7 +103,7 @@ export class AdminSettingsController {
     @Body() body: Partial<AdminSettingsBlob>,
     @CurrentUser() user: ActiveUser,
   ) {
-    await this.ensureRole(user, ADMIN_WRITE_ROLES);
+    await this.ensureRole(user, ALLOWED_ROLES);
     const row = await this.getOrCreate();
     const merged: AdminSettingsBlob = {
       ...row.settings,
