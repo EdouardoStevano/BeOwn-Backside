@@ -1,0 +1,87 @@
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
+
+exports[`permissions.constants la matrice couvre tous les rôles (snapshot anti-régression) 1`] = `
+{
+  "analyste_financier": [
+    "projects:read",
+    "projects:manage",
+    "projects:publish",
+    "news:manage",
+    "reservations:manage",
+    "reports:read",
+  ],
+  "cgp": [],
+  "charge_relation_investisseur": [
+    "relations:manage",
+    "spv:manage",
+    "projects:read",
+    "users:read",
+    "reservations:manage",
+  ],
+  "cio": [
+    "funds:disburse",
+    "funds:refund",
+    "retraits:manage",
+    "distributions:execute",
+    "sorties:execute",
+    "fiscal:manage",
+    "locatif:manage",
+    "market:manage",
+    "echeancier:read",
+    "projects:read",
+    "reports:read",
+  ],
+  "compliance": [
+    "kyc:validate",
+    "aml:manage",
+    "users:read",
+    "users:manage",
+    "projects:read",
+    "reports:read",
+  ],
+  "dpo": [
+    "users:read",
+    "data:export",
+    "audit:read",
+  ],
+  "financier": [
+    "funds:disburse",
+    "funds:refund",
+    "retraits:manage",
+    "distributions:execute",
+    "sorties:execute",
+    "fiscal:manage",
+    "locatif:manage",
+    "market:manage",
+    "echeancier:read",
+    "projects:read",
+    "reports:read",
+  ],
+  "investisseur": [],
+  "marketing": [
+    "data:export",
+    "crm:hubspot",
+    "users:read",
+    "reports:read",
+  ],
+  "porteur": [],
+  "rcci": [
+    "audit:read",
+    "aml:manage",
+    "reports:read",
+    "projects:read",
+    "echeancier:read",
+    "market:manage",
+  ],
+  "super_admin": [
+    "*",
+  ],
+  "support": [
+    "users:read",
+    "projects:read",
+    "reservations:manage",
+    "news:manage",
+    "notifications:manage",
+  ],
+}
+`;
