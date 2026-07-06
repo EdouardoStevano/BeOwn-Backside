@@ -357,10 +357,6 @@ export class UserController {
       found.lastname = dto.lastname ?? null;
       changed.push('lastname');
     }
-    if (dto.role !== undefined && dto.role !== (found as any).role) {
-      (found as any).role = dto.role;
-      changed.push('role');
-    }
     if (dto.status !== undefined && dto.status !== (found as any).status) {
       (found as any).status = dto.status;
       changed.push('status');

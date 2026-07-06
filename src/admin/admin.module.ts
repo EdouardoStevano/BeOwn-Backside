@@ -10,6 +10,7 @@ import { AdminEcheancesController, AdminEcheancesItemController } from './admin-
 import { AdminRetraitsController } from './admin-retraits.controller';
 import { AdminFiscalController } from './admin-fiscal.controller';
 import { AdminInvestorsController } from './admin-investors.controller';
+import { AdminPlatformWalletController } from './admin-platform-wallet.controller';
 import { UserEntity } from 'src/users/infrastructure/persistences/entities/user.entity';
 import { ProjectEntity } from 'src/projects/infrastructure/persistences/entities/project.entity';
 import { InvestmentEntity } from 'src/investments/infrastructure/persistences/entities/investment.entity';
@@ -55,6 +56,7 @@ import { ProfilesModule } from 'src/profiles/applications/profiles.module';
     AdminEcheancesItemController,
     AdminRetraitsController,
     AdminInvestorsController,
+    AdminPlatformWalletController,
   ],
 })
 export class AdminModule {}

@@ -1,5 +1,14 @@
 import {
-  Controller, ForbiddenException, Get, UseGuards,
+  BadRequestException,
+  Body,
+  Controller,
+  ForbiddenException,
+  Get,
+  NotFoundException,
+  Param,
+  ParseIntPipe,
+  Patch,
+  UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -9,10 +18,11 @@ import { RequirePermission } from 'src/common/auth/require-permission.decorator'
 import { rolesWithPermission } from 'src/common/auth/permissions.constants';
 import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
-import { UserEntity } from 'src/users/infrastructure/persistences/entities/user.entity';
+import { UserEntity, UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
 import { RiskScoringService } from 'src/profiles/applications/risk-scoring.service';
 
 const ADMIN_ROLES: string[] = rolesWithPermission('users:read');
+const ROLE_ASSIGN_ROLES: string[] = rolesWithPermission('roles:assign');
 
 @ApiTags('Admin — Suivi investisseurs')
 @ApiBearerAuth()
@@ -33,10 +43,36 @@ export class AdminInvestorsController {
     }
   }
 
+  private async assertRoleAssign(userId: number): Promise<void> {
+    const user = await this.userRepo.findOne({ where: { userId } });
+    if (!user || !ROLE_ASSIGN_ROLES.includes(user.role)) {
+      throw new ForbiddenException('Accès réservé.');
+    }
+  }
+
   @ApiOperation({ summary: 'Liste des investisseurs à contacter (surveillance périodique PSFP)' })
   @Get('due-contacts')
   async dueContacts(@CurrentUser() user: ActiveUser) {
     await this.assertAdmin(user.userId);
     return this.riskScoring.listDueContacts();
+  }
+
+  @ApiOperation({ summary: "Changer le rôle d'un utilisateur (super_admin)" })
+  @RequirePermission('roles:assign')
+  @Patch(':userId/role')
+  async changeRole(
+    @Param('userId', ParseIntPipe) userId: number,
+    @Body() body: { role: string },
+    @CurrentUser() admin: ActiveUser,
+  ) {
+    await this.assertRoleAssign(admin.userId);
+    if (!Object.values(UserRole).includes(body.role as UserRole)) {
+      throw new BadRequestException(`Rôle inconnu: ${body.role}`);
+    }
+    const user = await this.userRepo.findOne({ where: { userId } });
+    if (!user) throw new NotFoundException('Utilisateur introuvable');
+    user.role = body.role as UserRole;
+    await this.userRepo.save(user);
+    return { userId, role: user.role };
   }
 }
