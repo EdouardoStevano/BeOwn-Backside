@@ -84,4 +84,9 @@ describe('AuditInterceptor', () => {
     const out = sanitizeBody({ password: 'x', iban: 'FR76', note: 'ok' });
     expect(out).toEqual({ password: '[MASQUE]', iban: '[MASQUE]', note: 'ok' });
   });
+
+  it('sanitizeBody tronque un corps dépassant 2048 caractères', () => {
+    const out = sanitizeBody({ description: 'x'.repeat(3000) });
+    expect(out).toEqual({ _truncated: expect.any(String) });
+  });
 });
