@@ -89,7 +89,7 @@ export class AdminComplianceController {
     await this.auditLog
       .create(
         String(admin.userId),
-        (admin.role ?? UserRole.COMPLIANCE) as any,
+        admin.role ?? UserRole.COMPLIANCE,
         dto.pepFlagged ? 'compliance.pep.flag' : 'compliance.pep.unflag',
         'user',
         String(targetUserId),

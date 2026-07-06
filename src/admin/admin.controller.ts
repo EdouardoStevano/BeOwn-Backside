@@ -190,6 +190,7 @@ export class AdminController {
   @ApiParam({ name: 'id', type: Number })
   @ApiBody({ schema: { properties: { status: { type: 'string', enum: ['actif', 'suspendu', 'clos'] }, motif: { type: 'string' } } } })
   @ApiResponse({ status: 200, description: 'Statut mis à jour' })
+  @RequirePermission('users:manage')
   @Patch('users/:id/status')
   async updateUserStatus(
     @Param('id', ParseIntPipe) id: number,

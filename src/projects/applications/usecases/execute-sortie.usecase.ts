@@ -371,7 +371,7 @@ export class ExecuteSortieUseCase {
       await this.auditLog
         .create(
           String(adminUserId),
-          (adminRole ?? UserRole.SUPER_ADMIN) as any,
+          adminRole ?? UserRole.SUPER_ADMIN,
           'equity.sortie.execute',
           'sortie_projet',
           sortieId,

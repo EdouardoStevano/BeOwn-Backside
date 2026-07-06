@@ -1,5 +1,6 @@
 import { ValidateChargeUseCase } from './validate-charge.usecase';
 import { StatutDeclaration } from '../../domains/enums/statut-declaration.enum';
+import { UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
 
 describe('ValidateChargeUseCase', () => {
   let useCase: ValidateChargeUseCase;
@@ -28,6 +29,17 @@ describe('ValidateChargeUseCase', () => {
     const r = await useCase.validate('c1', 7);
     expect(r.statut).toBe(StatutDeclaration.VALIDE);
     expect(r.valideParUserId).toBe(7);
+    // Sans adminRole fourni, l'audit retombe sur SUPER_ADMIN (compat legacy)
+    expect(auditLog.create).toHaveBeenCalledWith(
+      '7',
+      UserRole.SUPER_ADMIN,
+      'equity.charge.validate',
+      'charge',
+      'c1',
+      undefined,
+      undefined,
+      expect.any(Object),
+    );
   });
 
   it('reject passe en REJETE avec motif', async () => {
@@ -51,5 +63,19 @@ describe('ValidateChargeUseCase', () => {
   it('rejette si introuvable', async () => {
     chargeRepo.findById.mockResolvedValue(null);
     await expect(useCase.validate('x', 7)).rejects.toThrow(/introuvable/);
+  });
+
+  it('audite avec le rôle réel de l\'acteur (pas SUPER_ADMIN) quand adminRole est fourni', async () => {
+    await useCase.validate('c1', 7, UserRole.CIO);
+    expect(auditLog.create).toHaveBeenCalledWith(
+      '7',
+      UserRole.CIO,
+      'equity.charge.validate',
+      'charge',
+      'c1',
+      undefined,
+      undefined,
+      expect.any(Object),
+    );
   });
 });

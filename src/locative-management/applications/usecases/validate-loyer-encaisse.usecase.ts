@@ -37,7 +37,7 @@ export class ValidateLoyerEncaisseUseCase {
     await this.auditLog
       .create(
         String(adminUserId),
-        (adminRole ?? UserRole.SUPER_ADMIN) as any,
+        adminRole ?? UserRole.SUPER_ADMIN,
         'equity.loyer.validate',
         'loyer_encaisse',
         id,
@@ -73,7 +73,7 @@ export class ValidateLoyerEncaisseUseCase {
     await this.auditLog
       .create(
         String(adminUserId),
-        (adminRole ?? UserRole.SUPER_ADMIN) as any,
+        adminRole ?? UserRole.SUPER_ADMIN,
         'equity.loyer.reject',
         'loyer_encaisse',
         id,

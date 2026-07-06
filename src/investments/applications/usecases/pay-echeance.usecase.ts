@@ -154,7 +154,7 @@ export class PayEcheanceUseCase {
     await this.notificationEvents.echeancePaid(echeance, project);
     await this.auditLog.create(
       String(adminId),
-      (adminRole ?? UserRole.SUPER_ADMIN) as any,
+      adminRole ?? UserRole.SUPER_ADMIN,
       'echeance.pay',
       'echeance',
       echeance.id,
