@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule } from '@nestjs/config';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
@@ -12,6 +12,7 @@ import { IamInfrastructureModule } from './iam/infrastructure/iam-infrastructure
 import { JwtAuthGuard } from './common/auth/jwt-auth.guard';
 import { RolesGuard } from './common/auth/roles.guard';
 import { PermissionsGuard } from './common/auth/permissions.guard';
+import { AuditInterceptor } from './common/audit/audit.interceptor';
 import { ProfilesModule } from './profiles/applications/profiles.module';
 import { ProjectsModule } from './projects/applications/projects.module';
 import { ReservationsModule } from './reservations/applications/reservations.module';
@@ -126,6 +127,7 @@ function requireEnv(name: string): string {
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
     { provide: APP_GUARD, useClass: PermissionsGuard },
+    { provide: APP_INTERCEPTOR, useClass: AuditInterceptor },
   ],
 })
 export class AppModule {}

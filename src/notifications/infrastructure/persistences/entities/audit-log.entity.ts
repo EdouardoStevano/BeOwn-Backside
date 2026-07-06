@@ -2,15 +2,18 @@ import {
   Column,
   CreateDateColumn,
   Entity,
+  Index,
   PrimaryGeneratedColumn,
 } from 'typeorm';
 
 @Entity('audit_log')
+@Index(['acteurId', 'createdAt'])
+@Index(['objetType', 'createdAt'])
 export class AuditLogEntity {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column({ type: 'uuid', nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   acteurId: string | null;
 
   @Column({ type: 'varchar', nullable: true })
