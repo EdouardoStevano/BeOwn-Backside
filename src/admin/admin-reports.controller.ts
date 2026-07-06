@@ -31,6 +31,7 @@ import { InvestmentStatus } from 'src/investments/domains/enums/investment-statu
 import PDFDocument = require('pdfkit');
 
 const ADMIN_ROLES: string[] = rolesWithPermission('reports:read');
+const EXPORT_ROLES: string[] = rolesWithPermission('data:export');
 
 const REPORT_TYPES = ['monthly', 'investors', 'ifu', 'amf', 'aml'] as const;
 type ReportType = (typeof REPORT_TYPES)[number];
@@ -61,6 +62,11 @@ export class AdminReportsController {
   private async ensureAdmin(currentUser: ActiveUser): Promise<void> {
     const u = await this.userRepo.findOne({ where: { userId: currentUser.userId } });
     if (!u || !ADMIN_ROLES.includes(u.role)) throw new ForbiddenException();
+  }
+
+  private async ensureExport(currentUser: ActiveUser): Promise<void> {
+    const u = await this.userRepo.findOne({ where: { userId: currentUser.userId } });
+    if (!u || !EXPORT_ROLES.includes(u.role)) throw new ForbiddenException();
   }
 
   @ApiOperation({ summary: 'Liste des types de rapports disponibles' })
@@ -100,7 +106,7 @@ export class AdminReportsController {
     @CurrentUser() user: ActiveUser,
     @Res() res: Response,
   ) {
-    await this.ensureAdmin(user);
+    await this.ensureExport(user);
     if (!REPORT_TYPES.includes(type as ReportType)) {
       throw new ForbiddenException(`Type de rapport inconnu : ${type}`);
     }

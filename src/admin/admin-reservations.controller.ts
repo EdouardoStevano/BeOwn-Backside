@@ -25,10 +25,7 @@ import { RequirePermission } from 'src/common/auth/require-permission.decorator'
 import { rolesWithPermission } from 'src/common/auth/permissions.constants';
 import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
-import {
-  UserEntity,
-  UserRole,
-} from 'src/users/infrastructure/persistences/entities/user.entity';
+import { UserEntity } from 'src/users/infrastructure/persistences/entities/user.entity';
 import { ProjectEntity } from 'src/projects/infrastructure/persistences/entities/project.entity';
 import { ReservationEntity } from 'src/reservations/infrastructure/persistences/entities/reservation.entity';
 import { ReservationStatus } from 'src/reservations/domains/enums/reservation-status.enum';

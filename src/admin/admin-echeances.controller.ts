@@ -53,6 +53,7 @@ import { PayEcheanceUseCase } from 'src/investments/applications/usecases/pay-ec
 import { ProjectScheduleGeneratorService } from 'src/investments/applications/project-schedule-generator.service';
 
 const ADMIN_ROLES = rolesWithPermission('echeancier:read');
+const PAY_ROLES: string[] = rolesWithPermission('echeancier:pay');
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -99,22 +100,29 @@ export class AdminEcheancesController {
     }
   }
 
-  @Post(':numero/trigger-payment')
-  @HttpCode(HttpStatus.OK)
-  @RequirePermission('echeancier:pay')
+  private async assertPay(user: ActiveUser): Promise<void> {
+    const u = await this.userRepo.findOne({ where: { userId: user.userId } });
+    if (!u || !PAY_ROLES.includes(u.role as UserRole)) {
+      throw new ForbiddenException("Accès réservé à l'équipe finance/admin");
+    }
+  }
+
   @ApiOperation({
     summary: "Déclencher manuellement le paiement d'une échéance pour tous les investisseurs",
   })
   @ApiParam({ name: 'projectId', description: 'UUID du projet' })
   @ApiParam({ name: 'numero', description: "Numéro de l'échéance (1-based)" })
   @ApiResponse({ status: 200, description: 'Récap : nb investisseurs payés + montant total' })
+  @HttpCode(HttpStatus.OK)
+  @RequirePermission('echeancier:pay')
+  @Post(':numero/trigger-payment')
   async triggerPayment(
     @Param('projectId') projectId: string,
     @Param('numero', ParseIntPipe) numero: number,
     @CurrentUser() admin: ActiveUser,
     @Body() body?: { motif?: string },
   ): Promise<{ paidCount: number; totalAmount: number; skipped: number }> {
-    await this.assertAdmin(admin);
+    await this.assertPay(admin);
     if (numero < 1) throw new BadRequestException("Numéro d'échéance invalide");
 
     // 1. Charger les investissements confirmés du projet
@@ -226,7 +234,7 @@ export class AdminEcheancesController {
   @RequirePermission('echeancier:pay')
   @Post(':id/pay')
   async markPaid(@Param('id') id: string, @CurrentUser() user: ActiveUser) {
-    await this.assertAdmin(user);
+    await this.assertPay(user);
     return this.payEcheance.execute(id, user.userId, user.role);
   }
 
@@ -543,16 +551,23 @@ export class AdminEcheancesItemController {
     }
   }
 
+  private async assertPay(user: ActiveUser): Promise<void> {
+    const u = await this.userRepo.findOne({ where: { userId: user.userId } });
+    if (!u || !PAY_ROLES.includes(u.role as UserRole)) {
+      throw new ForbiddenException("Accès réservé à l'équipe finance/admin");
+    }
+  }
+
   @ApiOperation({ summary: "Mettre à jour une échéance" })
   @ApiParam({ name: 'id', description: "UUID de l'échéance" })
-  @Patch(':id')
   @RequirePermission('echeancier:pay')
+  @Patch(':id')
   async update(
     @Param('id') id: string,
     @Body() dto: UpdateEcheanceDto,
     @CurrentUser() user: ActiveUser,
   ): Promise<EcheanceEntity> {
-    await this.assertAdmin(user);
+    await this.assertPay(user);
     const ech = await this.echeanceRepo.findOne({ where: { id } });
     if (!ech) throw new NotFoundException('Échéance introuvable.');
     if (ech.statut === EcheanceStatus.PAYE) {

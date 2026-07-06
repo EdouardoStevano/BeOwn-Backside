@@ -25,7 +25,7 @@ import {
   AdminSettingsBlob,
 } from './entities/admin-settings.entity';
 
-const ALLOWED_ROLES: string[] = rolesWithPermission('settings:manage');
+const ADMIN_ROLES: string[] = rolesWithPermission('settings:manage');
 
 const DEFAULT_SETTINGS: AdminSettingsBlob = {
   platform: {
@@ -92,7 +92,7 @@ export class AdminSettingsController {
   @ApiOperation({ summary: 'Récupérer les paramètres plateforme' })
   @Get()
   async get(@CurrentUser() user: ActiveUser) {
-    await this.ensureRole(user, ALLOWED_ROLES);
+    await this.ensureRole(user, ADMIN_ROLES);
     const row = await this.getOrCreate();
     return { ...DEFAULT_SETTINGS, ...row.settings, updatedAt: row.updatedAt };
   }
@@ -103,7 +103,7 @@ export class AdminSettingsController {
     @Body() body: Partial<AdminSettingsBlob>,
     @CurrentUser() user: ActiveUser,
   ) {
-    await this.ensureRole(user, ALLOWED_ROLES);
+    await this.ensureRole(user, ADMIN_ROLES);
     const row = await this.getOrCreate();
     const merged: AdminSettingsBlob = {
       ...row.settings,

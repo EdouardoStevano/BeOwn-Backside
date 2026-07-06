@@ -79,7 +79,7 @@ export class AdminRetraitsController {
     }
     await this.auditLog.create(
       String(admin.userId),
-      (admin.role ?? UserRole.SUPER_ADMIN) as any,
+      admin.role ?? UserRole.SUPER_ADMIN,
       'retrait.process',
       'transaction',
       tx.id,

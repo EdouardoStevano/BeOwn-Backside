@@ -16,7 +16,7 @@ import { RequirePermission } from 'src/common/auth/require-permission.decorator'
 import { rolesWithPermission } from 'src/common/auth/permissions.constants';
 import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
-import { UserEntity, UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
+import { UserEntity } from 'src/users/infrastructure/persistences/entities/user.entity';
 import { IfuGenerationService } from 'src/investments/applications/ifu-generation.service';
 
 const ADMIN_ROLES: string[] = rolesWithPermission('fiscal:manage');
