@@ -71,6 +71,20 @@ export class AdminInvestorsController {
     }
     const user = await this.userRepo.findOne({ where: { userId } });
     if (!user) throw new NotFoundException('Utilisateur introuvable');
+    if (String(admin.userId) === String(userId)) {
+      throw new BadRequestException('Impossible de modifier son propre rôle.');
+    }
+    if (
+      user.role === UserRole.SUPER_ADMIN &&
+      body.role !== UserRole.SUPER_ADMIN
+    ) {
+      const remaining = await this.userRepo.count({
+        where: { role: UserRole.SUPER_ADMIN },
+      });
+      if (remaining <= 1) {
+        throw new BadRequestException('Impossible de rétrograder le dernier super admin.');
+      }
+    }
     user.role = body.role as UserRole;
     await this.userRepo.save(user);
     return { userId, role: user.role };

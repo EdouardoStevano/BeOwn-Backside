@@ -8,7 +8,6 @@ import { AdminSettingsController } from './admin-settings.controller';
 import { AdminReportsController } from './admin-reports.controller';
 import { AdminEcheancesController, AdminEcheancesItemController } from './admin-echeances.controller';
 import { AdminRetraitsController } from './admin-retraits.controller';
-import { AdminFiscalController } from './admin-fiscal.controller';
 import { AdminInvestorsController } from './admin-investors.controller';
 import { AdminPlatformWalletController } from './admin-platform-wallet.controller';
 import { UserEntity } from 'src/users/infrastructure/persistences/entities/user.entity';
