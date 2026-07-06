@@ -261,7 +261,7 @@ export class ProjectController {
 
   @ApiOperation({ summary: 'Créer une SPV' })
   @ApiResponse({ status: 201, description: 'SPV créée' })
-  @RequirePermission('projects:manage')
+  @RequirePermission('projects:manage', 'spv:manage')
   @Post('spv')
   async createSpv(@Body() dto: CreateSpvDto): Promise<Spv> {
     const spv = new Spv();

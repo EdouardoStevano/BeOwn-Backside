@@ -546,6 +546,7 @@ export class AdminEcheancesItemController {
   @ApiOperation({ summary: "Mettre à jour une échéance" })
   @ApiParam({ name: 'id', description: "UUID de l'échéance" })
   @Patch(':id')
+  @RequirePermission('echeancier:pay')
   async update(
     @Param('id') id: string,
     @Body() dto: UpdateEcheanceDto,

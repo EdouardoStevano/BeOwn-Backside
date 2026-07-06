@@ -67,7 +67,6 @@ export class AdminComplianceController {
   }
 
   @Post('pep/:userId')
-  @RequirePermission('kyc:validate')
   @ApiOperation({ summary: 'Activer ou désactiver le flag PEP sur un utilisateur' })
   async setPep(
     @Param('userId') userIdStr: string,
@@ -90,7 +89,7 @@ export class AdminComplianceController {
     await this.auditLog
       .create(
         String(admin.userId),
-        UserRole.COMPLIANCE,
+        (admin.role ?? UserRole.COMPLIANCE) as any,
         dto.pepFlagged ? 'compliance.pep.flag' : 'compliance.pep.unflag',
         'user',
         String(targetUserId),
