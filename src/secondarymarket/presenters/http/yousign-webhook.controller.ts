@@ -25,8 +25,9 @@ import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/w
 import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entities/transaction.entity';
 import { InvestmentStatus, EcheanceStatus } from 'src/investments/domains/enums/investment-status.enum';
 import { OrdreMarcheStatus } from 'src/secondarymarket/domains/ordre-marche';
-import { computeSecondaryMarketCommission } from 'src/secondarymarket/domains/commission';
-import { computeEntryFee } from 'src/common/platform-fees/platform-fees.constants';
+import { PlatformFeesService } from 'src/common/platform-fees/platform-fees.service';
+import { round2 } from 'src/common/platform-fees/platform-fees.constants';
+import { computeCoutAcquisition } from 'src/secondarymarket/domains/cout-acquisition';
 import {
   TransactionFournisseur,
   TransactionStatus,
@@ -73,6 +74,7 @@ export class YouSignWebhookController {
     @Inject(USER_REPOSITORY)
     private readonly userRepository: UserRepository,
     private readonly notificationEvents: NotificationEventService,
+    private readonly platformFees: PlatformFeesService,
   ) {}
 
   @Public()
@@ -138,6 +140,10 @@ export class YouSignWebhookController {
       return;
     }
 
+    // Snapshot des taux lu UNE fois pour toute l'opération (cohérence R1 :
+    // pas de dérive si un admin modifie les commissions pendant le traitement).
+    const feeRates = await this.platformFees.getRates();
+
     // Exécuter la transaction dans une transaction DB atomique
     const { buyerInvestId, fusionnee } = await this.dataSource.transaction(async (em) => {
       const ordre = await em.findOne(OrdreMarcheEntity, {
@@ -149,9 +155,24 @@ export class YouSignWebhookController {
       const nbFractions = signature.nbFractions!;
       const projetId = ordre.investissement.projetId;
       const prixUnitaire = Number(ordre.prixUnitaire);
-      const montantTotal = nbFractions * prixUnitaire;
-      const commission = computeSecondaryMarketCommission(montantTotal);
-      const montantNetVendeur = montantTotal - commission;
+      const montantTotal = round2(nbFractions * prixUnitaire);
+      // Plus-value vendeur = prix de vente − coût d'acquisition des parts
+      // vendues (coût moyen pondéré — voir domains/cout-acquisition.ts).
+      // Calculée AVANT la réduction de l'investissement vendeur (étape 5).
+      const coutAcquisition = computeCoutAcquisition(
+        ordre.investissement,
+        nbFractions,
+        prixUnitaire,
+      );
+      const plusValueVendeur = round2(montantTotal - coutAcquisition);
+      // Frais vendeur : % du montant de la vente + % de la plus-value.
+      const { transactionFee, gainFee } = await this.platformFees.computeResaleFees(
+        montantTotal,
+        plusValueVendeur,
+        feeRates,
+      );
+      const totalFrais = round2(transactionFee + gainFee);
+      const montantNetVendeur = round2(montantTotal - totalFrais);
       const buyerUserId = signature.userId;
 
       // 1. Vérifier/obtenir wallet acheteur
@@ -228,16 +249,16 @@ export class YouSignWebhookController {
       buyerWallet.solde = Number(buyerWallet.solde) - montantTotal;
       await em.save(WalletEntity, buyerWallet);
 
-      // 8. Créditer wallet vendeur (net de commission)
+      // 8. Créditer wallet vendeur (net des frais vendeur)
       if (sellerWallet) {
         sellerWallet.solde = Number(sellerWallet.solde) + montantNetVendeur;
         await em.save(WalletEntity, sellerWallet);
       }
 
-      // 9. Créditer wallet plateforme (commission)
+      // 9. Créditer wallet plateforme (frais de transaction + frais sur gain)
       // Wallet system-wide, créé à la volée si absent (parité avec SEQUESTRE_IR/CSG).
       let platformWallet: WalletEntity | null = null;
-      if (commission > 0) {
+      if (totalFrais > 0) {
         platformWallet = await em.findOne(WalletEntity, {
           where: { type: WalletType.FRAIS_PLATEFORME },
         });
@@ -253,7 +274,7 @@ export class YouSignWebhookController {
             }),
           );
         }
-        platformWallet.solde = Number(platformWallet.solde) + commission;
+        platformWallet.solde = Number(platformWallet.solde) + totalFrais;
         await em.save(WalletEntity, platformWallet);
       }
 
@@ -270,11 +291,11 @@ export class YouSignWebhookController {
         projetId,
         idempotencyKey: `rachat:buyer:${signature.id}`,
         fraisPsp: 0,
-        fraisPlateforme: commission,
+        fraisPlateforme: totalFrais,
       });
       await em.save(TransactionEntity, txBuyer);
 
-      // 11. Transaction ledger vendeur (net de commission)
+      // 11. Transaction ledger vendeur (net des frais)
       if (sellerWallet) {
         const txSeller = em.create(TransactionEntity, {
           walletSource: null,
@@ -288,28 +309,63 @@ export class YouSignWebhookController {
           projetId,
           idempotencyKey: `rachat:seller:${signature.id}`,
           fraisPsp: 0,
-          fraisPlateforme: commission,
+          fraisPlateforme: totalFrais,
         });
         await em.save(TransactionEntity, txSeller);
       }
 
-      // 12. Transaction ledger commission plateforme
-      if (platformWallet && commission > 0) {
-        const txCommission = em.create(TransactionEntity, {
-          walletSource: null,
-          walletDestination: platformWallet.id,
-          type: TransactionType.SOUSCRIPTION,
-          montant: commission,
-          devise: platformWallet.devise,
-          statut: TransactionStatus.REUSSI,
-          fournisseur: TransactionFournisseur.INTERNE,
-          investissementId: ordre.investissementId,
-          projetId,
-          idempotencyKey: `secmarket:commission:order:${ordre.id}`,
-          fraisPsp: 0,
-          fraisPlateforme: 0,
-        });
-        await em.save(TransactionEntity, txCommission);
+      // 12. Transactions ledger frais plateforme — une par frais.
+      // Clés scoppées par signature (un ordre peut être exécuté en plusieurs
+      // fills partiels) ; metadata.ordreId permet le lookup au reverse admin.
+      if (platformWallet && transactionFee > 0) {
+        await em.save(
+          TransactionEntity,
+          em.create(TransactionEntity, {
+            walletSource: null,
+            walletDestination: platformWallet.id,
+            type: TransactionType.SOUSCRIPTION,
+            montant: transactionFee,
+            devise: platformWallet.devise,
+            statut: TransactionStatus.REUSSI,
+            fournisseur: TransactionFournisseur.INTERNE,
+            investissementId: ordre.investissementId,
+            projetId,
+            idempotencyKey: `secmarket:fee:revente_transaction:sig:${signature.id}`,
+            fraisPsp: 0,
+            fraisPlateforme: 0,
+            metadata: {
+              source: 'revente_transaction',
+              ordreId: ordre.id,
+              signatureId: signature.id,
+            },
+          }),
+        );
+      }
+      if (platformWallet && gainFee > 0) {
+        await em.save(
+          TransactionEntity,
+          em.create(TransactionEntity, {
+            walletSource: null,
+            walletDestination: platformWallet.id,
+            type: TransactionType.SOUSCRIPTION,
+            montant: gainFee,
+            devise: platformWallet.devise,
+            statut: TransactionStatus.REUSSI,
+            fournisseur: TransactionFournisseur.INTERNE,
+            investissementId: ordre.investissementId,
+            projetId,
+            idempotencyKey: `secmarket:fee:gain_revente_actions:sig:${signature.id}`,
+            fraisPsp: 0,
+            fraisPlateforme: 0,
+            metadata: {
+              source: 'gain_revente_actions',
+              ordreId: ordre.id,
+              signatureId: signature.id,
+              plusValueVendeur,
+              coutAcquisition,
+            },
+          }),
+        );
       }
 
       return { buyerInvestId: buyerInvest.id, fusionnee: !!existingInvest };
@@ -395,19 +451,19 @@ export class YouSignWebhookController {
 
     const project = await this.projectRepo.findOne({ where: { id: investment.projetId } });
     const montant = Number(investment.montant);
-    // Phase 9 — frais d'entrée 2% : prélevés sur le wallet en plus du montant
-    // souscrit. Crédités sur le wallet FRAIS_PLATEFORME.
-    const entryFee = computeEntryFee(montant);
-    const totalDebit = Math.round((montant + entryFee) * 100) / 100;
+    // Frais configurables : AUCUN frais d'entrée à la souscription — le
+    // wallet est débité exactement du montant investi. (L'ancien frais
+    // d'entrée 2 % Phase 9 est supprimé ; la plateforme se rémunère sur les
+    // distributions, la sortie et le marché secondaire.)
 
     await this.dataSource.transaction(async (em) => {
       const wallet = await em.findOne(WalletEntity, {
         where: { proprietaireUserId: investment.utilisateurId, type: WalletType.INVESTISSEUR },
       });
       if (!wallet) throw new Error(`Wallet introuvable pour user ${investment.utilisateurId}`);
-      if (Number(wallet.solde) < totalDebit) {
+      if (Number(wallet.solde) < montant) {
         throw new Error(
-          `Solde insuffisant pour souscription + frais d'entrée : ${wallet.solde} < ${totalDebit} (${montant} + ${entryFee})`,
+          `Solde insuffisant pour souscription : ${wallet.solde} < ${montant}`,
         );
       }
 
@@ -416,8 +472,8 @@ export class YouSignWebhookController {
       investment.signatureId = signature.id;
       await em.save(InvestmentEntity, investment);
 
-      // Débiter wallet (montant + entry fee)
-      wallet.solde = Number(wallet.solde) - totalDebit;
+      // Débiter wallet (montant investi, sans frais)
+      wallet.solde = Number(wallet.solde) - montant;
       await em.save(WalletEntity, wallet);
 
       // Transaction ledger principale (souscription)
@@ -433,48 +489,9 @@ export class YouSignWebhookController {
         projetId: investment.projetId,
         idempotencyKey: `invest:${investment.utilisateurId}:${investment.id}`,
         fraisPsp: 0,
-        fraisPlateforme: entryFee,
+        fraisPlateforme: 0,
       });
       await em.save(TransactionEntity, tx);
-
-      // Crédit wallet FRAIS_PLATEFORME + ledger tx
-      if (entryFee > 0) {
-        let walletPlatform = await em.findOne(WalletEntity, {
-          where: { type: WalletType.FRAIS_PLATEFORME },
-        });
-        if (!walletPlatform) {
-          walletPlatform = await em.save(
-            WalletEntity,
-            em.create(WalletEntity, {
-              type: WalletType.FRAIS_PLATEFORME,
-              proprietaireUserId: null,
-              fournisseurRef: 'PLAT-FEES-001',
-              devise: wallet.devise,
-              solde: 0,
-            }),
-          );
-        }
-        walletPlatform.solde = Number(walletPlatform.solde) + entryFee;
-        await em.save(WalletEntity, walletPlatform);
-
-        await em.save(
-          TransactionEntity,
-          em.create(TransactionEntity, {
-            walletSource: wallet.id,
-            walletDestination: walletPlatform.id,
-            type: TransactionType.SOUSCRIPTION,
-            montant: entryFee,
-            devise: wallet.devise,
-            statut: TransactionStatus.REUSSI,
-            fournisseur: TransactionFournisseur.INTERNE,
-            investissementId: investment.id,
-            projetId: investment.projetId,
-            idempotencyKey: `invest:entry-fee:${investment.id}`,
-            fraisPsp: 0,
-            fraisPlateforme: 0,
-          }),
-        );
-      }
 
       // Générer les écheances (in_fine par défaut)
       if (project) {

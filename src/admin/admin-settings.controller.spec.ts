@@ -92,6 +92,30 @@ describe('AdminSettingsController.update — validation commissions', () => {
     );
   });
 
+  it('purge les clés legacy stockées lors du merge (hygiène R2)', async () => {
+    const { controller } = makeController({
+      commissions: {
+        // Clés legacy persistées avant le déploiement des frais configurables
+        investmentFeePct: 1.5,
+        secondaryMarketFeePct: 2,
+        earlyExitFeePct: 1,
+        // Clé connue déjà stockée
+        annualPlatformFeePct: 2,
+      },
+    });
+
+    const merged = await controller.update(
+      { commissions: { rentManagementFeePct: 5 } },
+      admin,
+    );
+
+    // Uniquement les clés connues : legacy éliminées, connues fusionnées
+    expect(merged.commissions).toEqual({
+      annualPlatformFeePct: 2,
+      rentManagementFeePct: 5,
+    });
+  });
+
   it('ne valide pas les commissions quand le patch ne les contient pas', async () => {
     const { controller, settingsRepo } = makeController();
 

@@ -29,6 +29,19 @@ import { DEFAULT_FEE_RATES } from 'src/common/platform-fees/platform-fees.servic
 
 const ADMIN_ROLES: string[] = rolesWithPermission('settings:manage');
 
+/**
+ * Seules clés de commission autorisées à persister. Le merge PATCH repart de
+ * cette liste blanche pour ne jamais ressusciter des clés legacy stockées
+ * avant ce déploiement (investmentFeePct, secondaryMarketFeePct…).
+ */
+const COMMISSION_KEYS = [
+  'annualPlatformFeePct',
+  'rentManagementFeePct',
+  'propertySaleGainFeePct',
+  'resaleTransactionFeePct',
+  'shareSaleGainFeePct',
+] as const;
+
 const DEFAULT_SETTINGS: AdminSettingsBlob = {
   platform: {
     name: 'BeOwn',
@@ -96,6 +109,25 @@ export class AdminSettingsController {
     }
   }
 
+  /**
+   * Fusionne commissions stockées + patch en ne conservant QUE les 5 clés
+   * connues (hygiène anti-legacy — voir COMMISSION_KEYS).
+   */
+  private mergeCommissions(
+    stored: AdminSettingsBlob['commissions'],
+    patch: AdminSettingsBlob['commissions'],
+  ): NonNullable<AdminSettingsBlob['commissions']> {
+    const merged: Record<string, unknown> = { ...stored, ...patch };
+    const out: Record<string, number> = {};
+    for (const key of COMMISSION_KEYS) {
+      const value = merged[key];
+      if (typeof value === 'number' && Number.isFinite(value)) {
+        out[key] = value;
+      }
+    }
+    return out;
+  }
+
   private async getOrCreate(): Promise<AdminSettingsEntity> {
     let row = await this.settingsRepo.findOne({ where: { id: 'default' } });
     if (!row) {
@@ -131,7 +163,10 @@ export class AdminSettingsController {
       ...row.settings,
       ...body,
       platform: { ...row.settings.platform, ...body.platform },
-      commissions: { ...row.settings.commissions, ...body.commissions },
+      commissions: this.mergeCommissions(
+        row.settings.commissions,
+        body.commissions,
+      ),
       kyc: { ...row.settings.kyc, ...body.kyc },
       notifications: { ...row.settings.notifications, ...body.notifications },
       feature_flags: {

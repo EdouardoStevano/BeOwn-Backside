@@ -250,4 +250,43 @@ describe('PlatformFeesService', () => {
       });
     });
   });
+
+  describe('snapshot de taux (cohérence multi-frais — R1)', () => {
+    it('ne relit pas la base quand un snapshot est fourni', async () => {
+      const snapshot = { ...DEFAULT_FEE_RATES, annualPlatformFeePct: 2.4 };
+
+      const fee = await service.computeMonthlyPlatformFee(100_000, snapshot);
+
+      expect(fee).toBe(200); // 100 000 × 2.4 % / 12
+      expect(mockSettingsRepo.findOne).not.toHaveBeenCalled();
+    });
+
+    it('le snapshot prime sur les taux en base (pas de dérive mi-opération)', async () => {
+      // La base dit 50 %, mais l'opération a été démarrée avec un snapshot à 7 %
+      withCommissions({ rentManagementFeePct: 50 });
+      const snapshot = { ...DEFAULT_FEE_RATES, rentManagementFeePct: 7 };
+
+      await expect(
+        service.computeRentManagementFee(1000, snapshot),
+      ).resolves.toBe(70);
+      expect(mockSettingsRepo.findOne).not.toHaveBeenCalled();
+    });
+
+    it('computeResaleFees et computePropertySaleGainFee acceptent un snapshot', async () => {
+      const snapshot = {
+        ...DEFAULT_FEE_RATES,
+        resaleTransactionFeePct: 2,
+        shareSaleGainFeePct: 10,
+        propertySaleGainFeePct: 20,
+      };
+
+      await expect(
+        service.computeResaleFees(5000, 200, snapshot),
+      ).resolves.toEqual({ transactionFee: 100, gainFee: 20 });
+      await expect(
+        service.computePropertySaleGainFee(10_000, snapshot),
+      ).resolves.toBe(2000);
+      expect(mockSettingsRepo.findOne).not.toHaveBeenCalled();
+    });
+  });
 });

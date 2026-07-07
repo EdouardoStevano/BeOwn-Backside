@@ -65,30 +65,44 @@ export class PlatformFeesService {
 
   /**
    * Frais plateforme mensuel : capital initial × (taux annuel / 100) / 12.
+   *
+   * `rates` (optionnel) : snapshot de taux pré-lu via getRates(). Toute
+   * opération métier appliquant PLUSIEURS frais doit lire les taux UNE fois
+   * et passer ce snapshot à chaque helper (pas de dérive de taux en cours
+   * d'opération si un admin modifie les commissions entre deux calculs).
    */
-  async computeMonthlyPlatformFee(capitalInitial: number): Promise<number> {
-    const rates = await this.getRates();
-    return round2((capitalInitial * (rates.annualPlatformFeePct / 100)) / 12);
+  async computeMonthlyPlatformFee(
+    capitalInitial: number,
+    rates?: PlatformFeeRates,
+  ): Promise<number> {
+    const r = rates ?? (await this.getRates());
+    return round2((capitalInitial * (r.annualPlatformFeePct / 100)) / 12);
   }
 
   /**
    * Frais de gestion locative : loyers encaissés × taux / 100.
    * Pas de frais si aucun loyer encaissé.
    */
-  async computeRentManagementFee(loyers: number): Promise<number> {
+  async computeRentManagementFee(
+    loyers: number,
+    rates?: PlatformFeeRates,
+  ): Promise<number> {
     if (loyers <= 0) return 0;
-    const rates = await this.getRates();
-    return round2(loyers * (rates.rentManagementFeePct / 100));
+    const r = rates ?? (await this.getRates());
+    return round2(loyers * (r.rentManagementFeePct / 100));
   }
 
   /**
    * Frais sur plus-value à la vente du bien (sortie).
    * Pas de frais sur une moins-value.
    */
-  async computePropertySaleGainFee(plusValue: number): Promise<number> {
+  async computePropertySaleGainFee(
+    plusValue: number,
+    rates?: PlatformFeeRates,
+  ): Promise<number> {
     if (plusValue <= 0) return 0;
-    const rates = await this.getRates();
-    return round2(plusValue * (rates.propertySaleGainFeePct / 100));
+    const r = rates ?? (await this.getRates());
+    return round2(plusValue * (r.propertySaleGainFeePct / 100));
   }
 
   /**
@@ -99,8 +113,9 @@ export class PlatformFeesService {
   async computeResaleFees(
     montantVente: number,
     plusValueVendeur: number,
+    ratesSnapshot?: PlatformFeeRates,
   ): Promise<{ transactionFee: number; gainFee: number }> {
-    const rates = await this.getRates();
+    const rates = ratesSnapshot ?? (await this.getRates());
     return {
       transactionFee: round2(
         montantVente * (rates.resaleTransactionFeePct / 100),
