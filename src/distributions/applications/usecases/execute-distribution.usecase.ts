@@ -33,6 +33,8 @@ import { AuditLogService } from 'src/notifications/applications/audit-log.servic
 import { UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
 import { AmlMonitorService } from 'src/common/aml/aml-monitor.service';
 
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
 export interface ExecuteDistributionResult {
   periode: PeriodeDistribution;
   nbPartsPayees: number;
@@ -45,6 +47,13 @@ export interface ExecuteDistributionResult {
 /**
  * Exécute le versement d'une période de distribution validée :
  *
+ * - Encaisse les DEUX frais plateforme calculés (et persistés) sur la
+ *   période — `fraisPlateformeAnnuel` / `fraisGestionLocative` — via un
+ *   crédit wallet FRAIS_PLATEFORME + une transaction ledger par frais
+ *   (metadata.source). C'est ICI, et seulement ici, que ces frais bougent de
+ *   l'argent : le calcul ne fait que projeter les montants (voir
+ *   CalculateDistributionPeriodeUseCase), ce qui garde l'annulation d'une
+ *   période CALCULEE/VALIDEE totalement gratuite.
  * - Pour chaque DistributionPart :
  *   - Si montantNet > 0 → crédit wallet INVESTISSEUR
  *   - Si prelevementIR > 0 → crédit wallet SEQUESTRE_IR
@@ -106,6 +115,89 @@ export class ExecuteDistributionUseCase {
     let totalCSG = 0;
 
     await this.dataSource.transaction(async (em) => {
+      // ── Encaissement des frais plateforme — SEULEMENT à l'exécution ──────
+      // Les montants ont été figés au calcul (snapshot de taux R1) et sont
+      // simplement rejoués ici : aucune dérive possible, et une période ne
+      // peut être exécutée qu'une seule fois (VALIDEE → DISTRIBUEE), ce qui
+      // garantit l'idempotence des clés `distribution:fee:<source>:<id>`.
+      const fraisPlateformeAnnuel = round2(
+        Number(periode.fraisPlateformeAnnuel ?? 0),
+      );
+      const fraisGestionLocative = round2(
+        Number(periode.fraisGestionLocative ?? 0),
+      );
+      if (fraisPlateformeAnnuel > 0 || fraisGestionLocative > 0) {
+        let walletPlat = await em.findOne(WalletEntity, {
+          where: { type: WalletType.FRAIS_PLATEFORME },
+        });
+        if (!walletPlat) {
+          walletPlat = await em.save(
+            WalletEntity,
+            em.create(WalletEntity, {
+              type: WalletType.FRAIS_PLATEFORME,
+              proprietaireUserId: null,
+              fournisseurRef: 'PLAT-FEES-001',
+              devise: 'XOF',
+              solde: 0,
+            }),
+          );
+        }
+        walletPlat.solde = round2(
+          Number(walletPlat.solde) + fraisPlateformeAnnuel + fraisGestionLocative,
+        );
+        await em.save(WalletEntity, walletPlat);
+
+        if (fraisPlateformeAnnuel > 0) {
+          await em.save(
+            TransactionEntity,
+            em.create(TransactionEntity, {
+              walletSource: null,
+              walletDestination: walletPlat.id,
+              type: TransactionType.FRAIS,
+              montant: fraisPlateformeAnnuel,
+              devise: walletPlat.devise,
+              statut: TransactionStatus.REUSSI,
+              fournisseur: TransactionFournisseur.INTERNE,
+              projetId: periode.projetId,
+              idempotencyKey: `distribution:fee:plateforme_annuel:${periode.id}`,
+              fraisPsp: 0,
+              fraisPlateforme: 0,
+              metadata: {
+                source: 'plateforme_annuel',
+                periodeDistributionId: periode.id,
+                periode: periode.periode,
+                capped: periode.fraisPlafonnes,
+              },
+            }),
+          );
+        }
+        if (fraisGestionLocative > 0) {
+          await em.save(
+            TransactionEntity,
+            em.create(TransactionEntity, {
+              walletSource: null,
+              walletDestination: walletPlat.id,
+              type: TransactionType.FRAIS,
+              montant: fraisGestionLocative,
+              devise: walletPlat.devise,
+              statut: TransactionStatus.REUSSI,
+              fournisseur: TransactionFournisseur.INTERNE,
+              projetId: periode.projetId,
+              idempotencyKey: `distribution:fee:gestion_locative:${periode.id}`,
+              fraisPsp: 0,
+              fraisPlateforme: 0,
+              metadata: {
+                source: 'gestion_locative',
+                periodeDistributionId: periode.id,
+                periode: periode.periode,
+                totalLoyers: periode.totalLoyers,
+                capped: periode.fraisPlafonnes,
+              },
+            }),
+          );
+        }
+      }
+
       // Wallets système (lazy create, parité avec pay-echeance.usecase)
       let walletIR: WalletEntity | null = null;
       let walletCSG: WalletEntity | null = null;

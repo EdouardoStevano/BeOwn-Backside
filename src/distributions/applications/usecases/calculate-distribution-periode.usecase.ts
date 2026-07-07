@@ -36,16 +36,7 @@ import {
 import { ModeleEconomique } from 'src/projects/domains/enums/modele-economique.enum';
 import { ProjectStatus } from 'src/projects/domains/enums/project-status.enum';
 import { InvestmentStatus } from 'src/investments/domains/enums/investment-status.enum';
-import { DataSource } from 'typeorm';
 import { PlatformFeesService } from 'src/common/platform-fees/platform-fees.service';
-import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/wallet.entity';
-import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entities/transaction.entity';
-import {
-  TransactionFournisseur,
-  TransactionStatus,
-  TransactionType,
-  WalletType,
-} from 'src/wallets/domains/enums/wallet.enum';
 
 const PERIODE_REGEX = /^\d{4}-(0[1-9]|1[0-2])$/;
 const TAUX_IR = 0.128;
@@ -62,12 +53,17 @@ export interface CalculateDistributionResult {
  * Calcule la distribution d'une période pour un projet equity-locatif.
  *
  * - Agrège les loyers et charges VALIDES sur la période
- * - Prélève deux frais plateforme configurables (un seul snapshot de taux) :
+ * - Calcule (SANS les encaisser) deux frais plateforme configurables, depuis
+ *   un seul snapshot de taux :
  *     - `plateforme_annuel` : capital initial investi × (taux annuel / 100) / 12
  *     - `gestion_locative` : loyers encaissés × taux / 100
- *   Chaque frais génère sa propre transaction vers le wallet FRAIS_PLATEFORME
- *   (metadata.source). Garde-fou : les frais ne dépassent jamais le revenu
- *   distribuable (loyers − charges) — plafonnement proportionnel sinon.
+ *   Les montants sont persistés sur la PeriodeDistribution
+ *   (fraisPlateformeAnnuel / fraisGestionLocative) mais AUCUN wallet/ledger
+ *   n'est touché ici — l'argent ne bouge qu'à l'exécution
+ *   (ExecuteDistributionUseCase), pour que l'annulation d'une période
+ *   CALCULEE/VALIDEE reste totalement gratuite (rien à reverser). Garde-fou :
+ *   les frais ne dépassent jamais le revenu distribuable (loyers − charges)
+ *   — plafonnement proportionnel sinon (flag fraisPlafonnes).
  * - Crée une PeriodeDistribution (statut CALCULEE)
  * - Crée une DistributionPart par investisseur CONFIRME, au prorata
  *   de son investissement / capitalCible du projet
@@ -93,7 +89,6 @@ export class CalculateDistributionPeriodeUseCase {
     @Inject(INVESTMENT_REPOSITORY)
     private readonly investmentRepo: InvestmentRepository,
     private readonly platformFees: PlatformFeesService,
-    private readonly dataSource: DataSource,
   ) {}
 
   async execute(
@@ -190,95 +185,24 @@ export class CalculateDistributionPeriodeUseCase {
     );
     const revenuNet = round2(totalLoyers - totalCharges);
 
-    // Créer la période
+    // Créer la période — les montants de frais sont PERSISTÉS (snapshot de
+    // taux figé) mais AUCUN wallet/ledger n'est touché ici : l'encaissement
+    // n'a lieu qu'à l'exécution (voir ExecuteDistributionUseCase), pour que
+    // l'annulation d'une période CALCULEE/VALIDEE reste money-free.
     const p = new PeriodeDistribution();
     p.projetId = projetId;
     p.periode = periode;
     p.totalLoyers = totalLoyers;
     p.totalCharges = totalCharges;
     p.revenuNet = revenuNet;
+    p.fraisPlateformeAnnuel = feePlateformeAnnuel;
+    p.fraisGestionLocative = feeGestionLocative;
+    p.fraisPlafonnes = fraisPlafonnes;
     p.statut = StatutPeriodeDistribution.CALCULEE;
     p.calculeeLe = new Date();
     p.valideeLe = null;
     p.distribueeLe = null;
     const savedPeriode = await this.periodeRepo.save(p);
-
-    // ── Encaissement des frais plateforme : crédit wallet FRAIS_PLATEFORME +
-    // une transaction ledger PAR frais (metadata.source distincte). ─────────
-    if (feePlateformeAnnuel > 0 || feeGestionLocative > 0) {
-      await this.dataSource.transaction(async (em) => {
-        let walletPlat = await em.findOne(WalletEntity, {
-          where: { type: WalletType.FRAIS_PLATEFORME },
-        });
-        if (!walletPlat) {
-          walletPlat = await em.save(
-            WalletEntity,
-            em.create(WalletEntity, {
-              type: WalletType.FRAIS_PLATEFORME,
-              proprietaireUserId: null,
-              fournisseurRef: 'PLAT-FEES-001',
-              devise: 'XOF',
-              solde: 0,
-            }),
-          );
-        }
-        walletPlat.solde = round2(
-          Number(walletPlat.solde) + feePlateformeAnnuel + feeGestionLocative,
-        );
-        await em.save(WalletEntity, walletPlat);
-
-        if (feePlateformeAnnuel > 0) {
-          await em.save(
-            TransactionEntity,
-            em.create(TransactionEntity, {
-              walletSource: null,
-              walletDestination: walletPlat.id,
-              type: TransactionType.FRAIS,
-              montant: feePlateformeAnnuel,
-              devise: walletPlat.devise,
-              statut: TransactionStatus.REUSSI,
-              fournisseur: TransactionFournisseur.INTERNE,
-              projetId,
-              idempotencyKey: `distribution:fee:plateforme_annuel:${savedPeriode.id}`,
-              fraisPsp: 0,
-              fraisPlateforme: 0,
-              metadata: {
-                source: 'plateforme_annuel',
-                periodeDistributionId: savedPeriode.id,
-                periode,
-                capitalInitial,
-                capped: fraisPlafonnes,
-              },
-            }),
-          );
-        }
-        if (feeGestionLocative > 0) {
-          await em.save(
-            TransactionEntity,
-            em.create(TransactionEntity, {
-              walletSource: null,
-              walletDestination: walletPlat.id,
-              type: TransactionType.FRAIS,
-              montant: feeGestionLocative,
-              devise: walletPlat.devise,
-              statut: TransactionStatus.REUSSI,
-              fournisseur: TransactionFournisseur.INTERNE,
-              projetId,
-              idempotencyKey: `distribution:fee:gestion_locative:${savedPeriode.id}`,
-              fraisPsp: 0,
-              fraisPlateforme: 0,
-              metadata: {
-                source: 'gestion_locative',
-                periodeDistributionId: savedPeriode.id,
-                periode,
-                totalLoyers,
-                capped: fraisPlafonnes,
-              },
-            }),
-          );
-        }
-      });
-    }
 
     // Charger les investissements confirmés du projet
     const investissements = await this.investmentRepo.findByProjetId(projetId);

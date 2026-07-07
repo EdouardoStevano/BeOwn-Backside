@@ -21,6 +21,8 @@ import { rolesWithPermission } from 'src/common/auth/permissions.constants';
 import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
 import { OrdreMarcheEntity } from 'src/secondarymarket/infrastructure/persistences/entities/ordre-marche.entity';
+import { SignatureEntity } from 'src/signatures/infrastructure/persistences/entities/signature.entity';
+import { SignatureStatus } from 'src/signatures/domains/enums/signature-status.enum';
 import { InvestmentEntity } from 'src/investments/infrastructure/persistences/entities/investment.entity';
 import { UserEntity, UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
 import { OrdreMarcheStatus } from 'src/secondarymarket/domains/ordre-marche';
@@ -183,9 +185,53 @@ export class AdminSecondaryMarketController {
         })
         .andWhere('tx.statut = :statut', { statut: TransactionStatus.REUSSI })
         .getMany();
+
+      // Un ordre peut avoir été rempli en plusieurs fois (fills successifs
+      // sur le carnet EN_CARNET, tant que l'ordre n'est pas totalement
+      // absorbé) : chaque fill webhook écrit ses frais avec un
+      // metadata.signatureId qui lui est propre (yousign-webhook, étape 12).
+      // L'état courant de l'ordre (nbFractions, acheteurId) ne reflète QUE le
+      // DERNIER fill — reverser la somme des frais de TOUS les fills
+      // suralimenterait le remboursement acheteur et sous-débiterait le
+      // vendeur. On ne reverse donc que les frais du fill actuellement en
+      // vigueur, identifié via la signature YouSign SIGNED (ordreId,
+      // acheteurId) la plus récente. Un fill sans signature (force-execute
+      // admin, metadata.signatureId absent) compte comme son propre groupe.
+      const distinctSignatureIds = new Set(
+        feeTxs
+          .map((t) => (t.metadata as Record<string, unknown> | null)?.signatureId)
+          .filter((v): v is string => typeof v === 'string'),
+      );
+      const hasUnsignedFeeTx = feeTxs.some(
+        (t) => (t.metadata as Record<string, unknown> | null)?.signatureId == null,
+      );
+      const nbFillGroups = distinctSignatureIds.size + (hasUnsignedFeeTx ? 1 : 0);
+
+      let scopedFeeTxs = feeTxs;
+      if (nbFillGroups > 1) {
+        const lastSignature = await em.findOne(SignatureEntity, {
+          where: {
+            ordreId: id,
+            userId: buyerUserId,
+            statut: SignatureStatus.SIGNED,
+          },
+          order: { signedAt: 'DESC' },
+        });
+        if (!lastSignature || !distinctSignatureIds.has(lastSignature.id)) {
+          throw new BadRequestException(
+            'Ordre multi-remplissages : annulation globale impossible, traiter par remplissage',
+          );
+        }
+        scopedFeeTxs = feeTxs.filter(
+          (t) =>
+            (t.metadata as Record<string, unknown> | null)?.signatureId ===
+            lastSignature.id,
+        );
+      }
+
       const commissionPrelevee = round2(
         (legacyCommissionTx ? Number(legacyCommissionTx.montant) : 0) +
-          feeTxs.reduce((s, t) => s + Number(t.montant), 0),
+          scopedFeeTxs.reduce((s, t) => s + Number(t.montant), 0),
       );
       const montantNetVendeurInitial = montantTotal - commissionPrelevee;
 

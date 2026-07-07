@@ -16,9 +16,6 @@ describe('CalculateDistributionPeriodeUseCase', () => {
   let projectRepo: any;
   let investmentRepo: any;
   let platformFees: any;
-  let dataSource: any;
-  /** Transactions de frais capturées via em.save (celles avec idempotencyKey) */
-  let savedFeeTxs: any[];
 
   beforeEach(() => {
     periodeRepo = {
@@ -55,17 +52,9 @@ describe('CalculateDistributionPeriodeUseCase', () => {
       ),
     };
 
-    savedFeeTxs = [];
-    const em = {
-      findOne: jest.fn().mockResolvedValue(null),
-      create: jest.fn().mockImplementation((_entity, obj) => obj),
-      save: jest.fn().mockImplementation((_entity, obj) => {
-        if (obj?.idempotencyKey) savedFeeTxs.push(obj);
-        return Promise.resolve({ ...obj, id: obj.id ?? 'wallet-plat-1' });
-      }),
-    };
-    dataSource = { transaction: jest.fn(async (cb: any) => cb(em)) };
-
+    // Note : le usecase n'a plus de dépendance DataSource/wallet/transaction
+    // — le calcul ne fait QUE persister les montants de frais sur la
+    // période ; il ne les encaisse jamais (voir ExecuteDistributionUseCase).
     useCase = new CalculateDistributionPeriodeUseCase(
       periodeRepo,
       partRepo,
@@ -74,7 +63,6 @@ describe('CalculateDistributionPeriodeUseCase', () => {
       projectRepo,
       investmentRepo,
       platformFees,
-      dataSource,
     );
   });
 
@@ -96,11 +84,11 @@ describe('CalculateDistributionPeriodeUseCase', () => {
     expect(r.periode.statut).toBe(StatutPeriodeDistribution.CALCULEE);
   });
 
-  it('prélève les deux frais depuis UN SEUL snapshot de taux et écrit une transaction FRAIS_PLATEFORME par frais', async () => {
+  it('calcule les deux frais depuis UN SEUL snapshot de taux et les PERSISTE sur la période sans les encaisser', async () => {
     loyerRepo.findValidesParProjetEtPeriode.mockResolvedValue([
       { montant: 1_000_000 },
     ]);
-    await useCase.execute('proj-1', '2026-06');
+    const r = await useCase.execute('proj-1', '2026-06');
 
     // Un seul read des taux pour toute l'opération (R1)
     expect(platformFees.getRates).toHaveBeenCalledTimes(1);
@@ -114,29 +102,17 @@ describe('CalculateDistributionPeriodeUseCase', () => {
       snapshot,
     );
 
-    // Deux transactions de frais, chacune avec sa metadata.source
-    expect(savedFeeTxs).toHaveLength(2);
-    const plateforme = savedFeeTxs.find(
-      (t) => t.metadata?.source === 'plateforme_annuel',
-    );
-    const gestion = savedFeeTxs.find(
-      (t) => t.metadata?.source === 'gestion_locative',
-    );
-    expect(plateforme).toBeDefined();
-    expect(plateforme.montant).toBeCloseTo(833.33, 2);
-    expect(plateforme.idempotencyKey).toBe(
-      'distribution:fee:plateforme_annuel:pd-1',
-    );
-    expect(plateforme.metadata.capped).toBe(false);
-    expect(gestion).toBeDefined();
-    expect(gestion.montant).toBeCloseTo(70_000, 2);
-    expect(gestion.idempotencyKey).toBe(
-      'distribution:fee:gestion_locative:pd-1',
-    );
-    expect(gestion.metadata.capped).toBe(false);
+    // Les montants sont persistés sur la période...
+    expect(r.periode.fraisPlateformeAnnuel).toBeCloseTo(833.33, 2);
+    expect(r.periode.fraisGestionLocative).toBeCloseTo(70_000, 2);
+    expect(r.periode.fraisPlafonnes).toBe(false);
+    // ... mais AUCUN wallet/transaction n'est écrit au calcul : le seul
+    // write est celui de la période elle-même (periodeRepo.save), pas de
+    // dataSource/em.save de transaction FRAIS_PLATEFORME.
+    expect(periodeRepo.save).toHaveBeenCalledTimes(1);
   });
 
-  it('plafonne les frais au revenu distribuable (proportionnellement, capped:true)', async () => {
+  it('plafonne les frais au revenu distribuable (proportionnellement, fraisPlafonnes:true)', async () => {
     loyerRepo.findValidesParProjetEtPeriode.mockResolvedValue([
       { montant: 1000 },
     ]);
@@ -148,17 +124,9 @@ describe('CalculateDistributionPeriodeUseCase', () => {
     // Frais théoriques : 833.33 (plateforme) + 70 (gestion) = 903.33
     // Revenu disponible : 1000 − 900 = 100 → plafonnement proportionnel :
     // plateforme = round2(833.33 × 100/903.33) = 92.25 ; gestion = 100 − 92.25 = 7.75
-    expect(savedFeeTxs).toHaveLength(2);
-    const plateforme = savedFeeTxs.find(
-      (t) => t.metadata?.source === 'plateforme_annuel',
-    );
-    const gestion = savedFeeTxs.find(
-      (t) => t.metadata?.source === 'gestion_locative',
-    );
-    expect(plateforme.montant).toBeCloseTo(92.25, 2);
-    expect(plateforme.metadata.capped).toBe(true);
-    expect(gestion.montant).toBeCloseTo(7.75, 2);
-    expect(gestion.metadata.capped).toBe(true);
+    expect(r.periode.fraisPlateformeAnnuel).toBeCloseTo(92.25, 2);
+    expect(r.periode.fraisGestionLocative).toBeCloseTo(7.75, 2);
+    expect(r.periode.fraisPlafonnes).toBe(true);
     // Les frais consomment tout le revenu disponible : rien à distribuer
     expect(r.periode.revenuNet).toBe(0);
   });
@@ -205,9 +173,9 @@ describe('CalculateDistributionPeriodeUseCase', () => {
       { id: 'inv-1', montant: 1_000_000, statut: InvestmentStatus.CONFIRME },
     ]);
     const r = await useCase.execute('proj-1', '2026-06');
-    // Aucun loyer, 200 000 de charges : frais plafonnés à 0, aucun mouvement
-    expect(dataSource.transaction).not.toHaveBeenCalled();
-    expect(savedFeeTxs).toHaveLength(0);
+    // Aucun loyer, 200 000 de charges : frais plafonnés à 0
+    expect(r.periode.fraisPlateformeAnnuel).toBe(0);
+    expect(r.periode.fraisGestionLocative).toBe(0);
     expect(r.parts[0].montantBrut).toBe(-200_000);
     expect(r.parts[0].prelevementIR).toBe(0);
     expect(r.parts[0].prelevementCSG).toBe(0);
