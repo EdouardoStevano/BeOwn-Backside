@@ -9,9 +9,16 @@ export interface AdminSettingsBlob {
     timezone?: string;
   };
   commissions?: {
-    investmentFeePct?: number;
-    secondaryMarketFeePct?: number;
-    earlyExitFeePct?: number;
+    /** % par an du capital initial investi du SPV, prélevé 1/12 par mois sur les distributions */
+    annualPlatformFeePct?: number;
+    /** % des loyers encaissés, prélevé à chaque distribution */
+    rentManagementFeePct?: number;
+    /** % de la plus-value brute à la vente du bien (sortie) */
+    propertySaleGainFeePct?: number;
+    /** % du montant de la vente, à la charge du vendeur (marché secondaire) */
+    resaleTransactionFeePct?: number;
+    /** % de la plus-value du vendeur sur revente d'actions (marché secondaire) */
+    shareSaleGainFeePct?: number;
   };
   kyc?: {
     provider?: string;

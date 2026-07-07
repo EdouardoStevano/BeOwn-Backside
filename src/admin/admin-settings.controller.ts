@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   ForbiddenException,
@@ -24,6 +25,7 @@ import {
   AdminSettingsEntity,
   AdminSettingsBlob,
 } from './entities/admin-settings.entity';
+import { DEFAULT_FEE_RATES } from 'src/common/platform-fees/platform-fees.service';
 
 const ADMIN_ROLES: string[] = rolesWithPermission('settings:manage');
 
@@ -34,11 +36,7 @@ const DEFAULT_SETTINGS: AdminSettingsBlob = {
     defaultCurrency: 'XOF',
     timezone: 'Africa/Abidjan',
   },
-  commissions: {
-    investmentFeePct: 1.5,
-    secondaryMarketFeePct: 2,
-    earlyExitFeePct: 1,
-  },
+  commissions: { ...DEFAULT_FEE_RATES },
   kyc: {
     provider: 'sumsub',
     minScoreAccepted: 60,
@@ -77,6 +75,27 @@ export class AdminSettingsController {
     }
   }
 
+  /**
+   * Chaque taux de commission fourni doit être un nombre fini entre 0 et 100.
+   */
+  private validateCommissions(
+    commissions: NonNullable<AdminSettingsBlob['commissions']>,
+  ) {
+    for (const [key, value] of Object.entries(commissions)) {
+      if (value === undefined) continue;
+      if (
+        typeof value !== 'number' ||
+        !Number.isFinite(value) ||
+        value < 0 ||
+        value > 100
+      ) {
+        throw new BadRequestException(
+          `commissions.${key} doit être un nombre entre 0 et 100`,
+        );
+      }
+    }
+  }
+
   private async getOrCreate(): Promise<AdminSettingsEntity> {
     let row = await this.settingsRepo.findOne({ where: { id: 'default' } });
     if (!row) {
@@ -104,6 +123,9 @@ export class AdminSettingsController {
     @CurrentUser() user: ActiveUser,
   ) {
     await this.ensureRole(user, ADMIN_ROLES);
+    if (body.commissions) {
+      this.validateCommissions(body.commissions);
+    }
     const row = await this.getOrCreate();
     const merged: AdminSettingsBlob = {
       ...row.settings,
