@@ -41,7 +41,10 @@ import type { ActiveUser } from 'src/common/auth/current-user.decorator';
 import { UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
 import { RequirePermission } from 'src/common/auth/require-permission.decorator';
-import { rolesWithPermission } from 'src/common/auth/permissions.constants';
+import {
+  hasPermission,
+  rolesWithPermission,
+} from 'src/common/auth/permissions.constants';
 import { NotificationService } from 'src/notifications/applications/notification.service';
 import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
 import { NotificationEventService } from 'src/notifications/applications/notification-event.service';
@@ -82,6 +85,14 @@ export class ProfileController {
     }
   }
 
+  /** Auto-accès (son propre dossier) ou permission kyc:validate. */
+  private assertSelfOrKycReviewer(user: ActiveUser, targetUserId: number): void {
+    if (String(user.userId) === String(targetUserId)) return;
+    if (!hasPermission(user.role, 'kyc:validate')) {
+      throw new ForbiddenException('Accès réservé.');
+    }
+  }
+
   @ApiOperation({ summary: 'Créer le profil personne physique' })
   @ApiResponse({ status: 201, description: 'Profil PP créé' })
   @ApiResponse({ status: 409, description: 'Profil déjà existant' })
@@ -89,14 +100,20 @@ export class ProfileController {
   createPP(
     @Param('userId', ParseIntPipe) userId: number,
     @Body() dto: CreateProfilPPDto,
+    @CurrentUser() user: ActiveUser,
   ) {
+    this.assertSelfOrKycReviewer(user, userId);
     return this.createProfilPP.execute(userId, dto);
   }
 
   @ApiOperation({ summary: 'Initialiser le dossier KYC' })
   @ApiResponse({ status: 201, description: 'KYC créé' })
   @Post(':userId/kyc')
-  initKyc(@Param('userId', ParseIntPipe) userId: number) {
+  initKyc(
+    @Param('userId', ParseIntPipe) userId: number,
+    @CurrentUser() user: ActiveUser,
+  ) {
+    this.assertSelfOrKycReviewer(user, userId);
     return this.createKyc.execute(userId);
   }
 
@@ -178,6 +195,7 @@ export class ProfileController {
 
   @ApiOperation({ summary: 'Lister tous les KYC (admin)' })
   @ApiResponse({ status: 200, description: 'Liste paginée des KYC avec données utilisateur' })
+  @RequirePermission('kyc:validate')
   @Get('kyc/all')
   listAllKyc(
     @Query('page') page?: string,
