@@ -19,6 +19,7 @@ import {
 import { MailerService } from '@nestjs-modules/mailer';
 import { EmailVerificationDto } from './dto/email-verification.dto';
 import { randomUUID } from 'crypto';
+import { UserStatus } from 'src/users/domains/user';
 
 @Injectable()
 export class VerifyEmailService {
@@ -120,7 +121,14 @@ export class VerifyEmailService {
         throw new BadRequestException('Token invalide ou expiré');
       }
 
-      user?.userEmail.verify();
+      user.userEmail.verify();
+
+      // Fait avancer le cycle de vie du compte : le statut EMAIL_VERIFIE
+      // existait dans l'enum mais n'était jamais posé — les comptes restaient
+      // « cree » à vie même après confirmation de l'email.
+      if (user.status === UserStatus.CREE) {
+        user.status = UserStatus.EMAIL_VERIFIE;
+      }
 
       await this.usersRepository.update(user);
 
