@@ -13,6 +13,13 @@ import {
   USER_REPOSITORY,
   type UserRepository,
 } from 'src/users/applications/ports/repositories/user.repository';
+import { UserStatus } from 'src/users/infrastructure/persistences/entities/user.entity';
+import {
+  ACCOUNT_CLOSED_CODE,
+  ACCOUNT_CLOSED_MESSAGE,
+  ACCOUNT_SUSPENDED_CODE,
+  ACCOUNT_SUSPENDED_MESSAGE,
+} from 'src/common/auth/account-status.guard';
 
 @Injectable()
 export class SignInUsecase {
@@ -33,6 +40,29 @@ export class SignInUsecase {
       throw new UnauthorizedException({
         code: 'EMAIL_NOT_VERIFIED',
         message: 'Veuillez vérifier votre adresse email avant de vous connecter.',
+      });
+    }
+
+    // Un compte suspendu/clos/supprimé ne doit jamais pouvoir se reconnecter,
+    // sinon il obtiendrait un nouveau JWT valide malgré la sanction — même
+    // contrat d'erreur (401 + code stable) que le contrôle par requête fait
+    // par AccountStatusGuard, pour une expérience front cohérente.
+    if (user.status === UserStatus.SUSPENDU) {
+      throw new UnauthorizedException({
+        statusCode: 401,
+        message: ACCOUNT_SUSPENDED_MESSAGE,
+        code: ACCOUNT_SUSPENDED_CODE,
+      });
+    }
+
+    if (
+      user.status === UserStatus.CLOS ||
+      user.status === UserStatus.SUPPRIME
+    ) {
+      throw new UnauthorizedException({
+        statusCode: 401,
+        message: ACCOUNT_CLOSED_MESSAGE,
+        code: ACCOUNT_CLOSED_CODE,
       });
     }
 
