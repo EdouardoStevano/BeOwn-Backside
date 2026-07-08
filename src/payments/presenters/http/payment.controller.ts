@@ -43,6 +43,7 @@ import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
 import { UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
+import { KycValidatedGuard } from 'src/common/auth/kyc-validated.guard';
 import { UpdateKycStatusUseCase } from 'src/profiles/applications/usecases/update-kyc-status.usecase';
 import { KycStatus, KycNiveau } from 'src/profiles/domains/enums/kyc-status.enum';
 import { PROFIL_REPOSITORY, type ProfilRepository } from 'src/profiles/applications/ports/repositories/profil.repository';
@@ -80,6 +81,8 @@ export class PaymentController {
     status: 201,
     description: 'clientSecret retourné pour confirmation frontend',
   })
+  @ApiResponse({ status: 403, description: 'KYC non validé' })
+  @UseGuards(KycValidatedGuard)
   @Post('depot/intent')
   async createDepotIntent(
     @Body() dto: CreatePaymentIntentDto,
@@ -98,6 +101,8 @@ export class PaymentController {
 
   @ApiOperation({ summary: 'Confirmer un dépôt et créditer le wallet' })
   @ApiResponse({ status: 200, description: 'Wallet crédité' })
+  @ApiResponse({ status: 403, description: 'KYC non validé' })
+  @UseGuards(KycValidatedGuard)
   @HttpCode(HttpStatus.OK)
   @Post('depot/confirm')
   async confirmDepot(
@@ -180,6 +185,8 @@ export class PaymentController {
     description:
       'Demande de retrait enregistrée (traitement manuel ou via Stripe Payouts)',
   })
+  @ApiResponse({ status: 403, description: 'KYC non validé' })
+  @UseGuards(KycValidatedGuard)
   @HttpCode(HttpStatus.ACCEPTED)
   @Post('retrait')
   async createRetrait(
