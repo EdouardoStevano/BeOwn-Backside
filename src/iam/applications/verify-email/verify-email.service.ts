@@ -2,7 +2,8 @@ import {
   BadRequestException,
   Inject,
   Injectable,
-  NotFoundException,
+  Logger,
+  UnauthorizedException,
 } from '@nestjs/common';
 import {
   TOKEN_SERVICE,
@@ -23,6 +24,8 @@ import { UserStatus } from 'src/users/domains/user';
 
 @Injectable()
 export class VerifyEmailService {
+  private readonly logger = new Logger(VerifyEmailService.name);
+
   constructor(
     @Inject(TOKEN_SERVICE) private readonly tokenService: TokenService,
     @Inject(USER_REPOSITORY) private readonly usersRepository: UserRepository,
@@ -38,25 +41,39 @@ export class VerifyEmailService {
       emailVerificationDto.email,
     );
 
+    // Anti-enumeration: this endpoint is @Public and unauthenticated, so its
+    // response must never let a caller tell "unknown email" apart from
+    // "already verified" apart from "sent" — all three resolve the same way.
+    // Details go to the logs instead of the HTTP response.
     if (!user) {
-      throw new NotFoundException('User not found');
+      this.logger.log(
+        `send-verification requested for unknown email: ${emailVerificationDto.email}`,
+      );
+      return;
     }
 
     if (user.userEmail.isVerified) {
-      throw new BadRequestException('This email is already verified');
+      this.logger.log(
+        `send-verification requested for already-verified email: ${emailVerificationDto.email}`,
+      );
+      return;
     }
 
     const tokenId = randomUUID();
 
-    const token = await this.tokenService.generateEmailToken({
-      sub: user.userId,
-      email: user.userEmail.email,
-      emailTokenId: tokenId,
-    });
+    const token = await this.tokenService.generateEmailToken(
+      {
+        sub: user.userId,
+        email: user.userEmail.email,
+        emailTokenId: tokenId,
+      },
+      'email_verify',
+    );
 
     await this.cacheManagerService.insertEmailTokenId(
       user.userEmail.email,
       tokenId,
+      'email_verify',
     );
 
     const apiUrl = process.env.API_URL || 'http://localhost:3001';
@@ -100,14 +117,28 @@ export class VerifyEmailService {
     try {
       const emailTokenPayload = await this.tokenService.verifyEmailToken(token);
 
+      // Token-confusion guard: email-verify and password-reset tokens are
+      // both signed EmailTokenPayloads and used to be interchangeable at
+      // verification time. A password-reset token is delivered the same way
+      // (link in an email) but must never be usable to verify an email
+      // (and, symmetrically, ResetPasswordUseCase rejects this token type).
+      // Tokens issued before this fix carry no `type` claim at all — they
+      // are rejected rather than assumed to be `email_verify`, forcing a
+      // fresh request; acceptable since the email-token TTL is at most 24h.
+      if (emailTokenPayload.type !== 'email_verify') {
+        throw new UnauthorizedException('Token invalide ou expiré');
+      }
+
       const isValidToken = await this.cacheManagerService.validateEmailToken(
         emailTokenPayload.email,
         emailTokenPayload.emailTokenId,
+        'email_verify',
       );
 
       if (isValidToken) {
         await this.cacheManagerService.invalidateEmailTokenId(
           emailTokenPayload.email,
+          'email_verify',
         );
       } else {
         throw new BadRequestException('Token invalide ou expiré');
@@ -230,7 +261,13 @@ export class VerifyEmailService {
 </body>
 </html>
       `;
-    } catch {
+    } catch (err) {
+      // Preserve the 401 raised above for a type mismatch — everything else
+      // (bad signature, expired JWT, unknown user, single-use replay) stays
+      // a generic 400 so a caller can't distinguish the failure reason.
+      if (err instanceof UnauthorizedException) {
+        throw err;
+      }
       throw new BadRequestException('Token invalide ou expiré');
     }
   }

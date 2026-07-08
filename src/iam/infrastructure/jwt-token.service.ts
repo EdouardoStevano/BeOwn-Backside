@@ -9,6 +9,7 @@ import { type ConfigType } from '@nestjs/config';
 import {
   AuthTokens,
   EmailTokenPayload,
+  EmailTokenPurpose,
   TokenPayload,
   TokenService,
 } from '../domains/ports/token.service';
@@ -97,12 +98,13 @@ export class JwtTokenService implements TokenService {
   }
 
   async generateEmailToken(
-    emailTokenPayload: EmailTokenPayload,
+    emailTokenPayload: Omit<EmailTokenPayload, 'type'>,
+    purpose: EmailTokenPurpose,
   ): Promise<string> {
     return this.signToken<EmailTokenPayload>(
       emailTokenPayload.sub,
       this.jwtConfiguration.emailTokenTtl,
-      emailTokenPayload,
+      { ...emailTokenPayload, type: purpose },
     );
   }
 

@@ -1,7 +1,7 @@
 import { Inject } from '@nestjs/common';
 import { CacheManagerService } from '../domains/ports/cahe-manager.service';
 import { CACHE_MANAGER, type Cache } from '@nestjs/cache-manager';
-import { AuthTokens } from '../domains/ports/token.service';
+import { AuthTokens, EmailTokenPurpose } from '../domains/ports/token.service';
 import jwtConfig from './config/jwt.config';
 import { type ConfigType } from '@nestjs/config';
 
@@ -49,25 +49,35 @@ export class RedisCacheService implements CacheManagerService {
     return `refresh-${email}`;
   }
 
-  async insertEmailTokenId(email: string, emailTokenId: string): Promise<void> {
+  async insertEmailTokenId(
+    email: string,
+    emailTokenId: string,
+    purpose: EmailTokenPurpose,
+  ): Promise<void> {
     await this.cacheManager.set<string>(
-      this.getEmailTokenId(email),
+      this.getEmailTokenId(email, purpose),
       emailTokenId,
       this.jwtConfiguration.emailTokenTtl * 1000,
     );
   }
 
-  async validateEmailToken(email: string, emailTokenId: string): Promise<boolean> {
-    const storedId = await this.cacheManager.get<string>(this.getEmailTokenId(email));
+  async validateEmailToken(
+    email: string,
+    emailTokenId: string,
+    purpose: EmailTokenPurpose,
+  ): Promise<boolean> {
+    const storedId = await this.cacheManager.get<string>(
+      this.getEmailTokenId(email, purpose),
+    );
     return storedId === emailTokenId;
   }
 
-  async invalidateEmailTokenId(email: string): Promise<void> {
-    await this.cacheManager.del(this.getEmailTokenId(email));
+  async invalidateEmailTokenId(email: string, purpose: EmailTokenPurpose): Promise<void> {
+    await this.cacheManager.del(this.getEmailTokenId(email, purpose));
   }
 
-  private getEmailTokenId(email: string) {
-    return `email-token-${email}`;
+  private getEmailTokenId(email: string, purpose: EmailTokenPurpose) {
+    return `email-token-${purpose}-${email}`;
   }
 
   async insertOAuthCode(code: string, tokens: AuthTokens): Promise<void> {

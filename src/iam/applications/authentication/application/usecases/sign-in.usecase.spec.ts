@@ -8,6 +8,15 @@ import {
   ACCOUNT_SUSPENDED_CODE,
 } from 'src/common/auth/account-status.guard';
 
+// Nest's UnauthorizedException wraps a plain string message into
+// { statusCode, message, error }; extracts just the message either way.
+const genericMessageOf = (err: UnauthorizedException): unknown => {
+  const response = err.getResponse();
+  return typeof response === 'string'
+    ? response
+    : (response as Record<string, unknown>).message;
+};
+
 const buildUser = (status: UserStatus): User => {
   const user = new User();
   user.userId = 42;
@@ -20,8 +29,11 @@ const buildUser = (status: UserStatus): User => {
   return user;
 };
 
-const makeUsecase = (user: User | null) => {
-  const hashingService = { hash: jest.fn(), compare: jest.fn().mockResolvedValue(true) };
+const makeUsecase = (user: User | null, passwordValid = true) => {
+  const hashingService = {
+    hash: jest.fn(),
+    compare: jest.fn().mockResolvedValue(passwordValid),
+  };
   const tokenService = {
     generateTokens: jest.fn().mockResolvedValue({
       accessToken: 'access',
@@ -89,10 +101,10 @@ describe('SignInUsecase', () => {
     },
   );
 
-  it('refuse un email non vérifié avant même de regarder le statut', async () => {
+  it('refuse un email non vérifié, après vérification du mot de passe, avant même de regarder le statut', async () => {
     const user = buildUser(UserStatus.SUSPENDU);
     user.userEmail = new UserEmail('user@example.com'); // isVerified: false
-    const { usecase } = makeUsecase(user);
+    const { usecase, hashingService } = makeUsecase(user);
     let caught: UnauthorizedException | undefined;
     try {
       await usecase.signIn({ email: 'user@example.com', password: 'pw' });
@@ -101,6 +113,10 @@ describe('SignInUsecase', () => {
     }
     const body = caught!.getResponse() as Record<string, unknown>;
     expect(body).toMatchObject({ code: 'EMAIL_NOT_VERIFIED' });
+    // Le mot de passe a bien été vérifié avant que le code EMAIL_NOT_VERIFIED
+    // ne soit renvoyé (anti-enumeration : ce code ne doit jamais fuiter sans
+    // preuve de connaissance du mot de passe).
+    expect(hashingService.compare).toHaveBeenCalled();
   });
 
   it('refuse un email inconnu', async () => {
@@ -108,5 +124,59 @@ describe('SignInUsecase', () => {
     await expect(
       usecase.signIn({ email: 'nobody@example.com', password: 'pw' }),
     ).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+
+  describe('anti-enumeration : le mot de passe est vérifié avant tout code de statut informatif', () => {
+    it('renvoie le message générique (pas EMAIL_NOT_VERIFIED) si le mot de passe est incorrect sur un compte non vérifié', async () => {
+      const user = buildUser(UserStatus.ACTIF);
+      user.userEmail = new UserEmail('user@example.com'); // isVerified: false
+      const { usecase, tokenService } = makeUsecase(user, false);
+      let caught: UnauthorizedException | undefined;
+      try {
+        await usecase.signIn({ email: 'user@example.com', password: 'wrong' });
+      } catch (e) {
+        caught = e as UnauthorizedException;
+      }
+      expect(caught).toBeInstanceOf(UnauthorizedException);
+      expect(genericMessageOf(caught!)).toBe(
+        'Adresse email ou mot de passe incorrect',
+      );
+      expect(tokenService.generateTokens).not.toHaveBeenCalled();
+    });
+
+    it('renvoie le message générique (pas ACCOUNT_SUSPENDED) si le mot de passe est incorrect sur un compte suspendu', async () => {
+      const user = buildUser(UserStatus.SUSPENDU);
+      const { usecase, tokenService } = makeUsecase(user, false);
+      let caught: UnauthorizedException | undefined;
+      try {
+        await usecase.signIn({ email: 'user@example.com', password: 'wrong' });
+      } catch (e) {
+        caught = e as UnauthorizedException;
+      }
+      expect(caught).toBeInstanceOf(UnauthorizedException);
+      expect(genericMessageOf(caught!)).toBe(
+        'Adresse email ou mot de passe incorrect',
+      );
+      expect(tokenService.generateTokens).not.toHaveBeenCalled();
+    });
+
+    it.each([UserStatus.CLOS, UserStatus.SUPPRIME])(
+      'renvoie le message générique (pas ACCOUNT_CLOSED) si le mot de passe est incorrect sur un compte %s',
+      async (status) => {
+        const user = buildUser(status);
+        const { usecase, tokenService } = makeUsecase(user, false);
+        let caught: UnauthorizedException | undefined;
+        try {
+          await usecase.signIn({ email: 'user@example.com', password: 'wrong' });
+        } catch (e) {
+          caught = e as UnauthorizedException;
+        }
+        expect(caught).toBeInstanceOf(UnauthorizedException);
+        expect(genericMessageOf(caught!)).toBe(
+          'Adresse email ou mot de passe incorrect',
+        );
+        expect(tokenService.generateTokens).not.toHaveBeenCalled();
+      },
+    );
   });
 });

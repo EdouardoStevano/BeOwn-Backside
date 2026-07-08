@@ -36,6 +36,23 @@ export class SignInUsecase {
       throw new UnauthorizedException('Adresse email ou mot de passe incorrect');
     }
 
+    const isValidPassword = await this.hashingService.compare(
+      signInDto.password,
+      user.password!,
+    );
+
+    if (!isValidPassword) {
+      throw new UnauthorizedException('Adresse email ou mot de passe incorrect');
+    }
+
+    // Anti-enumeration: EMAIL_NOT_VERIFIED / ACCOUNT_SUSPENDED / ACCOUNT_CLOSED
+    // are only checked *after* the password has matched. These codes are
+    // more informative than the generic "invalid credentials" message, so
+    // if they fired before the password check, anyone who merely knows (or
+    // guesses) an email address could learn that account's verification or
+    // suspension status without ever supplying a correct password. Gating
+    // them behind a successful password check means this detail only
+    // reaches someone who already holds valid credentials for the account.
     if (!user.userEmail.isVerified) {
       throw new UnauthorizedException({
         code: 'EMAIL_NOT_VERIFIED',
@@ -64,15 +81,6 @@ export class SignInUsecase {
         message: ACCOUNT_CLOSED_MESSAGE,
         code: ACCOUNT_CLOSED_CODE,
       });
-    }
-
-    const isValidPassword = await this.hashingService.compare(
-      signInDto.password,
-      user.password!,
-    );
-
-    if (!isValidPassword) {
-      throw new UnauthorizedException('Adresse email ou mot de passe incorrect');
     }
 
     const tokenPayload = await this.tokenService.generateTokens({
