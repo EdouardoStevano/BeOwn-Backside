@@ -112,7 +112,7 @@ describe('SignInUsecase', () => {
       caught = e as UnauthorizedException;
     }
     const body = caught!.getResponse() as Record<string, unknown>;
-    expect(body).toMatchObject({ code: 'EMAIL_NOT_VERIFIED' });
+    expect(body).toMatchObject({ code: 'OTP_REQUIRED' });
     // Le mot de passe a bien été vérifié avant que le code EMAIL_NOT_VERIFIED
     // ne soit renvoyé (anti-enumeration : ce code ne doit jamais fuiter sans
     // preuve de connaissance du mot de passe).
@@ -127,7 +127,7 @@ describe('SignInUsecase', () => {
   });
 
   describe('anti-enumeration : le mot de passe est vérifié avant tout code de statut informatif', () => {
-    it('renvoie le message générique (pas EMAIL_NOT_VERIFIED) si le mot de passe est incorrect sur un compte non vérifié', async () => {
+    it('renvoie le message générique (pas OTP_REQUIRED) si le mot de passe est incorrect sur un compte non vérifié', async () => {
       const user = buildUser(UserStatus.ACTIF);
       user.userEmail = new UserEmail('user@example.com'); // isVerified: false
       const { usecase, tokenService } = makeUsecase(user, false);

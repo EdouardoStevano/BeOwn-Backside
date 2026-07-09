@@ -19,6 +19,8 @@ import {
   ACCOUNT_CLOSED_MESSAGE,
   ACCOUNT_SUSPENDED_CODE,
   ACCOUNT_SUSPENDED_MESSAGE,
+  OTP_REQUIRED_CODE,
+  OTP_REQUIRED_MESSAGE,
 } from 'src/common/auth/account-status.guard';
 
 @Injectable()
@@ -45,7 +47,7 @@ export class SignInUsecase {
       throw new UnauthorizedException('Adresse email ou mot de passe incorrect');
     }
 
-    // Anti-enumeration: EMAIL_NOT_VERIFIED / ACCOUNT_SUSPENDED / ACCOUNT_CLOSED
+    // Anti-enumeration: OTP_REQUIRED / ACCOUNT_SUSPENDED / ACCOUNT_CLOSED
     // are only checked *after* the password has matched. These codes are
     // more informative than the generic "invalid credentials" message, so
     // if they fired before the password check, anyone who merely knows (or
@@ -55,8 +57,8 @@ export class SignInUsecase {
     // reaches someone who already holds valid credentials for the account.
     if (!user.userEmail.isVerified) {
       throw new UnauthorizedException({
-        code: 'EMAIL_NOT_VERIFIED',
-        message: 'Veuillez vérifier votre adresse email avant de vous connecter.',
+        code: OTP_REQUIRED_CODE,
+        message: OTP_REQUIRED_MESSAGE,
       });
     }
 

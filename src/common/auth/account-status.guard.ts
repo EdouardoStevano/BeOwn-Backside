@@ -14,6 +14,17 @@ import {
 import { IS_PUBLIC_KEY } from './public.decorator';
 import type { ActiveUser } from './current-user.decorator';
 
+/**
+ * Code d'erreur stable consommé par le front — email pas encore vérifié à la
+ * connexion, l'utilisateur doit saisir/redemander son OTP d'inscription.
+ * Remplace EMAIL_NOT_VERIFIED (V2-T1) : le message reste inchangé pour que le
+ * front existant, qui matche encore sur le texte du message, continue de
+ * fonctionner tel quel jusqu'à sa mise à jour (V2-T5) pour matcher sur `code`.
+ */
+export const OTP_REQUIRED_CODE = 'OTP_REQUIRED';
+export const OTP_REQUIRED_MESSAGE =
+  'Veuillez vérifier votre adresse email avant de vous connecter.';
+
 /** Code d'erreur stable consommé par le front — compte suspendu par un administrateur. */
 export const ACCOUNT_SUSPENDED_CODE = 'ACCOUNT_SUSPENDED';
 /** Message affiché au front — contrat fixe, ne pas varier selon la cause du refus. */

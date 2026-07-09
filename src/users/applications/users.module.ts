@@ -11,6 +11,7 @@ import { ProfilesInfrastructureModule } from 'src/profiles/infrastructure/profil
 import { DocumentsInfrastructureModule } from 'src/documents/infrastructure/documents-infrastructure.module';
 import { WalletsInfrastructureModule } from 'src/wallets/infrastructure/wallets-infrastructure.module';
 import { NotificationsModule } from 'src/notifications/notifications.module';
+import { RegistrationOtpModule } from 'src/iam/applications/authentication/application/registration-otp.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { NotificationsModule } from 'src/notifications/notifications.module';
     DocumentsInfrastructureModule,
     WalletsInfrastructureModule,
     NotificationsModule,
+    RegistrationOtpModule,
   ],
   providers: [
     UsersService,
