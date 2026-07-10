@@ -43,6 +43,7 @@ import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
 import { UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
+import { KycValidatedGuard } from 'src/common/auth/kyc-validated.guard';
 import { UpdateKycStatusUseCase } from 'src/profiles/applications/usecases/update-kyc-status.usecase';
 import { KycStatus, KycNiveau } from 'src/profiles/domains/enums/kyc-status.enum';
 import { PROFIL_REPOSITORY, type ProfilRepository } from 'src/profiles/applications/ports/repositories/profil.repository';
@@ -51,6 +52,7 @@ import { SkipThrottle } from '@nestjs/throttler';
 import { NotificationService } from 'src/notifications/applications/notification.service';
 import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
 import { UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
+import { AuditLogService } from 'src/notifications/applications/audit-log.service';
 
 @SkipThrottle({ short: true, medium: true })
 @ApiTags('Payments & KYC')
@@ -65,6 +67,7 @@ export class PaymentController {
     private readonly identityService: StripeIdentityServiceImpl,
     private readonly updateKycStatus: UpdateKycStatusUseCase,
     private readonly notificationService: NotificationService,
+    private readonly auditLog: AuditLogService,
     @Inject(PROFIL_REPOSITORY)
     private readonly profilRepository: ProfilRepository,
     @InjectRepository(WalletEntity)
@@ -80,6 +83,8 @@ export class PaymentController {
     status: 201,
     description: 'clientSecret retourné pour confirmation frontend',
   })
+  @ApiResponse({ status: 403, description: 'KYC non validé' })
+  @UseGuards(KycValidatedGuard)
   @Post('depot/intent')
   async createDepotIntent(
     @Body() dto: CreatePaymentIntentDto,
@@ -98,6 +103,8 @@ export class PaymentController {
 
   @ApiOperation({ summary: 'Confirmer un dépôt et créditer le wallet' })
   @ApiResponse({ status: 200, description: 'Wallet crédité' })
+  @ApiResponse({ status: 403, description: 'KYC non validé' })
+  @UseGuards(KycValidatedGuard)
   @HttpCode(HttpStatus.OK)
   @Post('depot/confirm')
   async confirmDepot(
@@ -180,6 +187,8 @@ export class PaymentController {
     description:
       'Demande de retrait enregistrée (traitement manuel ou via Stripe Payouts)',
   })
+  @ApiResponse({ status: 403, description: 'KYC non validé' })
+  @UseGuards(KycValidatedGuard)
   @HttpCode(HttpStatus.ACCEPTED)
   @Post('retrait')
   async createRetrait(
@@ -431,105 +440,313 @@ export class PaymentController {
         }
       }
     } else if (event.type === 'identity.verification_session.verified') {
-      const session = event.data.object as any;
-      const userId = parseInt(session.metadata?.userId, 10);
-      if (!isNaN(userId)) {
-        await this.updateKycStatus.execute(userId, KycStatus.VALIDE);
-        this.logger.log(`KYC validé via Stripe Identity: userId=${userId}`);
-        this.notificationService.push({
-          utilisateurId: userId,
-          type: NotificationType.KYC_VALIDE,
-          titre: 'Identité vérifiée ✓',
-          message: 'Votre vérification d\'identité a été validée. Vous pouvez désormais investir.',
-        }).catch(() => {});
-
-        // Retrieve report data + upload images to Cloudinary
-        const sessionId = session.id;
-        const reportData = await this.identityService.extractReportData(sessionId);
-        if (reportData) {
-          const kyc = await this.profilRepository.findKycByUserId(userId);
-          if (kyc) {
-            const folder = `kyc/${userId}`;
-
-            // Upload images to Cloudinary in parallel (use Cloudinary URL as "fileId" going forward)
-            const [frontUrl, backUrl, selfieUrl] = await Promise.all([
-              reportData.documentFrontFileId
-                ? this.identityService.downloadAndUploadToCloudinary(
-                    reportData.documentFrontFileId, folder, `kyc_front_${userId}.jpg`,
-                  )
-                : Promise.resolve(undefined),
-              reportData.documentBackFileId
-                ? this.identityService.downloadAndUploadToCloudinary(
-                    reportData.documentBackFileId, folder, `kyc_back_${userId}.jpg`,
-                  )
-                : Promise.resolve(undefined),
-              reportData.selfieFileId
-                ? this.identityService.downloadAndUploadToCloudinary(
-                    reportData.selfieFileId, folder, `kyc_selfie_${userId}.jpg`,
-                  )
-                : Promise.resolve(undefined),
-            ]);
-
-            await this.profilRepository.updateKycReportData(kyc.id, reportData.reportId, {
-              nom: reportData.nom,
-              prenom: reportData.prenom,
-              dateNaissance: reportData.dateNaissance,
-              nationalite: reportData.nationalite,
-              typeDocument: reportData.typeDocument,
-              numeroDocument: reportData.numeroDocument,
-              dateExpiration: reportData.dateExpiration,
-              // Store Cloudinary URLs directly (fallback to Stripe file IDs if upload failed)
-              documentFrontFileId: frontUrl ?? reportData.documentFrontFileId,
-              documentBackFileId: backUrl ?? reportData.documentBackFileId,
-              selfieFileId: selfieUrl ?? reportData.selfieFileId,
-            });
-
-            this.logger.log(
-              `KYC report saved: userId=${userId} reportId=${reportData.reportId} ` +
-              `cloudinary: front=${!!frontUrl} back=${!!backUrl} selfie=${!!selfieUrl}`,
-            );
-          }
-        }
-      }
+      await this.handleIdentityVerified(event);
     } else if (event.type === 'identity.verification_session.processing') {
-      // Stripe has captured all photos and started verification — mark as in progress
-      const session = event.data.object as any;
-      const userId = parseInt(session.metadata?.userId, 10);
-      if (!isNaN(userId)) {
-        await this.updateKycStatus.execute(userId, KycStatus.EN_COURS);
-        this.logger.log(`KYC en cours (photos reçues) via Stripe Identity: userId=${userId}`);
-      }
+      await this.handleIdentityProcessing(event);
     } else if (event.type === 'identity.verification_session.requires_input') {
-      // Stripe could not auto-verify — send to admin for manual review
-      const session = event.data.object as any;
-      const userId = parseInt(session.metadata?.userId, 10);
-      if (!isNaN(userId)) {
-        const motif =
-          session.last_error?.reason ??
-          session.last_error?.code ??
-          'Vérification en attente de révision manuelle';
-        await this.updateKycStatus.execute(userId, KycStatus.EN_REVUE, motif);
-        this.logger.log(`KYC en revue (admin requis) via Stripe Identity: userId=${userId} motif=${motif}`);
-        this.notificationService.push({
-          utilisateurId: userId,
-          type: NotificationType.KYC_REJETE,
-          titre: 'Vérification KYC en attente de révision',
-          message: `Votre vérification d'identité nécessite une révision manuelle. Motif : ${motif}`,
-          metadata: { motif },
-        }).catch(() => {});
-        // Alerte aux admins (Compliance / RCCI) pour traitement manuel
-        this.notificationService
-          .pushToAdmins({
-            type: NotificationType.KYC_REJETE,
-            titre: 'KYC à réviser manuellement',
-            message: `L'utilisateur #${userId} attend une révision manuelle de son KYC. Motif : ${motif}`,
-            roles: [UserRole.SUPER_ADMIN, UserRole.COMPLIANCE, UserRole.RCCI],
-            metadata: { userId, motif },
-          })
-          .catch(() => {});
-      }
+      await this.handleIdentityRequiresInput(event);
     }
 
     return { received: true, type: event.type, eventId: event.id };
+  }
+
+  // ─── Stripe Identity — helpers webhook (validation auto + fallback revue manuelle) ──
+
+  /**
+   * Garde de transition anti-rejeu Stripe. Stripe redélivre les events
+   * Identity dans le désordre jusqu'à ~3 jours après leur émission ; les
+   * anciens gardes n'étaient keyés que sur (statut courant + session id),
+   * ce qui n'arrêtait que les doublons immédiats. Un event tardif pouvait
+   * donc écraser une décision manuelle définitive prise entretemps par un
+   * admin (ex. `verified` tardif re-validant un dossier REFUSE — F1).
+   *
+   * Chaque event webhook n'a le droit de s'appliquer que si le statut
+   * courant du dossier fait partie de ces statuts "amont" légitimes ;
+   * sinon c'est un no-op journalisé (aucune écriture de statut, aucune
+   * notification, aucun audit log). Les décisions manuelles (VALIDE /
+   * REFUSE) sont donc toujours définitives vis-à-vis du webhook Stripe.
+   *
+   * RENOUVELLEMENT / EXPIRE : ces statuts sont réservés à un futur parcours
+   * de re-vérification KYC périodique — aucun code du repo ne les
+   * positionne encore (grep sur KycStatus.RENOUVELLEMENT/EXPIRE ne trouve
+   * que la déclaration de l'enum et un test de guard). Leur sémantique
+   * métier est cependant claire : le dossier doit repasser par une
+   * nouvelle vérification Stripe Identity, exactement comme un dossier
+   * qui n'a jamais été soumis. On les traite donc comme NON_DEMARRE pour
+   * les trois events (verified/processing/requires_input) plutôt que de
+   * les exclure — les exclure bloquerait silencieusement le futur parcours
+   * de renouvellement le jour où il sera branché.
+   */
+  private static readonly VERIFIED_ALLOWED_FROM = new Set<KycStatus>([
+    KycStatus.NON_DEMARRE,
+    KycStatus.EN_COURS,
+    KycStatus.EN_REVUE, // retry légitime après un échec (requires_input) déjà en revue
+    KycStatus.RENOUVELLEMENT,
+    KycStatus.EXPIRE,
+  ]);
+
+  private static readonly REQUIRES_INPUT_ALLOWED_FROM = new Set<KycStatus>([
+    KycStatus.NON_DEMARRE,
+    KycStatus.EN_COURS,
+    KycStatus.RENOUVELLEMENT,
+    KycStatus.EXPIRE,
+  ]);
+
+  private static readonly PROCESSING_ALLOWED_FROM = new Set<KycStatus>([
+    KycStatus.NON_DEMARRE,
+    KycStatus.RENOUVELLEMENT,
+    KycStatus.EXPIRE,
+  ]);
+
+  /**
+   * Vrai si le statut courant autorise la transition demandée ; sinon log
+   * un warning (event id + statut courant) et retourne false — l'appelant
+   * doit alors `return` immédiatement sans aucun effet de bord.
+   */
+  private isIdentityTransitionAllowed(
+    allowedFrom: ReadonlySet<KycStatus>,
+    currentStatus: KycStatus,
+    eventLabel: string,
+    event: any,
+    userId: number,
+  ): boolean {
+    if (allowedFrom.has(currentStatus)) return true;
+    this.logger.warn(
+      `Identity webhook ${eventLabel}: transition ignorée — statut actuel="${currentStatus}" ` +
+      `non autorisé pour cet event (event=${event.id} userId=${userId}). ` +
+      'Probable event Stripe redélivré/tardif après une décision manuelle — no-op.',
+    );
+    return false;
+  }
+
+  /**
+   * Résout userId + dossier KYC associés à une session Stripe Identity.
+   * Retourne null (no-op sûr) si userId absent des metadata ou si aucun
+   * dossier KYC ne correspond — un event orphelin/tardif (ex. après
+   * suppression de compte) ne doit jamais faire échouer le webhook.
+   */
+  private async resolveKycForIdentitySession(
+    session: any,
+  ): Promise<{ userId: number; kyc: Kyc } | null> {
+    const userId = parseInt(session?.metadata?.userId, 10);
+    if (isNaN(userId)) {
+      this.logger.warn(
+        `Identity webhook: userId manquant dans les metadata (session=${session?.id})`,
+      );
+      return null;
+    }
+    const kyc = await this.profilRepository.findKycByUserId(userId);
+    if (!kyc) {
+      this.logger.warn(
+        `Identity webhook: KYC introuvable pour userId=${userId} (session=${session?.id}) — no-op`,
+      );
+      return null;
+    }
+    return { userId, kyc };
+  }
+
+  /**
+   * `identity.verification_session.verified` — Stripe a validé automatiquement
+   * l'identité : KYC → VALIDE, sans aucune action admin. Idempotent : une
+   * redélivrance du même event (dossier déjà VALIDE pour cette session) est un
+   * no-op qui évite de renotifier / re-télécharger les images / dupliquer
+   * l'audit log.
+   */
+  private async handleIdentityVerified(event: any): Promise<void> {
+    const session = event.data.object as any;
+    const resolved = await this.resolveKycForIdentitySession(session);
+    if (!resolved) return;
+    const { userId, kyc } = resolved;
+
+    if (kyc.statut === KycStatus.VALIDE && kyc.fournisseurRef === session.id) {
+      this.logger.debug(
+        `Identity webhook verified: déjà traité (idempotent) userId=${userId} session=${session.id}`,
+      );
+      return;
+    }
+
+    if (
+      !this.isIdentityTransitionAllowed(
+        PaymentController.VERIFIED_ALLOWED_FROM,
+        kyc.statut,
+        'verified',
+        event,
+        userId,
+      )
+    ) {
+      return;
+    }
+
+    await this.updateKycStatus.execute(userId, KycStatus.VALIDE);
+    this.logger.log(`KYC validé automatiquement via Stripe Identity: userId=${userId}`);
+
+    this.notificationService.push({
+      utilisateurId: userId,
+      type: NotificationType.KYC_VALIDE,
+      titre: 'Identité vérifiée',
+      message: 'Votre vérification d\'identité a été validée. Vous pouvez désormais investir.',
+    }).catch(() => {});
+
+    this.auditLog
+      .create(
+        'stripe',
+        'system',
+        'kyc.auto_valide',
+        'kyc',
+        kyc.id,
+        undefined,
+        undefined,
+        { source: 'stripe_identity', sessionId: session.id, eventId: event.id, userId },
+      )
+      .catch((err) => this.logger.warn(`Audit log KYC auto-validé échoué: ${err?.message}`));
+
+    // Retrieve report data + upload images to Cloudinary
+    const reportData = await this.identityService.extractReportData(session.id);
+    if (reportData) {
+      const folder = `kyc/${userId}`;
+
+      // Upload images to Cloudinary in parallel (use Cloudinary URL as "fileId" going forward)
+      const [frontUrl, backUrl, selfieUrl] = await Promise.all([
+        reportData.documentFrontFileId
+          ? this.identityService.downloadAndUploadToCloudinary(
+              reportData.documentFrontFileId, folder, `kyc_front_${userId}.jpg`,
+            )
+          : Promise.resolve(undefined),
+        reportData.documentBackFileId
+          ? this.identityService.downloadAndUploadToCloudinary(
+              reportData.documentBackFileId, folder, `kyc_back_${userId}.jpg`,
+            )
+          : Promise.resolve(undefined),
+        reportData.selfieFileId
+          ? this.identityService.downloadAndUploadToCloudinary(
+              reportData.selfieFileId, folder, `kyc_selfie_${userId}.jpg`,
+            )
+          : Promise.resolve(undefined),
+      ]);
+
+      await this.profilRepository.updateKycReportData(kyc.id, reportData.reportId, {
+        nom: reportData.nom,
+        prenom: reportData.prenom,
+        dateNaissance: reportData.dateNaissance,
+        nationalite: reportData.nationalite,
+        typeDocument: reportData.typeDocument,
+        numeroDocument: reportData.numeroDocument,
+        dateExpiration: reportData.dateExpiration,
+        // Store Cloudinary URLs directly (fallback to Stripe file IDs if upload failed)
+        documentFrontFileId: frontUrl ?? reportData.documentFrontFileId,
+        documentBackFileId: backUrl ?? reportData.documentBackFileId,
+        selfieFileId: selfieUrl ?? reportData.selfieFileId,
+      });
+
+      this.logger.log(
+        `KYC report saved: userId=${userId} reportId=${reportData.reportId} ` +
+        `cloudinary: front=${!!frontUrl} back=${!!backUrl} selfie=${!!selfieUrl}`,
+      );
+    }
+  }
+
+  /**
+   * `identity.verification_session.processing` — Stripe a capturé les photos
+   * et démarre la vérification automatique. Statut transitoire, idempotent
+   * par construction (réaffecter EN_COURS est sans effet de bord).
+   */
+  private async handleIdentityProcessing(event: any): Promise<void> {
+    const session = event.data.object as any;
+    const resolved = await this.resolveKycForIdentitySession(session);
+    if (!resolved) return;
+    const { userId, kyc } = resolved;
+    if (kyc.statut === KycStatus.EN_COURS) return; // idempotent no-op
+
+    if (
+      !this.isIdentityTransitionAllowed(
+        PaymentController.PROCESSING_ALLOWED_FROM,
+        kyc.statut,
+        'processing',
+        event,
+        userId,
+      )
+    ) {
+      return;
+    }
+
+    await this.updateKycStatus.execute(userId, KycStatus.EN_COURS);
+    this.logger.log(`KYC en cours (photos reçues) via Stripe Identity: userId=${userId}`);
+  }
+
+  /**
+   * `identity.verification_session.requires_input` — Stripe n'a pas pu
+   * valider automatiquement : le dossier passe en revue manuelle (EN_REVUE),
+   * l'utilisateur est invité à renvoyer ses documents, et Compliance/RCCI
+   * sont alertés pour traiter le dossier via `PATCH /profiles/:userId/kyc/status`
+   * (gaté aux dossiers EN_REVUE — cf. ProfileController.patchKycStatus).
+   * Idempotent : une redélivrance du même event pour une session déjà en
+   * revue manuelle est un no-op (pas de double notification).
+   */
+  private async handleIdentityRequiresInput(event: any): Promise<void> {
+    const session = event.data.object as any;
+    const resolved = await this.resolveKycForIdentitySession(session);
+    if (!resolved) return;
+    const { userId, kyc } = resolved;
+
+    if (kyc.statut === KycStatus.EN_REVUE && kyc.fournisseurRef === session.id) {
+      this.logger.debug(
+        `Identity webhook requires_input: déjà en revue manuelle (idempotent) userId=${userId} session=${session.id}`,
+      );
+      return;
+    }
+
+    if (
+      !this.isIdentityTransitionAllowed(
+        PaymentController.REQUIRES_INPUT_ALLOWED_FROM,
+        kyc.statut,
+        'requires_input',
+        event,
+        userId,
+      )
+    ) {
+      return;
+    }
+
+    const motif =
+      session.last_error?.reason ??
+      session.last_error?.code ??
+      'Vérification en attente de révision manuelle';
+
+    await this.updateKycStatus.execute(userId, KycStatus.EN_REVUE, motif);
+    this.logger.log(
+      `KYC en revue manuelle (Stripe Identity n'a pas pu valider automatiquement): userId=${userId} motif=${motif}`,
+    );
+
+    this.notificationService.push({
+      utilisateurId: userId,
+      type: NotificationType.KYC_REJETE,
+      titre: 'Vérification KYC en attente de révision',
+      message: `Votre vérification d'identité automatique n'a pas abouti. Merci de renvoyer vos documents. Motif : ${motif}`,
+      metadata: { motif },
+    }).catch(() => {});
+
+    // Alerte aux admins (Compliance / RCCI) pour traitement manuel
+    this.notificationService
+      .pushToAdmins({
+        type: NotificationType.KYC_REJETE,
+        titre: 'KYC à réviser manuellement',
+        message: `L'utilisateur #${userId} attend une révision manuelle de son KYC. Motif : ${motif}`,
+        roles: [UserRole.SUPER_ADMIN, UserRole.COMPLIANCE, UserRole.RCCI],
+        metadata: { userId, motif },
+      })
+      .catch(() => {});
+
+    this.auditLog
+      .create(
+        'stripe',
+        'system',
+        'kyc.revue_manuelle_requise',
+        'kyc',
+        kyc.id,
+        undefined,
+        undefined,
+        { source: 'stripe_identity', sessionId: session.id, eventId: event.id, userId, motif },
+      )
+      .catch((err) => this.logger.warn(`Audit log KYC revue manuelle échoué: ${err?.message}`));
   }
 }

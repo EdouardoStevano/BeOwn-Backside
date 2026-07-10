@@ -10,8 +10,10 @@ import { HealthController } from './health/health.controller';
 import { IamModule } from './iam/iam.module';
 import { IamInfrastructureModule } from './iam/infrastructure/iam-infrastructure.module';
 import { JwtAuthGuard } from './common/auth/jwt-auth.guard';
+import { AccountStatusGuard } from './common/auth/account-status.guard';
 import { RolesGuard } from './common/auth/roles.guard';
 import { PermissionsGuard } from './common/auth/permissions.guard';
+import { UserEntity } from './users/infrastructure/persistences/entities/user.entity';
 import { AuditInterceptor } from './common/audit/audit.interceptor';
 import { ProfilesModule } from './profiles/applications/profiles.module';
 import { ProjectsModule } from './projects/applications/projects.module';
@@ -33,6 +35,7 @@ import { DistributionsModule } from './distributions/applications/distributions.
 import { FiscaliteModule } from './fiscalite/applications/fiscalite.module';
 import { AmlModule } from './common/aml/aml.module';
 import { PlatformFeesModule } from './common/platform-fees/platform-fees.module';
+import { SmsModule } from './common/sms/sms.module';
 import { MailerModule } from '@nestjs-modules/mailer';
 import { HandlebarsAdapter } from '@nestjs-modules/mailer/adapters/handlebars.adapter';
 import { join } from 'path';
@@ -99,6 +102,10 @@ function requireEnv(name: string): string {
         },
       }),
     }),
+    // Feeds AccountStatusGuard: lean per-request lookup of the user status,
+    // independent of UsersModule's exports (see account-status.guard.ts).
+    TypeOrmModule.forFeature([UserEntity]),
+    SmsModule,
     IamInfrastructureModule,
     UsersModule,
     IamModule,
@@ -127,6 +134,7 @@ function requireEnv(name: string): string {
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
+    { provide: APP_GUARD, useClass: AccountStatusGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
     { provide: APP_GUARD, useClass: PermissionsGuard },
     { provide: APP_INTERCEPTOR, useClass: AuditInterceptor },

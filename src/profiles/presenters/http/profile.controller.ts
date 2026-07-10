@@ -1,5 +1,6 @@
 import {
   Body,
+  ConflictException,
   Controller,
   ForbiddenException,
   Param,
@@ -52,6 +53,18 @@ import { KycStatus } from 'src/profiles/domains/enums/kyc-status.enum';
 
 /** Rôles détenant `kyc:validate` — Compliance (+ super_admin via wildcard). */
 const KYC_REVIEWER_ROLES: string[] = rolesWithPermission('kyc:validate');
+
+/**
+ * Le KYC est validé AUTOMATIQUEMENT par Stripe Identity (voir webhook
+ * `identity.verification_session.verified` dans PaymentController). L'admin
+ * n'intervient QUE lorsque Stripe n'a pas pu vérifier automatiquement — le
+ * dossier passe alors en revue manuelle (EN_REVUE) et l'utilisateur est invité
+ * à renvoyer ses documents. Cette route est donc réservée aux dossiers
+ * EN_REVUE : un dossier déjà auto-validé (ou pas encore soumis) est en
+ * lecture seule pour l'admin.
+ */
+const KYC_MANUAL_REVIEW_REQUIRED_MESSAGE =
+  "Ce dossier n'est pas en revue manuelle : il a été validé automatiquement par Stripe Identity, ou n'a pas encore été soumis pour vérification. Seuls les dossiers en revue manuelle peuvent faire l'objet d'une décision manuelle.";
 
 @ApiTags('Profiles & KYC')
 @ApiBearerAuth()
@@ -117,10 +130,18 @@ export class ProfileController {
     return this.createKyc.execute(userId);
   }
 
-  @ApiOperation({ summary: 'Mettre à jour le statut KYC (admin)' })
+  @ApiOperation({
+    summary: 'Décision manuelle sur un dossier KYC en revue (admin)',
+    description:
+      'Le KYC est validé automatiquement par Stripe Identity. Cette route ' +
+      "n'agit que sur les dossiers passés en revue manuelle (EN_REVUE) suite " +
+      "à un échec de la vérification automatique — un dossier auto-validé " +
+      'ou pas encore soumis est en lecture seule pour l\'admin (409).',
+  })
   @ApiResponse({ status: 200, description: 'Statut KYC mis à jour' })
   @ApiResponse({ status: 403, description: 'Réservé aux équipes admin / compliance' })
   @ApiResponse({ status: 404, description: 'KYC introuvable' })
+  @ApiResponse({ status: 409, description: "Dossier pas en revue manuelle — décision manuelle impossible" })
   @HttpCode(HttpStatus.OK)
   @RequirePermission('kyc:validate')
   @Patch(':userId/kyc/status')
@@ -130,6 +151,15 @@ export class ProfileController {
     @CurrentUser() currentUser: ActiveUser,
   ) {
     await this.assertKycReviewer(currentUser);
+
+    // Fallback manuel réservé aux dossiers en revue manuelle : la validation
+    // auto (Stripe Identity) rend un dossier déjà VALIDE en lecture seule, et
+    // un dossier pas encore soumis n'a rien à décider.
+    const current = await this.getKyc.execute(userId);
+    if (current.statut !== KycStatus.EN_REVUE) {
+      throw new ConflictException(KYC_MANUAL_REVIEW_REQUIRED_MESSAGE);
+    }
+
     const updated = await this.updateKycStatus.execute(userId, dto.status, dto.motifRefus);
 
     if (dto.status === KycStatus.VALIDE) {

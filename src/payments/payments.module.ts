@@ -12,11 +12,13 @@ import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructu
 import { ProfilesModule } from 'src/profiles/applications/profiles.module';
 import { CloudStorageModule } from 'src/common/cloud-storage/cloud-storage.module';
 import { NotificationsModule } from 'src/notifications/notifications.module';
+import { KycEntity } from 'src/profiles/infrastructure/persistences/entities/kyc.entity';
+import { KycValidatedGuard } from 'src/common/auth/kyc-validated.guard';
 
 @Module({
   imports: [
     ConfigModule,
-    TypeOrmModule.forFeature([WalletEntity, TransactionEntity]),
+    TypeOrmModule.forFeature([WalletEntity, TransactionEntity, KycEntity]),
     WalletsInfrastructureModule,
     IamInfrastructureModule,
     ProfilesModule,
@@ -28,6 +30,7 @@ import { NotificationsModule } from 'src/notifications/notifications.module';
     { provide: PAYMENT_SERVICE, useClass: StripePaymentService },
     StripePaymentService,
     StripeIdentityServiceImpl,
+    KycValidatedGuard,
   ],
   exports: [PAYMENT_SERVICE, StripeIdentityServiceImpl],
 })
