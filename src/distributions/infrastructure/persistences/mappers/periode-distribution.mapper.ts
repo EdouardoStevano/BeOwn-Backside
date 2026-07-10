@@ -10,6 +10,9 @@ export class PeriodeDistributionMapper {
     d.totalLoyers = Number(e.totalLoyers);
     d.totalCharges = Number(e.totalCharges);
     d.revenuNet = Number(e.revenuNet);
+    d.fraisPlateformeAnnuel = Number(e.fraisPlateformeAnnuel ?? 0);
+    d.fraisGestionLocative = Number(e.fraisGestionLocative ?? 0);
+    d.fraisPlafonnes = !!e.fraisPlafonnes;
     d.statut = e.statut;
     d.calculeeLe = e.calculeeLe;
     d.valideeLe = e.valideeLe;
@@ -27,6 +30,9 @@ export class PeriodeDistributionMapper {
     e.totalLoyers = d.totalLoyers;
     e.totalCharges = d.totalCharges;
     e.revenuNet = d.revenuNet;
+    e.fraisPlateformeAnnuel = d.fraisPlateformeAnnuel ?? 0;
+    e.fraisGestionLocative = d.fraisGestionLocative ?? 0;
+    e.fraisPlafonnes = d.fraisPlafonnes ?? false;
     e.statut = d.statut;
     e.calculeeLe = d.calculeeLe;
     e.valideeLe = d.valideeLe;

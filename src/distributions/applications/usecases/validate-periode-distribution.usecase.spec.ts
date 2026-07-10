@@ -63,5 +63,22 @@ describe('ValidatePeriodeDistributionUseCase', () => {
       });
       await expect(useCase.cancel('pd-1')).rejects.toThrow(/exécutée/);
     });
+
+    it('annule une période dont les frais ont déjà été calculés sans y toucher — rien à reverser (money-free)', async () => {
+      // Les frais sont calculés (snapshot) mais jamais encaissés avant
+      // l'exécution : annuler une CALCULEE/VALIDEE n'a donc besoin d'aucun
+      // wallet/transaction repo — ce usecase n'en dépend d'ailleurs pas.
+      periodeRepo.findById.mockResolvedValue({
+        ...calculee(),
+        fraisPlateformeAnnuel: 833.33,
+        fraisGestionLocative: 70_000,
+        fraisPlafonnes: false,
+      });
+      const r = await useCase.cancel('pd-1');
+      expect(r.statut).toBe(StatutPeriodeDistribution.ANNULEE);
+      // Le save reflète l'annulation, mais rien d'autre n'a été mobilisé
+      // (aucune dépendance wallet/transaction dans ce usecase).
+      expect(periodeRepo.save).toHaveBeenCalledTimes(1);
+    });
   });
 });

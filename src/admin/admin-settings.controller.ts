@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   ForbiddenException,
@@ -24,8 +25,22 @@ import {
   AdminSettingsEntity,
   AdminSettingsBlob,
 } from './entities/admin-settings.entity';
+import { DEFAULT_FEE_RATES } from 'src/common/platform-fees/platform-fees.service';
 
 const ADMIN_ROLES: string[] = rolesWithPermission('settings:manage');
+
+/**
+ * Seules clés de commission autorisées à persister. Le merge PATCH repart de
+ * cette liste blanche pour ne jamais ressusciter des clés legacy stockées
+ * avant ce déploiement (investmentFeePct, secondaryMarketFeePct…).
+ */
+const COMMISSION_KEYS = [
+  'annualPlatformFeePct',
+  'rentManagementFeePct',
+  'propertySaleGainFeePct',
+  'resaleTransactionFeePct',
+  'shareSaleGainFeePct',
+] as const;
 
 const DEFAULT_SETTINGS: AdminSettingsBlob = {
   platform: {
@@ -34,11 +49,7 @@ const DEFAULT_SETTINGS: AdminSettingsBlob = {
     defaultCurrency: 'XOF',
     timezone: 'Africa/Abidjan',
   },
-  commissions: {
-    investmentFeePct: 1.5,
-    secondaryMarketFeePct: 2,
-    earlyExitFeePct: 1,
-  },
+  commissions: { ...DEFAULT_FEE_RATES },
   kyc: {
     provider: 'sumsub',
     minScoreAccepted: 60,
@@ -77,6 +88,46 @@ export class AdminSettingsController {
     }
   }
 
+  /**
+   * Chaque taux de commission fourni doit être un nombre fini entre 0 et 100.
+   */
+  private validateCommissions(
+    commissions: NonNullable<AdminSettingsBlob['commissions']>,
+  ) {
+    for (const [key, value] of Object.entries(commissions)) {
+      if (value === undefined) continue;
+      if (
+        typeof value !== 'number' ||
+        !Number.isFinite(value) ||
+        value < 0 ||
+        value > 100
+      ) {
+        throw new BadRequestException(
+          `commissions.${key} doit être un nombre entre 0 et 100`,
+        );
+      }
+    }
+  }
+
+  /**
+   * Fusionne commissions stockées + patch en ne conservant QUE les 5 clés
+   * connues (hygiène anti-legacy — voir COMMISSION_KEYS).
+   */
+  private mergeCommissions(
+    stored: AdminSettingsBlob['commissions'],
+    patch: AdminSettingsBlob['commissions'],
+  ): NonNullable<AdminSettingsBlob['commissions']> {
+    const merged: Record<string, unknown> = { ...stored, ...patch };
+    const out: Record<string, number> = {};
+    for (const key of COMMISSION_KEYS) {
+      const value = merged[key];
+      if (typeof value === 'number' && Number.isFinite(value)) {
+        out[key] = value;
+      }
+    }
+    return out;
+  }
+
   private async getOrCreate(): Promise<AdminSettingsEntity> {
     let row = await this.settingsRepo.findOne({ where: { id: 'default' } });
     if (!row) {
@@ -104,12 +155,18 @@ export class AdminSettingsController {
     @CurrentUser() user: ActiveUser,
   ) {
     await this.ensureRole(user, ADMIN_ROLES);
+    if (body.commissions) {
+      this.validateCommissions(body.commissions);
+    }
     const row = await this.getOrCreate();
     const merged: AdminSettingsBlob = {
       ...row.settings,
       ...body,
       platform: { ...row.settings.platform, ...body.platform },
-      commissions: { ...row.settings.commissions, ...body.commissions },
+      commissions: this.mergeCommissions(
+        row.settings.commissions,
+        body.commissions,
+      ),
       kyc: { ...row.settings.kyc, ...body.kyc },
       notifications: { ...row.settings.notifications, ...body.notifications },
       feature_flags: {

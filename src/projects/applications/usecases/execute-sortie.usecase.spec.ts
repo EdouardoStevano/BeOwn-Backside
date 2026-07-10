@@ -43,6 +43,16 @@ describe('ExecuteSortieUseCase — audit role', () => {
       }),
     };
     const amlMonitor: any = { check: jest.fn() };
+    // PlatformFeesService mocké : PV brute = 0 dans ces tests → frais 0
+    // (parité avec le vrai service qui renvoie 0 sur plus-value ≤ 0).
+    const platformFees: any = {
+      getRates: jest.fn(),
+      computePropertySaleGainFee: jest
+        .fn()
+        .mockImplementation(async (pv: number) =>
+          pv <= 0 ? 0 : Math.round(pv * 15) / 100,
+        ),
+    };
 
     useCase = new ExecuteSortieUseCase(
       sortieRepo,
@@ -53,6 +63,7 @@ describe('ExecuteSortieUseCase — audit role', () => {
       dataSource,
       auditLog,
       amlMonitor,
+      platformFees,
     );
   });
 

@@ -36,7 +36,7 @@ import {
 import { ModeleEconomique } from 'src/projects/domains/enums/modele-economique.enum';
 import { ProjectStatus } from 'src/projects/domains/enums/project-status.enum';
 import { InvestmentStatus } from 'src/investments/domains/enums/investment-status.enum';
-import { computeMonthlyManagementFee } from 'src/common/platform-fees/platform-fees.constants';
+import { PlatformFeesService } from 'src/common/platform-fees/platform-fees.service';
 
 const PERIODE_REGEX = /^\d{4}-(0[1-9]|1[0-2])$/;
 const TAUX_IR = 0.128;
@@ -53,6 +53,17 @@ export interface CalculateDistributionResult {
  * Calcule la distribution d'une période pour un projet equity-locatif.
  *
  * - Agrège les loyers et charges VALIDES sur la période
+ * - Calcule (SANS les encaisser) deux frais plateforme configurables, depuis
+ *   un seul snapshot de taux :
+ *     - `plateforme_annuel` : capital initial investi × (taux annuel / 100) / 12
+ *     - `gestion_locative` : loyers encaissés × taux / 100
+ *   Les montants sont persistés sur la PeriodeDistribution
+ *   (fraisPlateformeAnnuel / fraisGestionLocative) mais AUCUN wallet/ledger
+ *   n'est touché ici — l'argent ne bouge qu'à l'exécution
+ *   (ExecuteDistributionUseCase), pour que l'annulation d'une période
+ *   CALCULEE/VALIDEE reste totalement gratuite (rien à reverser). Garde-fou :
+ *   les frais ne dépassent jamais le revenu distribuable (loyers − charges)
+ *   — plafonnement proportionnel sinon (flag fraisPlafonnes).
  * - Crée une PeriodeDistribution (statut CALCULEE)
  * - Crée une DistributionPart par investisseur CONFIRME, au prorata
  *   de son investissement / capitalCible du projet
@@ -77,6 +88,7 @@ export class CalculateDistributionPeriodeUseCase {
     private readonly projectRepo: ProjectRepository,
     @Inject(INVESTMENT_REPOSITORY)
     private readonly investmentRepo: InvestmentRepository,
+    private readonly platformFees: PlatformFeesService,
   ) {}
 
   async execute(
@@ -128,22 +140,64 @@ export class CalculateDistributionPeriodeUseCase {
     const totalChargesOperationnelles = round2(
       charges.reduce((s, c) => s + c.montant, 0),
     );
-    // Commission de gestion mensuelle (1/12 du taux annuel) — Phase 9.
-    // Prélevée AVANT distribution aux investisseurs sur revenu opérationnel positif.
-    // Cumulée dans totalCharges pour rester cohérent avec l'entity existante
-    // (qui n'a pas de colonne dédiée managementFee — pas de migration).
-    const revenuAvantGestion = round2(totalLoyers - totalChargesOperationnelles);
-    const managementFee = computeMonthlyManagementFee(revenuAvantGestion);
-    const totalCharges = round2(totalChargesOperationnelles + managementFee);
+
+    // ── Frais plateforme configurables — UN SEUL snapshot de taux (R1) ──────
+    const rates = await this.platformFees.getRates();
+    // Capital initial investi du SPV = capitalCible du projet.
+    // Justification : un projet ne passe FINANCE que lorsque 100 % de ses
+    // fractions sont souscrites au prix primaire (auto-transition dans
+    // yousign-webhook), donc capitalCible == montant réellement collecté à la
+    // clôture. La somme des investissements CONFIRME actuels n'est PAS un bon
+    // proxy : elle dérive avec les prix du marché secondaire (le champ
+    // montant est muté au prix de revente lors des cessions).
+    const capitalInitial = Number(projet.capitalCible);
+    let feePlateformeAnnuel = await this.platformFees.computeMonthlyPlatformFee(
+      capitalInitial,
+      rates,
+    );
+    let feeGestionLocative = await this.platformFees.computeRentManagementFee(
+      totalLoyers,
+      rates,
+    );
+
+    // Garde-fou : les frais ne dépassent JAMAIS le revenu distribuable de la
+    // période (loyers − charges opérationnelles). Sinon plafonnement
+    // proportionnel au revenu disponible (0 si période déficitaire), flaggé
+    // capped:true dans la metadata des transactions de frais.
+    const revenuDisponible = round2(totalLoyers - totalChargesOperationnelles);
+    const totalFraisInitial = round2(feePlateformeAnnuel + feeGestionLocative);
+    let fraisPlafonnes = false;
+    if (totalFraisInitial > 0 && revenuDisponible < totalFraisInitial) {
+      fraisPlafonnes = true;
+      if (revenuDisponible <= 0) {
+        feePlateformeAnnuel = 0;
+        feeGestionLocative = 0;
+      } else {
+        const scale = revenuDisponible / totalFraisInitial;
+        feePlateformeAnnuel = round2(feePlateformeAnnuel * scale);
+        // Le second frais absorbe l'arrondi : somme exacte == revenu disponible
+        feeGestionLocative = round2(revenuDisponible - feePlateformeAnnuel);
+      }
+    }
+
+    const totalCharges = round2(
+      totalChargesOperationnelles + feePlateformeAnnuel + feeGestionLocative,
+    );
     const revenuNet = round2(totalLoyers - totalCharges);
 
-    // Créer la période
+    // Créer la période — les montants de frais sont PERSISTÉS (snapshot de
+    // taux figé) mais AUCUN wallet/ledger n'est touché ici : l'encaissement
+    // n'a lieu qu'à l'exécution (voir ExecuteDistributionUseCase), pour que
+    // l'annulation d'une période CALCULEE/VALIDEE reste money-free.
     const p = new PeriodeDistribution();
     p.projetId = projetId;
     p.periode = periode;
     p.totalLoyers = totalLoyers;
     p.totalCharges = totalCharges;
     p.revenuNet = revenuNet;
+    p.fraisPlateformeAnnuel = feePlateformeAnnuel;
+    p.fraisGestionLocative = feeGestionLocative;
+    p.fraisPlafonnes = fraisPlafonnes;
     p.statut = StatutPeriodeDistribution.CALCULEE;
     p.calculeeLe = new Date();
     p.valideeLe = null;

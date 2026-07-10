@@ -32,6 +32,7 @@ import { LocativeManagementModule } from './locative-management/applications/loc
 import { DistributionsModule } from './distributions/applications/distributions.module';
 import { FiscaliteModule } from './fiscalite/applications/fiscalite.module';
 import { AmlModule } from './common/aml/aml.module';
+import { PlatformFeesModule } from './common/platform-fees/platform-fees.module';
 import { MailerModule } from '@nestjs-modules/mailer';
 import { HandlebarsAdapter } from '@nestjs-modules/mailer/adapters/handlebars.adapter';
 import { join } from 'path';
@@ -119,6 +120,7 @@ function requireEnv(name: string): string {
     DistributionsModule,
     FiscaliteModule,
     AmlModule,
+    PlatformFeesModule,
     ...(process.env.NODE_ENV !== 'production' ? [NotificationTestModule] : []),
   ],
   controllers: [HealthController],

@@ -30,7 +30,7 @@ import {
   TransactionType,
   WalletType,
 } from 'src/wallets/domains/enums/wallet.enum';
-import { computePerformanceFee } from 'src/common/platform-fees/platform-fees.constants';
+import { PlatformFeesService } from 'src/common/platform-fees/platform-fees.service';
 import { AuditLogService } from 'src/notifications/applications/audit-log.service';
 import { UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
 import { AmlMonitorService } from 'src/common/aml/aml-monitor.service';
@@ -90,6 +90,7 @@ export class ExecuteSortieUseCase {
     private readonly dataSource: DataSource,
     private readonly auditLog: AuditLogService,
     private readonly amlMonitor: AmlMonitorService,
+    private readonly platformFees: PlatformFeesService,
   ) {}
 
   async execute(
@@ -119,9 +120,12 @@ export class ExecuteSortieUseCase {
       (i) => i.statut === InvestmentStatus.CONFIRME,
     );
 
-    // Performance fee (Phase 9) — prélevée par la plateforme sur la PV positive
-    // AVANT distribution aux investisseurs.
-    const performanceFee = computePerformanceFee(sortie.plusValueBrute);
+    // Frais sur plus-value à la vente du bien (taux configurable
+    // propertySaleGainFeePct) — prélevé par la plateforme sur la PV positive
+    // AVANT distribution aux investisseurs. 0 si moins-value.
+    const performanceFee = await this.platformFees.computePropertySaleGainFee(
+      Number(sortie.plusValueBrute),
+    );
     const plusValueDistribuable = round2(sortie.plusValueBrute - performanceFee);
 
     let nbInvestisseursPayes = 0;
@@ -169,6 +173,11 @@ export class ExecuteSortieUseCase {
             idempotencyKey: `sortie:performance-fee:${sortieId}`,
             fraisPsp: 0,
             fraisPlateforme: 0,
+            metadata: {
+              source: 'gain_vente_bien',
+              sortieId,
+              plusValueBrute: Number(sortie.plusValueBrute),
+            },
           }),
         );
       }
