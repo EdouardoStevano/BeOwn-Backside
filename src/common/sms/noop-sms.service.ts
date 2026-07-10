@@ -2,14 +2,11 @@ import { Injectable, Logger } from '@nestjs/common';
 import { SmsService } from './sms.service';
 
 /**
- * Placeholder SMS sender wired via DI for the registration-OTP flow (V2-T1).
- *
- * A real TwilioSmsService already exists in this repo and is bound to
- * SMS_SERVICE globally (iam.module.ts), but the registration module binds
- * SMS_SERVICE to this Noop on purpose so V2-T2 owns the decision of when to
- * flip the signup SMS channel onto the live Twilio sender (and any per-flow
- * cost/rate-limit guards that come with it). Until then, requesting the
- * `sms` canal logs the intent instead of sending — never throwing, so a
+ * Placeholder SMS sender used as the fallback branch of the app-wide
+ * SMS_SERVICE binding (see sms.module.ts's smsServiceFactory, global since
+ * V2-T2): TwilioSmsService is selected when the three Twilio env vars are
+ * present, this Noop otherwise (dev/CI without Twilio creds). Requesting the
+ * `sms` canal then logs the intent instead of sending — never throwing, so a
  * missing provider never breaks the (non-enumerating) resend contract.
  */
 @Injectable()

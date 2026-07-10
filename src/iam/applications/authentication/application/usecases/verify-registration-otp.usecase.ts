@@ -15,6 +15,12 @@ import {
   RegistrationOtpService,
   RegistrationOtpVerifyResult,
 } from './registration-otp.service';
+import {
+  ACCOUNT_CLOSED_CODE,
+  ACCOUNT_CLOSED_MESSAGE,
+  ACCOUNT_SUSPENDED_CODE,
+  ACCOUNT_SUSPENDED_MESSAGE,
+} from 'src/common/auth/account-status.guard';
 
 const INVALID_OR_EXPIRED_MESSAGE = 'Code invalide ou expiré';
 
@@ -53,6 +59,32 @@ export class VerifyRegistrationOtpUseCase {
     }
     if (result !== RegistrationOtpVerifyResult.OK) {
       throw new UnauthorizedException(INVALID_OR_EXPIRED_MESSAGE);
+    }
+
+    // Même garde-fou qu'à la connexion (SignInUsecase) : un compte
+    // suspendu/clos/supprimé ne doit jamais obtenir de nouveaux tokens de
+    // session, même via ce flux OTP — sans ce contrôle, un compte sanctionné
+    // pendant qu'il est encore CREE recevrait un 200 avec tokens (inerte
+    // grâce à AccountStatusGuard sur les requêtes suivantes, mais un signal
+    // trompeur pour l'appelant). Même contrat d'erreur (401 + code stable)
+    // que le reste de l'app.
+    if (user.status === UserStatus.SUSPENDU) {
+      throw new UnauthorizedException({
+        statusCode: 401,
+        message: ACCOUNT_SUSPENDED_MESSAGE,
+        code: ACCOUNT_SUSPENDED_CODE,
+      });
+    }
+
+    if (
+      user.status === UserStatus.CLOS ||
+      user.status === UserStatus.SUPPRIME
+    ) {
+      throw new UnauthorizedException({
+        statusCode: 401,
+        message: ACCOUNT_CLOSED_MESSAGE,
+        code: ACCOUNT_CLOSED_CODE,
+      });
     }
 
     user.userEmail.verify();

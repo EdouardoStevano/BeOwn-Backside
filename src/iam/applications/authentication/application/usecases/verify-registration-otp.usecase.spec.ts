@@ -140,4 +140,48 @@ describe('VerifyRegistrationOtpUseCase', () => {
     ).rejects.toBeInstanceOf(UnauthorizedException);
     expect(registrationOtpService.verify).not.toHaveBeenCalled();
   });
+
+  it('compte suspendu : code valide mais 401 ACCOUNT_SUSPENDED, sans tokens ni mise à jour du statut', async () => {
+    const { usecase, tokenService, userRepository, registrationOtpService, user } =
+      makeUsecase(buildUser(UserStatus.SUSPENDU));
+    registrationOtpService.verify.mockResolvedValue(
+      RegistrationOtpVerifyResult.OK,
+    );
+
+    let caught: UnauthorizedException | undefined;
+    try {
+      await usecase.execute({ email: 'user@example.com', code: '123456' });
+    } catch (e) {
+      caught = e as UnauthorizedException;
+    }
+
+    expect(caught).toBeInstanceOf(UnauthorizedException);
+    expect((caught!.getResponse() as any).code).toBe('ACCOUNT_SUSPENDED');
+    expect(tokenService.generateTokens).not.toHaveBeenCalled();
+    expect(userRepository.update).not.toHaveBeenCalled();
+    expect(user!.status).toBe(UserStatus.SUSPENDU);
+  });
+
+  it.each([UserStatus.CLOS, UserStatus.SUPPRIME])(
+    'compte %s : code valide mais 401 ACCOUNT_CLOSED, sans tokens ni mise à jour du statut',
+    async (status) => {
+      const { usecase, tokenService, userRepository, registrationOtpService } =
+        makeUsecase(buildUser(status));
+      registrationOtpService.verify.mockResolvedValue(
+        RegistrationOtpVerifyResult.OK,
+      );
+
+      let caught: UnauthorizedException | undefined;
+      try {
+        await usecase.execute({ email: 'user@example.com', code: '123456' });
+      } catch (e) {
+        caught = e as UnauthorizedException;
+      }
+
+      expect(caught).toBeInstanceOf(UnauthorizedException);
+      expect((caught!.getResponse() as any).code).toBe('ACCOUNT_CLOSED');
+      expect(tokenService.generateTokens).not.toHaveBeenCalled();
+      expect(userRepository.update).not.toHaveBeenCalled();
+    },
+  );
 });
