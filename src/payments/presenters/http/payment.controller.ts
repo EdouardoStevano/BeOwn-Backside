@@ -453,6 +453,73 @@ export class PaymentController {
   // ─── Stripe Identity — helpers webhook (validation auto + fallback revue manuelle) ──
 
   /**
+   * Garde de transition anti-rejeu Stripe. Stripe redélivre les events
+   * Identity dans le désordre jusqu'à ~3 jours après leur émission ; les
+   * anciens gardes n'étaient keyés que sur (statut courant + session id),
+   * ce qui n'arrêtait que les doublons immédiats. Un event tardif pouvait
+   * donc écraser une décision manuelle définitive prise entretemps par un
+   * admin (ex. `verified` tardif re-validant un dossier REFUSE — F1).
+   *
+   * Chaque event webhook n'a le droit de s'appliquer que si le statut
+   * courant du dossier fait partie de ces statuts "amont" légitimes ;
+   * sinon c'est un no-op journalisé (aucune écriture de statut, aucune
+   * notification, aucun audit log). Les décisions manuelles (VALIDE /
+   * REFUSE) sont donc toujours définitives vis-à-vis du webhook Stripe.
+   *
+   * RENOUVELLEMENT / EXPIRE : ces statuts sont réservés à un futur parcours
+   * de re-vérification KYC périodique — aucun code du repo ne les
+   * positionne encore (grep sur KycStatus.RENOUVELLEMENT/EXPIRE ne trouve
+   * que la déclaration de l'enum et un test de guard). Leur sémantique
+   * métier est cependant claire : le dossier doit repasser par une
+   * nouvelle vérification Stripe Identity, exactement comme un dossier
+   * qui n'a jamais été soumis. On les traite donc comme NON_DEMARRE pour
+   * les trois events (verified/processing/requires_input) plutôt que de
+   * les exclure — les exclure bloquerait silencieusement le futur parcours
+   * de renouvellement le jour où il sera branché.
+   */
+  private static readonly VERIFIED_ALLOWED_FROM = new Set<KycStatus>([
+    KycStatus.NON_DEMARRE,
+    KycStatus.EN_COURS,
+    KycStatus.EN_REVUE, // retry légitime après un échec (requires_input) déjà en revue
+    KycStatus.RENOUVELLEMENT,
+    KycStatus.EXPIRE,
+  ]);
+
+  private static readonly REQUIRES_INPUT_ALLOWED_FROM = new Set<KycStatus>([
+    KycStatus.NON_DEMARRE,
+    KycStatus.EN_COURS,
+    KycStatus.RENOUVELLEMENT,
+    KycStatus.EXPIRE,
+  ]);
+
+  private static readonly PROCESSING_ALLOWED_FROM = new Set<KycStatus>([
+    KycStatus.NON_DEMARRE,
+    KycStatus.RENOUVELLEMENT,
+    KycStatus.EXPIRE,
+  ]);
+
+  /**
+   * Vrai si le statut courant autorise la transition demandée ; sinon log
+   * un warning (event id + statut courant) et retourne false — l'appelant
+   * doit alors `return` immédiatement sans aucun effet de bord.
+   */
+  private isIdentityTransitionAllowed(
+    allowedFrom: ReadonlySet<KycStatus>,
+    currentStatus: KycStatus,
+    eventLabel: string,
+    event: any,
+    userId: number,
+  ): boolean {
+    if (allowedFrom.has(currentStatus)) return true;
+    this.logger.warn(
+      `Identity webhook ${eventLabel}: transition ignorée — statut actuel="${currentStatus}" ` +
+      `non autorisé pour cet event (event=${event.id} userId=${userId}). ` +
+      'Probable event Stripe redélivré/tardif après une décision manuelle — no-op.',
+    );
+    return false;
+  }
+
+  /**
    * Résout userId + dossier KYC associés à une session Stripe Identity.
    * Retourne null (no-op sûr) si userId absent des metadata ou si aucun
    * dossier KYC ne correspond — un event orphelin/tardif (ex. après
@@ -498,13 +565,25 @@ export class PaymentController {
       return;
     }
 
+    if (
+      !this.isIdentityTransitionAllowed(
+        PaymentController.VERIFIED_ALLOWED_FROM,
+        kyc.statut,
+        'verified',
+        event,
+        userId,
+      )
+    ) {
+      return;
+    }
+
     await this.updateKycStatus.execute(userId, KycStatus.VALIDE);
     this.logger.log(`KYC validé automatiquement via Stripe Identity: userId=${userId}`);
 
     this.notificationService.push({
       utilisateurId: userId,
       type: NotificationType.KYC_VALIDE,
-      titre: 'Identité vérifiée ✓',
+      titre: 'Identité vérifiée',
       message: 'Votre vérification d\'identité a été validée. Vous pouvez désormais investir.',
     }).catch(() => {});
 
@@ -578,6 +657,18 @@ export class PaymentController {
     const { userId, kyc } = resolved;
     if (kyc.statut === KycStatus.EN_COURS) return; // idempotent no-op
 
+    if (
+      !this.isIdentityTransitionAllowed(
+        PaymentController.PROCESSING_ALLOWED_FROM,
+        kyc.statut,
+        'processing',
+        event,
+        userId,
+      )
+    ) {
+      return;
+    }
+
     await this.updateKycStatus.execute(userId, KycStatus.EN_COURS);
     this.logger.log(`KYC en cours (photos reçues) via Stripe Identity: userId=${userId}`);
   }
@@ -601,6 +692,18 @@ export class PaymentController {
       this.logger.debug(
         `Identity webhook requires_input: déjà en revue manuelle (idempotent) userId=${userId} session=${session.id}`,
       );
+      return;
+    }
+
+    if (
+      !this.isIdentityTransitionAllowed(
+        PaymentController.REQUIRES_INPUT_ALLOWED_FROM,
+        kyc.statut,
+        'requires_input',
+        event,
+        userId,
+      )
+    ) {
       return;
     }
 
