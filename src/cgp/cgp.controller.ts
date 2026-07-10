@@ -128,7 +128,7 @@ export class CgpController {
     @Param('clientId', ParseIntPipe) clientId: number,
     @CurrentUser() user: ActiveUser,
   ) {
-    if (user.role !== UserRole.CGP && user.role !== UserRole.ADMIN) {
+    if (user.role !== UserRole.CGP && user.role !== UserRole.SUPER_ADMIN) {
       throw new ForbiddenException('Accès refusé.');
     }
 

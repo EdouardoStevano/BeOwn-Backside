@@ -208,7 +208,7 @@ export class SeedService {
    */
   private async isAlreadySeeded(): Promise<boolean> {
     const adminCount = await this.userRepo.count({
-      where: { role: UserRole.ADMIN },
+      where: { role: UserRole.SUPER_ADMIN },
     });
     return adminCount > 0;
   }
@@ -324,7 +324,7 @@ export class SeedService {
         firstname: 'Admin',
         lastname: 'BeOwn',
         email: 'admin@beown.com',
-        role: UserRole.ADMIN,
+        role: UserRole.SUPER_ADMIN,
       },
       {
         firstname: 'Marie',
@@ -355,6 +355,30 @@ export class SeedService {
         lastname: 'DPO',
         email: 'dpo@beown.com',
         role: UserRole.DPO,
+      },
+      {
+        firstname: 'Chloé',
+        lastname: 'CIO',
+        email: 'cio@beown.com',
+        role: UserRole.CIO,
+      },
+      {
+        firstname: 'Marc',
+        lastname: 'Marketing',
+        email: 'marketing@beown.com',
+        role: UserRole.MARKETING,
+      },
+      {
+        firstname: 'Awa',
+        lastname: 'Analyste',
+        email: 'analyste@beown.com',
+        role: UserRole.ANALYSTE_FINANCIER,
+      },
+      {
+        firstname: 'Paul',
+        lastname: 'Relation',
+        email: 'relation@beown.com',
+        role: UserRole.CHARGE_RELATION_INVESTISSEUR,
       },
     ];
 

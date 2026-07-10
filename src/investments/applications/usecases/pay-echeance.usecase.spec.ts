@@ -1,5 +1,6 @@
 import { PayEcheanceUseCase } from './pay-echeance.usecase';
 import { EcheanceStatus } from '../../domains/enums/investment-status.enum';
+import { UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
 
 describe('PayEcheanceUseCase', () => {
   let useCase: PayEcheanceUseCase;
@@ -73,6 +74,17 @@ describe('PayEcheanceUseCase', () => {
       }),
     );
     expect(notificationEvents.echeancePaid).toHaveBeenCalledWith(echeance, project);
+    // Sans adminRole fourni, l'audit retombe sur SUPER_ADMIN (compat legacy)
+    expect(auditLog.create).toHaveBeenCalledWith(
+      '1',
+      UserRole.SUPER_ADMIN,
+      'echeance.pay',
+      'echeance',
+      'e1',
+      undefined,
+      undefined,
+      expect.any(Object),
+    );
   });
 
   it('creates séquestre wallets when they do not exist yet', async () => {
@@ -112,5 +124,35 @@ describe('PayEcheanceUseCase', () => {
   it('rejects if échéance is already PAYE', async () => {
     echeanceRepo.findOne.mockResolvedValue({ id: 'e1', statut: EcheanceStatus.PAYE });
     await expect(useCase.execute('e1', 1)).rejects.toThrow();
+  });
+
+  it('audite avec le rôle réel de l\'acteur (pas SUPER_ADMIN) quand adminRole est fourni', async () => {
+    const project = { id: 'p3', titre: 'Cottage' };
+    const echeance = {
+      id: 'e3',
+      statut: EcheanceStatus.A_VENIR,
+      montantTotal: 20000,
+      montantInterets: 4000,
+      investissementId: 'i3',
+      investissement: { utilisateurId: 9, projet: project, projetId: 'p3' },
+    };
+    echeanceRepo.findOne.mockResolvedValue(echeance);
+    walletRepo.findOne
+      .mockResolvedValueOnce({ id: 'wInv3', solde: 0, devise: 'XOF' }) // investor
+      .mockResolvedValueOnce({ id: 'wIR3', solde: 0, devise: 'XOF' }) // SEQUESTRE_IR
+      .mockResolvedValueOnce({ id: 'wCSG3', solde: 0, devise: 'XOF' }); // SEQUESTRE_CSG
+
+    await useCase.execute('e3', 1, UserRole.CIO);
+
+    expect(auditLog.create).toHaveBeenCalledWith(
+      '1',
+      UserRole.CIO,
+      'echeance.pay',
+      'echeance',
+      'e3',
+      undefined,
+      undefined,
+      expect.any(Object),
+    );
   });
 });

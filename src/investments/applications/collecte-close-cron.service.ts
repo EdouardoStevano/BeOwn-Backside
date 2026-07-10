@@ -69,7 +69,7 @@ export class CollecteCloseCronService {
               type: NotificationType.AUTRE,
               titre: 'Collecte financée — créer l\'échéancier',
               message: `« ${project.titre} » a atteint son objectif minimum (${raised} / min ${minimum}, cible ${target} XOF). Créez l'échéancier emprunteur depuis la fiche projet.`,
-              roles: [UserRole.ADMIN, UserRole.FINANCIER, UserRole.COMPLIANCE],
+              roles: [UserRole.SUPER_ADMIN, UserRole.FINANCIER, UserRole.COMPLIANCE],
               metadata: { projectId: project.id, raised, minimum, target },
             })
             .catch(() => {});
@@ -92,7 +92,7 @@ export class CollecteCloseCronService {
               type: NotificationType.AUTRE,
               titre: 'Collecte échouée — investisseurs remboursés',
               message: `« ${project.titre} » : objectif minimum non atteint (${raised} / min ${minimum} XOF). ${result.refundedCount} investisseur(s) remboursé(s) pour ${result.refundedAmount} XOF. Projet passé en ÉCHEC.`,
-              roles: [UserRole.ADMIN, UserRole.FINANCIER, UserRole.COMPLIANCE],
+              roles: [UserRole.SUPER_ADMIN, UserRole.FINANCIER, UserRole.COMPLIANCE],
               metadata: {
                 projectId: project.id,
                 raised,

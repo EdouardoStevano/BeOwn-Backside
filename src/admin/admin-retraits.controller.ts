@@ -13,7 +13,8 @@ import { ApiBearerAuth, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger'
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
-import { Roles } from 'src/common/auth/roles.decorator';
+import { RequirePermission } from 'src/common/auth/require-permission.decorator';
+import { rolesWithPermission } from 'src/common/auth/permissions.constants';
 import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
 import { UserEntity, UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
@@ -23,13 +24,13 @@ import { TransactionStatus, TransactionType } from 'src/wallets/domains/enums/wa
 import { NotificationEventService } from 'src/notifications/applications/notification-event.service';
 import { AuditLogService } from 'src/notifications/applications/audit-log.service';
 
-const ADMIN_ROLES: string[] = [UserRole.ADMIN, UserRole.FINANCIER];
+const ADMIN_ROLES: string[] = rolesWithPermission('retraits:manage');
 
 @ApiTags('Admin — Retraits')
 @ApiBearerAuth()
 @Controller('admin/retraits')
 @UseGuards(JwtAuthGuard)
-@Roles(UserRole.ADMIN, UserRole.FINANCIER)
+@RequirePermission('retraits:manage')
 export class AdminRetraitsController {
   constructor(
     @InjectRepository(UserEntity)
@@ -78,7 +79,7 @@ export class AdminRetraitsController {
     }
     await this.auditLog.create(
       String(admin.userId),
-      UserRole.ADMIN,
+      admin.role ?? UserRole.SUPER_ADMIN,
       'retrait.process',
       'transaction',
       tx.id,

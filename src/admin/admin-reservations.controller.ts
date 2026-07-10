@@ -21,25 +21,18 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
-import { Roles } from 'src/common/auth/roles.decorator';
+import { RequirePermission } from 'src/common/auth/require-permission.decorator';
+import { rolesWithPermission } from 'src/common/auth/permissions.constants';
 import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
-import {
-  UserEntity,
-  UserRole,
-} from 'src/users/infrastructure/persistences/entities/user.entity';
+import { UserEntity } from 'src/users/infrastructure/persistences/entities/user.entity';
 import { ProjectEntity } from 'src/projects/infrastructure/persistences/entities/project.entity';
 import { ReservationEntity } from 'src/reservations/infrastructure/persistences/entities/reservation.entity';
 import { ReservationStatus } from 'src/reservations/domains/enums/reservation-status.enum';
 import { NotificationService } from 'src/notifications/applications/notification.service';
 import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
 
-const ADMIN_ROLES: string[] = [
-  UserRole.ADMIN,
-  UserRole.SUPPORT,
-  UserRole.COMPLIANCE,
-  UserRole.FINANCIER,
-];
+const ADMIN_ROLES: string[] = rolesWithPermission('reservations:manage');
 
 class CreateReservationAdminDto {
   projectId: string;
@@ -76,7 +69,7 @@ const mapStatus = (s: ReservationStatus): string => {
 @ApiBearerAuth()
 @Controller('admin')
 @UseGuards(JwtAuthGuard)
-@Roles(UserRole.ADMIN, UserRole.SUPPORT, UserRole.COMPLIANCE, UserRole.FINANCIER)
+@RequirePermission('reservations:manage')
 export class AdminReservationsController {
   constructor(
     @InjectRepository(UserEntity)

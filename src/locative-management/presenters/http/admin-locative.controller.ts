@@ -9,10 +9,9 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
-import { Roles } from 'src/common/auth/roles.decorator';
+import { RequirePermission } from 'src/common/auth/require-permission.decorator';
 import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
-import { UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
 import {
   LOYER_ENCAISSE_REPOSITORY,
   type LoyerEncaisseRepository,
@@ -30,7 +29,7 @@ import { RejectDeclarationDto } from '../dto/admin-validate.dto';
 @ApiBearerAuth()
 @Controller('admin/locative')
 @UseGuards(JwtAuthGuard)
-@Roles(UserRole.ADMIN, UserRole.FINANCIER, UserRole.COMPLIANCE)
+@RequirePermission('locatif:manage')
 export class AdminLocativeController {
   constructor(
     @Inject(LOYER_ENCAISSE_REPOSITORY)
@@ -52,7 +51,7 @@ export class AdminLocativeController {
     @Param('id') id: string,
     @CurrentUser() user: ActiveUser,
   ) {
-    return this.validateLoyer.validate(id, user.userId);
+    return this.validateLoyer.validate(id, user.userId, user.role);
   }
 
   @Post('loyers/:id/reject')
@@ -62,7 +61,7 @@ export class AdminLocativeController {
     @Body() dto: RejectDeclarationDto,
     @CurrentUser() user: ActiveUser,
   ) {
-    return this.validateLoyer.reject(id, user.userId, dto.motif);
+    return this.validateLoyer.reject(id, user.userId, dto.motif, user.role);
   }
 
   @Get('charges/pending')
@@ -77,7 +76,7 @@ export class AdminLocativeController {
     @Param('id') id: string,
     @CurrentUser() user: ActiveUser,
   ) {
-    return this.validateCharge.validate(id, user.userId);
+    return this.validateCharge.validate(id, user.userId, user.role);
   }
 
   @Post('charges/:id/reject')
@@ -87,6 +86,6 @@ export class AdminLocativeController {
     @Body() dto: RejectDeclarationDto,
     @CurrentUser() user: ActiveUser,
   ) {
-    return this.validateCharge.reject(id, user.userId, dto.motif);
+    return this.validateCharge.reject(id, user.userId, dto.motif, user.role);
   }
 }

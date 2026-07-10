@@ -166,7 +166,7 @@ export class PaymentController {
         type: NotificationType.DEPOT_CONFIRME,
         titre: 'Dépôt utilisateur',
         message: `User #${user.userId} a déposé ${amountMajor} XOF.`,
-        roles: [UserRole.ADMIN, UserRole.FINANCIER],
+        roles: [UserRole.SUPER_ADMIN, UserRole.FINANCIER],
         metadata: { userId: user.userId, paymentIntentId: dto.paymentIntentId, montant: amountMajor },
       })
       .catch(() => {});
@@ -222,7 +222,7 @@ export class PaymentController {
         type: NotificationType.RETRAIT_TRAITE,
         titre: 'Nouvelle demande de retrait',
         message: `L'utilisateur #${user.userId} a demandé un retrait de ${dto.amount} ${dto.currency} vers ${dto.ibanDestination}.`,
-        roles: [UserRole.ADMIN, UserRole.FINANCIER],
+        roles: [UserRole.SUPER_ADMIN, UserRole.FINANCIER],
         metadata: {
           userId: user.userId,
           transactionId: tx.id,
@@ -523,7 +523,7 @@ export class PaymentController {
             type: NotificationType.KYC_REJETE,
             titre: 'KYC à réviser manuellement',
             message: `L'utilisateur #${userId} attend une révision manuelle de son KYC. Motif : ${motif}`,
-            roles: [UserRole.ADMIN, UserRole.COMPLIANCE, UserRole.RCCI],
+            roles: [UserRole.SUPER_ADMIN, UserRole.COMPLIANCE, UserRole.RCCI],
             metadata: { userId, motif },
           })
           .catch(() => {});

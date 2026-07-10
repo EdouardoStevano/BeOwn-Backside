@@ -87,7 +87,7 @@ export class AmlMonitorService {
         type: NotificationType.SECURITE,
         titre: 'Alerte AML : seuil dépassé',
         message: `User #${ctx.userId} — ${ctx.context} ${ctx.amount.toLocaleString('fr-FR')} (${motif})`,
-        roles: [UserRole.COMPLIANCE, UserRole.RCCI, UserRole.FINANCIER, UserRole.ADMIN],
+        roles: [UserRole.COMPLIANCE, UserRole.RCCI, UserRole.FINANCIER, UserRole.SUPER_ADMIN],
         metadata: {
           userId: ctx.userId,
           amount: ctx.amount,

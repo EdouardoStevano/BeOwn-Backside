@@ -20,10 +20,7 @@ import {
 } from '@nestjs/swagger';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import {
-  UserEntity,
-  UserRole,
-} from 'src/users/infrastructure/persistences/entities/user.entity';
+import { UserEntity } from 'src/users/infrastructure/persistences/entities/user.entity';
 import { CreateProfilPPUseCase } from 'src/profiles/applications/usecases/create-profil-pp.usecase';
 import { CreateKycUseCase } from 'src/profiles/applications/usecases/create-kyc.usecase';
 import { UpdateKycStatusUseCase } from 'src/profiles/applications/usecases/update-kyc-status.usecase';
@@ -43,10 +40,18 @@ import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
 import { UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
+import { RequirePermission } from 'src/common/auth/require-permission.decorator';
+import {
+  hasPermission,
+  rolesWithPermission,
+} from 'src/common/auth/permissions.constants';
 import { NotificationService } from 'src/notifications/applications/notification.service';
 import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
 import { NotificationEventService } from 'src/notifications/applications/notification-event.service';
 import { KycStatus } from 'src/profiles/domains/enums/kyc-status.enum';
+
+/** Rôles détenant `kyc:validate` — Compliance (+ super_admin via wildcard). */
+const KYC_REVIEWER_ROLES: string[] = rolesWithPermission('kyc:validate');
 
 @ApiTags('Profiles & KYC')
 @ApiBearerAuth()
@@ -70,19 +75,21 @@ export class ProfileController {
     private readonly notificationEvents: NotificationEventService,
   ) {}
 
-  /** KYC-status mutation is reserved to admin / compliance / support staff. */
+  /** Défense en profondeur : mutation KYC réservée à `kyc:validate` (Compliance + super_admin). */
   private async assertKycReviewer(user: ActiveUser): Promise<void> {
     const u = await this.userRepo.findOne({ where: { userId: user.userId } });
-    const allowed: string[] = [
-      UserRole.ADMIN,
-      UserRole.SUPPORT,
-      UserRole.COMPLIANCE,
-      UserRole.RCCI,
-    ];
-    if (!u || !allowed.includes(u.role)) {
+    if (!u || !KYC_REVIEWER_ROLES.includes(u.role)) {
       throw new ForbiddenException(
         "Action réservée aux équipes admin / compliance.",
       );
+    }
+  }
+
+  /** Auto-accès (son propre dossier) ou permission kyc:validate. */
+  private assertSelfOrKycReviewer(user: ActiveUser, targetUserId: number): void {
+    if (String(user.userId) === String(targetUserId)) return;
+    if (!hasPermission(user.role, 'kyc:validate')) {
+      throw new ForbiddenException('Accès réservé.');
     }
   }
 
@@ -93,14 +100,20 @@ export class ProfileController {
   createPP(
     @Param('userId', ParseIntPipe) userId: number,
     @Body() dto: CreateProfilPPDto,
+    @CurrentUser() user: ActiveUser,
   ) {
+    this.assertSelfOrKycReviewer(user, userId);
     return this.createProfilPP.execute(userId, dto);
   }
 
   @ApiOperation({ summary: 'Initialiser le dossier KYC' })
   @ApiResponse({ status: 201, description: 'KYC créé' })
   @Post(':userId/kyc')
-  initKyc(@Param('userId', ParseIntPipe) userId: number) {
+  initKyc(
+    @Param('userId', ParseIntPipe) userId: number,
+    @CurrentUser() user: ActiveUser,
+  ) {
+    this.assertSelfOrKycReviewer(user, userId);
     return this.createKyc.execute(userId);
   }
 
@@ -109,6 +122,7 @@ export class ProfileController {
   @ApiResponse({ status: 403, description: 'Réservé aux équipes admin / compliance' })
   @ApiResponse({ status: 404, description: 'KYC introuvable' })
   @HttpCode(HttpStatus.OK)
+  @RequirePermission('kyc:validate')
   @Patch(':userId/kyc/status')
   async patchKycStatus(
     @Param('userId', ParseIntPipe) userId: number,
@@ -181,6 +195,7 @@ export class ProfileController {
 
   @ApiOperation({ summary: 'Lister tous les KYC (admin)' })
   @ApiResponse({ status: 200, description: 'Liste paginée des KYC avec données utilisateur' })
+  @RequirePermission('kyc:validate')
   @Get('kyc/all')
   listAllKyc(
     @Query('page') page?: string,

@@ -100,11 +100,6 @@ export class UpdateUserAdminDto {
   @MinLength(2)
   lastname?: string;
 
-  @ApiPropertyOptional({ example: 'support', enum: ['admin', 'support', 'compliance', 'financier', 'rcci', 'investisseur'] })
-  @IsOptional()
-  @IsString()
-  role?: string;
-
   @ApiPropertyOptional({ example: 'actif', enum: ['actif', 'suspendu', 'clos'] })
   @IsOptional()
   @IsString()

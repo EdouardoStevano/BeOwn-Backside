@@ -18,7 +18,7 @@ import {
 } from '@nestjs/common';
 import { IsEnum } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
-import { UserRole, UserStatus, UserType } from 'src/users/infrastructure/persistences/entities/user.entity';
+import { UserStatus, UserType } from 'src/users/infrastructure/persistences/entities/user.entity';
 import { HASHING_SERVICE } from 'src/common/hashing/hashing.service';
 import type { HashingService } from 'src/common/hashing/hashing.service';
 import { IsString, IsNotEmpty } from 'class-validator';
@@ -38,6 +38,8 @@ import {
 import { UsersService } from 'src/users/applications/users.service';
 import { RegisterDto, UpdateUserDto, UpdateUserAdminDto, UpdatePreferencesDto } from '../dto/user.dto';
 import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
+import { RequirePermission } from 'src/common/auth/require-permission.decorator';
+import { rolesWithPermission } from 'src/common/auth/permissions.constants';
 import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
 import { NotificationEventService } from 'src/notifications/applications/notification-event.service';
@@ -52,13 +54,10 @@ import type { WalletRepository } from 'src/wallets/applications/ports/repositori
 import { WalletType } from 'src/wallets/domains/enums/wallet.enum';
 import { SkipThrottle } from '@nestjs/throttler';
 
-const ADMIN_ROLES: string[] = [
-  UserRole.ADMIN,
-  UserRole.SUPPORT,
-  UserRole.COMPLIANCE,
-  UserRole.FINANCIER,
-  UserRole.RCCI,
-];
+/** Rôles détenant `users:read` — back-office consultation d'un profil tiers. */
+const READ_ROLES: string[] = rolesWithPermission('users:read');
+/** Rôles détenant `users:manage` — back-office mutation d'un profil tiers. */
+const MANAGE_ROLES: string[] = rolesWithPermission('users:manage');
 
 @SkipThrottle()
 @ApiTags('Users')
@@ -82,9 +81,9 @@ export class UserController {
 
   // ─── Helper ───────────────────────────────────────────────────────────────
 
-  private async isAdmin(userId: number): Promise<boolean> {
+  private async hasRole(userId: number, roles: string[]): Promise<boolean> {
     const user = await this.userRepository.findById(userId);
-    return ADMIN_ROLES.includes((user as any)?.role ?? '');
+    return roles.includes((user as any)?.role ?? '');
   }
 
   // ─── Endpoints ────────────────────────────────────────────────────────────
@@ -316,8 +315,8 @@ export class UserController {
     @CurrentUser() currentUser: ActiveUser,
   ) {
     const isSelf = currentUser.userId === id;
-    const admin = isSelf ? false : await this.isAdmin(currentUser.userId);
-    if (!isSelf && !admin) throw new ForbiddenException('Accès refusé.');
+    const canRead = isSelf || (await this.hasRole(currentUser.userId, READ_ROLES));
+    if (!canRead) throw new ForbiddenException('Accès refusé.');
 
     const found = await this.userRepository.findById(id);
     if (!found) throw new NotFoundException('Utilisateur introuvable.');
@@ -336,13 +335,14 @@ export class UserController {
   @ApiResponse({ status: 200, description: 'Utilisateur mis à jour' })
   @ApiResponse({ status: 403, description: 'Accès refusé — rôle admin requis' })
   @ApiResponse({ status: 404, description: 'Utilisateur introuvable' })
+  @RequirePermission('users:manage')
   @Patch(':id')
   async updateById(
     @Param('id', ParseIntPipe) id: number,
     @CurrentUser() currentUser: ActiveUser,
     @Body() dto: UpdateUserAdminDto,
   ) {
-    if (!(await this.isAdmin(currentUser.userId))) {
+    if (!(await this.hasRole(currentUser.userId, MANAGE_ROLES))) {
       throw new ForbiddenException('Accès réservé aux administrateurs.');
     }
     const found = await this.userRepository.findById(id);
@@ -356,10 +356,6 @@ export class UserController {
     if (dto.lastname !== undefined && (dto.lastname ?? null) !== (found.lastname ?? null)) {
       found.lastname = dto.lastname ?? null;
       changed.push('lastname');
-    }
-    if (dto.role !== undefined && dto.role !== (found as any).role) {
-      (found as any).role = dto.role;
-      changed.push('role');
     }
     if (dto.status !== undefined && dto.status !== (found as any).status) {
       (found as any).status = dto.status;

@@ -95,6 +95,7 @@ export class ExecuteSortieUseCase {
   async execute(
     sortieId: string,
     adminUserId?: number,
+    adminRole?: string,
   ): Promise<ExecuteSortieResult> {
     const sortie = await this.sortieRepo.findById(sortieId);
     if (!sortie) throw new NotFoundException('Sortie introuvable.');
@@ -370,7 +371,7 @@ export class ExecuteSortieUseCase {
       await this.auditLog
         .create(
           String(adminUserId),
-          UserRole.ADMIN,
+          adminRole ?? UserRole.SUPER_ADMIN,
           'equity.sortie.execute',
           'sortie_projet',
           sortieId,
