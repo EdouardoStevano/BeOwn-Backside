@@ -1,0 +1,16 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Base commune à tous les environnements (dev / staging / test / production).
+# Aucune ressource ne fixe de namespace ici : c'est l'overlay qui l'injecte
+# (voir overlays/<env>/kustomization.yaml → champ `namespace`).
+# NB : le Secret `beown-backend-secrets` n'est PAS géré ici — il est créé
+# hors-Git dans chaque namespace (voir secrets.example.yaml). Ne jamais
+# committer de vraies valeurs de secrets.
+resources:
+  - configmap.yaml
+  - postgres.yaml
+  - redis.yaml
+  - deployment.yaml
+  - service.yaml
+  - hpa.yaml

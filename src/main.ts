@@ -146,5 +146,6 @@ async function bootstrap() {
 }
 bootstrap().catch((err) => {
   console.error('Application failed to start:', err);
+  console.error('This is a test');
   process.exit(1);
 });

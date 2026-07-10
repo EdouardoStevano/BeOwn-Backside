@@ -3,12 +3,11 @@
 # K3s embarque metrics-server par défaut : les métriques CPU/mémoire
 # sont donc disponibles sans installation supplémentaire.
 # Prérequis : le Deployment cible doit définir resources.requests
-# (déjà le cas dans 05-app.yaml : cpu 250m / memory 256Mi).
+# (déjà le cas dans deployment.yaml : cpu 250m / memory 256Mi).
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
   name: beown-backend-hpa
-  namespace: beown
   labels:
     app: beown-backend
 spec:
