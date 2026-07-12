@@ -5,7 +5,7 @@ import { Readable } from 'stream';
 
 export interface UploadResult {
   objectName: string; // Cloudinary public_id
-  publicUrl: string;  // Cloudinary secure_url (CDN HTTPS)
+  publicUrl: string; // Cloudinary secure_url (CDN HTTPS)
 }
 
 @Injectable()
@@ -44,7 +44,8 @@ export class CloudStorageService implements OnModuleInit {
           overwrite: false,
         },
         (error, result) => {
-          if (error || !result) return reject(error ?? new Error('Upload failed'));
+          if (error || !result)
+            return reject(error ?? new Error('Upload failed'));
           resolve(result);
         },
       );

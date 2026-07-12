@@ -1,6 +1,7 @@
 import {
   IsBoolean,
   IsEmail,
+  IsEnum,
   IsIn,
   IsNotEmpty,
   IsOptional,
@@ -9,6 +10,11 @@ import {
   MinLength,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import {
+  UserRole,
+  UserStatus,
+  UserType,
+} from 'src/users/domains/enums/user.enum';
 
 export class RegisterDto {
   @ApiProperty({ example: 'Jean', minLength: 3 })
@@ -33,6 +39,21 @@ export class RegisterDto {
       'Le mot de passe doit contenir au moins une majuscule, une minuscule, un chiffre et un symbole',
   })
   password: string;
+}
+
+export class DeleteAccountDto {
+  @ApiProperty({
+    description: 'Mot de passe actuel, pour confirmer la suppression',
+  })
+  @IsString()
+  @IsNotEmpty()
+  password: string;
+}
+
+export class SetUserTypeDto {
+  @ApiProperty({ example: 'PP', enum: UserType })
+  @IsEnum(UserType)
+  userType: UserType;
 }
 
 export class UpdateUserDto {
@@ -100,13 +121,13 @@ export class UpdateUserAdminDto {
   @MinLength(2)
   lastname?: string;
 
-  @ApiPropertyOptional({ example: 'support', enum: ['admin', 'support', 'compliance', 'financier', 'rcci', 'investisseur'] })
+  @ApiPropertyOptional({ example: 'support', enum: UserRole })
   @IsOptional()
-  @IsString()
-  role?: string;
+  @IsEnum(UserRole)
+  role?: UserRole;
 
-  @ApiPropertyOptional({ example: 'actif', enum: ['actif', 'suspendu', 'clos'] })
+  @ApiPropertyOptional({ example: 'actif', enum: UserStatus })
   @IsOptional()
-  @IsString()
-  status?: string;
+  @IsEnum(UserStatus)
+  status?: UserStatus;
 }

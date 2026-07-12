@@ -7,8 +7,8 @@ const MIN_SCORE = 0.5;
 
 interface RecaptchaResponse {
   success: boolean;
-  score?: number;       // v3 only
-  action?: string;      // v3 only
+  score?: number; // v3 only
+  action?: string; // v3 only
   'error-codes'?: string[];
 }
 
@@ -41,25 +41,31 @@ export class RecaptchaService {
         body: new URLSearchParams({ secret: this.secret, response: token }),
         signal: AbortSignal.timeout(5000),
       });
-      data = await res.json() as RecaptchaResponse;
+      data = (await res.json()) as RecaptchaResponse;
     } catch (err) {
       this.logger.error('reCAPTCHA network error', err);
       // Fail open only with test key; fail closed in production
       if (!this.isTestKey) {
-        throw new BadRequestException('Service de vérification indisponible. Réessayez dans un instant.');
+        throw new BadRequestException(
+          'Service de vérification indisponible. Réessayez dans un instant.',
+        );
       }
       return;
     }
 
     if (!data.success) {
       this.logger.warn('reCAPTCHA failed', data['error-codes']);
-      throw new BadRequestException('Vérification CAPTCHA échouée. Veuillez réessayer.');
+      throw new BadRequestException(
+        'Vérification CAPTCHA échouée. Veuillez réessayer.',
+      );
     }
 
     // reCAPTCHA v3 score check (v2 tokens don't include a score)
     if (data.score !== undefined && !this.isTestKey && data.score < MIN_SCORE) {
       this.logger.warn(`reCAPTCHA low score: ${data.score}`);
-      throw new BadRequestException('Activité suspecte détectée. Veuillez réessayer.');
+      throw new BadRequestException(
+        'Activité suspecte détectée. Veuillez réessayer.',
+      );
     }
   }
 }

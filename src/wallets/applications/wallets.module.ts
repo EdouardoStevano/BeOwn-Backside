@@ -1,11 +1,10 @@
 import { Module } from '@nestjs/common';
 import { WalletsInfrastructureModule } from '../infrastructure/wallets-infrastructure.module';
 import { WalletController } from '../presenters/http/wallet.controller';
-import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructure.module';
 import { WALLET_REPOSITORY } from './ports/repositories/wallet.repository';
 
 @Module({
-  imports: [WalletsInfrastructureModule, IamInfrastructureModule],
+  imports: [WalletsInfrastructureModule],
   controllers: [WalletController],
   exports: [],
 })

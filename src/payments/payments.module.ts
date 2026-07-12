@@ -8,7 +8,6 @@ import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/w
 import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entities/transaction.entity';
 import { PAYMENT_SERVICE } from './applications/ports/payment.service';
 import { WalletsInfrastructureModule } from 'src/wallets/infrastructure/wallets-infrastructure.module';
-import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructure.module';
 import { ProfilesModule } from 'src/profiles/applications/profiles.module';
 import { CloudStorageModule } from 'src/common/cloud-storage/cloud-storage.module';
 import { NotificationsModule } from 'src/notifications/notifications.module';
@@ -18,7 +17,6 @@ import { NotificationsModule } from 'src/notifications/notifications.module';
     ConfigModule,
     TypeOrmModule.forFeature([WalletEntity, TransactionEntity]),
     WalletsInfrastructureModule,
-    IamInfrastructureModule,
     ProfilesModule,
     CloudStorageModule,
     NotificationsModule,

@@ -6,7 +6,11 @@ export class SignInDto {
   @IsEmail()
   email: string;
 
-  @ApiProperty({ example: 'Password123!', description: 'Mot de passe (8 caractères minimum)', minLength: 8 })
+  @ApiProperty({
+    example: 'Password123!',
+    description: 'Mot de passe (8 caractères minimum)',
+    minLength: 8,
+  })
   @IsNotEmpty()
   @MinLength(8)
   password: string;

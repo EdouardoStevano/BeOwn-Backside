@@ -67,7 +67,9 @@ export class AdminComplianceController {
   }
 
   @Post('pep/:userId')
-  @ApiOperation({ summary: 'Activer ou désactiver le flag PEP sur un utilisateur' })
+  @ApiOperation({
+    summary: 'Activer ou désactiver le flag PEP sur un utilisateur',
+  })
   async setPep(
     @Param('userId') userIdStr: string,
     @Body() dto: SetPepFlagDto,

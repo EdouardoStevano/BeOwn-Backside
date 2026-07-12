@@ -3,7 +3,6 @@ import { FiscaliteInfrastructureModule } from '../infrastructure/fiscalite-infra
 import { DistributionsInfrastructureModule } from 'src/distributions/infrastructure/distributions-infrastructure.module';
 import { InvestmentsInfrastructureModule } from 'src/investments/infrastructure/investments-infrastructure.module';
 import { UsersInfrastructureModule } from 'src/users/infrastructure/users-infrastructure.module';
-import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructure.module';
 import { GenerateInvestisseurIfuUseCase } from './usecases/generate-investisseur-ifu.usecase';
 import { IfuPdfService } from './ifu-pdf.service';
 import { IfuCronService } from './ifu-cron.service';
@@ -16,7 +15,6 @@ import { AdminFiscaliteController } from '../presenters/http/admin-fiscalite.con
     DistributionsInfrastructureModule,
     InvestmentsInfrastructureModule,
     UsersInfrastructureModule,
-    IamInfrastructureModule,
   ],
   controllers: [InvestisseurFiscaliteController, AdminFiscaliteController],
   providers: [

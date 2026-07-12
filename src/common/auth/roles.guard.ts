@@ -7,7 +7,7 @@ import {
 import { Reflector } from '@nestjs/core';
 import { ROLES_KEY } from './roles.decorator';
 import { IS_PUBLIC_KEY } from './public.decorator';
-import { UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
+import { UserRole } from 'src/users/domains/enums/user.enum';
 
 @Injectable()
 export class RolesGuard implements CanActivate {

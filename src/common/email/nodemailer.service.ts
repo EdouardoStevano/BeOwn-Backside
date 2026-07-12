@@ -81,10 +81,14 @@ export class NodemailerMailService implements EmailService {
     });
   }
 
-  async sendKycRejectedEmail(email: string, prenom: string, motif?: string): Promise<void> {
+  async sendKycRejectedEmail(
+    email: string,
+    prenom: string,
+    motif?: string,
+  ): Promise<void> {
     await this.mailerService.sendMail({
       to: email,
-      subject: 'Vérification d\'identité — mise à jour requise',
+      subject: "Vérification d'identité — mise à jour requise",
       template: 'kyc-rejected',
       context: { prenom, motif: motif ?? 'Documents non conformes' },
     });
@@ -129,21 +133,35 @@ export class NodemailerMailService implements EmailService {
     });
   }
 
-  async sendDepotConfirmedEmail(email: string, prenom: string, montant: number): Promise<void> {
+  async sendDepotConfirmedEmail(
+    email: string,
+    prenom: string,
+    montant: number,
+  ): Promise<void> {
     await this.mailerService.sendMail({
       to: email,
       subject: 'Dépôt confirmé sur votre compte BeOwn',
       template: 'depot-confirmed',
-      context: { prenom, montant: new Intl.NumberFormat('fr-FR').format(montant) },
+      context: {
+        prenom,
+        montant: new Intl.NumberFormat('fr-FR').format(montant),
+      },
     });
   }
 
-  async sendRetraitProcessedEmail(email: string, prenom: string, montant: number): Promise<void> {
+  async sendRetraitProcessedEmail(
+    email: string,
+    prenom: string,
+    montant: number,
+  ): Promise<void> {
     await this.mailerService.sendMail({
       to: email,
       subject: 'Votre retrait est en cours de traitement',
       template: 'retrait-processed',
-      context: { prenom, montant: new Intl.NumberFormat('fr-FR').format(montant) },
+      context: {
+        prenom,
+        montant: new Intl.NumberFormat('fr-FR').format(montant),
+      },
     });
   }
 }

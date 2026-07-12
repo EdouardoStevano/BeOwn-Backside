@@ -7,15 +7,16 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import {
-  TOKEN_SERVICE,
-  type TokenService,
-} from 'src/iam/domains/ports/token.service';
+  ACCESS_TOKEN_VERIFIER,
+  type AccessTokenVerifier,
+} from './ports/access-token-verifier.port';
 import { IS_PUBLIC_KEY } from '../auth/public.decorator';
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
   constructor(
-    @Inject(TOKEN_SERVICE) private readonly tokenService: TokenService,
+    @Inject(ACCESS_TOKEN_VERIFIER)
+    private readonly accessTokenVerifier: AccessTokenVerifier,
     private readonly reflector: Reflector,
   ) {}
 
@@ -34,7 +35,7 @@ export class JwtAuthGuard implements CanActivate {
     }
 
     try {
-      const payload = await this.tokenService.verifyAccessToken(token);
+      const payload = await this.accessTokenVerifier.verifyAccessToken(token);
       request.user = {
         userId: payload.sub,
         email: payload.email,

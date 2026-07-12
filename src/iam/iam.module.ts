@@ -1,30 +1,22 @@
-import { Module, forwardRef } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { IamInfrastructureModule } from './infrastructure/iam-infrastructure.module';
-import { AuthenticationModule } from './applications/authentication/application/authentication.module';
-import { OtpModule } from './applications/authentication/application/otp.module';
-import { UsersInfrastructureModule } from 'src/users/infrastructure/users-infrastructure.module';
-import { VerifyEmailService } from './applications/verify-email/verify-email.service';
-import { VerifyEmailController } from './applications/verify-email/verify-email.controller';
-import { SMS_SERVICE } from 'src/common/sms/sms.service';
-import { TwilioSmsService } from 'src/common/sms/twilio-sms.service';
-import { EMAIL_SERVICE } from 'src/common/email/email.service';
-import { NodemailerMailService } from 'src/common/email/nodemailer.service';
-import { ConfigModule } from '@nestjs/config';
+import { AuthenticationModule } from './application/authentication/authentication.module';
+import { OtpModule } from './application/otp/otp.module';
+import { EmailVerificationModule } from './application/email-verification/email-verification.module';
 
+/**
+ * Racine du contexte IAM : les adapters d'un côté, les trois familles de use
+ * cases de l'autre (authentification, OTP, vérification d'email).
+ *
+ * Plus de forwardRef : le cycle avec OtpModule n'existait que pour propager
+ * SMS_SERVICE, désormais fourni globalement par SmsModule.
+ */
 @Module({
   imports: [
     IamInfrastructureModule,
     AuthenticationModule,
-    forwardRef(() => OtpModule),
-    UsersInfrastructureModule,
-    ConfigModule,
+    OtpModule,
+    EmailVerificationModule,
   ],
-  providers: [
-    VerifyEmailService,
-    { provide: SMS_SERVICE, useClass: TwilioSmsService },
-    { provide: EMAIL_SERVICE, useClass: NodemailerMailService },
-  ],
-  controllers: [VerifyEmailController],
-  exports: [SMS_SERVICE, IamInfrastructureModule],
 })
 export class IamModule {}

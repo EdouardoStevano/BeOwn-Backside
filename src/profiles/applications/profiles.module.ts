@@ -13,7 +13,6 @@ import { SaveQuestionnaireUseCase } from './usecases/save-questionnaire.usecase'
 import { QuestionnaireAdequationEntity } from '../infrastructure/persistences/entities/questionnaire-adequation.entity';
 import { ProfilPPEntity } from '../infrastructure/persistences/entities/profil-pp.entity';
 import { UserEntity } from 'src/users/infrastructure/persistences/entities/user.entity';
-import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructure.module';
 import { NotificationsModule } from 'src/notifications/notifications.module';
 import { RiskScoringService } from './risk-scoring.service';
 import { BeneficiaireEffectifEntity } from '../infrastructure/persistences/entities/beneficiaire-effectif.entity';
@@ -23,7 +22,6 @@ import { BeneficiaireEffectifController } from '../presenters/http/beneficiaire-
 @Module({
   imports: [
     ProfilesInfrastructureModule,
-    IamInfrastructureModule,
     NotificationsModule,
     TypeOrmModule.forFeature([QuestionnaireAdequationEntity, ProfilPPEntity, UserEntity, BeneficiaireEffectifEntity, ProfilPMEntity]),
   ],

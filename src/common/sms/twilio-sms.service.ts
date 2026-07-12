@@ -23,10 +23,7 @@ export class TwilioSmsService implements SmsService {
     );
   }
 
-  async sendTransactional(
-    phoneNumber: string,
-    message: string,
-  ): Promise<void> {
+  async sendTransactional(phoneNumber: string, message: string): Promise<void> {
     try {
       const result = await this.client.messages.create({
         body: message,

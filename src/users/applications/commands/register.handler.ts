@@ -1,42 +1,23 @@
-import { ConflictException, Inject } from '@nestjs/common';
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
-import { UserFactory } from 'src/users/domains/factories/user.factory';
-import {
-  USER_REPOSITORY,
-  type UserRepository,
-} from '../ports/repositories/user.repository';
-import { User } from 'src/users/domains/user';
-import { NotificationEventService } from 'src/notifications/applications/notification-event.service';
+import { UsersAccountService } from '../services/user-account.service';
+import { PublicUserView } from '../contracts/user-account.contract';
 import { RegisterCommand } from './register.command';
 
+/**
+ * Point d'entrée CQRS de l'inscription. La règle (unicité de l'email, hachage,
+ * notification) vit dans UsersAccountService, que les autres contextes appellent
+ * aussi par le contrat publié : les deux chemins partagent le même code.
+ */
 @CommandHandler(RegisterCommand)
 export class RegisterHandler implements ICommandHandler<RegisterCommand> {
-  constructor(
-    private readonly userFactory: UserFactory,
-    @Inject(USER_REPOSITORY)
-    private readonly userRepository: UserRepository,
-    private readonly notificationEvents: NotificationEventService,
-  ) {}
+  constructor(private readonly userAccountService: UsersAccountService) {}
 
-  async execute(command: RegisterCommand): Promise<User> {
-    const existing = await this.userRepository.findByEmail(command.email);
-    if (existing) {
-      throw new ConflictException('Un compte avec cette email existe déjà.');
-    }
-
-    const user = await this.userFactory.create({
+  execute(command: RegisterCommand): Promise<PublicUserView> {
+    return this.userAccountService.register({
       firstname: command.firstname,
       lastname: command.lastname,
       email: command.email,
       password: command.password,
-      socialId: null,
     });
-
-    const savedUser = await this.userRepository.save(user);
-
-    const fullUser = await this.userRepository.findById(savedUser.userId);
-    if (fullUser) this.notificationEvents.userRegistered(fullUser);
-
-    return savedUser;
   }
 }

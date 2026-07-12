@@ -10,38 +10,18 @@ import {
 } from 'typeorm';
 import { UserEmailEntity } from './user-email.entity';
 import { TFAMethodEntity } from './tfa-method.entity';
+import {
+  RegimeFiscal,
+  UserRole,
+  UserStatus,
+  UserType,
+} from 'src/users/domains/enums/user.enum';
 
-export enum UserRole {
-  INVESTISSEUR = 'investisseur',
-  PORTEUR = 'porteur',
-  ADMIN = 'admin',
-  SUPPORT = 'support',
-  COMPLIANCE = 'compliance',
-  DPO = 'dpo',
-  RCCI = 'rcci',
-  FINANCIER = 'financier',
-  CGP = 'cgp',
-}
-
-export enum UserStatus {
-  CREE = 'cree',
-  EMAIL_VERIFIE = 'email_verifie',
-  ACTIF = 'actif',
-  SUSPENDU = 'suspendu',
-  CLOS = 'clos',
-  SUPPRIME = 'supprime',
-}
-
-export enum UserType {
-  PP = 'PP',
-  PM = 'PM',
-}
-
-export enum RegimeFiscal {
-  PFU = 'PFU',
-  BAREME = 'BAREME',
-  DISPENSE = 'DISPENSE',
-}
+// Ces enums appartiennent au domaine (src/users/domains/enums/user.enum.ts).
+// On les ré-exporte ici pour ne pas casser les nombreux modules qui les
+// importaient historiquement depuis l'entité ; le nouveau code doit importer
+// depuis le domaine.
+export { RegimeFiscal, UserRole, UserStatus, UserType };
 
 @Entity('users')
 export class UserEntity {

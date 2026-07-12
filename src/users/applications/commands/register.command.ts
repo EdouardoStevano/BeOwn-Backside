@@ -1,7 +1,7 @@
 import { Command } from '@nestjs/cqrs';
-import { User } from 'src/users/domains/user';
+import { PublicUserView } from '../contracts/user-account.contract';
 
-export class RegisterCommand extends Command<User> {
+export class RegisterCommand extends Command<PublicUserView> {
   constructor(
     public readonly firstname: string,
     public readonly lastname: string | null,

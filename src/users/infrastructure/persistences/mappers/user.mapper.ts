@@ -23,16 +23,19 @@ export class UserMapper {
     user.password = entity.password;
     user.role = entity.role;
     user.status = entity.status;
+    user.userType = entity.userType;
+    user.regimeFiscal = entity.regimeFiscal;
     user.cguAccepteesLe = entity.cguAccepteesLe;
     user.lastLoginAt = entity.lastLoginAt;
     user.createdAt = entity.createdAt;
     user.updatedAt = entity.updatedAt;
 
     if (entity.userEmail) {
-      const vo = new UserEmail(entity.userEmail.email);
-      vo.isVerified = entity.userEmail.isVerified;
-      vo.verifiedDate = entity.userEmail.verifiedDate;
-      user.userEmail = vo;
+      user.userEmail = UserEmail.restore(
+        entity.userEmail.email,
+        entity.userEmail.isVerified,
+        entity.userEmail.verifiedDate,
+      );
     }
 
     if (entity.tfaMethods) {
@@ -48,7 +51,18 @@ export class UserMapper {
     entity.firstname = domain.firstname;
     entity.lastname = domain.lastname;
     entity.socialId = domain.socialId;
+
+    // `undefined` est volontaire, pas une omission : TypeORM ignore les colonnes
+    // undefined lors d'un save(). C'est ce qui évite d'écraser le hash du mot de
+    // passe quand l'agrégat a été chargé sans lui (colonne `select: false`), ou
+    // d'écraser un défaut SQL sur un utilisateur qui vient d'être créé.
     entity.password = domain.password;
+    entity.role = domain.role;
+    entity.status = domain.status;
+    entity.userType = domain.userType;
+    entity.regimeFiscal = domain.regimeFiscal;
+    entity.cguAccepteesLe = domain.cguAccepteesLe;
+    entity.lastLoginAt = domain.lastLoginAt;
 
     if (domain.userEmail) {
       const emailEntity = new UserEmailEntity();

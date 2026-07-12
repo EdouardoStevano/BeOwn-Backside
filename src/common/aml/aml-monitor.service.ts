@@ -20,13 +20,22 @@ import { UserRole } from 'src/users/infrastructure/persistences/entities/user.en
  * d'un vrai vendor AML (SumSub, Veriff, ComplyAdvantage) viendra en Phase 11.
  */
 
-const AML_THRESHOLD_SINGLE = Number(process.env.AML_THRESHOLD_SINGLE ?? 10_000_000); // XOF
-const AML_THRESHOLD_MONTHLY = Number(process.env.AML_THRESHOLD_MONTHLY ?? 50_000_000);
+const AML_THRESHOLD_SINGLE = Number(
+  process.env.AML_THRESHOLD_SINGLE ?? 10_000_000,
+); // XOF
+const AML_THRESHOLD_MONTHLY = Number(
+  process.env.AML_THRESHOLD_MONTHLY ?? 50_000_000,
+);
 
 export interface AmlContext {
   userId: number;
   amount: number;
-  context: 'souscription' | 'distribution' | 'sortie' | 'retrait' | 'marche-secondaire';
+  context:
+    | 'souscription'
+    | 'distribution'
+    | 'sortie'
+    | 'retrait'
+    | 'marche-secondaire';
   reference?: string; // ID de la transaction concernée
   cumulMensuel?: number;
 }
@@ -49,10 +58,7 @@ export class AmlMonitorService {
     if (ctx.amount > AML_THRESHOLD_SINGLE) {
       alerts.push(`single>${AML_THRESHOLD_SINGLE}`);
     }
-    if (
-      ctx.cumulMensuel != null &&
-      ctx.cumulMensuel > AML_THRESHOLD_MONTHLY
-    ) {
+    if (ctx.cumulMensuel != null && ctx.cumulMensuel > AML_THRESHOLD_MONTHLY) {
       alerts.push(`monthly>${AML_THRESHOLD_MONTHLY}`);
     }
 
@@ -87,7 +93,12 @@ export class AmlMonitorService {
         type: NotificationType.SECURITE,
         titre: 'Alerte AML : seuil dépassé',
         message: `User #${ctx.userId} — ${ctx.context} ${ctx.amount.toLocaleString('fr-FR')} (${motif})`,
-        roles: [UserRole.COMPLIANCE, UserRole.RCCI, UserRole.FINANCIER, UserRole.ADMIN],
+        roles: [
+          UserRole.COMPLIANCE,
+          UserRole.RCCI,
+          UserRole.FINANCIER,
+          UserRole.ADMIN,
+        ],
         metadata: {
           userId: ctx.userId,
           amount: ctx.amount,

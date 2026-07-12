@@ -3,7 +3,6 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { SecondaryMarketInfrastructureModule } from '../infrastructure/secondary-market-infrastructure.module';
 import { SecondaryMarketController } from '../presenters/http/secondary-market.controller';
 import { YouSignWebhookController } from '../presenters/http/yousign-webhook.controller';
-import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructure.module';
 import { NotificationsModule } from 'src/notifications/notifications.module';
 import { CloudStorageModule } from 'src/common/cloud-storage/cloud-storage.module';
 import { YouSignModule } from 'src/common/yousign/yousign.module';
@@ -22,7 +21,6 @@ import { UsersInfrastructureModule } from 'src/users/infrastructure/users-infras
   imports: [
     TypeOrmModule.forFeature([KycEntity, ProjectEntity, UserEntity, InvestmentEntity]),
     SecondaryMarketInfrastructureModule,
-    IamInfrastructureModule,
     NotificationsModule,
     CloudStorageModule,
     YouSignModule,

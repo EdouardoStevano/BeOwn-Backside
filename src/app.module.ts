@@ -1,5 +1,9 @@
 import { Module } from '@nestjs/common';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_FILTER, APP_GUARD } from '@nestjs/core';
+import { DomainExceptionFilter } from './common/presenters/domain-exception.filter';
+import { HashingModule } from './common/hashing/hashing.module';
+import { EmailModule } from './common/email/email.module';
+import { SmsModule } from './common/sms/sms.module';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule } from '@nestjs/config';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
@@ -96,6 +100,11 @@ function requireEnv(name: string): string {
         },
       }),
     }),
+    // Modules globaux : un seul binding pour chaque port partagé, au lieu d'un
+    // re-binding dans chaque module qui en avait besoin.
+    HashingModule,
+    EmailModule,
+    SmsModule,
     IamInfrastructureModule,
     UsersModule,
     IamModule,
@@ -124,6 +133,9 @@ function requireEnv(name: string): string {
     { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
+    // Traduit les erreurs métier en réponses HTTP. `@Catch(DomainError)` : les
+    // HttpException des modules non encore migrés restent gérées par Nest.
+    { provide: APP_FILTER, useClass: DomainExceptionFilter },
   ],
 })
 export class AppModule {}

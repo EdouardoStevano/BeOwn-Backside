@@ -6,7 +6,6 @@ import { ProjectsInfrastructureModule } from 'src/projects/infrastructure/projec
 import { InvestmentsInfrastructureModule } from 'src/investments/infrastructure/investments-infrastructure.module';
 import { NotificationsModule } from 'src/notifications/notifications.module';
 import { AmlModule } from 'src/common/aml/aml.module';
-import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructure.module';
 import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/wallet.entity';
 import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entities/transaction.entity';
 import { CalculateDistributionPeriodeUseCase } from './usecases/calculate-distribution-periode.usecase';
@@ -25,7 +24,6 @@ import { InvestisseurDistributionsController } from '../presenters/http/investis
     InvestmentsInfrastructureModule,
     NotificationsModule,
     AmlModule,
-    IamInfrastructureModule,
     TypeOrmModule.forFeature([WalletEntity, TransactionEntity]),
   ],
   controllers: [

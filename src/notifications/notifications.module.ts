@@ -11,12 +11,10 @@ import { NotificationController } from './presenters/http/notification.controlle
 import { AuditLogService } from './applications/audit-log.service';
 import { AuditLogController } from './presenters/http/audit-log.controller';
 import { NotificationGateway } from './presenters/ws/notification.gateway';
-import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructure.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([NotificationEntity, AuditLogEntity, UserEntity]),
-    IamInfrastructureModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: (config: ConfigService) => ({

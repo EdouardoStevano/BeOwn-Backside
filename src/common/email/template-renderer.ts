@@ -3,7 +3,13 @@ import { join } from 'path';
 import * as Handlebars from 'handlebars';
 
 // Same location as the MailerModule template dir configured in app.module.ts.
-const TEMPLATES_DIR = join(process.cwd(), 'src', 'common', 'email', 'templates');
+const TEMPLATES_DIR = join(
+  process.cwd(),
+  'src',
+  'common',
+  'email',
+  'templates',
+);
 
 const cache = new Map<string, Handlebars.TemplateDelegate>();
 

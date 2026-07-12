@@ -12,6 +12,9 @@ export default registerAs('jwt', () => {
     emailTokenTtl: parseInt(process.env.JWT_TOKEN_EMAIL_TTL ?? '86400', 10),
     // Volontairement court : un lien de reset est bien plus sensible qu'un lien
     // de confirmation d'email. 30 minutes par défaut.
-    passwordResetTtl: parseInt(process.env.JWT_PASSWORD_RESET_TTL ?? '1800', 10),
+    passwordResetTtl: parseInt(
+      process.env.JWT_PASSWORD_RESET_TTL ?? '1800',
+      10,
+    ),
   };
 });

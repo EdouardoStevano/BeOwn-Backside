@@ -14,7 +14,6 @@ import { TopUpInvestmentUseCase } from './usecases/top-up-investment.usecase';
 import { InitiateInvestmentUseCase } from './usecases/initiate-investment.usecase';
 import { CancelInvestmentUseCase } from './usecases/cancel-investment.usecase';
 import { InvestmentController } from '../presenters/http/investment.controller';
-import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructure.module';
 import { NotificationsModule } from 'src/notifications/notifications.module';
 import { ProjectEntity } from 'src/projects/infrastructure/persistences/entities/project.entity';
 import { InvestmentEntity } from 'src/investments/infrastructure/persistences/entities/investment.entity';
@@ -49,7 +48,6 @@ import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entit
       TransactionEntity,
     ]),
     InvestmentsInfrastructureModule,
-    IamInfrastructureModule,
     ProjectsInfrastructureModule,
     WalletsInfrastructureModule,
     DocumentsInfrastructureModule,
