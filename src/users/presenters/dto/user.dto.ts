@@ -108,6 +108,19 @@ export class UpdatePreferencesDto {
   preferredCurrency?: string;
 }
 
+export class UpdateLanguePreferenceDto {
+  @ApiProperty({ example: 'fr', enum: ['fr', 'en', 'ar'] })
+  @IsString()
+  @IsIn(['fr', 'en', 'ar'])
+  value: string;
+}
+
+export class TogglePreferenceDto {
+  @ApiProperty({ example: true })
+  @IsBoolean()
+  value: boolean;
+}
+
 export class UpdateUserAdminDto {
   @ApiPropertyOptional({ example: 'Jean' })
   @IsOptional()

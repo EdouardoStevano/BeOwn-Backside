@@ -27,6 +27,8 @@ import {
   DeleteAccountDto,
   RegisterDto,
   SetUserTypeDto,
+  TogglePreferenceDto,
+  UpdateLanguePreferenceDto,
   UpdatePreferencesDto,
   UpdateUserAdminDto,
   UpdateUserDto,
@@ -107,70 +109,76 @@ export class UserController {
   }
 
   @ApiOperation({ summary: 'Changer la langue' })
+  @ApiResponse({ status: 200, description: 'Langue mise à jour' })
   @Patch('me/preferences/langue')
   updateLangue(
     @CurrentUser() user: ActiveUser,
-    @Body() body: { value: string },
+    @Body() dto: UpdateLanguePreferenceDto,
   ) {
     return this.commandBus.execute(
-      new UpdatePreferencesCommand(user.userId, { langue: body.value }),
+      new UpdatePreferencesCommand(user.userId, { langue: dto.value }),
     );
   }
 
   @ApiOperation({ summary: 'Basculer le masquage des montants sensibles' })
+  @ApiResponse({ status: 200, description: 'Préférence mise à jour' })
   @Patch('me/preferences/masquer-montants')
   toggleMasquerMontants(
     @CurrentUser() user: ActiveUser,
-    @Body() body: { value: boolean },
+    @Body() dto: TogglePreferenceDto,
   ) {
     return this.commandBus.execute(
       new UpdatePreferencesCommand(user.userId, {
-        masquerMontants: body.value,
+        masquerMontants: dto.value,
       }),
     );
   }
 
   @ApiOperation({ summary: 'Basculer les notifications email' })
+  @ApiResponse({ status: 200, description: 'Préférence mise à jour' })
   @Patch('me/preferences/notif-email')
   toggleNotifEmail(
     @CurrentUser() user: ActiveUser,
-    @Body() body: { value: boolean },
+    @Body() dto: TogglePreferenceDto,
   ) {
     return this.commandBus.execute(
-      new UpdatePreferencesCommand(user.userId, { notifEmail: body.value }),
+      new UpdatePreferencesCommand(user.userId, { notifEmail: dto.value }),
     );
   }
 
   @ApiOperation({ summary: 'Basculer les notifications SMS' })
+  @ApiResponse({ status: 200, description: 'Préférence mise à jour' })
   @Patch('me/preferences/notif-sms')
   toggleNotifSms(
     @CurrentUser() user: ActiveUser,
-    @Body() body: { value: boolean },
+    @Body() dto: TogglePreferenceDto,
   ) {
     return this.commandBus.execute(
-      new UpdatePreferencesCommand(user.userId, { notifSms: body.value }),
+      new UpdatePreferencesCommand(user.userId, { notifSms: dto.value }),
     );
   }
 
   @ApiOperation({ summary: 'Basculer les emails marketing' })
+  @ApiResponse({ status: 200, description: 'Préférence mise à jour' })
   @Patch('me/preferences/notif-marketing')
   toggleNotifMarketing(
     @CurrentUser() user: ActiveUser,
-    @Body() body: { value: boolean },
+    @Body() dto: TogglePreferenceDto,
   ) {
     return this.commandBus.execute(
       new UpdatePreferencesCommand(user.userId, {
-        notifMarketing: body.value,
+        notifMarketing: dto.value,
       }),
     );
   }
 
   @ApiOperation({ summary: 'Basculer la double authentification' })
+  @ApiResponse({ status: 200, description: 'Préférence mise à jour' })
   @Patch('me/preferences/tfa')
-  toggleTfa(@CurrentUser() user: ActiveUser, @Body() body: { value: boolean }) {
+  toggleTfa(@CurrentUser() user: ActiveUser, @Body() dto: TogglePreferenceDto) {
     return this.commandBus.execute(
       new UpdatePreferencesCommand(user.userId, {
-        twoFactorEnabled: body.value,
+        twoFactorEnabled: dto.value,
       }),
     );
   }
