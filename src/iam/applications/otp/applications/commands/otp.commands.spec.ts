@@ -5,7 +5,7 @@ import {
   InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
-import { MailerService } from '@nestjs-modules/mailer';
+import { EMAIL_SERVICE } from 'src/common/email/email.service';
 import { OTP_SERVICE } from '../ports/otp.service';
 import { SMS_SERVICE } from 'src/common/sms/sms.service';
 import { USER_REPOSITORY } from 'src/users/applications/ports/repositories/user.repository';
@@ -35,7 +35,7 @@ describe('otp commands via CommandBus', () => {
     verifyTotp: jest.fn(),
   };
   const userRepository = { findByEmail: jest.fn() };
-  const mailerService = { sendMail: jest.fn() };
+  const emailService = { sendOtpEmail: jest.fn() };
   const smsService = { sendOtp: jest.fn() };
 
   const knownUser = { userId: 1, userEmail: { email: 'a@b.com' } };
@@ -54,7 +54,7 @@ describe('otp commands via CommandBus', () => {
         { provide: OTP_SERVICE, useValue: otpService },
         { provide: USER_REPOSITORY, useValue: userRepository },
         { provide: SMS_SERVICE, useValue: smsService },
-        { provide: MailerService, useValue: mailerService },
+        { provide: EMAIL_SERVICE, useValue: emailService },
       ],
     }).compile();
     await moduleRef.init();
@@ -62,7 +62,7 @@ describe('otp commands via CommandBus', () => {
   });
 
   describe('SendEmailOtpCommand', () => {
-    it('mails the generated code to a known user', async () => {
+    it('mails the generated code to a known user via the email port', async () => {
       userRepository.findByEmail.mockResolvedValue(knownUser);
       otpService.hasActiveOtp.mockResolvedValue(false);
       otpService.generateOtp.mockResolvedValue('123456');
@@ -70,8 +70,10 @@ describe('otp commands via CommandBus', () => {
       await commandBus.execute(new SendEmailOtpCommand('a@b.com'));
 
       expect(otpService.generateOtp).toHaveBeenCalledWith('otp:email:a@b.com');
-      expect(mailerService.sendMail).toHaveBeenCalledWith(
-        expect.objectContaining({ to: 'a@b.com' }),
+      expect(emailService.sendOtpEmail).toHaveBeenCalledWith(
+        'a@b.com',
+        '123456',
+        '5 minutes',
       );
     });
 
@@ -95,7 +97,7 @@ describe('otp commands via CommandBus', () => {
       userRepository.findByEmail.mockResolvedValue(knownUser);
       otpService.hasActiveOtp.mockResolvedValue(false);
       otpService.generateOtp.mockResolvedValue('123456');
-      mailerService.sendMail.mockRejectedValue(new Error('smtp down'));
+      emailService.sendOtpEmail.mockRejectedValue(new Error('smtp down'));
 
       await expect(
         commandBus.execute(new SendEmailOtpCommand('a@b.com')),

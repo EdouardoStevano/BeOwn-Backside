@@ -6,14 +6,17 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
-import { MailerService } from '@nestjs-modules/mailer';
+import {
+  EMAIL_SERVICE,
+  type EmailService,
+} from 'src/common/email/email.service';
 import { OTP_SERVICE, type OtpService } from '../ports/otp.service';
 import {
   USER_REPOSITORY,
   type UserRepository,
 } from 'src/users/applications/ports/repositories/user.repository';
 import { SendEmailOtpCommand } from './send-email-otp.command';
-import { emailOtpKey } from './otp-keys';
+import { emailOtpKey, otpExpiryLabel } from './otp-keys';
 
 @CommandHandler(SendEmailOtpCommand)
 export class SendEmailOtpHandler implements ICommandHandler<SendEmailOtpCommand> {
@@ -22,7 +25,7 @@ export class SendEmailOtpHandler implements ICommandHandler<SendEmailOtpCommand>
   constructor(
     @Inject(OTP_SERVICE) private readonly otpService: OtpService,
     @Inject(USER_REPOSITORY) private readonly userRepository: UserRepository,
-    private readonly mailerService: MailerService,
+    @Inject(EMAIL_SERVICE) private readonly emailService: EmailService,
   ) {}
 
   async execute(command: SendEmailOtpCommand): Promise<void> {
@@ -42,11 +45,7 @@ export class SendEmailOtpHandler implements ICommandHandler<SendEmailOtpCommand>
     const otp = await this.otpService.generateOtp(key);
 
     try {
-      await this.mailerService.sendMail({
-        to: email,
-        subject: 'Votre code de vérification BeOwn',
-        text: `Votre code de vérification est : ${otp}\nCe code est valable ${process.env.OTP_TTL ?? 300} secondes.`,
-      });
+      await this.emailService.sendOtpEmail(email, otp, otpExpiryLabel());
     } catch (err) {
       // Si l'envoi échoue, on invalide l'OTP en cache pour permettre
       // une nouvelle tentative immédiate (sinon l'utilisateur reste

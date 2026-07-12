@@ -10,6 +10,8 @@ import { SendSmsOtpHandler } from 'src/iam/applications/otp/applications/command
 import { VerifySmsOtpHandler } from 'src/iam/applications/otp/applications/commands/verify-sms-otp.handler';
 import { OtpController } from 'src/iam/presenters/otp/http/otp.controller';
 import { IamModule } from 'src/iam/iam.module';
+import { EMAIL_SERVICE } from 'src/common/email/email.service';
+import { NodemailerMailService } from 'src/common/email/nodemailer.service';
 
 const CommandHandlers = [
   SendEmailOtpHandler,
@@ -27,7 +29,10 @@ const CommandHandlers = [
     UsersInfrastructureModule,
     forwardRef(() => IamModule),
   ],
-  providers: [...CommandHandlers],
+  providers: [
+    ...CommandHandlers,
+    { provide: EMAIL_SERVICE, useClass: NodemailerMailService },
+  ],
   controllers: [OtpController],
 })
 export class OtpModule {}

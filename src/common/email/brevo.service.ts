@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { EmailService } from './email.service';
+import { renderTemplate } from './template-renderer';
 
 @Injectable()
 export class BrevoEmailService implements EmailService {
@@ -30,6 +31,18 @@ export class BrevoEmailService implements EmailService {
       email,
       'Votre code de connexion BeOwn',
       `<p>Votre code de vérification : <strong>${otp}</strong></p><p>Ce code expire dans 5 minutes.</p>`,
+    );
+  }
+
+  async sendOtpEmail(
+    email: string,
+    otp: string,
+    expiresIn: string,
+  ): Promise<void> {
+    await this.send(
+      email,
+      'Votre code de vérification BeOwn',
+      renderTemplate('otp-code', { otp, expiresIn }),
     );
   }
 

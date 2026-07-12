@@ -24,6 +24,19 @@ export class NodemailerMailService implements EmailService {
     });
   }
 
+  async sendOtpEmail(
+    email: string,
+    otp: string,
+    expiresIn: string,
+  ): Promise<void> {
+    await this.mailerService.sendMail({
+      to: email,
+      subject: 'Votre code de vérification BeOwn',
+      template: 'otp-code',
+      context: { otp, expiresIn },
+    });
+  }
+
   async sendKycValidatedEmail(email: string, prenom: string): Promise<void> {
     await this.mailerService.sendMail({
       to: email,
