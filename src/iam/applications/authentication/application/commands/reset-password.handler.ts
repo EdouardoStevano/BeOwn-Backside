@@ -1,5 +1,5 @@
-﻿import { Injectable, UnauthorizedException } from '@nestjs/common';
-import { Inject } from '@nestjs/common';
+import { Inject, UnauthorizedException } from '@nestjs/common';
+import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
 import {
   TOKEN_SERVICE,
   type TokenService,
@@ -9,21 +9,26 @@ import {
   USER_REPOSITORY,
   type UserRepository,
 } from 'src/users/applications/ports/repositories/user.repository';
-import { ResetPasswordDto } from '../../../../presenters/http/dto/password.dto';
-import { HASHING_SERVICE, type HashingService } from 'src/common/hashing/hashing.service';
+import {
+  HASHING_SERVICE,
+  type HashingService,
+} from 'src/common/hashing/hashing.service';
+import { ResetPasswordCommand } from './reset-password.command';
 
-@Injectable()
-export class ResetPasswordUseCase {
+@CommandHandler(ResetPasswordCommand)
+export class ResetPasswordHandler
+  implements ICommandHandler<ResetPasswordCommand>
+{
   constructor(
     @Inject(USER_REPOSITORY) private readonly userRepository: UserRepository,
     @Inject(TOKEN_SERVICE) private readonly tokenService: TokenService,
     @Inject(HASHING_SERVICE) private readonly hashingService: HashingService,
   ) {}
 
-  async execute(dto: ResetPasswordDto): Promise<void> {
+  async execute(command: ResetPasswordCommand): Promise<void> {
     let payload: EmailTokenPayload;
     try {
-      payload = await this.tokenService.verifyEmailToken(dto.token);
+      payload = await this.tokenService.verifyEmailToken(command.token);
     } catch {
       throw new UnauthorizedException('Token invalide ou expiré');
     }
@@ -33,8 +38,7 @@ export class ResetPasswordUseCase {
       throw new UnauthorizedException('Utilisateur non trouvé');
     }
 
-    const hashedPassword = await this.hashingService.hash(dto.newPassword);
-    user.password = hashedPassword;
+    user.password = await this.hashingService.hash(command.newPassword);
     await this.userRepository.update(user);
   }
 }

@@ -1,9 +1,9 @@
-﻿import {
+import {
   ConflictException,
   Inject,
-  Injectable,
   InternalServerErrorException,
 } from '@nestjs/common';
+import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
 import {
   TOKEN_SERVICE,
   type TokenService,
@@ -12,22 +12,20 @@ import {
   USER_REPOSITORY,
   type UserRepository,
 } from 'src/users/applications/ports/repositories/user.repository';
-import { SocialInterface } from '../../infrastructures/interfaces/social.interface';
 import { UserFactory } from 'src/users/domains/factories/user.factory';
+import { SocialAuthCommand, SocialAuthResult } from './social-auth.command';
 
-@Injectable()
-export class SocialAuthUseCase {
+@CommandHandler(SocialAuthCommand)
+export class SocialAuthHandler implements ICommandHandler<SocialAuthCommand> {
   constructor(
     @Inject(TOKEN_SERVICE) private readonly tokenService: TokenService,
     @Inject(USER_REPOSITORY) private readonly usersRepository: UserRepository,
     private readonly userFactory: UserFactory,
   ) {}
 
-  async authenticate(social: SocialInterface): Promise<{
-    accessToken: string;
-    refreshToken: string;
-    isNewUser: boolean;
-  }> {
+  async execute(command: SocialAuthCommand): Promise<SocialAuthResult> {
+    const { social } = command;
+
     try {
       const existing = await this.usersRepository.findOneBySocialId(
         social.socialId,

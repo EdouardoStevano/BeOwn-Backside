@@ -16,18 +16,18 @@ import type { Request, Response } from 'express';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { CommandBus } from '@nestjs/cqrs';
 import { SignInCommand } from '../../applications/authentication/application/commands/sign-in.command';
+import { RefreshTokenCommand } from '../../applications/authentication/application/commands/refresh-token.command';
+import { SocialAuthCommand } from '../../applications/authentication/application/commands/social-auth.command';
+import { ForgotPasswordCommand } from '../../applications/authentication/application/commands/forgot-password.command';
+import { ResetPasswordCommand } from '../../applications/authentication/application/commands/reset-password.command';
 import { SignInDto } from './dto/sign-in.dto';
 import { ExchangeCodeDto, RefreshTokenDto } from './dto/refresh-token.dto';
-import { RefreshTokenUseCase } from '../../applications/authentication/application/usecases/refresh-token.usecase';
-import { SocialAuthUseCase } from '../../applications/authentication/application/usecases/social-auth.usecase';
 import { FacebookAuthGuard } from '../../applications/authentication/infrastructures/guards/facebook-auth.guard';
 import { FacebookCallbackGuard } from '../../applications/authentication/infrastructures/guards/facebook-callback.guard';
 import { GoogleAuthGuard } from '../../applications/authentication/infrastructures/guards/google-auth.guard';
 import { GoogleCallbackGuard } from '../../applications/authentication/infrastructures/guards/google-callback.guard';
 import { LinkedinAuthGuard } from '../../applications/authentication/infrastructures/guards/linkedin-auth.guard';
 import { LinkedinCallbackGuard } from '../../applications/authentication/infrastructures/guards/linkedin-callback.guard';
-import { ForgotPasswordUseCase } from '../../applications/authentication/application/usecases/forgot-password.usecase';
-import { ResetPasswordUseCase } from '../../applications/authentication/application/usecases/reset-password.usecase';
 import {
   ForgotPasswordDto,
   ResetPasswordDto,
@@ -47,10 +47,6 @@ import {
 export class AuthenticationController {
   constructor(
     private readonly commandBus: CommandBus,
-    private readonly refreshTokenUseCase: RefreshTokenUseCase,
-    private readonly socialAuthUseCase: SocialAuthUseCase,
-    private readonly forgotPasswordUseCase: ForgotPasswordUseCase,
-    private readonly resetPasswordUseCase: ResetPasswordUseCase,
     private readonly registerUseCase: RegisterUseCase,
     private readonly recaptchaService: RecaptchaService,
     @Inject(CACHE_MANAGER_SERVICE)
@@ -82,7 +78,9 @@ export class AuthenticationController {
   @HttpCode(HttpStatus.OK)
   @Post('refresh-tokens')
   refreshToken(@Body() refreshTokenDto: RefreshTokenDto) {
-    return this.refreshTokenUseCase.refreshToken(refreshTokenDto);
+    return this.commandBus.execute(
+      new RefreshTokenCommand(refreshTokenDto.refreshToken),
+    );
   }
 
   @ApiOperation({ summary: 'Authentification via Facebook' })
@@ -156,7 +154,7 @@ export class AuthenticationController {
     }
     try {
       const { accessToken, refreshToken, isNewUser } =
-        await this.socialAuthUseCase.authenticate(user);
+        await this.commandBus.execute(new SocialAuthCommand(user));
       const code = randomUUID();
       await this.cacheManagerService.insertOAuthCode(code, {
         accessToken,
@@ -194,7 +192,7 @@ export class AuthenticationController {
   @HttpCode(HttpStatus.NO_CONTENT)
   @Post('forgot-password')
   forgotPassword(@Body() dto: ForgotPasswordDto) {
-    return this.forgotPasswordUseCase.execute(dto);
+    return this.commandBus.execute(new ForgotPasswordCommand(dto.email));
   }
 
   @ApiOperation({ summary: 'Réinitialiser le mot de passe' })
@@ -205,6 +203,8 @@ export class AuthenticationController {
   @Public()
   @Post('reset-password')
   resetPassword(@Body() dto: ResetPasswordDto) {
-    return this.resetPasswordUseCase.execute(dto);
+    return this.commandBus.execute(
+      new ResetPasswordCommand(dto.token, dto.newPassword),
+    );
   }
 }
