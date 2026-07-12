@@ -70,6 +70,35 @@ export class RedisCacheService implements CacheManagerService {
     return `email-token-${email}`;
   }
 
+  async insertPasswordResetTokenId(
+    email: string,
+    resetTokenId: string,
+  ): Promise<void> {
+    await this.cacheManager.set<string>(
+      this.getPasswordResetKey(email),
+      resetTokenId,
+      this.jwtConfiguration.passwordResetTtl * 1000,
+    );
+  }
+
+  async validatePasswordResetToken(
+    email: string,
+    resetTokenId: string,
+  ): Promise<boolean> {
+    const storedId = await this.cacheManager.get<string>(
+      this.getPasswordResetKey(email),
+    );
+    return storedId === resetTokenId;
+  }
+
+  async invalidatePasswordResetTokenId(email: string): Promise<void> {
+    await this.cacheManager.del(this.getPasswordResetKey(email));
+  }
+
+  private getPasswordResetKey(email: string) {
+    return `pwd-reset-${email}`;
+  }
+
   async insertOAuthCode(code: string, tokens: AuthTokens): Promise<void> {
     await this.cacheManager.set(`oauth-code:${code}`, tokens, 30_000);
   }

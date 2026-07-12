@@ -12,6 +12,9 @@ export interface CacheManagerService {
   invalidateRefreshTokenId(email: string): Promise<void>;
   insertEmailTokenId(email: string, emailTokenId: string): Promise<void>;
   invalidateEmailTokenId(email: string): Promise<void>;
+  insertPasswordResetTokenId(email: string, resetTokenId: string): Promise<void>;
+  validatePasswordResetToken(email: string, resetTokenId: string): Promise<boolean>;
+  invalidatePasswordResetTokenId(email: string): Promise<void>;
   insertOAuthCode(code: string, tokens: AuthTokens): Promise<void>;
   getAndDeleteOAuthCode(code: string): Promise<AuthTokens | null>;
 }

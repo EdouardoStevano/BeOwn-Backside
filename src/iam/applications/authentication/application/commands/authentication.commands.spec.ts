@@ -7,9 +7,11 @@ import {
 } from '@nestjs/common';
 import { HASHING_SERVICE } from 'src/common/hashing/hashing.service';
 import { TOKEN_SERVICE } from 'src/iam/domains/ports/token.service';
+import { CACHE_MANAGER_SERVICE } from 'src/iam/domains/ports/cahe-manager.service';
 import { EMAIL_SERVICE } from 'src/common/email/email.service';
 import { USER_REPOSITORY } from 'src/users/applications/ports/repositories/user.repository';
 import { UserFactory } from 'src/users/domains/factories/user.factory';
+import jwtConfig from 'src/iam/infrastructure/config/jwt.config';
 
 import { RefreshTokenHandler } from './refresh-token.handler';
 import { RefreshTokenCommand } from './refresh-token.command';
@@ -35,6 +37,14 @@ describe('authentication commands via CommandBus', () => {
     refreshTokens: jest.fn(),
     generateEmailToken: jest.fn(),
     verifyEmailToken: jest.fn(),
+    generatePasswordResetToken: jest.fn(),
+    verifyPasswordResetToken: jest.fn(),
+  };
+  const cacheManagerService = {
+    insertPasswordResetTokenId: jest.fn(),
+    validatePasswordResetToken: jest.fn(),
+    invalidatePasswordResetTokenId: jest.fn(),
+    invalidateRefreshTokenId: jest.fn(),
   };
   const hashingService = { hash: jest.fn(), compare: jest.fn() };
   const emailService = { sendPasswordResetEmail: jest.fn() };
@@ -51,9 +61,11 @@ describe('authentication commands via CommandBus', () => {
         ResetPasswordHandler,
         { provide: USER_REPOSITORY, useValue: userRepository },
         { provide: TOKEN_SERVICE, useValue: tokenService },
+        { provide: CACHE_MANAGER_SERVICE, useValue: cacheManagerService },
         { provide: HASHING_SERVICE, useValue: hashingService },
         { provide: EMAIL_SERVICE, useValue: emailService },
         { provide: UserFactory, useValue: userFactory },
+        { provide: jwtConfig.KEY, useValue: { passwordResetTtl: 1800 } },
       ],
     }).compile();
     await moduleRef.init();
@@ -138,18 +150,25 @@ describe('authentication commands via CommandBus', () => {
   });
 
   describe('ForgotPasswordCommand', () => {
-    it('sends a reset email to a known user', async () => {
+    it('sends a single-use reset link, storing its id for later consumption', async () => {
       userRepository.findByEmail.mockResolvedValue({
         userId: 5,
         userEmail: { email: 'a@b.com' },
       });
-      tokenService.generateEmailToken.mockResolvedValue('email-token');
+      tokenService.generatePasswordResetToken.mockResolvedValue('reset-token');
 
       await commandBus.execute(new ForgotPasswordCommand('a@b.com'));
 
+      const { resetTokenId } =
+        tokenService.generatePasswordResetToken.mock.calls[0][0];
+      expect(
+        cacheManagerService.insertPasswordResetTokenId,
+      ).toHaveBeenCalledWith('a@b.com', resetTokenId);
+
       expect(emailService.sendPasswordResetEmail).toHaveBeenCalledWith(
         'a@b.com',
-        'email-token',
+        'reset-token',
+        '30 minutes',
       );
     });
 
@@ -167,8 +186,8 @@ describe('authentication commands via CommandBus', () => {
         userId: 5,
         userEmail: { email: 'a@b.com' },
       });
-      tokenService.generateEmailToken.mockResolvedValue('email-token');
-      emailService.sendPasswordResetEmail.mockRejectedValue(new Error('brevo'));
+      tokenService.generatePasswordResetToken.mockResolvedValue('reset-token');
+      emailService.sendPasswordResetEmail.mockRejectedValue(new Error('smtp'));
 
       await expect(
         commandBus.execute(new ForgotPasswordCommand('a@b.com')),
@@ -177,8 +196,15 @@ describe('authentication commands via CommandBus', () => {
   });
 
   describe('ResetPasswordCommand', () => {
-    it('hashes and persists the new password', async () => {
-      tokenService.verifyEmailToken.mockResolvedValue({ sub: 9 });
+    const validPayload = {
+      sub: 9,
+      email: 'a@b.com',
+      resetTokenId: 'rid',
+    };
+
+    it('hashes and persists the new password, then burns the link', async () => {
+      tokenService.verifyPasswordResetToken.mockResolvedValue(validPayload);
+      cacheManagerService.validatePasswordResetToken.mockResolvedValue(true);
       const user = { userId: 9, password: 'old' };
       userRepository.findById.mockResolvedValue(user);
       hashingService.hash.mockResolvedValue('hashed-new');
@@ -188,17 +214,39 @@ describe('authentication commands via CommandBus', () => {
       expect(hashingService.hash).toHaveBeenCalledWith('NewPass123');
       expect(user.password).toBe('hashed-new');
       expect(userRepository.update).toHaveBeenCalledWith(user);
+      expect(
+        cacheManagerService.invalidatePasswordResetTokenId,
+      ).toHaveBeenCalledWith('a@b.com');
+      // Le changement de mot de passe déconnecte les autres sessions.
+      expect(cacheManagerService.invalidateRefreshTokenId).toHaveBeenCalledWith(
+        'a@b.com',
+      );
     });
 
-    it('rejects an invalid token', async () => {
-      tokenService.verifyEmailToken.mockRejectedValue(new Error('bad'));
+    it('rejects a link already used once (replay)', async () => {
+      tokenService.verifyPasswordResetToken.mockResolvedValue(validPayload);
+      // Le tokenId n'est plus en cache : il a été consommé par un premier reset.
+      cacheManagerService.validatePasswordResetToken.mockResolvedValue(false);
+
+      await expect(
+        commandBus.execute(new ResetPasswordCommand('tok', 'NewPass123')),
+      ).rejects.toThrow('Token invalide ou expiré');
+      expect(userRepository.update).not.toHaveBeenCalled();
+    });
+
+    it('rejects an invalid or expired token', async () => {
+      tokenService.verifyPasswordResetToken.mockRejectedValue(new Error('bad'));
       await expect(
         commandBus.execute(new ResetPasswordCommand('bad', 'NewPass123')),
       ).rejects.toThrow('Token invalide ou expiré');
     });
 
     it('rejects a token pointing at a missing user', async () => {
-      tokenService.verifyEmailToken.mockResolvedValue({ sub: 404 });
+      tokenService.verifyPasswordResetToken.mockResolvedValue({
+        ...validPayload,
+        sub: 404,
+      });
+      cacheManagerService.validatePasswordResetToken.mockResolvedValue(true);
       userRepository.findById.mockResolvedValue(null);
       await expect(
         commandBus.execute(new ResetPasswordCommand('tok', 'NewPass123')),

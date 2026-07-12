@@ -10,17 +10,60 @@ export interface EmailService {
 
   /** Lien de confirmation d'adresse email (flux d'inscription). `confirmEmailUrl`
    *  est l'URL complète, token inclus. */
-  sendEmailVerificationLink(email: string, confirmEmailUrl: string): Promise<void>;
-  sendPasswordResetEmail?(email: string, token: string): Promise<void>;
-  sendKycStatusEmail?(email: string, status: string, motif?: string): Promise<void>;
-  sendTransactionalEmail?(email: string, subject: string, htmlContent: string): Promise<void>;
+  sendEmailVerificationLink(
+    email: string,
+    confirmEmailUrl: string,
+  ): Promise<void>;
+
+  /** Lien de réinitialisation du mot de passe, à usage unique. Le lien est
+   *  construit par l'adapter à partir de `FRONTEND_URL`. `expiresIn` est un
+   *  libellé prêt à afficher, ex. « 30 minutes ». */
+  sendPasswordResetEmail(
+    email: string,
+    token: string,
+    expiresIn: string,
+  ): Promise<void>;
+  sendKycStatusEmail?(
+    email: string,
+    status: string,
+    motif?: string,
+  ): Promise<void>;
+  sendTransactionalEmail?(
+    email: string,
+    subject: string,
+    htmlContent: string,
+  ): Promise<void>;
 
   // F4 transactional emails
   sendKycValidatedEmail?(email: string, prenom: string): Promise<void>;
-  sendKycRejectedEmail?(email: string, prenom: string, motif?: string): Promise<void>;
-  sendNewProjectEmail?(email: string, prenom: string, projet: { titre: string; ville: string; triCible?: number; url?: string }): Promise<void>;
-  sendNewSecondaryOrderEmail?(email: string, prenom: string, projet: { titre: string; nbFractions: number; prix: number }): Promise<void>;
-  sendEcheanceEmail?(email: string, prenom: string, echeance: { date: string; montant: number; projetTitre: string }): Promise<void>;
-  sendDepotConfirmedEmail?(email: string, prenom: string, montant: number): Promise<void>;
-  sendRetraitProcessedEmail?(email: string, prenom: string, montant: number): Promise<void>;
+  sendKycRejectedEmail?(
+    email: string,
+    prenom: string,
+    motif?: string,
+  ): Promise<void>;
+  sendNewProjectEmail?(
+    email: string,
+    prenom: string,
+    projet: { titre: string; ville: string; triCible?: number; url?: string },
+  ): Promise<void>;
+  sendNewSecondaryOrderEmail?(
+    email: string,
+    prenom: string,
+    projet: { titre: string; nbFractions: number; prix: number },
+  ): Promise<void>;
+  sendEcheanceEmail?(
+    email: string,
+    prenom: string,
+    echeance: { date: string; montant: number; projetTitre: string },
+  ): Promise<void>;
+  sendDepotConfirmedEmail?(
+    email: string,
+    prenom: string,
+    montant: number,
+  ): Promise<void>;
+  sendRetraitProcessedEmail?(
+    email: string,
+    prenom: string,
+    montant: number,
+  ): Promise<void>;
 }

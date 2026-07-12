@@ -15,8 +15,9 @@ import { SocialAuthHandler } from './commands/social-auth.handler';
 import { ForgotPasswordHandler } from './commands/forgot-password.handler';
 import { ResetPasswordHandler } from './commands/reset-password.handler';
 import { EMAIL_SERVICE } from 'src/common/email/email.service';
-import { BrevoEmailService } from 'src/common/email/brevo.service';
+import { NodemailerMailService } from 'src/common/email/nodemailer.service';
 import { ConfigModule } from '@nestjs/config';
+import jwtConfig from 'src/iam/infrastructure/config/jwt.config';
 import { RegisterUseCase } from 'src/users/applications/usecases/register.usecase';
 import { RecaptchaService } from 'src/common/recaptcha/recaptcha.service';
 import { NotificationsModule } from 'src/notifications/notifications.module';
@@ -36,6 +37,9 @@ const CommandHandlers = [
     UsersInfrastructureModule,
     UsersModule,
     ConfigModule,
+    // ForgotPasswordHandler injecte jwtConfig.KEY (TTL du lien de reset) :
+    // forFeature n'est pas transitif, il faut le déclarer ici aussi.
+    ConfigModule.forFeature(jwtConfig),
     NotificationsModule,
   ],
   providers: [
@@ -43,7 +47,7 @@ const CommandHandlers = [
     RegisterUseCase,
     RecaptchaService,
     { provide: HASHING_SERVICE, useClass: BcryptService },
-    { provide: EMAIL_SERVICE, useClass: BrevoEmailService },
+    { provide: EMAIL_SERVICE, useClass: NodemailerMailService },
     GoogleStrategy,
     FacebookAuthStrategy,
     LinkedinStrategy,

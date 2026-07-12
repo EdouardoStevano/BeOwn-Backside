@@ -9,6 +9,7 @@ import { type ConfigType } from '@nestjs/config';
 import {
   AuthTokens,
   EmailTokenPayload,
+  PasswordResetTokenPayload,
   TokenPayload,
   TokenService,
 } from '../domains/ports/token.service';
@@ -112,5 +113,36 @@ export class JwtTokenService implements TokenService {
       audience: this.jwtConfiguration.audience,
       issuer: this.jwtConfiguration.issuer,
     });
+  }
+
+  async generatePasswordResetToken(
+    payload: PasswordResetTokenPayload,
+  ): Promise<string> {
+    return this.signToken<PasswordResetTokenPayload>(
+      payload.sub,
+      this.jwtConfiguration.passwordResetTtl,
+      payload,
+    );
+  }
+
+  async verifyPasswordResetToken(
+    token: string,
+  ): Promise<PasswordResetTokenPayload> {
+    const payload = await this.jwtService.verifyAsync<PasswordResetTokenPayload>(
+      token,
+      {
+        secret: this.jwtConfiguration.secret,
+        audience: this.jwtConfiguration.audience,
+        issuer: this.jwtConfiguration.issuer,
+      },
+    );
+
+    // Tous nos tokens partagent le même secret : sans ce garde-fou, un token de
+    // confirmation d'email (valable 24h) serait accepté ici comme token de reset.
+    if (!payload.resetTokenId) {
+      throw new Error('Not a password reset token');
+    }
+
+    return payload;
   }
 }

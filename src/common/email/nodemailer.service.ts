@@ -1,10 +1,14 @@
 import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { EmailService } from './email.service';
 import { MailerService } from '@nestjs-modules/mailer';
 
 @Injectable()
 export class NodemailerMailService implements EmailService {
-  constructor(private readonly mailerService: MailerService) {}
+  constructor(
+    private readonly mailerService: MailerService,
+    private readonly config: ConfigService,
+  ) {}
 
   async sendActivationEmail(email: string, otp: string): Promise<void> {
     await this.mailerService.sendMail({
@@ -34,6 +38,25 @@ export class NodemailerMailService implements EmailService {
       subject: 'Votre code de vérification BeOwn',
       template: 'otp-code',
       context: { otp, expiresIn },
+    });
+  }
+
+  async sendPasswordResetEmail(
+    email: string,
+    token: string,
+    expiresIn: string,
+  ): Promise<void> {
+    const frontendUrl =
+      this.config.get<string>('FRONTEND_URL') || 'http://localhost:5173';
+
+    await this.mailerService.sendMail({
+      to: email,
+      subject: 'Réinitialisation de votre mot de passe BeOwn',
+      template: 'password-reset',
+      context: {
+        resetLink: `${frontendUrl}/auth/reset-password?token=${token}`,
+        expiresIn,
+      },
     });
   }
 

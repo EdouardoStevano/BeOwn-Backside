@@ -57,13 +57,20 @@ export class BrevoEmailService implements EmailService {
     );
   }
 
-  async sendPasswordResetEmail(email: string, token: string): Promise<void> {
-    const frontendUrl = this.config.get('FRONTEND_URL') || 'http://localhost:5173';
-    const resetLink = `${frontendUrl}/auth/reset-password?token=${token}`;
+  async sendPasswordResetEmail(
+    email: string,
+    token: string,
+    expiresIn: string,
+  ): Promise<void> {
+    const frontendUrl =
+      this.config.get('FRONTEND_URL') || 'http://localhost:5173';
     await this.send(
       email,
       'Réinitialisation de votre mot de passe BeOwn',
-      `<h2>Réinitialisation de mot de passe</h2><p>Cliquez sur le lien ci-dessous pour réinitialiser votre mot de passe :</p><p><a href="${resetLink}">${resetLink}</a></p><p>Ce lien expire dans 30 minutes.</p>`,
+      renderTemplate('password-reset', {
+        resetLink: `${frontendUrl}/auth/reset-password?token=${token}`,
+        expiresIn,
+      }),
     );
   }
 
