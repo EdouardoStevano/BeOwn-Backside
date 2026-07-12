@@ -45,8 +45,8 @@ const COMMISSION_KEYS = [
 const DEFAULT_SETTINGS: AdminSettingsBlob = {
   platform: {
     name: 'BeOwn',
-    contactEmail: 'support@beown.com',
-    defaultCurrency: 'XOF',
+    contactEmail: 'support@beown.fr',
+    defaultCurrency: 'EUR',
     timezone: 'Africa/Abidjan',
   },
   commissions: { ...DEFAULT_FEE_RATES },
@@ -55,7 +55,7 @@ const DEFAULT_SETTINGS: AdminSettingsBlob = {
     minScoreAccepted: 60,
   },
   notifications: {
-    defaultEmailFrom: 'noreply@beown.com',
+    defaultEmailFrom: 'noreply@beown.fr',
     smsProvider: 'twilio',
     digestFrequency: 'weekly',
   },
@@ -82,7 +82,9 @@ export class AdminSettingsController {
   ) {}
 
   private async ensureRole(currentUser: ActiveUser, roles: string[]) {
-    const u = await this.userRepo.findOne({ where: { userId: currentUser.userId } });
+    const u = await this.userRepo.findOne({
+      where: { userId: currentUser.userId },
+    });
     if (!u || !roles.includes(u.role)) {
       throw new ForbiddenException();
     }

@@ -35,6 +35,7 @@ import {
 } from 'src/wallets/domains/enums/wallet.enum';
 import { ContractGeneratorService } from './contract-generator.service';
 import { CloudStorageService } from 'src/common/cloud-storage/cloud-storage.service';
+import { formatEur } from 'src/common/money/format-eur';
 import { Document } from 'src/documents/domains/document';
 import { DocumentRelatedTo, DocumentType } from 'src/documents/domains/enums/document-type.enum';
 import { NotificationService } from 'src/notifications/applications/notification.service';
@@ -123,7 +124,7 @@ export class CreateInvestmentUseCase {
     }
     if (Number(wallet.solde) < montant) {
       throw new BadRequestException(
-        `Solde insuffisant. Disponible : ${wallet.solde} XOF — Requis : ${montant} XOF`,
+        `Solde insuffisant. Disponible : ${formatEur(Number(wallet.solde))} — Requis : ${formatEur(montant)}`,
       );
     }
 

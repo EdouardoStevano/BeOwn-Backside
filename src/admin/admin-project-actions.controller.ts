@@ -23,6 +23,7 @@ import { RequirePermission } from 'src/common/auth/require-permission.decorator'
 import { rolesWithPermission } from 'src/common/auth/permissions.constants';
 import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
+import { formatEur } from 'src/common/money/format-eur';
 import {
   UserEntity,
   UserRole,
@@ -150,7 +151,7 @@ export class AdminProjectActionsController {
         .pushToAdmins({
           type: NotificationType.AUTRE,
           titre: 'Collecte financée — créer l\'échéancier',
-          message: `« ${project.titre} » a atteint son objectif minimum (${raised} / min ${minimum} XOF). Créez l'échéancier emprunteur.`,
+          message: `« ${project.titre} » a atteint son objectif minimum (${formatEur(raised)} / min ${formatEur(minimum)}). Créez l'échéancier emprunteur.`,
           roles: [UserRole.SUPER_ADMIN, UserRole.FINANCIER, UserRole.COMPLIANCE],
           metadata: { projectId: id, raised, minimum, target },
         })
@@ -167,7 +168,7 @@ export class AdminProjectActionsController {
 
     const result = await this.refundService.refundProjectCollecte(id, {
       targetStatus: ProjectStatus.ECHEC,
-      reason: `Objectif minimum de collecte non atteint (${raised} / min ${minimum} XOF).`,
+      reason: `Objectif minimum de collecte non atteint (${formatEur(raised)} / min ${formatEur(minimum)}).`,
       triggeredByUserId: currentUser.userId,
     });
     return {

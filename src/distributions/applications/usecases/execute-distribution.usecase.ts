@@ -137,7 +137,7 @@ export class ExecuteDistributionUseCase {
               type: WalletType.FRAIS_PLATEFORME,
               proprietaireUserId: null,
               fournisseurRef: 'PLAT-FEES-001',
-              devise: 'XOF',
+              devise: 'EUR',
               solde: 0,
             }),
           );

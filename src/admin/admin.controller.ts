@@ -26,6 +26,7 @@ import { RequirePermission } from 'src/common/auth/require-permission.decorator'
 import { rolesWithPermission } from 'src/common/auth/permissions.constants';
 import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
+import { formatEur } from 'src/common/money/format-eur';
 import { NotificationEventService } from 'src/notifications/applications/notification-event.service';
 import {
   UserEntity,
@@ -485,7 +486,7 @@ export class AdminController {
               user: this.displayName(i.utilisateur),
               email: i.utilisateur?.userEmail?.email ?? '',
               action: `Investissement — ${(i as any).projet?.titre ?? i.projetId}`,
-              detail: `${Number(i.montant).toLocaleString('fr-FR')} FCFA · ${i.nbTitres ?? 0} titre(s)`,
+              detail: `${formatEur(Number(i.montant))} · ${i.nbTitres ?? 0} titre(s)`,
               status: ACTIVE_INVESTMENT_STATUSES.includes(i.statut) ? 'success' : 'pending',
               date: i.createdAt,
               time: this.relativeTime(i.createdAt),
@@ -536,7 +537,7 @@ export class AdminController {
               user: this.displayName(o.vendeur),
               email: o.vendeur?.userEmail?.email ?? '',
               action: `Ordre marché secondaire — ${o.sens}`,
-              detail: `${Number(o.montant).toLocaleString('fr-FR')} titres · ${Number(o.prixUnitaire).toLocaleString('fr-FR')} FCFA/u`,
+              detail: `${Number(o.montant).toLocaleString('fr-FR')} titres · ${formatEur(Number(o.prixUnitaire))}/u`,
               status: o.statut === OrdreMarcheStatus.EXECUTE ? 'success' : o.statut === OrdreMarcheStatus.ANNULE ? 'error' : 'pending',
               date: o.createdAt,
               time: this.relativeTime(o.createdAt),

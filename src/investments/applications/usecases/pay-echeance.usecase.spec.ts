@@ -10,9 +10,9 @@ describe('PayEcheanceUseCase', () => {
   let notificationEvents: any;
   let auditLog: any;
 
-  const investorWallet = { id: 'w1', solde: 100000, devise: 'XOF' };
-  const walletIR = { id: 'wIR', solde: 0, devise: 'XOF' };
-  const walletCSG = { id: 'wCSG', solde: 0, devise: 'XOF' };
+  const investorWallet = { id: 'w1', solde: 100000, devise: 'EUR' };
+  const walletIR = { id: 'wIR', solde: 0, devise: 'EUR' };
+  const walletCSG = { id: 'wCSG', solde: 0, devise: 'EUR' };
 
   beforeEach(() => {
     echeanceRepo = {
@@ -99,16 +99,16 @@ describe('PayEcheanceUseCase', () => {
     };
     echeanceRepo.findOne.mockResolvedValue(echeance);
     walletRepo.findOne
-      .mockResolvedValueOnce({ id: 'wInv', solde: 0, devise: 'XOF' }) // investor
+      .mockResolvedValueOnce({ id: 'wInv', solde: 0, devise: 'EUR' }) // investor
       .mockResolvedValueOnce(null)  // SEQUESTRE_IR not found → create
       .mockResolvedValueOnce(null); // SEQUESTRE_CSG not found → create
     // walletRepo.save returns the created wallet objects
     walletRepo.save
-      .mockResolvedValueOnce({ id: 'wInv', solde: 9744, devise: 'XOF' })      // investor saved
-      .mockResolvedValueOnce({ id: 'wIR_new', solde: 0, devise: 'XOF' })       // IR created
-      .mockResolvedValueOnce({ id: 'wIR_new', solde: 256, devise: 'XOF' })     // IR credited
-      .mockResolvedValueOnce({ id: 'wCSG_new', solde: 0, devise: 'XOF' })      // CSG created
-      .mockResolvedValueOnce({ id: 'wCSG_new', solde: 344, devise: 'XOF' });   // CSG credited
+      .mockResolvedValueOnce({ id: 'wInv', solde: 9744, devise: 'EUR' })      // investor saved
+      .mockResolvedValueOnce({ id: 'wIR_new', solde: 0, devise: 'EUR' })       // IR created
+      .mockResolvedValueOnce({ id: 'wIR_new', solde: 256, devise: 'EUR' })     // IR credited
+      .mockResolvedValueOnce({ id: 'wCSG_new', solde: 0, devise: 'EUR' })      // CSG created
+      .mockResolvedValueOnce({ id: 'wCSG_new', solde: 344, devise: 'EUR' });   // CSG credited
 
     await useCase.execute('e2', 1);
 
@@ -138,9 +138,9 @@ describe('PayEcheanceUseCase', () => {
     };
     echeanceRepo.findOne.mockResolvedValue(echeance);
     walletRepo.findOne
-      .mockResolvedValueOnce({ id: 'wInv3', solde: 0, devise: 'XOF' }) // investor
-      .mockResolvedValueOnce({ id: 'wIR3', solde: 0, devise: 'XOF' }) // SEQUESTRE_IR
-      .mockResolvedValueOnce({ id: 'wCSG3', solde: 0, devise: 'XOF' }); // SEQUESTRE_CSG
+      .mockResolvedValueOnce({ id: 'wInv3', solde: 0, devise: 'EUR' }) // investor
+      .mockResolvedValueOnce({ id: 'wIR3', solde: 0, devise: 'EUR' }) // SEQUESTRE_IR
+      .mockResolvedValueOnce({ id: 'wCSG3', solde: 0, devise: 'EUR' }); // SEQUESTRE_CSG
 
     await useCase.execute('e3', 1, UserRole.CIO);
 

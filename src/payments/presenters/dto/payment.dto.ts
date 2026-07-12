@@ -2,11 +2,11 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsEnum, IsInt, IsNotEmpty, IsOptional, IsPositive, IsString, Min } from 'class-validator';
 
 export class CreatePaymentIntentDto {
-  @ApiProperty({ example: 50000, description: 'Montant en XOF/EUR' })
+  @ApiProperty({ example: 500, description: 'Montant en EUR' })
   @IsPositive()
   amount: number;
 
-  @ApiProperty({ example: 'XOF', description: 'Code devise ISO 4217' })
+  @ApiProperty({ example: 'EUR', description: 'Code devise ISO 4217' })
   @IsString()
   @IsNotEmpty()
   currency: string;
@@ -35,7 +35,7 @@ export class CreateRetraitDto {
   @Min(1000)
   amount: number;
 
-  @ApiProperty({ example: 'XOF' })
+  @ApiProperty({ example: 'EUR' })
   @IsString()
   currency: string;
 

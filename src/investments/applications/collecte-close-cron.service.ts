@@ -9,6 +9,7 @@ import { InvestmentStatus } from 'src/investments/domains/enums/investment-statu
 import { NotificationService } from 'src/notifications/applications/notification.service';
 import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
 import { UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
+import { formatEur } from 'src/common/money/format-eur';
 import { RefundCollecteService } from './refund-collecte.service';
 
 /**
@@ -68,7 +69,7 @@ export class CollecteCloseCronService {
             .pushToAdmins({
               type: NotificationType.AUTRE,
               titre: 'Collecte financée — créer l\'échéancier',
-              message: `« ${project.titre} » a atteint son objectif minimum (${raised} / min ${minimum}, cible ${target} XOF). Créez l'échéancier emprunteur depuis la fiche projet.`,
+              message: `« ${project.titre} » a atteint son objectif minimum (${formatEur(raised)} / min ${formatEur(minimum)}, cible ${formatEur(target)}). Créez l'échéancier emprunteur depuis la fiche projet.`,
               roles: [UserRole.SUPER_ADMIN, UserRole.FINANCIER, UserRole.COMPLIANCE],
               metadata: { projectId: project.id, raised, minimum, target },
             })
@@ -83,7 +84,7 @@ export class CollecteCloseCronService {
             project.id,
             {
               targetStatus: ProjectStatus.ECHEC,
-              reason: `Objectif minimum de collecte non atteint à la date de clôture (${raised} / min ${minimum} XOF).`,
+              reason: `Objectif minimum de collecte non atteint à la date de clôture (${formatEur(raised)} / min ${formatEur(minimum)}).`,
               triggeredByUserId: null,
             },
           );
@@ -91,7 +92,7 @@ export class CollecteCloseCronService {
             .pushToAdmins({
               type: NotificationType.AUTRE,
               titre: 'Collecte échouée — investisseurs remboursés',
-              message: `« ${project.titre} » : objectif minimum non atteint (${raised} / min ${minimum} XOF). ${result.refundedCount} investisseur(s) remboursé(s) pour ${result.refundedAmount} XOF. Projet passé en ÉCHEC.`,
+              message: `« ${project.titre} » : objectif minimum non atteint (${formatEur(raised)} / min ${formatEur(minimum)}). ${result.refundedCount} investisseur(s) remboursé(s) pour ${formatEur(result.refundedAmount)}. Projet passé en ÉCHEC.`,
               roles: [UserRole.SUPER_ADMIN, UserRole.FINANCIER, UserRole.COMPLIANCE],
               metadata: {
                 projectId: project.id,

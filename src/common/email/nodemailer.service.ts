@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { EmailService } from './email.service';
 import { MailerService } from '@nestjs-modules/mailer';
+import { formatEur } from 'src/common/money/format-eur';
 
 @Injectable()
 export class NodemailerMailService implements EmailService {
@@ -64,7 +65,7 @@ export class NodemailerMailService implements EmailService {
       to: email,
       subject: `Nouvelle annonce sur le marché secondaire`,
       template: 'new-secondary',
-      context: { prenom, ...projet },
+      context: { prenom, ...projet, prix: formatEur(projet.prix) },
     });
   }
 
@@ -77,7 +78,7 @@ export class NodemailerMailService implements EmailService {
       to: email,
       subject: `Échéance à venir — ${echeance.projetTitre}`,
       template: 'echeance',
-      context: { prenom, ...echeance },
+      context: { prenom, ...echeance, montant: formatEur(echeance.montant) },
     });
   }
 
@@ -86,7 +87,7 @@ export class NodemailerMailService implements EmailService {
       to: email,
       subject: 'Dépôt confirmé sur votre compte BeOwn',
       template: 'depot-confirmed',
-      context: { prenom, montant: new Intl.NumberFormat('fr-FR').format(montant) },
+      context: { prenom, montant: formatEur(montant) },
     });
   }
 
@@ -95,7 +96,7 @@ export class NodemailerMailService implements EmailService {
       to: email,
       subject: 'Votre retrait est en cours de traitement',
       template: 'retrait-processed',
-      context: { prenom, montant: new Intl.NumberFormat('fr-FR').format(montant) },
+      context: { prenom, montant: formatEur(montant) },
     });
   }
 }

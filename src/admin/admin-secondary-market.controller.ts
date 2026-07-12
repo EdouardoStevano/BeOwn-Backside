@@ -20,6 +20,7 @@ import { RequirePermission } from 'src/common/auth/require-permission.decorator'
 import { rolesWithPermission } from 'src/common/auth/permissions.constants';
 import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
+import { formatEur } from 'src/common/money/format-eur';
 import { OrdreMarcheEntity } from 'src/secondarymarket/infrastructure/persistences/entities/ordre-marche.entity';
 import { SignatureEntity } from 'src/signatures/infrastructure/persistences/entities/signature.entity';
 import { SignatureStatus } from 'src/signatures/domains/enums/signature-status.enum';
@@ -298,7 +299,7 @@ export class AdminSecondaryMarketController {
         walletDestination: buyerWallet?.id ?? null,
         type: TransactionType.SOUSCRIPTION,
         montant: montantTotal,
-        devise: buyerWallet?.devise ?? sellerWallet?.devise ?? 'XOF',
+        devise: buyerWallet?.devise ?? sellerWallet?.devise ?? 'EUR',
         statut: TransactionStatus.REUSSI,
         fournisseur: TransactionFournisseur.INTERNE,
         investissementId: ordre.investissementId,
@@ -335,7 +336,7 @@ export class AdminSecondaryMarketController {
       utilisateurId: sellerUserId,
       type: NotificationType.MARCHE_SECONDAIRE,
       titre: "Vente d'ordre refusée — fractions restaurées",
-      message: `Votre vente de ${nbFractions} fraction(s) à ${prixUnitaire} XOF a été annulée par l'administration. Les fractions ont été restaurées sur votre investissement.`,
+      message: `Votre vente de ${nbFractions} fraction(s) à ${formatEur(prixUnitaire)} a été annulée par l'administration. Les fractions ont été restaurées sur votre investissement.`,
       metadata: { ordreId: id, reverse: true, montantRestaure: montantTotal },
     }).catch(() => {});
 
@@ -343,7 +344,7 @@ export class AdminSecondaryMarketController {
       utilisateurId: buyerUserId,
       type: NotificationType.MARCHE_SECONDAIRE,
       titre: "Achat annulé — remboursement effectué",
-      message: `L'achat de ${nbFractions} fraction(s) a été annulé par l'administration. ${montantTotal} XOF ont été recrédités sur votre wallet.`,
+      message: `L'achat de ${nbFractions} fraction(s) a été annulé par l'administration. ${formatEur(montantTotal)} ont été recrédités sur votre wallet.`,
       metadata: { ordreId: id, reverse: true, montantRembourse: montantTotal },
     }).catch(() => {});
 

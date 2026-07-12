@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { NotificationService } from './notification.service';
 import { NotificationType } from '../infrastructure/persistences/entities/notification.entity';
 import { UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
+import { formatEur } from 'src/common/money/format-eur';
 
 @Injectable()
 export class NotificationEventService {
@@ -113,7 +114,7 @@ export class NotificationEventService {
         utilisateurId: userId,
         type: NotificationType.ECHEANCE,
         titre: 'Échéance à venir',
-        message: `Votre échéance n°${echeance.numero} de ${echeance.montantTotal} XOF pour « ${project.titre} » est prévue le ${dateStr}.`,
+        message: `Votre échéance n°${echeance.numero} de ${formatEur(Number(echeance.montantTotal))} pour « ${project.titre} » est prévue le ${dateStr}.`,
         metadata: {
           echeanceId: echeance.id,
           investissementId: echeance.investissementId,
@@ -136,7 +137,7 @@ export class NotificationEventService {
         utilisateurId: userId,
         type: NotificationType.ECHEANCE,
         titre: 'Échéance payée ✓',
-        message: `L'échéance n°${echeance.numero} de ${echeance.montantTotal} XOF pour « ${project.titre} » a été créditée sur votre wallet.`,
+        message: `L'échéance n°${echeance.numero} de ${formatEur(Number(echeance.montantTotal))} pour « ${project.titre} » a été créditée sur votre wallet.`,
         metadata: {
           echeanceId: echeance.id,
           investissementId: echeance.investissementId,
@@ -155,7 +156,7 @@ export class NotificationEventService {
       await this.notifications.pushToRoles({
         type: NotificationType.ECHEANCE,
         titre: 'Échéance en retard',
-        message: `L'échéance n°${echeance.numero} de ${echeance.montantTotal} XOF pour "${project.titre}" est en retard.`,
+        message: `L'échéance n°${echeance.numero} de ${formatEur(Number(echeance.montantTotal))} pour "${project.titre}" est en retard.`,
         roles: [UserRole.SUPER_ADMIN, UserRole.FINANCIER],
         metadata: {
           echeanceId: echeance.id,
@@ -181,7 +182,7 @@ export class NotificationEventService {
         utilisateurId: userId,
         type: NotificationType.RETRAIT_TRAITE,
         titre: 'Retrait traité ✓',
-        message: `Votre retrait de ${montant} ${devise} a été envoyé vers votre compte bancaire. Référence : ${reference}.`,
+        message: `Votre retrait de ${formatEur(montant)} a été envoyé vers votre compte bancaire. Référence : ${reference}.`,
         metadata: { montant, devise, reference },
       });
     } catch (err) {
@@ -224,7 +225,7 @@ export class NotificationEventService {
       await this.notifications.pushToRoles({
         type: NotificationType.MARCHE_SECONDAIRE,
         titre: 'Nouvelle annonce marché secondaire',
-        message: `${this.displayName(vendeur)} a mis en vente ${ordre.nbFractions} fraction(s) de "${project.titre}" à ${Number(ordre.prixUnitaire)} XOF/fraction.`,
+        message: `${this.displayName(vendeur)} a mis en vente ${ordre.nbFractions} fraction(s) de "${project.titre}" à ${formatEur(Number(ordre.prixUnitaire))}/fraction.`,
         roles: [UserRole.SUPER_ADMIN, UserRole.COMPLIANCE, UserRole.FINANCIER],
         metadata: {
           ordreId: ordre.id,
@@ -247,7 +248,7 @@ export class NotificationEventService {
         utilisateurId: investment.utilisateurId,
         type: NotificationType.INVESTISSEMENT,
         titre: 'Investissement confirmé',
-        message: `Votre investissement de ${montant} XOF dans "${project.titre}" est confirmé. Vous détenez ${nbFractions} fraction(s).`,
+        message: `Votre investissement de ${formatEur(montant)} dans "${project.titre}" est confirmé. Vous détenez ${nbFractions} fraction(s).`,
         metadata: {
           investissementId: investment.id,
           projetId: project.id,
@@ -262,7 +263,7 @@ export class NotificationEventService {
       await this.notifications.pushToRoles({
         type: NotificationType.INVESTISSEMENT,
         titre: 'Nouvel investissement',
-        message: `${this.displayName(user)} a investi ${montant} XOF dans "${project.titre}" (${nbFractions} fraction(s)).`,
+        message: `${this.displayName(user)} a investi ${formatEur(montant)} dans "${project.titre}" (${nbFractions} fraction(s)).`,
         roles: [UserRole.SUPER_ADMIN, UserRole.FINANCIER, UserRole.COMPLIANCE],
         metadata: {
           investissementId: investment.id,
@@ -290,7 +291,7 @@ export class NotificationEventService {
         utilisateurId: investment.utilisateurId,
         type: NotificationType.INVESTISSEMENT,
         titre: 'Fractions ajoutées',
-        message: `+${nbFractions} fraction${nbFractions > 1 ? 's' : ''} ajoutée${nbFractions > 1 ? 's' : ''} dans "${project.titre}". Vous détenez désormais ${totalFractions} fraction(s) (${montantDelta} XOF débités).`,
+        message: `+${nbFractions} fraction${nbFractions > 1 ? 's' : ''} ajoutée${nbFractions > 1 ? 's' : ''} dans "${project.titre}". Vous détenez désormais ${totalFractions} fraction(s) (${formatEur(montantDelta)} débités).`,
         metadata: {
           investissementId: investment.id,
           projetId: project.id,
@@ -306,7 +307,7 @@ export class NotificationEventService {
       await this.notifications.pushToRoles({
         type: NotificationType.INVESTISSEMENT,
         titre: 'Top-up investissement',
-        message: `${this.displayName(user)} a ajouté ${nbFractions} fraction(s) dans "${project.titre}" (+${montantDelta} XOF).`,
+        message: `${this.displayName(user)} a ajouté ${nbFractions} fraction(s) dans "${project.titre}" (+${formatEur(montantDelta)}).`,
         roles: [UserRole.SUPER_ADMIN, UserRole.FINANCIER],
         metadata: {
           investissementId: investment.id,
@@ -356,7 +357,7 @@ export class NotificationEventService {
         utilisateurId: buyer.userId,
         type: NotificationType.MARCHE_SECONDAIRE,
         titre: 'Achat de fractions confirmé',
-        message: `Vous avez acheté ${nbFractions} fraction(s) à ${prix} XOF/fraction pour "${project.titre}".`,
+        message: `Vous avez acheté ${nbFractions} fraction(s) à ${formatEur(prix)}/fraction pour "${project.titre}".`,
         metadata: meta,
       });
     } catch (err) {
@@ -367,7 +368,7 @@ export class NotificationEventService {
         utilisateurId: seller.userId,
         type: NotificationType.MARCHE_SECONDAIRE,
         titre: 'Vente de fractions exécutée',
-        message: `${nbFractions} fraction(s) de votre ordre ont été achetées à ${prix} XOF/fraction.`,
+        message: `${nbFractions} fraction(s) de votre ordre ont été achetées à ${formatEur(prix)}/fraction.`,
         metadata: meta,
       });
     } catch (err) {

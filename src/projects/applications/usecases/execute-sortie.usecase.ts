@@ -143,8 +143,8 @@ export class ExecuteSortieUseCase {
         let walletPlat = await em.findOne(WalletEntity, {
           where: { type: WalletType.FRAIS_PLATEFORME },
         });
-        // Devise sera prise sur le premier wallet investisseur, fallback XOF
-        const fallbackDevise = 'XOF';
+        // Devise sera prise sur le premier wallet investisseur, fallback EUR
+        const fallbackDevise = 'EUR';
         if (!walletPlat) {
           walletPlat = await em.save(
             WalletEntity,
