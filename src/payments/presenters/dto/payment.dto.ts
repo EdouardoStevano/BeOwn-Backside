@@ -30,9 +30,9 @@ export class ConfirmDepotDto {
 }
 
 export class CreateRetraitDto {
-  @ApiProperty({ example: 10000, description: 'Montant à retirer' })
+  @ApiProperty({ example: 500, description: 'Montant à retirer (EUR)' })
   @IsPositive()
-  @Min(1000)
+  @Min(10, { message: 'Le montant minimum de retrait est de 10 €.' })
   amount: number;
 
   @ApiProperty({ example: 'EUR' })

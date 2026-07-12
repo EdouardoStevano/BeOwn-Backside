@@ -10,7 +10,7 @@ import {
 
 export class DeclareSortieDto {
   @ApiProperty() @IsUUID() projetId: string;
-  @ApiProperty({ example: 260_000_000 })
+  @ApiProperty({ example: 840_000 })
   @IsNumber()
   @Min(0.01)
   prixRevente: number;
