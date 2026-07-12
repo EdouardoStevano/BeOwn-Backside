@@ -14,7 +14,8 @@ import {
 import { randomUUID } from 'crypto';
 import type { Request, Response } from 'express';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
-import { SignInUsecase } from '../../applications/authentication/application/usecases/sign-in.usecase';
+import { CommandBus } from '@nestjs/cqrs';
+import { SignInCommand } from '../../applications/authentication/application/commands/sign-in.command';
 import { SignInDto } from './dto/sign-in.dto';
 import { ExchangeCodeDto, RefreshTokenDto } from './dto/refresh-token.dto';
 import { RefreshTokenUseCase } from '../../applications/authentication/application/usecases/refresh-token.usecase';
@@ -45,7 +46,7 @@ import {
 @Controller('auth')
 export class AuthenticationController {
   constructor(
-    private readonly signInUsecase: SignInUsecase,
+    private readonly commandBus: CommandBus,
     private readonly refreshTokenUseCase: RefreshTokenUseCase,
     private readonly socialAuthUseCase: SocialAuthUseCase,
     private readonly forgotPasswordUseCase: ForgotPasswordUseCase,
@@ -68,7 +69,9 @@ export class AuthenticationController {
   @HttpCode(HttpStatus.OK)
   @Post('sign-in')
   signIn(@Body() signInDto: SignInDto) {
-    return this.signInUsecase.signIn(signInDto);
+    return this.commandBus.execute(
+      new SignInCommand(signInDto.email, signInDto.password),
+    );
   }
 
   @ApiOperation({ summary: "Rafraîchir les tokens d'accès" })

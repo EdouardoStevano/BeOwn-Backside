@@ -1,29 +1,31 @@
-﻿import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
+import { Inject, UnauthorizedException } from '@nestjs/common';
+import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
 import {
   HASHING_SERVICE,
   type HashingService,
 } from 'src/common/hashing/hashing.service';
 import {
   TOKEN_SERVICE,
+  AuthTokens,
   TokenPayload,
   type TokenService,
 } from 'src/iam/domains/ports/token.service';
-import { SignInDto } from '../../../../presenters/http/dto/sign-in.dto';
 import {
   USER_REPOSITORY,
   type UserRepository,
 } from 'src/users/applications/ports/repositories/user.repository';
+import { SignInCommand } from './sign-in.command';
 
-@Injectable()
-export class SignInUsecase {
+@CommandHandler(SignInCommand)
+export class SignInHandler implements ICommandHandler<SignInCommand> {
   constructor(
     @Inject(HASHING_SERVICE) private readonly hashingService: HashingService,
     @Inject(TOKEN_SERVICE) private readonly tokenService: TokenService,
     @Inject(USER_REPOSITORY) private readonly usersRepository: UserRepository,
   ) {}
 
-  async signIn(signInDto: SignInDto) {
-    const user = await this.usersRepository.findByEmail(signInDto.email);
+  async execute(command: SignInCommand): Promise<AuthTokens> {
+    const user = await this.usersRepository.findByEmail(command.email);
 
     if (!user) {
       throw new UnauthorizedException('Adresse email ou mot de passe incorrect');
@@ -37,7 +39,7 @@ export class SignInUsecase {
     }
 
     const isValidPassword = await this.hashingService.compare(
-      signInDto.password,
+      command.password,
       user.password!,
     );
 

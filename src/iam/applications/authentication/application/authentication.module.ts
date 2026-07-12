@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
-import { SignInUsecase } from './usecases/sign-in.usecase';
+import { CqrsModule } from '@nestjs/cqrs';
+import { SignInHandler } from './commands/sign-in.handler';
 import { AuthenticationController } from '../../../presenters/http/authentication.controller';
 import { HASHING_SERVICE } from 'src/common/hashing/hashing.service';
 import { BcryptService } from 'src/common/hashing/bcrypt.service';
@@ -22,6 +23,7 @@ import { NotificationsModule } from 'src/notifications/notifications.module';
 
 @Module({
   imports: [
+    CqrsModule,
     IamInfrastructureModule,
     UsersInfrastructureModule,
     UsersModule,
@@ -29,7 +31,7 @@ import { NotificationsModule } from 'src/notifications/notifications.module';
     NotificationsModule,
   ],
   providers: [
-    SignInUsecase,
+    SignInHandler,
     RefreshTokenUseCase,
     ForgotPasswordUseCase,
     ResetPasswordUseCase,
