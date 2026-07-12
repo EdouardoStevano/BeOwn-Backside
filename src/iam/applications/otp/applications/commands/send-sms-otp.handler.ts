@@ -1,52 +1,33 @@
 import {
   BadRequestException,
   Inject,
-  Injectable,
   InternalServerErrorException,
   Logger,
 } from '@nestjs/common';
-import { ApiProperty } from '@nestjs/swagger';
-import { IsString } from 'class-validator';
+import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
 import { OTP_SERVICE, type OtpService } from '../ports/otp.service';
 import { SMS_SERVICE, type SmsService } from 'src/common/sms/sms.service';
+import { SendSmsOtpCommand } from './send-sms-otp.command';
+import { normalizePhone, smsOtpKey } from './otp-keys';
 
-export class SendSmsOtpDto {
-  @ApiProperty({ example: '+33612345678', description: 'E.164 phone number' })
-  @IsString()
-  phone: string;
-}
-
-export class VerifySmsOtpDto {
-  @ApiProperty({ example: '+33612345678' })
-  @IsString()
-  phone: string;
-
-  @ApiProperty({ example: '123456' })
-  @IsString()
-  otp: string;
-}
-
-// Normalize phone to a stable cache key (strip spaces, ensure leading +)
-const normalize = (p: string): string => p.replace(/\s+/g, '').trim();
-
-@Injectable()
-export class CreateSmsOtpUseCase {
-  private readonly logger = new Logger(CreateSmsOtpUseCase.name);
+@CommandHandler(SendSmsOtpCommand)
+export class SendSmsOtpHandler implements ICommandHandler<SendSmsOtpCommand> {
+  private readonly logger = new Logger(SendSmsOtpHandler.name);
 
   constructor(
     @Inject(OTP_SERVICE) private readonly otpService: OtpService,
     @Inject(SMS_SERVICE) private readonly smsService: SmsService,
   ) {}
 
-  async send(dto: SendSmsOtpDto): Promise<void> {
-    const phone = normalize(dto.phone);
+  async execute(command: SendSmsOtpCommand): Promise<void> {
+    const phone = normalizePhone(command.phone);
     if (!/^\+[1-9]\d{6,14}$/.test(phone)) {
       throw new BadRequestException(
         'Numéro de téléphone invalide (format E.164 attendu, ex: +33612345678).',
       );
     }
 
-    const key = `otp:sms:${phone}`;
+    const key = smsOtpKey(phone);
     const hasActive = await this.otpService.hasActiveOtp(key);
     if (hasActive) {
       throw new BadRequestException(
@@ -68,14 +49,8 @@ export class CreateSmsOtpUseCase {
         err instanceof Error ? err.stack : String(err),
       );
       throw new InternalServerErrorException(
-        'Impossible d\'envoyer le code par SMS. Réessayez dans un instant.',
+        "Impossible d'envoyer le code par SMS. Réessayez dans un instant.",
       );
     }
-  }
-
-  async verify(dto: VerifySmsOtpDto): Promise<boolean> {
-    const phone = normalize(dto.phone);
-    const key = `otp:sms:${phone}`;
-    return this.otpService.verifyOtp(key, dto.otp);
   }
 }

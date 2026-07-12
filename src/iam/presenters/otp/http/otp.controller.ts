@@ -1,31 +1,27 @@
 import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
+import { CommandBus } from '@nestjs/cqrs';
 import { Throttle } from '@nestjs/throttler';
 import { Public } from 'src/common/auth/public.decorator';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { SendEmailOtpCommand } from '../../../applications/otp/applications/commands/send-email-otp.command';
+import { VerifyEmailOtpCommand } from '../../../applications/otp/applications/commands/verify-email-otp.command';
+import { SetupTotpCommand } from '../../../applications/otp/applications/commands/setup-totp.command';
+import { VerifyTotpCommand } from '../../../applications/otp/applications/commands/verify-totp.command';
+import { SendSmsOtpCommand } from '../../../applications/otp/applications/commands/send-sms-otp.command';
+import { VerifySmsOtpCommand } from '../../../applications/otp/applications/commands/verify-sms-otp.command';
 import {
-  CreateEmailOtpUseCase,
   SendEmailOtpDto,
-  VerifyEmailOtpDto,
-} from '../../../applications/otp/applications/usecases/create-email-otp.usecase';
-import {
-  CreateTotpUseCase,
-  SetupTotpDto,
-  VerifyTotpDto,
-} from '../../../applications/otp/applications/usecases/create-totp.usecase';
-import {
-  CreateSmsOtpUseCase,
   SendSmsOtpDto,
+  SetupTotpDto,
+  VerifyEmailOtpDto,
   VerifySmsOtpDto,
-} from '../../../applications/otp/applications/usecases/create-sms-otp.usecase';
+  VerifyTotpDto,
+} from './dto/otp.dto';
 
 @ApiTags('OTP / 2FA')
 @Controller('otp')
 export class OtpController {
-  constructor(
-    private readonly emailOtpUseCase: CreateEmailOtpUseCase,
-    private readonly totpUseCase: CreateTotpUseCase,
-    private readonly smsOtpUseCase: CreateSmsOtpUseCase,
-  ) {}
+  constructor(private readonly commandBus: CommandBus) {}
 
   @ApiOperation({ summary: 'Envoyer un OTP par email' })
   @ApiResponse({ status: 204, description: 'OTP envoyé' })
@@ -35,7 +31,7 @@ export class OtpController {
   @HttpCode(HttpStatus.NO_CONTENT)
   @Post('email/send')
   sendEmailOtp(@Body() dto: SendEmailOtpDto) {
-    return this.emailOtpUseCase.send(dto);
+    return this.commandBus.execute(new SendEmailOtpCommand(dto.email));
   }
 
   @ApiOperation({ summary: "Vérifier l'OTP email" })
@@ -43,21 +39,25 @@ export class OtpController {
   @Public()
   @Post('email/verify')
   verifyEmailOtp(@Body() dto: VerifyEmailOtpDto) {
-    return this.emailOtpUseCase.verify(dto);
+    return this.commandBus.execute(
+      new VerifyEmailOtpCommand(dto.email, dto.otp),
+    );
   }
 
   @ApiOperation({ summary: 'Configurer le TOTP (Google Authenticator)' })
   @ApiResponse({ status: 201, description: 'Secret + URI pour QR code' })
   @Post('totp/setup')
   setupTotp(@Body() dto: SetupTotpDto) {
-    return this.totpUseCase.setup(dto);
+    return this.commandBus.execute(new SetupTotpCommand(dto.email));
   }
 
   @ApiOperation({ summary: 'Vérifier un code TOTP' })
   @ApiResponse({ status: 200, description: 'TOTP valide' })
   @Post('totp/verify')
   verifyTotp(@Body() dto: VerifyTotpDto) {
-    return this.totpUseCase.verify(dto);
+    return this.commandBus.execute(
+      new VerifyTotpCommand(dto.email, dto.otp, dto.secret),
+    );
   }
 
   @ApiOperation({ summary: 'Envoyer un OTP par SMS' })
@@ -68,7 +68,7 @@ export class OtpController {
   @HttpCode(HttpStatus.NO_CONTENT)
   @Post('sms/send')
   sendSmsOtp(@Body() dto: SendSmsOtpDto) {
-    return this.smsOtpUseCase.send(dto);
+    return this.commandBus.execute(new SendSmsOtpCommand(dto.phone));
   }
 
   @ApiOperation({ summary: "Vérifier l'OTP SMS" })
@@ -76,6 +76,6 @@ export class OtpController {
   @Public()
   @Post('sms/verify')
   verifySmsOtp(@Body() dto: VerifySmsOtpDto) {
-    return this.smsOtpUseCase.verify(dto);
+    return this.commandBus.execute(new VerifySmsOtpCommand(dto.phone, dto.otp));
   }
 }
