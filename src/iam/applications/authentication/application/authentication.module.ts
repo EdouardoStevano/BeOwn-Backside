@@ -18,7 +18,6 @@ import { EMAIL_SERVICE } from 'src/common/email/email.service';
 import { NodemailerMailService } from 'src/common/email/nodemailer.service';
 import { ConfigModule } from '@nestjs/config';
 import jwtConfig from 'src/iam/infrastructure/config/jwt.config';
-import { RegisterUseCase } from 'src/users/applications/usecases/register.usecase';
 import { RecaptchaService } from 'src/common/recaptcha/recaptcha.service';
 import { NotificationsModule } from 'src/notifications/notifications.module';
 
@@ -44,7 +43,6 @@ const CommandHandlers = [
   ],
   providers: [
     ...CommandHandlers,
-    RegisterUseCase,
     RecaptchaService,
     { provide: HASHING_SERVICE, useClass: BcryptService },
     { provide: EMAIL_SERVICE, useClass: NodemailerMailService },

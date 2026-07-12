@@ -1,8 +1,9 @@
 import { Module } from '@nestjs/common';
+import { CqrsModule } from '@nestjs/cqrs';
 import { UsersService } from './users.service';
 import { UsersInfrastructureModule } from '../infrastructure/users-infrastructure.module';
 import { UserController } from '../presenters/http/user.controller';
-import { RegisterUseCase } from './usecases/register.usecase';
+import { RegisterHandler } from './commands/register.handler';
 import { UserFactory } from '../domains/factories/user.factory';
 import { HASHING_SERVICE } from 'src/common/hashing/hashing.service';
 import { BcryptService } from 'src/common/hashing/bcrypt.service';
@@ -14,6 +15,7 @@ import { NotificationsModule } from 'src/notifications/notifications.module';
 
 @Module({
   imports: [
+    CqrsModule,
     UsersInfrastructureModule,
     IamInfrastructureModule,
     ProfilesInfrastructureModule,
@@ -23,7 +25,7 @@ import { NotificationsModule } from 'src/notifications/notifications.module';
   ],
   providers: [
     UsersService,
-    RegisterUseCase,
+    RegisterHandler,
     UserFactory,
     { provide: HASHING_SERVICE, useClass: BcryptService },
   ],

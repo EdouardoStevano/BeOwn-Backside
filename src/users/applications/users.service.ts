@@ -1,12 +1,22 @@
 import { Injectable } from '@nestjs/common';
+import { CommandBus } from '@nestjs/cqrs';
 import { RegisterDto } from '../presenters/dto/user.dto';
-import { RegisterUseCase } from './usecases/register.usecase';
+import { User } from '../domains/user';
+import { RegisterCommand } from './commands/register.command';
 
 @Injectable()
 export class UsersService {
-  constructor(private readonly registerUsecase: RegisterUseCase) {}
-  create(registerDto: RegisterDto) {
-    return this.registerUsecase.execute(registerDto);
+  constructor(private readonly commandBus: CommandBus) {}
+
+  create(registerDto: RegisterDto): Promise<User> {
+    return this.commandBus.execute(
+      new RegisterCommand(
+        registerDto.firstname,
+        registerDto.lastname ?? null,
+        registerDto.email,
+        registerDto.password,
+      ),
+    );
   }
 
   findAll() {

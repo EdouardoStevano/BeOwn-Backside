@@ -33,7 +33,7 @@ import {
   ResetPasswordDto,
   SignUpDto,
 } from './dto/password.dto';
-import { RegisterUseCase } from 'src/users/applications/usecases/register.usecase';
+import { RegisterCommand } from 'src/users/applications/commands/register.command';
 import { RecaptchaService } from 'src/common/recaptcha/recaptcha.service';
 import { Public } from 'src/common/auth/public.decorator';
 import { Throttle } from '@nestjs/throttler';
@@ -47,7 +47,6 @@ import {
 export class AuthenticationController {
   constructor(
     private readonly commandBus: CommandBus,
-    private readonly registerUseCase: RegisterUseCase,
     private readonly recaptchaService: RecaptchaService,
     @Inject(CACHE_MANAGER_SERVICE)
     private readonly cacheManagerService: CacheManagerService,
@@ -177,7 +176,14 @@ export class AuthenticationController {
   @Post('sign-up')
   async signUp(@Body() dto: SignUpDto) {
     await this.recaptchaService.verify(dto.captchaToken);
-    const user = await this.registerUseCase.execute(dto);
+    const user = await this.commandBus.execute(
+      new RegisterCommand(
+        dto.firstname,
+        dto.lastname ?? null,
+        dto.email,
+        dto.password,
+      ),
+    );
     const { password: _p, ...safe } = user as any;
     return safe;
   }

@@ -26,11 +26,11 @@ export class RegisterDto {
   @IsEmail()
   email: string;
 
-  @ApiProperty({ example: 'Password123', minLength: 8 })
+  @ApiProperty({ example: 'Password123!', minLength: 8 })
   @MinLength(8)
-  @Matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/, {
+  @Matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^a-zA-Z0-9])/, {
     message:
-      'Le mot de passe doit contenir au moins une majuscule, une minuscule et un chiffre',
+      'Le mot de passe doit contenir au moins une majuscule, une minuscule, un chiffre et un symbole',
   })
   password: string;
 }
