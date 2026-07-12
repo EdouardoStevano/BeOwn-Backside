@@ -16,7 +16,10 @@ import {
   CACHE_MANAGER_SERVICE,
   type CacheManagerService,
 } from '../../domains/ports/cahe-manager.service';
-import { MailerService } from '@nestjs-modules/mailer';
+import {
+  EMAIL_SERVICE,
+  type EmailService,
+} from 'src/common/email/email.service';
 import { EmailVerificationDto } from './dto/email-verification.dto';
 import { randomUUID } from 'crypto';
 
@@ -27,7 +30,7 @@ export class VerifyEmailService {
     @Inject(USER_REPOSITORY) private readonly usersRepository: UserRepository,
     @Inject(CACHE_MANAGER_SERVICE)
     private readonly cacheManagerService: CacheManagerService,
-    private readonly mailerService: MailerService,
+    @Inject(EMAIL_SERVICE) private readonly emailService: EmailService,
   ) {}
 
   async sendVerificationEmail(
@@ -61,38 +64,10 @@ export class VerifyEmailService {
     const apiUrl = process.env.API_URL || 'http://localhost:3001';
     const confirmEmailUrl = `${apiUrl}/email/verify?token=${token}`;
 
-    await this.mailerService.sendMail({
-      to: emailVerificationDto.email,
-      subject: 'Confirmez votre adresse email',
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-          <div style="background: #1A2E35; padding: 30px; border-radius: 10px 10px 0 0; text-align: center;">
-            <h1 style="color: white; margin: 0; font-size: 28px;">BeOwn</h1>
-          </div>
-          <div style="background-color: #ffffff; padding: 40px 30px; border: 1px solid #e0e0e0; border-top: none; border-radius: 0 0 10px 10px;">
-            <h2 style="color: #333; margin-top: 0;">Confirmez votre adresse email</h2>
-            <p style="color: #666; font-size: 16px; line-height: 1.6;">
-              Bienvenue sur BeOwn ! Pour finaliser votre inscription et accéder à votre compte, veuillez confirmer votre adresse email en cliquant sur le bouton ci-dessous.
-            </p>
-            <div style="text-align: center; margin: 30px 0;">
-              <a href="${confirmEmailUrl}" style="background: #FFB52E; color: white; padding: 15px 40px; text-decoration: none; border-radius: 25px; font-size: 16px; font-weight: bold; display: inline-block;">
-                Confirmer mon email
-              </a>
-            </div>
-            <p style="color: #999; font-size: 14px; line-height: 1.6;">
-              Si le bouton ne fonctionne pas, copiez et collez ce lien dans votre navigateur :
-            </p>
-            <p style="color: #667eea; font-size: 14px; word-break: break-all;">
-              ${confirmEmailUrl}
-            </p>
-            <hr style="border: none; border-top: 1px solid #e0e0e0; margin: 30px 0;">
-            <p style="color: #999; font-size: 12px; text-align: center;">
-              Si vous n'avez pas créé de compte sur BeOwn, ignorez cet email.
-            </p>
-          </div>
-        </div>
-      `,
-    });
+    await this.emailService.sendEmailVerificationLink(
+      emailVerificationDto.email,
+      confirmEmailUrl,
+    );
   }
 
   async confirmEmail(token: string): Promise<string> {

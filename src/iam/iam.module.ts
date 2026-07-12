@@ -7,7 +7,8 @@ import { VerifyEmailService } from './applications/verify-email/verify-email.ser
 import { VerifyEmailController } from './applications/verify-email/verify-email.controller';
 import { SMS_SERVICE } from 'src/common/sms/sms.service';
 import { TwilioSmsService } from 'src/common/sms/twilio-sms.service';
-import { TOKEN_SERVICE } from './domains/ports/token.service';
+import { EMAIL_SERVICE } from 'src/common/email/email.service';
+import { NodemailerMailService } from 'src/common/email/nodemailer.service';
 import { ConfigModule } from '@nestjs/config';
 
 @Module({
@@ -21,6 +22,7 @@ import { ConfigModule } from '@nestjs/config';
   providers: [
     VerifyEmailService,
     { provide: SMS_SERVICE, useClass: TwilioSmsService },
+    { provide: EMAIL_SERVICE, useClass: NodemailerMailService },
   ],
   controllers: [VerifyEmailController],
   exports: [SMS_SERVICE, IamInfrastructureModule],

@@ -37,6 +37,18 @@ export class NodemailerMailService implements EmailService {
     });
   }
 
+  async sendEmailVerificationLink(
+    email: string,
+    confirmEmailUrl: string,
+  ): Promise<void> {
+    await this.mailerService.sendMail({
+      to: email,
+      subject: 'Confirmez votre adresse email',
+      template: 'email-verification',
+      context: { confirmEmailUrl },
+    });
+  }
+
   async sendKycValidatedEmail(email: string, prenom: string): Promise<void> {
     await this.mailerService.sendMail({
       to: email,

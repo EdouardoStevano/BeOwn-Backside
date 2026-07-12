@@ -46,6 +46,17 @@ export class BrevoEmailService implements EmailService {
     );
   }
 
+  async sendEmailVerificationLink(
+    email: string,
+    confirmEmailUrl: string,
+  ): Promise<void> {
+    await this.send(
+      email,
+      'Confirmez votre adresse email',
+      renderTemplate('email-verification', { confirmEmailUrl }),
+    );
+  }
+
   async sendPasswordResetEmail(email: string, token: string): Promise<void> {
     const frontendUrl = this.config.get('FRONTEND_URL') || 'http://localhost:5173';
     const resetLink = `${frontendUrl}/auth/reset-password?token=${token}`;

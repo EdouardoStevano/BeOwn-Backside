@@ -7,6 +7,10 @@ export interface EmailService {
   /** Code de vérification à usage unique (flux OTP email). `expiresIn` est un
    *  libellé prêt à afficher, ex. « 5 minutes ». */
   sendOtpEmail(email: string, otp: string, expiresIn: string): Promise<void>;
+
+  /** Lien de confirmation d'adresse email (flux d'inscription). `confirmEmailUrl`
+   *  est l'URL complète, token inclus. */
+  sendEmailVerificationLink(email: string, confirmEmailUrl: string): Promise<void>;
   sendPasswordResetEmail?(email: string, token: string): Promise<void>;
   sendKycStatusEmail?(email: string, status: string, motif?: string): Promise<void>;
   sendTransactionalEmail?(email: string, subject: string, htmlContent: string): Promise<void>;

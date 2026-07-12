@@ -1,8 +1,8 @@
-import { MailerService } from '@nestjs-modules/mailer';
 import { VerifyEmailService } from './verify-email.service';
 import type { CacheManagerService } from '../../domains/ports/cahe-manager.service';
 import type { TokenService } from '../../domains/ports/token.service';
 import type { UserRepository } from 'src/users/applications/ports/repositories/user.repository';
+import type { EmailService } from 'src/common/email/email.service';
 
 describe('VerifyEmailService', () => {
   let service: VerifyEmailService;
@@ -12,7 +12,7 @@ describe('VerifyEmailService', () => {
       {} as TokenService,
       {} as UserRepository,
       {} as CacheManagerService,
-      {} as MailerService,
+      {} as EmailService,
     );
   });
 
