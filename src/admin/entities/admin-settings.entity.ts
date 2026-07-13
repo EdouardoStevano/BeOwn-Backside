@@ -5,8 +5,6 @@ export interface AdminSettingsBlob {
     name?: string;
     contactEmail?: string;
     supportPhone?: string;
-    defaultCurrency?: string;
-    timezone?: string;
   };
   commissions?: {
     /** % par an du capital initial investi du SPV, prélevé 1/12 par mois sur les distributions */
