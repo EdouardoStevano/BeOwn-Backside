@@ -174,7 +174,6 @@ export class NotificationEventService {
   async retraitProcessed(
     userId: number,
     montant: number,
-    devise: string,
     reference: string,
   ): Promise<void> {
     try {
@@ -183,7 +182,7 @@ export class NotificationEventService {
         type: NotificationType.RETRAIT_TRAITE,
         titre: 'Retrait traité ✓',
         message: `Votre retrait de ${formatEur(montant)} a été envoyé vers votre compte bancaire. Référence : ${reference}.`,
-        metadata: { montant, devise, reference },
+        metadata: { montant, reference },
       });
     } catch (err) {
       this.logger.warn(`retraitProcessed failed: ${(err as Error)?.message}`);

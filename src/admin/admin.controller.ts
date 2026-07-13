@@ -537,7 +537,7 @@ export class AdminController {
               user: this.displayName(o.vendeur),
               email: o.vendeur?.userEmail?.email ?? '',
               action: `Ordre marché secondaire — ${o.sens}`,
-              detail: `${Number(o.montant).toLocaleString('fr-FR')} titres · ${formatEur(Number(o.prixUnitaire))}/u`,
+              detail: `${Number(o.nbFractions).toLocaleString('fr-FR')} titres · ${formatEur(Number(o.prixUnitaire))}/u`,
               status: o.statut === OrdreMarcheStatus.EXECUTE ? 'success' : o.statut === OrdreMarcheStatus.ANNULE ? 'error' : 'pending',
               date: o.createdAt,
               time: this.relativeTime(o.createdAt),

@@ -677,8 +677,8 @@ Immeuble résidentiel de 6 appartements loués, détenu via la SPV **BeOwn Les J
     this.logger.log('✅ Wallets + dépôts créés');
 
     // ════════════════════════════════════════════════════════════════════════
-    // 6. INVESTISSEMENTS — collecte financée à 100 % (200/200 parts)
-    //    inv1 = 100 parts (50 %), inv2 = 60 parts (30 %), inv3 = 40 parts (20 %)
+    // 6. INVESTISSEMENTS — collecte financée à 100 % (6 000/6 000 parts)
+    //    inv1 = 3 000 parts (50 %), inv2 = 1 800 parts (30 %), inv3 = 1 200 parts (20 %)
     // ════════════════════════════════════════════════════════════════════════
     this.logger.log('📈 Souscriptions investisseurs (clôture à 100 %)...');
 

@@ -197,14 +197,14 @@ describe('NotificationEventService.retraitProcessed', () => {
     } as unknown as jest.Mocked<NotificationService>;
     const service = new NotificationEventService(notifications);
 
-    await service.retraitProcessed(42, 100000, 'EUR', 'tx-uuid');
+    await service.retraitProcessed(42, 100000, 'tx-uuid');
 
     expect(notifications.push).toHaveBeenCalledWith({
       utilisateurId: 42,
       type: NotificationType.RETRAIT_TRAITE,
       titre: 'Retrait traité ✓',
       message: `Votre retrait de ${formatEur(100000)} a été envoyé vers votre compte bancaire. Référence : tx-uuid.`,
-      metadata: { montant: 100000, devise: 'EUR', reference: 'tx-uuid' },
+      metadata: { montant: 100000, reference: 'tx-uuid' },
     });
   });
 });

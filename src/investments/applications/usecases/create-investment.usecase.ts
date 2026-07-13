@@ -135,8 +135,8 @@ export class CreateInvestmentUseCase {
       const recommendedCap = Math.max(1000, limit5Percent);
       if (montant > recommendedCap && !dto.consentementDepassementLimite) {
         throw new BadRequestException(
-          `Votre statut "non averti" recommande de ne pas dépasser ${recommendedCap.toFixed(0)} € par investissement ` +
-          `(max entre 1000 € et 5% de votre patrimoine déclaré de ${patrimoine} €). ` +
+          `Votre statut "non averti" recommande de ne pas dépasser ${formatEur(recommendedCap)} par investissement ` +
+          `(max entre ${formatEur(1000)} et 5% de votre patrimoine déclaré de ${formatEur(patrimoine)}). ` +
           `Pour passer outre, cochez la case de consentement explicite "consentementDepassementLimite": true.`,
         );
       }
