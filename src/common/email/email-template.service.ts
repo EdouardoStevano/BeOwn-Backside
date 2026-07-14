@@ -256,6 +256,53 @@ export class EmailTemplateService implements OnModuleInit {
   }
 
   /**
+   * Rendu destiné à la PRÉVISUALISATION admin (API V2-T2). Identique à
+   * render() À UN DÉTAIL PRÈS : le flag `enabled` est ignoré — un template
+   * désactivé doit rester prévisualisable dans le back-office. N'affecte
+   * jamais le comportement d'envoi (render() reste la seule porte de sortie
+   * vers les transports et continue de renvoyer null quand enabled=false).
+   *
+   * Retourne null uniquement si la clé est introuvable (ni en base, ni parmi
+   * les .hbs du code).
+   */
+  async renderForPreview(
+    key: string,
+    vars: Record<string, unknown> = {},
+  ): Promise<RenderedEmail | null> {
+    let row: EmailTemplateEntity | null = null;
+    try {
+      row = await this.repo.findOne({ where: { key } });
+    } catch (err) {
+      this.logger.error(
+        `Lecture du template "${key}" en base impossible — fallback sur le fichier .hbs`,
+        err instanceof Error ? err.stack : undefined,
+      );
+    }
+
+    if (row) {
+      try {
+        const sujet = this.compileSujet(row.sujet, vars);
+        const corps = this.compileHtml(row.corpsHtml, vars);
+        return { sujet, html: wrapInLayout(corps, sujet) };
+      } catch (err) {
+        this.logger.error(
+          `Template DB "${key}" invalide — prévisualisation sur le fichier .hbs`,
+          err instanceof Error ? err.stack : undefined,
+        );
+      }
+    }
+
+    const source = await this.readTemplateFile(key);
+    if (source === null) return null;
+    const sujetTpl =
+      DEFAULT_TEMPLATE_META[key]?.sujet ?? extractTitle(source) ?? key;
+    return {
+      sujet: this.compileSujet(sujetTpl, vars),
+      html: this.compileHtml(source, vars),
+    };
+  }
+
+  /**
    * Insère les clés MANQUANTES depuis les .hbs du dossier (découverte
    * dynamique : une future clé ajoutée au dossier est seedée sans changer ce
    * code). N'écrase JAMAIS une ligne existante — idempotent.
