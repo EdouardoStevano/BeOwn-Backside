@@ -11,12 +11,16 @@ import { NotificationController } from './presenters/http/notification.controlle
 import { AuditLogService } from './applications/audit-log.service';
 import { AuditLogController } from './presenters/http/audit-log.controller';
 import { NotificationGateway } from './presenters/ws/notification.gateway';
+import { NotificationUnsubscribeService } from './applications/notification-unsubscribe.service';
+import { PublicUnsubscribeController } from './presenters/http/public-unsubscribe.controller';
 import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructure.module';
+import { UsersInfrastructureModule } from 'src/users/infrastructure/users-infrastructure.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([NotificationEntity, AuditLogEntity, UserEntity]),
     IamInfrastructureModule,
+    UsersInfrastructureModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: (config: ConfigService) => ({
@@ -25,8 +29,21 @@ import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructu
       inject: [ConfigService],
     }),
   ],
-  providers: [NotificationService, NotificationEventService, AuditLogService, NotificationGateway],
-  controllers: [NotificationController, AuditLogController],
-  exports: [NotificationService, NotificationEventService, AuditLogService, NotificationGateway, TypeOrmModule],
+  providers: [
+    NotificationService,
+    NotificationEventService,
+    AuditLogService,
+    NotificationGateway,
+    NotificationUnsubscribeService,
+  ],
+  controllers: [NotificationController, AuditLogController, PublicUnsubscribeController],
+  exports: [
+    NotificationService,
+    NotificationEventService,
+    AuditLogService,
+    NotificationGateway,
+    NotificationUnsubscribeService,
+    TypeOrmModule,
+  ],
 })
 export class NotificationsModule {}
