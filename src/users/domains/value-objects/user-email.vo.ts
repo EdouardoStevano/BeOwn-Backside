@@ -1,6 +1,6 @@
 import { InvalidEmailError } from '../errors/user.errors';
 
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+export const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /**
  * Adresse email d'un utilisateur, avec son état de vérification.

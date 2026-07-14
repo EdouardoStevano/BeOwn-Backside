@@ -2,6 +2,7 @@ import { Test } from '@nestjs/testing';
 import { CommandBus, CqrsModule } from '@nestjs/cqrs';
 import { HASHING_SERVICE } from 'src/common/hashing/hashing.service';
 import { USER_REPOSITORY } from '../ports/repositories/user.repository';
+import { TFA_REPOSITORY } from '../ports/repositories/tfa.repository';
 import { UserFactory } from 'src/users/domains/factories/user.factory';
 import { NotificationEventService } from 'src/notifications/applications/notification-event.service';
 import { EmailAlreadyInUseError } from 'src/users/domains/errors/user.errors';
@@ -34,6 +35,13 @@ describe('RegisterCommand via CommandBus', () => {
     findById: jest.fn(),
     save: jest.fn(),
   };
+  const tfaRepository = {
+    findOne: jest.fn(),
+    findActive: jest.fn(),
+    upsert: jest.fn(),
+    activateOnly: jest.fn(),
+    deactivateAll: jest.fn(),
+  };
   const hashingService = { hash: jest.fn(), compare: jest.fn() };
   const userFactory = { create: jest.fn() };
   const notificationEvents = { userRegistered: jest.fn() };
@@ -46,6 +54,7 @@ describe('RegisterCommand via CommandBus', () => {
         RegisterHandler,
         UsersAccountService,
         { provide: USER_REPOSITORY, useValue: userRepository },
+        { provide: TFA_REPOSITORY, useValue: tfaRepository },
         { provide: HASHING_SERVICE, useValue: hashingService },
         { provide: UserFactory, useValue: userFactory },
         { provide: NotificationEventService, useValue: notificationEvents },

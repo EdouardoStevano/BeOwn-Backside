@@ -6,6 +6,10 @@ import {
   type PasswordResetTokenPayload,
 } from 'src/iam/domain/ports/token.service';
 import { ACCOUNT_GATEWAY } from 'src/iam/domain/ports/account.gateway';
+import {
+  TWO_FACTOR_GATEWAY,
+  TwoFactorMethod,
+} from 'src/iam/domain/ports/two-factor.gateway';
 import { CAPTCHA_VERIFIER } from 'src/iam/domain/ports/captcha.verifier';
 import {
   ONE_TIME_TOKEN_STORE,
@@ -21,12 +25,17 @@ import {
   InvalidCredentialsError,
   InvalidOAuthCodeError,
   InvalidOrExpiredTokenError,
+  InvalidOtpError,
   InvalidRefreshTokenError,
+  InvalidTwoFactorChallengeError,
 } from 'src/iam/domain/errors/iam.errors';
 import jwtConfig from 'src/iam/infrastructure/config/jwt.config';
+import { TwoFactorChallengeService } from 'src/iam/application/two-factor/two-factor-challenge.service';
 
 import { SignInHandler } from './sign-in.handler';
 import { SignInCommand } from './sign-in.command';
+import { VerifyTwoFactorSignInHandler } from './verify-two-factor-sign-in.handler';
+import { VerifyTwoFactorSignInCommand } from './verify-two-factor-sign-in.command';
 import { SignUpHandler } from './sign-up.handler';
 import { SignUpCommand } from './sign-up.command';
 import { RefreshTokenHandler } from './refresh-token.handler';
@@ -63,7 +72,17 @@ describe('authentication use cases', () => {
     verifyEmailToken: jest.fn(),
     generatePasswordResetToken: jest.fn(),
     verifyPasswordResetToken: jest.fn(),
+    generateTwoFactorChallengeToken: jest.fn(),
+    verifyTwoFactorChallengeToken: jest.fn(),
   };
+  const twoFactor = {
+    findActive: jest.fn(),
+    findEnrollment: jest.fn(),
+    startEnrollment: jest.fn(),
+    activate: jest.fn(),
+    disable: jest.fn(),
+  };
+  const challenges = { send: jest.fn(), verify: jest.fn() };
   const oneTimeTokens = {
     issue: jest.fn(),
     isPending: jest.fn(),
@@ -92,6 +111,7 @@ describe('authentication use cases', () => {
       imports: [CqrsModule],
       providers: [
         SignInHandler,
+        VerifyTwoFactorSignInHandler,
         SignUpHandler,
         RefreshTokenHandler,
         SocialAuthHandler,
@@ -100,6 +120,8 @@ describe('authentication use cases', () => {
         ExchangeOAuthCodeHandler,
         { provide: ACCOUNT_GATEWAY, useValue: accounts },
         { provide: TOKEN_SERVICE, useValue: tokenService },
+        { provide: TWO_FACTOR_GATEWAY, useValue: twoFactor },
+        { provide: TwoFactorChallengeService, useValue: challenges },
         { provide: ONE_TIME_TOKEN_STORE, useValue: oneTimeTokens },
         { provide: SESSION_TOKEN_STORE, useValue: sessions },
         { provide: OAUTH_HANDOFF_STORE, useValue: handoff },
@@ -172,6 +194,139 @@ describe('authentication use cases', () => {
         'a@b.com',
         'Secret123!',
       );
+    });
+  });
+
+  describe('SignInCommand — second facteur actif', () => {
+    const totpEnrollment = {
+      method: TwoFactorMethod.TOTP,
+      credential: 'SECRET',
+      isActive: true,
+    };
+
+    beforeEach(() => {
+      accounts.findByEmail.mockResolvedValue(verifiedAccount);
+      accounts.verifyPassword.mockResolvedValue(true);
+      twoFactor.findActive.mockResolvedValue(totpEnrollment);
+      tokenService.generateTwoFactorChallengeToken.mockResolvedValue('chal');
+    });
+
+    it('issues a challenge instead of tokens', async () => {
+      const result = await commandBus.execute(
+        new SignInCommand('a@b.com', 'Secret123!'),
+      );
+
+      expect(result).toEqual({
+        mfaRequired: true,
+        method: TwoFactorMethod.TOTP,
+        challengeToken: 'chal',
+      });
+      // Le mot de passe seul ne vaut pas une session.
+      expect(tokenService.generateTokens).not.toHaveBeenCalled();
+    });
+
+    it('remembers the challenge id, so it can only be played once', async () => {
+      await commandBus.execute(new SignInCommand('a@b.com', 'Secret123!'));
+
+      const [payload] = tokenService.generateTwoFactorChallengeToken.mock
+        .calls[0] as [{ challengeId: string }];
+      expect(oneTimeTokens.issue).toHaveBeenCalledWith(
+        OneTimeTokenPurpose.TWO_FACTOR_CHALLENGE,
+        'a@b.com',
+        payload.challengeId,
+      );
+    });
+
+    it('sends the code on the enrolled channel', async () => {
+      await commandBus.execute(new SignInCommand('a@b.com', 'Secret123!'));
+
+      expect(challenges.send).toHaveBeenCalledWith('a@b.com', totpEnrollment);
+    });
+
+    it('still refuses a wrong password before reaching the second factor', async () => {
+      accounts.verifyPassword.mockResolvedValue(false);
+
+      await expect(
+        commandBus.execute(new SignInCommand('a@b.com', 'wrong')),
+      ).rejects.toThrow(InvalidCredentialsError);
+      expect(challenges.send).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('VerifyTwoFactorSignInCommand', () => {
+    const payload = { sub: 1, email: 'a@b.com', challengeId: 'cid' };
+    const enrollment = {
+      method: TwoFactorMethod.TOTP,
+      credential: 'SECRET',
+      isActive: true,
+    };
+
+    beforeEach(() => {
+      tokenService.verifyTwoFactorChallengeToken.mockResolvedValue(payload);
+      oneTimeTokens.isPending.mockResolvedValue(true);
+      twoFactor.findActive.mockResolvedValue(enrollment);
+      accounts.findByEmail.mockResolvedValue(verifiedAccount);
+      tokenService.generateTokens.mockResolvedValue(TOKENS);
+    });
+
+    it('issues the tokens once the code is verified, and burns the challenge', async () => {
+      challenges.verify.mockResolvedValue(true);
+
+      await expect(
+        commandBus.execute(new VerifyTwoFactorSignInCommand('chal', '123456')),
+      ).resolves.toEqual(TOKENS);
+
+      expect(challenges.verify).toHaveBeenCalledWith(
+        'a@b.com',
+        enrollment,
+        '123456',
+      );
+      expect(oneTimeTokens.consume).toHaveBeenCalledWith(
+        OneTimeTokenPurpose.TWO_FACTOR_CHALLENGE,
+        'a@b.com',
+      );
+    });
+
+    it('rejects a wrong code without burning the challenge', async () => {
+      challenges.verify.mockResolvedValue(false);
+
+      await expect(
+        commandBus.execute(new VerifyTwoFactorSignInCommand('chal', '000000')),
+      ).rejects.toThrow(InvalidOtpError);
+
+      // Une faute de frappe ne doit pas obliger à ressaisir son mot de passe :
+      // c'est l'OtpService qui compte les tentatives.
+      expect(oneTimeTokens.consume).not.toHaveBeenCalled();
+      expect(tokenService.generateTokens).not.toHaveBeenCalled();
+    });
+
+    it('rejects a challenge already consumed (replay)', async () => {
+      oneTimeTokens.isPending.mockResolvedValue(false);
+
+      await expect(
+        commandBus.execute(new VerifyTwoFactorSignInCommand('chal', '123456')),
+      ).rejects.toThrow(InvalidTwoFactorChallengeError);
+      expect(challenges.verify).not.toHaveBeenCalled();
+    });
+
+    it('rejects a token that is not a challenge token', async () => {
+      tokenService.verifyTwoFactorChallengeToken.mockRejectedValue(
+        new Error('not a challenge'),
+      );
+
+      await expect(
+        commandBus.execute(
+          new VerifyTwoFactorSignInCommand('access-token', '123456'),
+        ),
+      ).rejects.toThrow(InvalidTwoFactorChallengeError);
+    });
+
+    it('refuses to finish if the 2FA was disabled in between', async () => {
+      twoFactor.findActive.mockResolvedValue(null);
+
+      await expect(
+        commandBus.execute(new VerifyTwoFactorSignInCommand('chal', '123456')),
+      ).rejects.toThrow(InvalidTwoFactorChallengeError);
     });
   });
 

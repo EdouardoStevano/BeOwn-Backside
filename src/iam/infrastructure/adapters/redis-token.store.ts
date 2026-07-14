@@ -100,9 +100,14 @@ export class RedisTokenStore
   // ─── Clés ────────────────────────────────────────────────────────────────
 
   private ttlFor(purpose: OneTimeTokenPurpose): number {
-    return purpose === OneTimeTokenPurpose.PASSWORD_RESET
-      ? this.jwtConfiguration.passwordResetTtl
-      : this.jwtConfiguration.emailTokenTtl;
+    switch (purpose) {
+      case OneTimeTokenPurpose.PASSWORD_RESET:
+        return this.jwtConfiguration.passwordResetTtl;
+      case OneTimeTokenPurpose.TWO_FACTOR_CHALLENGE:
+        return this.jwtConfiguration.twoFactorChallengeTtl;
+      case OneTimeTokenPurpose.EMAIL_VERIFICATION:
+        return this.jwtConfiguration.emailTokenTtl;
+    }
   }
 
   private static refreshKey(email: string): string {
@@ -113,9 +118,14 @@ export class RedisTokenStore
     purpose: OneTimeTokenPurpose,
     email: string,
   ): string {
-    return purpose === OneTimeTokenPurpose.PASSWORD_RESET
-      ? `pwd-reset-${email}`
-      : `email-token-${email}`;
+    switch (purpose) {
+      case OneTimeTokenPurpose.PASSWORD_RESET:
+        return `pwd-reset-${email}`;
+      case OneTimeTokenPurpose.TWO_FACTOR_CHALLENGE:
+        return `2fa-challenge-${email}`;
+      case OneTimeTokenPurpose.EMAIL_VERIFICATION:
+        return `email-token-${email}`;
+    }
   }
 
   private static oauthKey(code: string): string {

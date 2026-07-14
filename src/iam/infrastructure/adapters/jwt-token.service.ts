@@ -9,6 +9,7 @@ import {
   PasswordResetTokenPayload,
   TokenPayload,
   TokenService,
+  TwoFactorChallengePayload,
 } from 'src/iam/domain/ports/token.service';
 import {
   SESSION_TOKEN_STORE,
@@ -115,6 +116,35 @@ export class JwtTokenService implements TokenService {
     // confirmation d'email (valable 24h) serait accepté ici comme token de reset.
     if (!payload.resetTokenId) {
       throw new Error('Not a password reset token');
+    }
+
+    return payload;
+  }
+
+  generateTwoFactorChallengeToken(
+    payload: TwoFactorChallengePayload,
+  ): Promise<string> {
+    return this.signToken<TwoFactorChallengePayload>(
+      payload.sub,
+      this.jwtConfiguration.twoFactorChallengeTtl,
+      payload,
+    );
+  }
+
+  async verifyTwoFactorChallengeToken(
+    token: string,
+  ): Promise<TwoFactorChallengePayload> {
+    const payload =
+      await this.jwtService.verifyAsync<TwoFactorChallengePayload>(token, {
+        secret: this.jwtConfiguration.secret,
+        audience: this.jwtConfiguration.audience,
+        issuer: this.jwtConfiguration.issuer,
+      });
+
+    // Même garde-fou que pour le reset : sans discriminant, un access token
+    // signé avec le même secret suffirait à franchir l'étape 2FA.
+    if (!payload.challengeId) {
+      throw new Error('Not a two-factor challenge token');
     }
 
     return payload;

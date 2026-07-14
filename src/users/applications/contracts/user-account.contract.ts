@@ -1,4 +1,5 @@
 import {
+  TwoFactorMethod,
   UserRole,
   UserStatus,
   UserType,
@@ -57,6 +58,20 @@ export interface RegisterSocialUserInput {
   socialId: string;
 }
 
+/**
+ * Une méthode de second facteur enrôlée, vue de l'extérieur de Users.
+ *
+ * `credential` porte ce dont IAM a besoin pour challenger l'utilisateur sur ce
+ * canal : l'adresse email, le numéro E.164, ou le secret TOTP. Users la stocke,
+ * IAM s'en sert — aucun des deux n'a besoin de savoir ce que l'autre en fait.
+ */
+export interface TwoFactorEnrollmentView {
+  method: TwoFactorMethod;
+  credential: string;
+  /** Faux tant que l'utilisateur n'a pas prouvé qu'il recevait les codes. */
+  isActive: boolean;
+}
+
 export interface UserAccountService {
   findByEmail(email: string): Promise<UserAccountSnapshot | null>;
   findBySocialId(socialId: string): Promise<UserAccountSnapshot | null>;
@@ -74,4 +89,31 @@ export interface UserAccountService {
   changePassword(email: string, newPlainPassword: string): Promise<void>;
 
   markEmailAsVerified(email: string): Promise<void>;
+
+  // ─── Second facteur ──────────────────────────────────────────────────────
+
+  /** La méthode 2FA choisie et confirmée, ou null si la 2FA est désactivée. */
+  findActiveTwoFactor(email: string): Promise<TwoFactorEnrollmentView | null>;
+
+  /** La méthode enrôlée sur ce canal, confirmée ou non. */
+  findTwoFactorEnrollment(
+    userId: number,
+    method: TwoFactorMethod,
+  ): Promise<TwoFactorEnrollmentView | null>;
+
+  /**
+   * Enregistre un canal en attente de confirmation. Il ne devient la méthode du
+   * compte qu'après `activateTwoFactor` — enrôler ne suffit pas à s'exposer au
+   * risque de ne plus pouvoir se connecter.
+   */
+  startTwoFactorEnrollment(
+    userId: number,
+    method: TwoFactorMethod,
+    credential: string,
+  ): Promise<void>;
+
+  /** Confirme le canal, en fait la méthode du compte, et désactive les autres. */
+  activateTwoFactor(userId: number, method: TwoFactorMethod): Promise<void>;
+
+  disableTwoFactor(userId: number): Promise<void>;
 }

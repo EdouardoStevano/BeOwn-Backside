@@ -12,10 +12,12 @@ import { ONE_TIME_TOKEN_STORE } from '../domain/ports/one-time-token.store';
 import { OAUTH_HANDOFF_STORE } from '../domain/ports/oauth-handoff.store';
 import { OTP_SERVICE } from '../domain/ports/otp.service';
 import { ACCOUNT_GATEWAY } from '../domain/ports/account.gateway';
+import { TWO_FACTOR_GATEWAY } from '../domain/ports/two-factor.gateway';
 import { JwtTokenService } from './adapters/jwt-token.service';
 import { RedisTokenStore } from './adapters/redis-token.store';
 import { OtplibOtpService } from './adapters/otplib-otp.service';
 import { UsersAccountGateway } from './adapters/users-account.gateway';
+import { UsersTwoFactorGateway } from './adapters/users-two-factor.gateway';
 
 /**
  * Tous les adapters d'IAM, branchés sur les ports du domaine.
@@ -47,6 +49,7 @@ import { UsersAccountGateway } from './adapters/users-account.gateway';
     { provide: TOKEN_SERVICE, useClass: JwtTokenService },
     { provide: OTP_SERVICE, useClass: OtplibOtpService },
     { provide: ACCOUNT_GATEWAY, useClass: UsersAccountGateway },
+    { provide: TWO_FACTOR_GATEWAY, useClass: UsersTwoFactorGateway },
 
     // IAM est le fournisseur du port que common/auth déclare : la dépendance
     // est inversée, `common` ne connaît plus `iam`.
@@ -59,6 +62,7 @@ import { UsersAccountGateway } from './adapters/users-account.gateway';
     OAUTH_HANDOFF_STORE,
     OTP_SERVICE,
     ACCOUNT_GATEWAY,
+    TWO_FACTOR_GATEWAY,
     ACCESS_TOKEN_VERIFIER,
   ],
 })

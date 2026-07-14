@@ -7,8 +7,14 @@ import {
   USER_REPOSITORY,
   type UserRepository,
 } from '../ports/repositories/user.repository';
+import {
+  TFA_REPOSITORY,
+  type TfaRepository,
+} from '../ports/repositories/tfa.repository';
 import { UserFactory } from 'src/users/domains/factories/user.factory';
 import { User } from 'src/users/domains/user';
+import { TfaMethod, createTfaMethod } from 'src/users/domains/tfa-method';
+import { TwoFactorMethod } from 'src/users/domains/enums/user.enum';
 import {
   EmailAlreadyInUseError,
   UserNotFoundError,
@@ -17,6 +23,7 @@ import {
   PublicUserView,
   RegisterSocialUserInput,
   RegisterUserInput,
+  TwoFactorEnrollmentView,
   UserAccountService,
   UserAccountSnapshot,
 } from '../contracts/user-account.contract';
@@ -32,6 +39,7 @@ import { NotificationEventService } from 'src/notifications/applications/notific
 export class UsersAccountService implements UserAccountService {
   constructor(
     @Inject(USER_REPOSITORY) private readonly userRepository: UserRepository,
+    @Inject(TFA_REPOSITORY) private readonly tfaRepository: TfaRepository,
     @Inject(HASHING_SERVICE) private readonly hashingService: HashingService,
     private readonly userFactory: UserFactory,
     private readonly notificationEvents: NotificationEventService,
@@ -110,6 +118,73 @@ export class UsersAccountService implements UserAccountService {
 
     user.verifyEmail();
     await this.userRepository.update(user);
+  }
+
+  // ─── Second facteur ────────────────────────────────────────────────────────
+
+  async findActiveTwoFactor(
+    email: string,
+  ): Promise<TwoFactorEnrollmentView | null> {
+    const user = await this.userRepository.findByEmail(email);
+    if (!user) return null;
+
+    const prefs = await this.userRepository.findPreferences(user.userId);
+    if (!prefs.twoFactorMethod) return null;
+
+    // La préférence dit quel canal ; le canal doit encore avoir été confirmé.
+    // Une incohérence entre les deux (donnée corrompue, migration ratée) se
+    // traduit par « pas de 2FA » plutôt que par un compte inaccessible.
+    const method = await this.tfaRepository.findOne(
+      user.userId,
+      prefs.twoFactorMethod,
+    );
+    if (!method?.isActive) return null;
+
+    return UsersAccountService.toEnrollmentView(method);
+  }
+
+  async findTwoFactorEnrollment(
+    userId: number,
+    method: TwoFactorMethod,
+  ): Promise<TwoFactorEnrollmentView | null> {
+    const enrolled = await this.tfaRepository.findOne(userId, method);
+    return enrolled ? UsersAccountService.toEnrollmentView(enrolled) : null;
+  }
+
+  async startTwoFactorEnrollment(
+    userId: number,
+    method: TwoFactorMethod,
+    credential: string,
+  ): Promise<void> {
+    await this.tfaRepository.upsert(
+      userId,
+      createTfaMethod(method, credential),
+    );
+  }
+
+  async activateTwoFactor(
+    userId: number,
+    method: TwoFactorMethod,
+  ): Promise<void> {
+    await this.tfaRepository.activateOnly(userId, method);
+    await this.userRepository.savePreferences(userId, {
+      twoFactorMethod: method,
+    });
+  }
+
+  async disableTwoFactor(userId: number): Promise<void> {
+    await this.tfaRepository.deactivateAll(userId);
+    await this.userRepository.savePreferences(userId, {
+      twoFactorMethod: null,
+    });
+  }
+
+  private static toEnrollmentView(method: TfaMethod): TwoFactorEnrollmentView {
+    return {
+      method: method.method,
+      credential: method.credential,
+      isActive: method.isActive,
+    };
   }
 
   private static toSnapshot(user: User): UserAccountSnapshot {

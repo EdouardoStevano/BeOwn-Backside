@@ -41,6 +41,17 @@ export enum UserType {
   PM = 'PM',
 }
 
+/**
+ * Les trois canaux de second facteur. Un compte n'en active qu'un à la fois :
+ * c'est `UserPreferences.twoFactorMethod` qui dit lequel, et `null` qui dit
+ * « pas de 2FA ».
+ */
+export enum TwoFactorMethod {
+  EMAIL = 'email',
+  SMS = 'sms',
+  TOTP = 'totp',
+}
+
 export enum RegimeFiscal {
   PFU = 'PFU',
   BAREME = 'BAREME',

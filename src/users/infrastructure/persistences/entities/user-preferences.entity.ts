@@ -8,6 +8,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { UserEntity } from './user.entity';
+import { TwoFactorMethod } from 'src/users/domains/enums/user.enum';
 
 @Entity('user_preferences')
 export class UserPreferencesEntity {
@@ -29,8 +30,9 @@ export class UserPreferencesEntity {
   @Column({ default: false })
   notifMarketing: boolean;
 
-  @Column({ default: false })
-  twoFactorEnabled: boolean;
+  /** null = 2FA désactivée. Cf. UserPreferences.twoFactorMethod. */
+  @Column({ type: 'varchar', nullable: true })
+  twoFactorMethod: TwoFactorMethod | null;
 
   @Column({ default: 'EUR' })
   preferredCurrency: string;

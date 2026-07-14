@@ -17,6 +17,7 @@ import { CommandBus, QueryBus } from '@nestjs/cqrs';
 import { Throttle } from '@nestjs/throttler';
 import { Public } from 'src/common/auth/public.decorator';
 import { SignInCommand } from 'src/iam/application/authentication/commands/sign-in.command';
+import { VerifyTwoFactorSignInCommand } from 'src/iam/application/authentication/commands/verify-two-factor-sign-in.command';
 import { RefreshTokenCommand } from 'src/iam/application/authentication/commands/refresh-token.command';
 import {
   SocialAuthCommand,
@@ -34,7 +35,7 @@ import { GoogleCallbackGuard } from 'src/iam/infrastructure/guards/google-callba
 import { LinkedinAuthGuard } from 'src/iam/infrastructure/guards/linkedin-auth.guard';
 import { LinkedinCallbackGuard } from 'src/iam/infrastructure/guards/linkedin-callback.guard';
 import appUrlsConfig from 'src/iam/infrastructure/config/app-urls.config';
-import { SignInDto } from './dto/sign-in.dto';
+import { SignInDto, VerifyTwoFactorSignInDto } from './dto/sign-in.dto';
 import { ExchangeCodeDto, RefreshTokenDto } from './dto/refresh-token.dto';
 import {
   ForgotPasswordDto,
@@ -55,8 +56,19 @@ export class AuthenticationController {
     private readonly urls: ConfigType<typeof appUrlsConfig>,
   ) {}
 
-  @ApiOperation({ summary: 'Connexion avec email et mot de passe' })
-  @ApiResponse({ status: 200, description: 'Tokens retournés avec succès' })
+  @ApiOperation({
+    summary: 'Connexion avec email et mot de passe',
+    description:
+      "Si le compte a une double authentification active, aucun token n'est " +
+      'délivré ici : la réponse porte { mfaRequired: true, method, challengeToken } ' +
+      "et le code est envoyé (email/SMS) ou attendu depuis l'application (TOTP). " +
+      'Le client enchaîne alors sur POST /auth/sign-in/verify-otp.',
+  })
+  @ApiResponse({
+    status: 200,
+    description:
+      'Tokens retournés, ou challenge 2FA si un second facteur est actif',
+  })
   @ApiResponse({ status: 401, description: 'Identifiants invalides' })
   @ApiResponse({
     status: 429,
@@ -68,6 +80,26 @@ export class AuthenticationController {
   @Post('sign-in')
   signIn(@Body() dto: SignInDto) {
     return this.commandBus.execute(new SignInCommand(dto.email, dto.password));
+  }
+
+  @ApiOperation({
+    summary:
+      'Seconde étape du sign-in : vérifier le code de double authentification',
+  })
+  @ApiResponse({ status: 200, description: 'Tokens retournés avec succès' })
+  @ApiResponse({ status: 400, description: 'Code invalide' })
+  @ApiResponse({
+    status: 401,
+    description: 'Challenge inconnu, expiré, ou déjà consommé',
+  })
+  @Throttle({ auth: { ttl: 900_000, limit: 500 } })
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @Post('sign-in/verify-otp')
+  verifyTwoFactorSignIn(@Body() dto: VerifyTwoFactorSignInDto) {
+    return this.commandBus.execute(
+      new VerifyTwoFactorSignInCommand(dto.challengeToken, dto.otp),
+    );
   }
 
   @ApiOperation({ summary: 'Inscription (sign-up)' })

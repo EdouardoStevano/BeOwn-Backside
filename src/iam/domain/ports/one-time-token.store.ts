@@ -1,9 +1,15 @@
 export const ONE_TIME_TOKEN_STORE = Symbol('ONE_TIME_TOKEN_STORE');
 
-/** Les deux familles de liens à usage unique envoyés par email. */
+/** Les familles de jetons à usage unique émis par IAM. */
 export enum OneTimeTokenPurpose {
   EMAIL_VERIFICATION = 'email-verification',
   PASSWORD_RESET = 'password-reset',
+  /**
+   * Le sas entre « mot de passe validé » et « code 2FA validé ». Il n'est pas
+   * envoyé par email : il est remis au client, qui le rejoue pour prouver qu'il
+   * a déjà passé la première étape.
+   */
+  TWO_FACTOR_CHALLENGE = 'two-factor-challenge',
 }
 
 /**

@@ -1,17 +1,8 @@
 import { User } from 'src/users/domains/user';
 import { UserEntity } from '../entities/user.entity';
 import { UserEmail } from 'src/users/domains/value-objects/user-email.vo';
-import { TFAMethodEntity } from '../entities/tfa-method.entity';
-import {
-  EmailMethod,
-  SmsMethod,
-  TfaMethod,
-  TotpMethod,
-} from 'src/users/domains/tfa-method';
-import { EmailMethodEntity } from '../entities/email-method.entity';
-import { SMSMethodEntity } from '../entities/sms-method.entity';
-import { TOTPMethodEntity } from '../entities/totp-method.entity';
 import { UserEmailEntity } from '../entities/user-email.entity';
+import { TfaMapper } from './tfa-method.mapper';
 
 export class UserMapper {
   static toDomain(entity: UserEntity): User {
@@ -39,7 +30,7 @@ export class UserMapper {
     }
 
     if (entity.tfaMethods) {
-      user.tfaMethods = entity.tfaMethods.map(UserMapper.tfaToDomain);
+      user.tfaMethods = entity.tfaMethods.map((m) => TfaMapper.toDomain(m));
     }
 
     return user;
@@ -78,33 +69,5 @@ export class UserMapper {
     }
 
     return entity;
-  }
-
-  private static tfaToDomain(this: void, entity: TFAMethodEntity): TfaMethod {
-    if (entity instanceof EmailMethodEntity) {
-      const emailMethod = new EmailMethod();
-      emailMethod.emailOtp = entity.emailOTP;
-      emailMethod.isActive = entity.isActive;
-      emailMethod.tfaMethodId = entity.TFAMethodId;
-      emailMethod.activatedDate = entity.activatedDate;
-      return emailMethod;
-    }
-
-    if (entity instanceof SMSMethodEntity) {
-      const smsMethod = new SmsMethod();
-      smsMethod.tfaMethodId = entity.TFAMethodId;
-      smsMethod.isActive = entity.isActive;
-      smsMethod.activatedDate = entity.activatedDate;
-      smsMethod.phoneNumberOtp = entity.phoneNumberOTP;
-      return smsMethod;
-    }
-
-    const totpMethodEntity = entity as TOTPMethodEntity;
-    const totpMethod = new TotpMethod();
-    totpMethod.tfaMethodId = totpMethodEntity.TFAMethodId;
-    totpMethod.isActive = totpMethodEntity.isActive;
-    totpMethod.activatedDate = totpMethodEntity.activatedDate;
-    totpMethod.secretKeyOtp = totpMethodEntity.secretKeyOtp;
-    return totpMethod;
   }
 }

@@ -97,10 +97,10 @@ export class UpdatePreferencesDto {
   @IsBoolean()
   notifMarketing?: boolean;
 
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsBoolean()
-  twoFactorEnabled?: boolean;
+  // Pas de `twoFactorMethod` ici, volontairement : activer un second facteur
+  // suppose d'avoir prouvé qu'on reçoit les codes sur le canal choisi. Cela
+  // passe par POST /auth/2fa/enroll puis /auth/2fa/confirm — jamais par une
+  // simple écriture de préférence.
 
   @ApiPropertyOptional({ example: 'EUR' })
   @IsOptional()

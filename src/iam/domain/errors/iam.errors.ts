@@ -145,6 +145,36 @@ export class InvalidPhoneNumberError extends InvalidInputDomainError {
   }
 }
 
+// ─── Second facteur ────────────────────────────────────────────────────────
+
+/** Le challenge de sign-in est inconnu, expiré, ou déjà consommé. */
+export class InvalidTwoFactorChallengeError extends UnauthorizedDomainError {
+  readonly code = 'INVALID_TWO_FACTOR_CHALLENGE';
+
+  constructor() {
+    super('Session de vérification invalide ou expirée. Reconnectez-vous.');
+  }
+}
+
+export class TwoFactorNotEnrolledError extends InvalidInputDomainError {
+  readonly code = 'TWO_FACTOR_NOT_ENROLLED';
+
+  constructor(
+    message = "Aucune méthode de double authentification n'est en attente de confirmation.",
+  ) {
+    super(message);
+  }
+}
+
+/** Le canal SMS n'a de sens qu'avec un numéro sur lequel envoyer le code. */
+export class PhoneNumberRequiredError extends InvalidInputDomainError {
+  readonly code = 'PHONE_NUMBER_REQUIRED';
+
+  constructor() {
+    super('Un numéro de téléphone est requis pour activer la 2FA par SMS.');
+  }
+}
+
 // ─── Dépendances externes ──────────────────────────────────────────────────
 
 export class EmailDeliveryFailedError extends ExternalServiceDomainError {

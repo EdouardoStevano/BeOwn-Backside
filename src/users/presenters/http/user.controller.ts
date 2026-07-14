@@ -172,16 +172,9 @@ export class UserController {
     );
   }
 
-  @ApiOperation({ summary: 'Basculer la double authentification' })
-  @ApiResponse({ status: 200, description: 'Préférence mise à jour' })
-  @Patch('me/preferences/tfa')
-  toggleTfa(@CurrentUser() user: ActiveUser, @Body() dto: TogglePreferenceDto) {
-    return this.commandBus.execute(
-      new UpdatePreferencesCommand(user.userId, {
-        twoFactorEnabled: dto.value,
-      }),
-    );
-  }
+  // La double authentification n'est plus une préférence qu'on bascule : le
+  // canal (email, SMS ou TOTP) doit être confirmé avant d'être activé, sans quoi
+  // on peut se verrouiller hors de son compte. Cf. POST /auth/2fa/enroll.
 
   @ApiOperation({ summary: "Définir le type d'investisseur (PP ou PM)" })
   @ApiResponse({ status: 200, description: 'Type mis à jour' })

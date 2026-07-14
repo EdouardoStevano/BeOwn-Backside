@@ -29,6 +29,17 @@ export interface PasswordResetTokenPayload {
 }
 
 /**
+ * Le jeton remis entre les deux étapes du sign-in : le mot de passe est validé,
+ * le second facteur ne l'est pas encore. Il ne donne accès à rien d'autre qu'à
+ * l'endpoint de vérification OTP.
+ */
+export interface TwoFactorChallengePayload {
+  sub: number;
+  email: string;
+  challengeId: string;
+}
+
+/**
  * Frappe et vérification des jetons. Le domaine ignore que ce sont des JWT :
  * il demande « un token de reset valable pour ce compte », pas « signe-moi
  * ceci en HS256 ».
@@ -43,4 +54,10 @@ export interface TokenService {
     payload: PasswordResetTokenPayload,
   ): Promise<string>;
   verifyPasswordResetToken(token: string): Promise<PasswordResetTokenPayload>;
+  generateTwoFactorChallengeToken(
+    payload: TwoFactorChallengePayload,
+  ): Promise<string>;
+  verifyTwoFactorChallengeToken(
+    token: string,
+  ): Promise<TwoFactorChallengePayload>;
 }

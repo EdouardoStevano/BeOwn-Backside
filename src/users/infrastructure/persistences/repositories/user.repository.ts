@@ -122,7 +122,7 @@ export class UserTypeOrmRepository implements UserRepository {
     p.notifEmail = e.notifEmail;
     p.notifSms = e.notifSms;
     p.notifMarketing = e.notifMarketing;
-    p.twoFactorEnabled = e.twoFactorEnabled;
+    p.twoFactorMethod = e.twoFactorMethod;
     p.preferredCurrency = e.preferredCurrency;
     p.createdAt = e.createdAt;
     p.updatedAt = e.updatedAt;

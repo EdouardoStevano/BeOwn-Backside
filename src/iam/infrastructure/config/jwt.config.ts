@@ -16,5 +16,11 @@ export default registerAs('jwt', () => {
       process.env.JWT_PASSWORD_RESET_TTL ?? '1800',
       10,
     ),
+    // Le temps de lire un SMS et de le recopier, pas davantage : ce jeton vaut
+    // « mot de passe déjà validé ». 5 minutes, comme le TTL d'un OTP.
+    twoFactorChallengeTtl: parseInt(
+      process.env.JWT_TWO_FACTOR_CHALLENGE_TTL ?? '300',
+      10,
+    ),
   };
 });

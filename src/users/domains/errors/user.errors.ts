@@ -62,6 +62,22 @@ export class InvalidEmailError extends InvalidInputDomainError {
   }
 }
 
+export class InvalidPhoneNumberError extends InvalidInputDomainError {
+  readonly code = 'INVALID_PHONE_NUMBER';
+
+  constructor(value: string) {
+    super(`Numéro de téléphone invalide : « ${value} ». Format E.164 attendu.`);
+  }
+}
+
+export class InvalidTotpSecretError extends InvalidInputDomainError {
+  readonly code = 'INVALID_TOTP_SECRET';
+
+  constructor() {
+    super('Secret TOTP invalide : encodage base32 attendu.');
+  }
+}
+
 /** Un compte social (sans mot de passe) ne peut pas confirmer une action par mot de passe. */
 export class NoPasswordSetError extends UnauthorizedDomainError {
   readonly code = 'NO_PASSWORD_SET';

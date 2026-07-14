@@ -10,7 +10,9 @@ import { RecaptchaVerifier } from 'src/iam/infrastructure/adapters/recaptcha.ver
 import { GoogleStrategy } from 'src/iam/infrastructure/strategies/google-auth.strategy';
 import { FacebookAuthStrategy } from 'src/iam/infrastructure/strategies/facebook-auth.strategy';
 import { LinkedinStrategy } from 'src/iam/infrastructure/strategies/linkedin-auth.strategy';
+import { TwoFactorModule } from 'src/iam/application/two-factor/two-factor.module';
 import { SignInHandler } from './commands/sign-in.handler';
+import { VerifyTwoFactorSignInHandler } from './commands/verify-two-factor-sign-in.handler';
 import { SignUpHandler } from './commands/sign-up.handler';
 import { RefreshTokenHandler } from './commands/refresh-token.handler';
 import { SocialAuthHandler } from './commands/social-auth.handler';
@@ -20,6 +22,7 @@ import { ExchangeOAuthCodeHandler } from './queries/exchange-oauth-code.handler'
 
 const CommandHandlers = [
   SignInHandler,
+  VerifyTwoFactorSignInHandler,
   SignUpHandler,
   RefreshTokenHandler,
   SocialAuthHandler,
@@ -42,6 +45,9 @@ const QueryHandlers = [ExchangeOAuthCodeHandler];
     // déclarer ici aussi.
     ConfigModule.forFeature(jwtConfig),
     ConfigModule.forFeature(appUrlsConfig),
+    // Pour le TwoFactorChallengeService : le sign-in envoie et vérifie le code
+    // du second facteur exactement comme l'enrôlement.
+    TwoFactorModule,
   ],
   providers: [
     ...CommandHandlers,
