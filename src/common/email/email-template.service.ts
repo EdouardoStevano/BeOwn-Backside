@@ -118,7 +118,15 @@ export function extractVariables(content: string): string[] {
   return [...vars].sort();
 }
 
-/** Déclarations CSS par classe du <style> d'un .hbs (pseudo-sélecteurs ignorés). */
+/**
+ * Déclarations CSS par classe du <style> d'un .hbs.
+ *
+ * Parser volontairement minimal, calibré sur le CSS minifié mono-sélecteur
+ * des .hbs historiques (`.classe{...}`) : sélecteurs composés, media queries
+ * et pseudo-sélecteurs (.row:last-child…) sont ignorés. Une règle non parsée
+ * n'est pas grave : le défaut du layout s'applique alors silencieusement
+ * (dégradation cosmétique, jamais bloquante).
+ */
 function parseStyleMap(source: string): Record<string, string> {
   const styles: Record<string, string> = {};
   const styleBlock = /<style>([\s\S]*?)<\/style>/i.exec(source)?.[1] ?? '';
@@ -134,6 +142,11 @@ function parseStyleMap(source: string): Record<string, string> {
  * déclinent une même classe différemment (.h1/.p centrés, .badge rouge du
  * KYC refusé…). Quand la déclaration du template source diffère du défaut du
  * layout, elle est inlinée sur les éléments concernés du corps extrait.
+ *
+ * Limites assumées : ne cible que les attributs `class="cls"` mono-classe du
+ * markup minifié des .hbs historiques. Un élément non matché (multi-classes,
+ * attribut réordonné, style déjà présent) reste tel quel et hérite du défaut
+ * du layout — silencieux et purement cosmétique.
  */
 function inlineVariantStyles(
   corps: string,
@@ -152,11 +165,16 @@ function inlineVariantStyles(
  * Corps métier d'un .hbs historique : contenu de <div class="body">, sans
  * header ni footer (réinjectés par le layout fixe au rendu), avec inlining
  * des styles propres au template (voir inlineVariantStyles).
+ *
+ * Retourne null si la structure body/footer attendue est introuvable :
+ * seeder le document complet dans le layout donnerait un email doublement
+ * enveloppé — l'appelant (seedDefaults) loggue et saute la clé, le rendu de
+ * cette clé restant assuré par le fallback fichier de render().
  */
-export function extractCorps(source: string): string {
+export function extractCorps(source: string): string | null {
   const match = CORPS_RE.exec(source);
-  const corps = (match ? match[1] : source).trim();
-  return inlineVariantStyles(corps, parseStyleMap(source));
+  if (!match) return null;
+  return inlineVariantStyles(match[1].trim(), parseStyleMap(source));
 }
 
 /**
@@ -193,7 +211,17 @@ export class EmailTemplateService implements OnModuleInit {
     key: string,
     vars: Record<string, unknown> = {},
   ): Promise<RenderedEmail | null> {
-    const row = await this.repo.findOne({ where: { key } });
+    let row: EmailTemplateEntity | null = null;
+    try {
+      row = await this.repo.findOne({ where: { key } });
+    } catch (err) {
+      // Panne DB transitoire ou table absente : l'envoi d'emails (chemin
+      // chaud) ne doit pas en dépendre — on dégrade sur le .hbs du code.
+      this.logger.error(
+        `Lecture du template "${key}" en base impossible — fallback sur le fichier .hbs`,
+        err instanceof Error ? err.stack : undefined,
+      );
+    }
 
     if (row) {
       if (!row.enabled) return null;
@@ -259,6 +287,12 @@ export class EmailTemplateService implements OnModuleInit {
           'utf8',
         );
         const corpsHtml = extractCorps(source);
+        if (corpsHtml === null) {
+          this.logger.warn(
+            `Structure inattendue de ${key}.hbs (pas de <div class="body">…<div class="footer">) — clé non seedée, le rendu passera par le fallback fichier`,
+          );
+          continue;
+        }
         const meta = DEFAULT_TEMPLATE_META[key] ?? {
           nom: key,
           description: `Template « ${key} »`,

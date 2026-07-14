@@ -180,6 +180,19 @@ describe('EmailTemplateService', () => {
 
       await expect(service.render('cle-inexistante', {})).resolves.toBeNull();
     });
+
+    it('retombe sur le .hbs du code quand la lecture DB échoue (panne, table absente)', async () => {
+      repo.findOne.mockRejectedValue(new Error('connection refused'));
+
+      const result = await service.render('activation', {
+        otp: '654321',
+        expiresIn: '5 minutes',
+      });
+
+      expect(result).not.toBeNull();
+      expect(result!.sujet).toBe('Activez votre compte BeOwn');
+      expect(result!.html).toContain('654321');
+    });
   });
 
   describe('seedDefaults', () => {
@@ -241,6 +254,25 @@ describe('EmailTemplateService', () => {
       expect(store.get('activation')!.enabled).toBe(false);
     });
 
+    it('continue le seed des autres clés quand une insertion échoue', async () => {
+      repo.findOne.mockResolvedValue(null);
+      repo.insert.mockImplementation((row: EmailTemplateEntity) =>
+        row.key === 'activation'
+          ? Promise.reject(new Error('duplicate key value'))
+          : Promise.resolve({}),
+      );
+
+      await service.seedDefaults();
+
+      const insertedKeys = repo.insert.mock.calls.map(
+        ([row]) => (row as EmailTemplateEntity).key,
+      );
+      // Toutes les clés ont été tentées malgré l'échec sur activation
+      for (const key of KNOWN_KEYS) {
+        expect(insertedKeys).toContain(key);
+      }
+    });
+
     it('est appelé au bootstrap via onModuleInit', async () => {
       const spy = jest
         .spyOn(service, 'seedDefaults')
@@ -267,7 +299,7 @@ describe('EmailTemplateService', () => {
 </div></body></html>`;
 
     it('extrait le contenu de <div class="body"> sans header ni footer', () => {
-      const corps = extractCorps(SAMPLE);
+      const corps = extractCorps(SAMPLE)!;
 
       expect(corps).toContain('Bonjour {{prenom}}');
       expect(corps).toContain('{{#if motif}}');
@@ -277,7 +309,7 @@ describe('EmailTemplateService', () => {
     });
 
     it('inline la déclaration du template quand elle diffère du défaut du layout', () => {
-      const corps = extractCorps(SAMPLE);
+      const corps = extractCorps(SAMPLE)!;
 
       // .h1 du sample est centré (diffère du layout) → inliné
       expect(corps).toContain(
@@ -286,6 +318,12 @@ describe('EmailTemplateService', () => {
       // .card du sample est identique au layout → pas de style inline
       expect(corps).toContain('<div class="card">');
       expect(corps).not.toContain('class="card" style=');
+    });
+
+    it('retourne null quand la structure body/footer est introuvable', () => {
+      expect(
+        extractCorps('<html><body><p>autre structure</p></body></html>'),
+      ).toBeNull();
     });
 
     it('extrait les variables {{var}} et {{#if var}} dédupliquées et triées', () => {
