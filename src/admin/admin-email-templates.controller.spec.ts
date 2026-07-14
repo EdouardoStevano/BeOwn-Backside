@@ -18,6 +18,9 @@ const makeRow = (overrides: any = {}) => ({
   ...overrides,
 });
 
+/** updatedAt écrit par la base (@UpdateDateColumn) lors d'un UPDATE. */
+const SAVED_AT = new Date('2026-02-02T10:00:00Z');
+
 const makeController = (opts: { row?: any; role?: UserRole } = {}) => {
   const row = opts.row === undefined ? makeRow() : opts.row;
   const userRepo = {
@@ -27,8 +30,12 @@ const makeController = (opts: { row?: any; role?: UserRole } = {}) => {
   };
   const templateRepo = {
     find: jest.fn().mockResolvedValue(row ? [row] : []),
+    // findOne renvoie la MÊME référence que `update` mute : la re-lecture
+    // post-écriture du controller voit donc bien l'état persisté.
     findOne: jest.fn().mockResolvedValue(row),
-    update: jest.fn().mockResolvedValue(undefined),
+    update: jest.fn().mockImplementation(async (_where: any, patch: any) => {
+      if (row) Object.assign(row, patch, { updatedAt: SAVED_AT });
+    }),
   };
   const templates = {
     render: jest.fn().mockResolvedValue({ sujet: 'S', html: '<html>H</html>' }),
@@ -116,6 +123,20 @@ describe('AdminEmailTemplatesController', () => {
       expect(result.sujet).toBe('Nouveau sujet');
       expect(result.enabled).toBe(false);
       expect(result.updatedBy).toBe('admin@beown.fr');
+    });
+
+    it("renvoie l'updatedAt réellement persisté, pas celui d'avant l'écriture", async () => {
+      const { controller } = makeController();
+
+      const result = await controller.update(
+        'new-project',
+        { sujet: 'Nouveau sujet' },
+        admin,
+      );
+
+      // Re-lecture post-UPDATE : surtout pas l'updatedAt de la ligne lue avant.
+      expect(result.updatedAt).toEqual(SAVED_AT);
+      expect(result.updatedAt).not.toEqual(new Date('2026-01-01T00:00:00Z'));
     });
 
     it("ne persiste que les champs fournis (corpsHtml absent → non touché)", async () => {

@@ -135,7 +135,10 @@ export class AdminEmailTemplatesController {
     if (dto.enabled !== undefined) patch.enabled = dto.enabled;
 
     await this.templateRepo.update({ key }, patch);
-    const updated = { ...row, ...patch };
+    // Re-lecture plutôt qu'un merge en mémoire : `updatedAt` est géré par la
+    // base (@UpdateDateColumn), un `{ ...row, ...patch }` renverrait la valeur
+    // d'AVANT l'écriture.
+    const updated = await this.getOr404(key);
     return { ...this.summary(updated), corpsHtml: updated.corpsHtml };
   }
 

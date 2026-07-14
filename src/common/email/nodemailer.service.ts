@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { EmailService } from './email.service';
 import { MailerService } from '@nestjs-modules/mailer';
 import { formatEur } from 'src/common/money/format-eur';
@@ -7,11 +8,16 @@ import { EmailTemplateService } from './email-template.service';
 @Injectable()
 export class NodemailerMailService implements EmailService {
   private readonly logger = new Logger(NodemailerMailService.name);
+  /** Base des liens « Accéder à mon espace » des templates (variable {{appUrl}}). */
+  private readonly appUrl: string;
 
   constructor(
     private readonly mailerService: MailerService,
     private readonly templates: EmailTemplateService,
-  ) {}
+    private readonly config: ConfigService,
+  ) {
+    this.appUrl = this.config.get('FRONTEND_URL') || 'http://localhost:5173';
+  }
 
   async sendActivationEmail(email: string, otp: string): Promise<void> {
     await this.sendTemplated('activation', email, {
@@ -100,13 +106,21 @@ export class NodemailerMailService implements EmailService {
    * Rendu centralisé (template DB éditable, fallback .hbs du code) puis envoi
    * via l'unique transport sendHtml. render → null (template désactivé ou
    * introuvable) : on loggue et on n'envoie pas.
+   *
+   * `appUrl` est injecté dans le contexte de TOUS les templates : plusieurs
+   * .hbs (kyc-validated, kyc-rejected, new-secondary) déclarent {{appUrl}}
+   * pour leur bouton d'action, sans quoi le lien serait rendu vide. Les
+   * variables explicites de l'appelant restent prioritaires (spread après).
    */
   private async sendTemplated(
     key: string,
     email: string,
     vars: Record<string, unknown>,
   ): Promise<void> {
-    const rendered = await this.templates.render(key, vars);
+    const rendered = await this.templates.render(key, {
+      appUrl: this.appUrl,
+      ...vars,
+    });
     if (!rendered) {
       this.logger.log(
         `Template email "${key}" désactivé ou introuvable — envoi ignoré (destinataire : ${email})`,

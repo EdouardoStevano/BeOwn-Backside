@@ -195,6 +195,56 @@ describe('EmailTemplateService', () => {
     });
   });
 
+  describe('renderForPreview — prévisualisation admin', () => {
+    it('rend un template DÉSACTIVÉ, là où render() renvoie null', async () => {
+      repo.findOne.mockResolvedValue(
+        makeRow({
+          enabled: false,
+          sujet: 'Bonjour {{prenom}}',
+          corpsHtml: '<p class="p">Salut {{prenom}}</p>',
+        }),
+      );
+
+      // Le chemin d'envoi refuse toujours un template désactivé…
+      await expect(service.render('activation', { prenom: 'Awa' })).resolves
+        .toBeNull();
+
+      // …mais l'admin doit pouvoir le prévisualiser malgré tout.
+      const result = await service.renderForPreview('activation', {
+        prenom: 'Awa',
+      });
+
+      expect(result).not.toBeNull();
+      expect(result!.sujet).toBe('Bonjour Awa');
+      expect(result!.html).toContain('<p class="p">Salut Awa</p>');
+      expect(result!.html).toContain('<div class="logo">BeOwn</div>');
+    });
+
+    it("interpole les données d'exemple dans le HTML rendu", async () => {
+      repo.findOne.mockResolvedValue(
+        makeRow({
+          key: 'new-project',
+          sujet: 'Nouveau projet : {{titre}}',
+          corpsHtml:
+            '<p class="h1">{{titre}}</p><p class="location">{{ville}}</p><p class="p">Bonjour {{prenom}}</p>',
+        }),
+      );
+
+      const result = await service.renderForPreview('new-project', {
+        prenom: 'Awa',
+        titre: 'Résidence Horizon',
+        ville: 'Saint-Denis',
+      });
+
+      expect(result!.sujet).toBe('Nouveau projet : Résidence Horizon');
+      expect(result!.html).toContain('Résidence Horizon');
+      expect(result!.html).toContain('Saint-Denis');
+      expect(result!.html).toContain('Bonjour Awa');
+      // Aucune variable non substituée ne doit fuiter dans la préviz.
+      expect(result!.html).not.toContain('{{');
+    });
+  });
+
   describe('seedDefaults', () => {
     it('insère toutes les clés .hbs manquantes, corps sans header/footer', async () => {
       repo.findOne.mockResolvedValue(null);

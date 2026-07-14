@@ -10,6 +10,8 @@ export class BrevoEmailService implements EmailService {
   private readonly senderEmail: string;
   private readonly senderName: string;
   private readonly apiUrl = 'https://api.brevo.com/v3/smtp/email';
+  /** Base des liens « Accéder à mon espace » des templates (variable {{appUrl}}). */
+  private readonly appUrl: string;
 
   constructor(
     private readonly config: ConfigService,
@@ -19,6 +21,7 @@ export class BrevoEmailService implements EmailService {
     this.senderEmail =
       this.config.get('BREVO_SENDER_EMAIL') || 'no-reply@beown.com';
     this.senderName = this.config.get('BREVO_SENDER_NAME') || 'BeOwn';
+    this.appUrl = this.config.get('FRONTEND_URL') || 'http://localhost:5173';
   }
 
   async sendActivationEmail(email: string, otp: string): Promise<void> {
@@ -74,13 +77,21 @@ export class BrevoEmailService implements EmailService {
    * Rendu centralisé (template DB éditable, fallback .hbs du code) puis envoi
    * via l'unique transport sendHtml. render → null (template désactivé ou
    * introuvable) : on loggue et on n'envoie pas.
+   *
+   * `appUrl` est injecté dans le contexte de TOUS les templates : plusieurs
+   * .hbs (kyc-validated, kyc-rejected, new-secondary) déclarent {{appUrl}} pour
+   * leur bouton d'action, sans quoi le lien serait rendu vide. Les variables
+   * explicites de l'appelant restent prioritaires (spread après).
    */
   private async sendTemplated(
     key: string,
     email: string,
     vars: Record<string, unknown>,
   ): Promise<void> {
-    const rendered = await this.templates.render(key, vars);
+    const rendered = await this.templates.render(key, {
+      appUrl: this.appUrl,
+      ...vars,
+    });
     if (!rendered) {
       this.logger.log(
         `Template email "${key}" désactivé ou introuvable — envoi ignoré (destinataire : ${email})`,
