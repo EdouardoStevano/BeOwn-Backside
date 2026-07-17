@@ -9,8 +9,7 @@ import { PROJECT_REPOSITORY } from '../ports/repositories/project.repository';
 import type { ProjectRepository } from '../ports/repositories/project.repository';
 import { Project } from 'src/projects/domains/project';
 import { ProjectStatus } from 'src/projects/domains/enums/project-status.enum';
-import { NotificationService } from 'src/notifications/applications/notification.service';
-import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
+import { BroadcastService } from 'src/notifications/applications/broadcast.service';
 
 const ALLOWED_TRANSITIONS: Record<ProjectStatus, ProjectStatus[]> = {
   [ProjectStatus.BROUILLON]: [ProjectStatus.ANNONCE, ProjectStatus.ANNULE],
@@ -41,10 +40,14 @@ export class UpdateProjectStatusUseCase {
   constructor(
     @Inject(PROJECT_REPOSITORY)
     private readonly projectRepository: ProjectRepository,
-    private readonly notificationService: NotificationService,
+    private readonly broadcast: BroadcastService,
   ) {}
 
-  async execute(projectId: string, newStatus: ProjectStatus): Promise<Project> {
+  async execute(
+    projectId: string,
+    newStatus: ProjectStatus,
+    triggeredBy: number,
+  ): Promise<Project> {
     const project = await this.projectRepository.findProjectById(projectId);
     if (!project) throw new NotFoundException('Projet introuvable.');
 
@@ -61,30 +64,16 @@ export class UpdateProjectStatusUseCase {
     );
 
     if (newStatus === ProjectStatus.EN_COLLECTE) {
-      const lieu = [updated.ville, updated.pays].filter(Boolean).join(', ');
-      this.notificationService
-        .pushToInvestors({
-          type: NotificationType.NOUVEAU_PROJET,
-          titre: "Projet ouvert à l'investissement",
-          message: lieu
-            ? `« ${updated.titre} » (${lieu}) est ouvert à l'investissement.`
-            : `« ${updated.titre} » est ouvert à l'investissement.`,
-          metadata: {
-            projectId: updated.id,
-            slug: updated.slug,
-            statut: updated.statut,
-            ville: updated.ville,
-            type: updated.type,
-          },
-        })
-        .then((results) => {
-          this.logger.log(
-            `Notified ${results.length} investor(s) about project ${updated.id} (${updated.titre})`,
-          );
-        })
+      // Diffusion « nouveau projet » en fire-and-forget : elle remplace
+      // l'ancien fan-out in-app brut (tous les investisseurs, quel que soit
+      // leur statut). BroadcastService pousse la notif in-app aux comptes
+      // ACTIFS, ajoute email/SMS selon les préférences et les toggles admin,
+      // dédoublonne via un horodatage sur le projet et n'échoue jamais.
+      void this.broadcast
+        .announceProjectLaunched(updated.id, triggeredBy)
         .catch((err) =>
           this.logger.warn(
-            `Notification fan-out failed for project ${projectId}: ${err?.message ?? err}`,
+            `Diffusion « nouveau projet » échouée pour le projet ${projectId}: ${err?.message ?? err}`,
           ),
         );
     }

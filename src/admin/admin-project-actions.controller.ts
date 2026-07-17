@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   HttpCode,
   HttpStatus,
+  Logger,
   NotFoundException,
   Param,
   Post,
@@ -34,6 +35,7 @@ import { InvestmentEntity } from 'src/investments/infrastructure/persistences/en
 import { InvestmentStatus } from 'src/investments/domains/enums/investment-status.enum';
 import { RefundCollecteService } from 'src/investments/applications/refund-collecte.service';
 import { NotificationService } from 'src/notifications/applications/notification.service';
+import { BroadcastService } from 'src/notifications/applications/broadcast.service';
 import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
 
 const ADMIN_ROLES: string[] = rolesWithPermission('projects:manage');
@@ -48,6 +50,8 @@ class CancelCollecteDto {
 @UseGuards(JwtAuthGuard)
 @RequirePermission('projects:manage')
 export class AdminProjectActionsController {
+  private readonly logger = new Logger(AdminProjectActionsController.name);
+
   constructor(
     @InjectRepository(UserEntity)
     private readonly userRepo: Repository<UserEntity>,
@@ -57,6 +61,7 @@ export class AdminProjectActionsController {
     private readonly investRepo: Repository<InvestmentEntity>,
     private readonly notif: NotificationService,
     private readonly refundService: RefundCollecteService,
+    private readonly broadcast: BroadcastService,
   ) {}
 
   private async ensureAdmin(currentUser: ActiveUser): Promise<UserEntity> {
@@ -203,6 +208,19 @@ export class AdminProjectActionsController {
       { id },
       { statut: ProjectStatus.ANNONCE, datePublication: new Date() },
     );
+
+    // Diffusion « réservations ouvertes » en fire-and-forget : la publication
+    // ne doit jamais échouer parce qu'un email n'est pas parti. Le service est
+    // idempotent (horodatage anti-doublon) et n'émet jamais d'exception.
+    void this.broadcast
+      .announceReservationOpened(id, currentUser.userId)
+      .catch((e) =>
+        this.logger.error(
+          `Diffusion « ouverture de réservation » échouée pour le projet ${id}`,
+          e instanceof Error ? e.stack : String(e),
+        ),
+      );
+
     return { id, statut: ProjectStatus.ANNONCE };
   }
 

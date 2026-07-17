@@ -64,6 +64,12 @@ export const DEFAULT_TEMPLATE_META: Record<string, TemplateMeta> = {
     description: "Annonce d'un nouveau projet ouvert à l'investissement.",
     sujet: 'Nouveau projet disponible : {{titre}}',
   },
+  'ouverture-reservation': {
+    nom: 'Ouverture des réservations',
+    description:
+      "Annonce de l'ouverture des réservations sur un projet publié en vitrine.",
+    sujet: 'Réservations ouvertes : {{titre}}',
+  },
   'new-secondary': {
     nom: 'Nouvelle annonce marché secondaire',
     description:

@@ -24,6 +24,8 @@ import { UserEntity } from 'src/users/infrastructure/persistences/entities/user.
 import {
   AdminSettingsEntity,
   AdminSettingsBlob,
+  DEFAULT_BROADCAST_SETTINGS,
+  mergeBroadcastSettings,
 } from './entities/admin-settings.entity';
 import { DEFAULT_FEE_RATES } from 'src/common/platform-fees/platform-fees.service';
 
@@ -65,6 +67,7 @@ const DEFAULT_SETTINGS: AdminSettingsBlob = {
     defaultEmailFrom: 'noreply@beown.fr',
     smsProvider: 'twilio',
     digestFrequency: 'weekly',
+    broadcast: DEFAULT_BROADCAST_SETTINGS,
   },
   feature_flags: {
     enableSecondaryMarket: true,
@@ -158,6 +161,33 @@ export class AdminSettingsController {
     return out;
   }
 
+  /**
+   * Fusionne les notifications stockées + patch, en reconstruisant le
+   * sous-objet `broadcast` clé par clé (mergeBroadcastSettings) : un PATCH
+   * partiel (ex. `{ broadcast: { nouveauProjet: { sms: true } } }`) ne doit
+   * pas effacer les autres canaux/événements, et une lecture doit toujours
+   * renvoyer les 2 événements complets même si la base n'en stocke aucun.
+   */
+  private mergeNotifications(
+    stored: AdminSettingsBlob['notifications'],
+    patch: AdminSettingsBlob['notifications'],
+  ): NonNullable<AdminSettingsBlob['notifications']> {
+    return {
+      ...stored,
+      ...patch,
+      broadcast: mergeBroadcastSettings({
+        nouveauProjet: {
+          ...stored?.broadcast?.nouveauProjet,
+          ...patch?.broadcast?.nouveauProjet,
+        },
+        ouvertureReservation: {
+          ...stored?.broadcast?.ouvertureReservation,
+          ...patch?.broadcast?.ouvertureReservation,
+        },
+      }),
+    };
+  }
+
   private async getOrCreate(): Promise<AdminSettingsEntity> {
     let row = await this.settingsRepo.findOne({ where: { id: 'default' } });
     if (!row) {
@@ -181,6 +211,10 @@ export class AdminSettingsController {
       platform: this.mergePlatform(
         DEFAULT_SETTINGS.platform,
         row.settings.platform,
+      ),
+      notifications: this.mergeNotifications(
+        DEFAULT_SETTINGS.notifications,
+        row.settings.notifications,
       ),
       updatedAt: row.updatedAt,
     };
@@ -206,7 +240,10 @@ export class AdminSettingsController {
         body.commissions,
       ),
       kyc: { ...row.settings.kyc, ...body.kyc },
-      notifications: { ...row.settings.notifications, ...body.notifications },
+      notifications: this.mergeNotifications(
+        row.settings.notifications,
+        body.notifications,
+      ),
       feature_flags: {
         ...row.settings.feature_flags,
         ...body.feature_flags,

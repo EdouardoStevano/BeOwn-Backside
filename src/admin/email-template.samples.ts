@@ -27,6 +27,16 @@ export const EMAIL_TEMPLATE_SAMPLES: Record<string, Record<string, unknown>> = {
     ville: 'Saint-Denis',
     triCible: 8,
     url: 'https://beown.fr/projets/exemple',
+    unsubscribeUrl: 'https://beown.fr/desinscription?token=exemple',
+  },
+  'ouverture-reservation': {
+    prenom: 'Awa',
+    titre: 'Résidence Horizon',
+    ville: 'Saint-Denis',
+    dateOuverture: '15 août 2026',
+    dateCloture: '30 septembre 2026',
+    url: 'https://beown.fr/projets/exemple',
+    unsubscribeUrl: 'https://beown.fr/desinscription?token=exemple',
   },
   'new-secondary': {
     prenom: 'Awa',
@@ -55,7 +65,9 @@ export const TRIGGER_EVENTS: Record<string, string> = {
   'two-factor': 'Connexion avec double authentification (2FA)',
   'kyc-validated': "Validation de la vérification d'identité (KYC)",
   'kyc-rejected': "Refus de la vérification d'identité (KYC)",
-  'new-project': "Publication d'un nouveau projet d'investissement",
+  'new-project': "Passage d'un projet en collecte (diffusion à la base)",
+  'ouverture-reservation':
+    "Publication d'un projet en annonce : ouverture des réservations (diffusion à la base)",
   'new-secondary': 'Nouvelle annonce sur le marché secondaire',
   echeance: 'Échéance de paiement à venir sur un investissement',
   'depot-confirmed': 'Dépôt crédité sur le portefeuille',

@@ -79,7 +79,8 @@ describe('AdminEmailTemplatesController', () => {
       expect(result[0]).toMatchObject({
         key: 'new-project',
         nom: 'Nouveau projet',
-        evenementDeclencheur: "Publication d'un nouveau projet d'investissement",
+        evenementDeclencheur:
+          "Passage d'un projet en collecte (diffusion à la base)",
         sujet: 'Nouveau projet : {{titre}}',
         enabled: true,
       });
@@ -94,7 +95,7 @@ describe('AdminEmailTemplatesController', () => {
       const result = await controller.getOne('new-project', admin);
 
       expect(result.corpsHtml).toBe('<p class="p">Bonjour {{prenom}}</p>');
-      expect(result.evenementDeclencheur).toContain('Publication');
+      expect(result.evenementDeclencheur).toContain('collecte');
     });
 
     it('404 pour une clé inconnue', async () => {

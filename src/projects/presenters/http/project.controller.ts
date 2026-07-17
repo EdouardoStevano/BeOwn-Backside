@@ -255,8 +255,14 @@ export class ProjectController {
   @HttpCode(HttpStatus.OK)
   @RequirePermission('projects:manage')
   @Patch(':id/status')
-  patchStatus(@Param('id') id: string, @Body() dto: UpdateProjectStatusDto) {
-    return this.updateStatus.execute(id, dto.statut);
+  patchStatus(
+    @Param('id') id: string,
+    @Body() dto: UpdateProjectStatusDto,
+    @CurrentUser() user: ActiveUser,
+  ) {
+    // user.userId sert de déclencheur audité de la diffusion « nouveau projet »
+    // quand la transition ouvre la collecte.
+    return this.updateStatus.execute(id, dto.statut, user.userId);
   }
 
   @ApiOperation({ summary: 'Créer une SPV' })
