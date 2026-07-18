@@ -37,22 +37,22 @@ const BATCH_SIZE = 20;
 const E164_REGEX = /^\+[1-9]\d{6,14}$/;
 
 /**
- * Défauts appliqués aux utilisateurs SANS ligne dans `user_preferences` :
- * ceux de UserPreferencesEntity, c'est-à-dire ce que `findPreferences()`
- * matérialiserait pour eux (notifEmail true, notifSms false, notifMarketing
- * FALSE).
+ * Défauts appliqués aux utilisateurs SANS ligne dans `user_preferences`
+ * (décision D2 « opt-out » du design 2026-07-10) : pas de ligne = l'utilisateur
+ * n'a jamais exprimé de choix → il reçoit les annonces, le lien de
+ * désinscription présent dans chaque email servant de garde-fou RGPD.
  *
- * ⚠ Conséquence assumée : marketing = opt-in. Un compte qui n'a jamais touché
- * ses préférences ne reçoit PAS les diffusions — c'est la seule lecture
- * cohérente avec un utilisateur qui possède une ligne aux valeurs par défaut
- * (il ne les reçoit pas non plus), et la seule défendable côté RGPD. Basculer
- * la diffusion en opt-out se fait ici (notifMarketing: true) ET côté
- * inscription (créer la ligne de préférences avec consentement).
+ * Volontairement DIFFÉRENT des défauts de UserPreferencesEntity
+ * (notifMarketing false) : une ligne n'est matérialisée que lorsque
+ * l'utilisateur passe par une UI de préférences ou par le lien de
+ * désinscription — dans les deux cas son choix explicite est alors respecté
+ * verbatim (voir loadRecipients), y compris un notifMarketing=false issu d'un
+ * unsubscribe.
  */
 export const BROADCAST_PREF_DEFAULTS = {
   notifEmail: true,
-  notifSms: false,
-  notifMarketing: false,
+  notifSms: true,
+  notifMarketing: true,
 };
 
 type BroadcastEvent = keyof BroadcastSettings;

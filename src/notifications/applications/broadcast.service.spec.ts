@@ -267,9 +267,37 @@ describe('BroadcastService — filtrage des destinataires', () => {
     expect(result.skipped).toBe(1);
   });
 
-  it('sans ligne user_preferences : défauts entité → opt-out marketing, 0 envoi', async () => {
+  it("sans ligne user_preferences : opt-out (D2) → l'annonce part, avec lien de désinscription", async () => {
     const deps = makeDeps();
     deps.prefsRepo.find.mockResolvedValue([]);
+
+    const result = await makeService(deps).announceProjectLaunched(
+      PROJECT_ID,
+      99,
+    );
+
+    // Pas de ligne = jamais exprimé de choix → diffusion par défaut, le lien
+    // de désinscription de l'email servant de garde-fou.
+    expect(deps.emailService.sendTransactionalEmail).toHaveBeenCalledTimes(1);
+    expect(deps.templates.render).toHaveBeenCalledWith(
+      'new-project',
+      expect.objectContaining({
+        unsubscribeUrl: 'https://app.beown.fr/desinscription?token=tok-123',
+      }),
+    );
+    // SMS : toggles admin par défaut (off) — les préférences n'y changent rien.
+    expect(deps.smsService.sendTransactional).not.toHaveBeenCalled();
+    expect(result.emails).toBe(1);
+    expect(result.skipped).toBe(0);
+    expect(deps.notifications.push).toHaveBeenCalledTimes(1);
+  });
+
+  it('une ligne existante reste respectée verbatim (opt-out enregistré → 0 envoi)', async () => {
+    const deps = makeDeps();
+    // Ligne matérialisée par un unsubscribe : notifMarketing=false.
+    deps.prefsRepo.find.mockResolvedValue([
+      makePrefs(1, { notifMarketing: false }),
+    ]);
 
     const result = await makeService(deps).announceProjectLaunched(
       PROJECT_ID,
@@ -279,8 +307,6 @@ describe('BroadcastService — filtrage des destinataires', () => {
     expect(deps.emailService.sendTransactionalEmail).not.toHaveBeenCalled();
     expect(deps.smsService.sendTransactional).not.toHaveBeenCalled();
     expect(result.skipped).toBe(1);
-    // La notif in-app, elle, part toujours.
-    expect(deps.notifications.push).toHaveBeenCalledTimes(1);
   });
 
   it('téléphone absent ou non-E.164 → SMS skippé, email envoyé', async () => {
