@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   ConflictException,
   Controller,
@@ -14,6 +15,7 @@ import {
   ServiceUnavailableException,
   UseGuards,
 } from '@nestjs/common';
+import Handlebars from 'handlebars';
 import {
   ApiBearerAuth,
   ApiOperation,
@@ -87,6 +89,27 @@ export class AdminEmailTemplatesController {
     return row;
   }
 
+  /**
+   * Dry-run de compilation Handlebars AVANT persistance : un template
+   * syntaxiquement invalide serait accepté silencieusement, puis la preview
+   * comme l'envoi retomberaient sur le .hbs du code (fallback de
+   * EmailTemplateService) — l'admin croirait son édition en ligne alors que
+   * la prod loggue des erreurs et envoie l'ancienne version. compile() étant
+   * paresseux (le parse n'a lieu qu'au premier rendu), on invoque la fonction
+   * compilée avec un contexte vide pour forcer le parse.
+   */
+  private assertValidHandlebars(champ: string, source: string): void {
+    try {
+      Handlebars.compile(source, { strict: false })({});
+    } catch (err) {
+      throw new BadRequestException(
+        `Syntaxe Handlebars invalide (${champ}) : ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
+  }
+
   private summary(row: EmailTemplateEntity) {
     return {
       key: row.key,
@@ -119,6 +142,7 @@ export class AdminEmailTemplatesController {
   }
 
   @ApiOperation({ summary: 'Mettre à jour sujet / corps / activation' })
+  @ApiResponse({ status: 400, description: 'Syntaxe Handlebars invalide' })
   @ApiResponse({ status: 404, description: 'Clé inconnue' })
   @Patch(':key')
   async update(
@@ -130,8 +154,14 @@ export class AdminEmailTemplatesController {
     const row = await this.getOr404(key);
 
     const patch: Partial<EmailTemplateEntity> = { updatedBy: user.email };
-    if (dto.sujet !== undefined) patch.sujet = dto.sujet;
-    if (dto.corpsHtml !== undefined) patch.corpsHtml = dto.corpsHtml;
+    if (dto.sujet !== undefined) {
+      this.assertValidHandlebars('sujet', dto.sujet);
+      patch.sujet = dto.sujet;
+    }
+    if (dto.corpsHtml !== undefined) {
+      this.assertValidHandlebars('corpsHtml', dto.corpsHtml);
+      patch.corpsHtml = dto.corpsHtml;
+    }
     if (dto.enabled !== undefined) patch.enabled = dto.enabled;
 
     await this.templateRepo.update({ key }, patch);

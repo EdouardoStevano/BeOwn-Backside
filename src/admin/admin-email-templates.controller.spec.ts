@@ -1,4 +1,8 @@
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import { AdminEmailTemplatesController } from './admin-email-templates.controller';
 import { EMAIL_TEMPLATE_SAMPLES } from './email-template.samples';
 import { UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
@@ -30,9 +34,12 @@ const makeController = (opts: { row?: any; role?: UserRole } = {}) => {
   };
   const templateRepo = {
     find: jest.fn().mockResolvedValue(row ? [row] : []),
-    // findOne renvoie la MÊME référence que `update` mute : la re-lecture
-    // post-écriture du controller voit donc bien l'état persisté.
-    findOne: jest.fn().mockResolvedValue(row),
+    // findOne renvoie une COPIE à chaque appel (comme un vrai repo qui
+    // matérialise une nouvelle entité par requête) : si le controller
+    // renvoyait `{ ...row, ...patch }` au lieu de RELIRE après l'UPDATE, le
+    // test updatedAt échouerait — une même référence partagée avec `update`
+    // rendait le test vacueux (il passait avec ou sans la re-lecture).
+    findOne: jest.fn().mockImplementation(async () => (row ? { ...row } : null)),
     update: jest.fn().mockImplementation(async (_where: any, patch: any) => {
       if (row) Object.assign(row, patch, { updatedAt: SAVED_AT });
     }),
@@ -158,6 +165,40 @@ describe('AdminEmailTemplatesController', () => {
         controller.update('inconnue', { enabled: true }, admin),
       ).rejects.toThrow(NotFoundException);
       expect(templateRepo.update).not.toHaveBeenCalled();
+    });
+
+    it('refuse (400) un corpsHtml Handlebars invalide sans rien persister', async () => {
+      const { controller, templateRepo } = makeController();
+
+      await expect(
+        controller.update(
+          'new-project',
+          { corpsHtml: '<p>{{#if prenom}}</p>' },
+          admin,
+        ),
+      ).rejects.toThrow(/Syntaxe Handlebars invalide \(corpsHtml\)/);
+      expect(templateRepo.update).not.toHaveBeenCalled();
+    });
+
+    it('refuse (400) un sujet Handlebars invalide sans rien persister', async () => {
+      const { controller, templateRepo } = makeController();
+
+      await expect(
+        controller.update('new-project', { sujet: 'Bonjour {{prenom' }, admin),
+      ).rejects.toThrow(BadRequestException);
+      expect(templateRepo.update).not.toHaveBeenCalled();
+    });
+
+    it('accepte un template Handlebars valide avec helpers ({{#if}})', async () => {
+      const { controller, templateRepo } = makeController();
+
+      await controller.update(
+        'new-project',
+        { corpsHtml: '{{#if triCible}}<p>{{triCible}}%</p>{{/if}}' },
+        admin,
+      );
+
+      expect(templateRepo.update).toHaveBeenCalled();
     });
   });
 
