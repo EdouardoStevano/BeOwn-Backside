@@ -111,7 +111,13 @@ interface BroadcastStats {
   destinataires: number;
   emails: number;
   sms: number;
-  skipped: number;
+  /**
+   * Destinataires n'ayant reçu QUE la notification in-app (aucun email ni SMS
+   * envoyé) — parce qu'ils sont opt-out, que le canal est désactivé, ou que
+   * leur téléphone n'est pas exploitable. À ne pas confondre avec « filtré » :
+   * ces comptes ont bien été touchés in-app.
+   */
+  inAppOnly: number;
   errors: number;
   templateDisabled: boolean;
 }
@@ -185,14 +191,20 @@ export class BroadcastService {
       destinataires: 0,
       emails: 0,
       sms: 0,
-      skipped: 0,
+      inAppOnly: 0,
       errors: 0,
       templateDisabled: false,
     };
 
+    const id = String(projetId);
+    // Portés hors du try pour que le filet de sécurité (catch) puisse décider
+    // s'il faut réarmer l'horodatage anti-doublon.
+    let project: ProjectEntity | null = null;
+    let claimed = false;
+    let deliveriesAttempted = 0;
+
     try {
-      const id = String(projetId);
-      const project = await this.projectRepo.findOne({ where: { id } });
+      project = await this.projectRepo.findOne({ where: { id } });
       if (!project) {
         this.logger.warn(
           `Diffusion "${campaign.event}" ignorée : projet ${id} introuvable.`,
@@ -200,7 +212,8 @@ export class BroadcastService {
         return { ...stats, diffuse: false };
       }
 
-      if (!(await this.claim(project, campaign))) {
+      claimed = await this.claim(project, campaign);
+      if (!claimed) {
         this.logger.log(
           `Diffusion "${campaign.event}" déjà effectuée pour le projet ${id} — no-op.`,
         );
@@ -217,15 +230,27 @@ export class BroadcastService {
       for (let i = 0; i < recipients.length; i += BATCH_SIZE) {
         const batch = recipients.slice(i, i + BATCH_SIZE);
         await Promise.allSettled(
-          batch.map((r) =>
-            this.deliver(r, project, campaign, toggles, vars, smsText, stats),
-          ),
+          batch.map((r) => {
+            // Incrémenté à l'entrée de la boucle d'envoi : marque le passage
+            // du « avant tout envoi » (réarmement du stamp permis) au « au
+            // moins un destinataire traité » (at-most-once, on garde le stamp).
+            deliveriesAttempted++;
+            return this.deliver(
+              r,
+              project as ProjectEntity,
+              campaign,
+              toggles,
+              vars,
+              smsText,
+              stats,
+            );
+          }),
         );
       }
 
       this.logger.log(
         `Diffusion "${campaign.event}" projet ${id} : ${stats.destinataires} destinataire(s), ` +
-          `${stats.emails} email(s), ${stats.sms} SMS, ${stats.skipped} ignoré(s), ${stats.errors} erreur(s).`,
+          `${stats.emails} email(s), ${stats.sms} SMS, ${stats.inAppOnly} in-app seul, ${stats.errors} erreur(s).`,
       );
 
       await this.audit(project, campaign, triggeredBy, stats);
@@ -234,10 +259,51 @@ export class BroadcastService {
       // Filet de sécurité : aucune exception ne doit remonter à l'appelant
       // (la transition de statut du projet prime sur la diffusion).
       this.logger.error(
-        `Diffusion "${campaign.event}" en échec pour le projet ${String(projetId)}`,
+        `Diffusion "${campaign.event}" en échec pour le projet ${id}`,
         err instanceof Error ? err.stack : String(err),
       );
+
+      // Réarmement de l'horodatage : si l'échec est survenu APRÈS avoir posé le
+      // stamp mais AVANT qu'un seul destinataire n'ait été traité, la campagne
+      // n'a atteint personne et resterait pourtant bloquée à jamais (pas
+      // d'endpoint de resend, déclencheur fire-and-forget). On remet le stamp à
+      // NULL pour qu'une prochaine transition puisse re-déclencher. Si au moins
+      // un envoi a été tenté, on LAISSE le stamp (at-most-once : ne jamais
+      // re-diffuser à ceux qui ont déjà reçu).
+      if (claimed && deliveriesAttempted === 0 && project) {
+        await this.resetClaim(project, campaign);
+      } else if (claimed) {
+        this.logger.warn(
+          `Diffusion "${campaign.event}" projet ${id} interrompue après ${deliveriesAttempted} envoi(s) tenté(s) — horodatage conservé (at-most-once).`,
+        );
+      }
+
       return { ...stats, diffuse: false };
+    }
+  }
+
+  /**
+   * Réarme l'horodatage anti-doublon (le remet à NULL) quand une campagne a
+   * échoué avant d'atteindre le moindre destinataire — voir run(). Toujours
+   * silencieux : jamais de throw depuis le filet de sécurité.
+   */
+  private async resetClaim(
+    project: ProjectEntity,
+    campaign: CampaignConfig,
+  ): Promise<void> {
+    try {
+      await this.projectRepo.update(
+        { id: project.id },
+        { [campaign.stampColumn]: null },
+      );
+      this.logger.warn(
+        `Diffusion "${campaign.event}" projet ${project.id} échouée avant tout envoi — horodatage réarmé, campagne re-déclenchable.`,
+      );
+    } catch (err) {
+      this.logger.error(
+        `Réarmement de l'horodatage "${campaign.event}" impossible pour le projet ${project.id} — la campagne restera bloquée`,
+        err instanceof Error ? err.stack : String(err),
+      );
     }
   }
 
@@ -417,7 +483,8 @@ export class BroadcastService {
       }
     }
 
-    if (sent === 0) stats.skipped++;
+    // Aucun email/SMS parti : le destinataire n'a reçu que la notif in-app.
+    if (sent === 0) stats.inAppOnly++;
   }
 
   private async unsubscribeUrl(userId: number): Promise<string> {
@@ -496,7 +563,7 @@ export class BroadcastService {
           destinataires: stats.destinataires,
           emails: stats.emails,
           sms: stats.sms,
-          skipped: stats.skipped,
+          inAppOnly: stats.inAppOnly,
           errors: stats.errors,
           templateDisabled: stats.templateDisabled,
           triggeredBy,

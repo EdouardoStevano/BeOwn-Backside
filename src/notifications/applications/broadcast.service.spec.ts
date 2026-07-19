@@ -222,6 +222,53 @@ describe('BroadcastService — anti-doublon', () => {
     expect(result.diffuse).toBe(false);
     expect(deps.emailService.sendTransactionalEmail).not.toHaveBeenCalled();
   });
+
+  it('échec AVANT tout envoi (loadRecipients throw) → horodatage réarmé à NULL, campagne re-déclenchable', async () => {
+    const deps = makeDeps();
+    // Le stamp a bien été posé (claim OK), puis la préparation échoue avant la
+    // boucle d'envoi.
+    deps.userRepo.find.mockRejectedValue(new Error('db down mid-load'));
+
+    const service = makeService(deps);
+    const result = await service.announceProjectLaunched(PROJECT_ID, 99);
+
+    expect(result.diffuse).toBe(false);
+    // 2 UPDATE : le claim (pose) puis le réarmement (remise à NULL).
+    expect(deps.projectRepo.update).toHaveBeenCalledTimes(2);
+    expect(deps.projectRepo.update).toHaveBeenLastCalledWith(
+      { id: PROJECT_ID },
+      { broadcastCollecteAt: null },
+    );
+    expect(deps.emailService.sendTransactionalEmail).not.toHaveBeenCalled();
+
+    // Re-déclenchable : le projet rechargé n'a plus de stamp, une nouvelle
+    // tentative repart normalement et diffuse.
+    deps.userRepo.find.mockResolvedValue([makeUser(1)]);
+    const retry = await service.announceProjectLaunched(PROJECT_ID, 99);
+    expect(retry.diffuse).toBe(true);
+    expect(deps.emailService.sendTransactionalEmail).toHaveBeenCalledTimes(1);
+  });
+
+  it('diffusion réussie (au moins un destinataire servi) → jamais de réarmement', async () => {
+    // At-most-once : dès qu'un envoi a été tenté, le stamp reste posé. Une
+    // diffusion normale ne fait qu'un seul UPDATE (le claim), jamais de remise
+    // à NULL — garde-fou contre une régression qui réinitialiserait à tort.
+    const deps = makeDeps();
+    deps.userRepo.find.mockResolvedValue([makeUser(1)]);
+    deps.prefsRepo.find.mockResolvedValue([makePrefs(1)]);
+
+    const result = await makeService(deps).announceProjectLaunched(
+      PROJECT_ID,
+      99,
+    );
+
+    expect(result.diffuse).toBe(true);
+    expect(deps.projectRepo.update).toHaveBeenCalledTimes(1);
+    expect(deps.projectRepo.update).not.toHaveBeenCalledWith(
+      { id: PROJECT_ID },
+      { broadcastCollecteAt: null },
+    );
+  });
 });
 
 describe('BroadcastService — filtrage des destinataires', () => {
@@ -264,7 +311,7 @@ describe('BroadcastService — filtrage des destinataires', () => {
 
     expect(deps.emailService.sendTransactionalEmail).not.toHaveBeenCalled();
     expect(deps.smsService.sendTransactional).not.toHaveBeenCalled();
-    expect(result.skipped).toBe(1);
+    expect(result.inAppOnly).toBe(1);
   });
 
   it("sans ligne user_preferences : opt-out (D2) → l'annonce part, avec lien de désinscription", async () => {
@@ -288,7 +335,7 @@ describe('BroadcastService — filtrage des destinataires', () => {
     // SMS : toggles admin par défaut (off) — les préférences n'y changent rien.
     expect(deps.smsService.sendTransactional).not.toHaveBeenCalled();
     expect(result.emails).toBe(1);
-    expect(result.skipped).toBe(0);
+    expect(result.inAppOnly).toBe(0);
     expect(deps.notifications.push).toHaveBeenCalledTimes(1);
   });
 
@@ -306,7 +353,7 @@ describe('BroadcastService — filtrage des destinataires', () => {
 
     expect(deps.emailService.sendTransactionalEmail).not.toHaveBeenCalled();
     expect(deps.smsService.sendTransactional).not.toHaveBeenCalled();
-    expect(result.skipped).toBe(1);
+    expect(result.inAppOnly).toBe(1);
   });
 
   it('téléphone absent ou non-E.164 → SMS skippé, email envoyé', async () => {
