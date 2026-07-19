@@ -14,6 +14,11 @@ const KNOWN_KEYS = [
   'kyc-rejected',
   'new-project',
   'new-secondary',
+  // Garde le seed honnête : seedDefaults skip silencieusement une clé dont
+  // l'extraction du corps échoue (structure body/footer inattendue) — sans
+  // cette entrée, un ouverture-reservation.hbs mal structuré passerait
+  // inaperçu de la suite.
+  'ouverture-reservation',
   'echeance',
   'depot-confirmed',
   'retrait-processed',

@@ -78,6 +78,21 @@ export class UpdateProjectStatusUseCase {
         );
     }
 
+    if (newStatus === ProjectStatus.ANNONCE) {
+      // Diffusion « réservations ouvertes » : le PATCH générique de statut est
+      // un second chemin vers ANNONCE, en plus du bouton publish-annonce
+      // (AdminProjectActionsController). Les deux déclenchent la même
+      // campagne ; le claim atomique sur broadcastAnnonceAt garantit qu'un
+      // projet passé par les deux chemins ne diffuse qu'une seule fois.
+      void this.broadcast
+        .announceReservationOpened(updated.id, triggeredBy)
+        .catch((err) =>
+          this.logger.warn(
+            `Diffusion « ouverture de réservation » échouée pour le projet ${projectId}: ${err?.message ?? err}`,
+          ),
+        );
+    }
+
     return updated;
   }
 }
