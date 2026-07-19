@@ -6,8 +6,8 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { InjectRepository, InjectDataSource } from '@nestjs/typeorm';
+import { DataSource, In, QueryFailedError, Repository } from 'typeorm';
 import {
   UserEntity,
   UserStatus,
@@ -81,6 +81,20 @@ const PENDING_RETRAIT_STATUSES: TransactionStatus[] = [
   TransactionStatus.EN_COURS,
 ];
 
+/** Résultat de la tentative de retrait automatique du solde (atomique). */
+type WithdrawalOutcome =
+  | { result: 'created'; montant: number }
+  | { result: 'already_pending'; montant: number }
+  | { result: 'no_balance'; montant: number };
+
+/** Violation de contrainte unique Postgres (clé d'idempotence déjà présente). */
+function isUniqueViolation(err: unknown): boolean {
+  return (
+    err instanceof QueryFailedError &&
+    (err as unknown as { code?: string }).code === '23505'
+  );
+}
+
 /**
  * Suppression de compte sous conditions (V2-T7).
  *
@@ -111,6 +125,8 @@ export class DeleteAccountUseCase {
     private readonly walletRepo: Repository<WalletEntity>,
     @InjectRepository(TransactionEntity)
     private readonly txRepo: Repository<TransactionEntity>,
+    @InjectDataSource()
+    private readonly dataSource: DataSource,
     private readonly notifications: NotificationService,
     private readonly notificationEvents: NotificationEventService,
     private readonly templates: EmailTemplateService,
@@ -132,6 +148,20 @@ export class DeleteAccountUseCase {
 
     const user = await this.userRepo.findOne({ where: { userId } });
     if (!user) throw new NotFoundException('Utilisateur introuvable.');
+
+    // Idempotence : un compte déjà supprimé est un no-op de succès — aucun
+    // second email ni seconde notification (le chemin admin ne pré-filtre pas
+    // le statut de la cible, un rejeu doit rester inoffensif).
+    if (user.status === UserStatus.SUPPRIME) return;
+
+    // Verrou mutuel : on n'autorise pas la suppression d'un compte qui détient
+    // lui-même `users:delete` (autre super_admin) — évite qu'un admin en
+    // supprime un autre et prive la plateforme de ses administrateurs.
+    if (hasPermission(user.role, 'users:delete')) {
+      throw new BadRequestException(
+        'Impossible de supprimer un administrateur.',
+      );
+    }
 
     const blockers: DeletionBlocker[] = [];
 
@@ -161,46 +191,49 @@ export class DeleteAccountUseCase {
     }
 
     // ── Solde du portefeuille ───────────────────────────────────────────────
+    // Lecture « sale » (hors verrou) uniquement pour décider s'il y a matière
+    // à traiter et récupérer l'IBAN. La décision et le débit qui font foi ont
+    // lieu sous verrou pessimiste dans createFullBalanceWithdrawal.
     const wallet = await this.walletRepo.findOne({
       where: { proprietaireUserId: userId, type: WalletType.INVESTISSEUR },
     });
     const solde = wallet ? Number(wallet.solde) : 0;
     if (wallet && solde > 0) {
-      const pendingRetrait = await this.txRepo.findOne({
-        where: {
-          walletId: wallet.id,
-          type: TransactionType.RETRAIT,
-          statut: In(PENDING_RETRAIT_STATUSES),
-        },
-      });
-      if (pendingRetrait) {
-        // Garde anti-doublon : un versement attend déjà son traitement.
+      const iban = await this.findRegisteredIban(wallet.id);
+      if (!iban) {
         blockers.push({
           code: 'WALLET_BALANCE',
-          withdrawalCreated: true,
-          message: `Le versement de votre solde (${formatEur(solde)}) est déjà en cours de traitement — la suppression aboutira une fois le virement traité.`,
+          withdrawalCreated: false,
+          message: `Votre portefeuille présente un solde de ${formatEur(solde)} qui doit vous être versé avant la suppression.`,
+        });
+        blockers.push({
+          code: 'NO_IBAN',
+          message:
+            'Renseignez vos coordonnées bancaires pour récupérer votre solde avant la suppression.',
         });
       } else {
-        const iban = await this.findRegisteredIban(wallet.id);
-        if (iban) {
-          await this.createFullBalanceWithdrawal(userId, wallet, solde, iban);
+        const outcome = await this.createFullBalanceWithdrawal(
+          userId,
+          wallet.id,
+          solde,
+          iban,
+        );
+        if (outcome.result === 'created') {
           blockers.push({
             code: 'WALLET_BALANCE',
             withdrawalCreated: true,
-            message: `Le versement de votre solde (${formatEur(solde)}) a été déclenché automatiquement — la suppression aboutira une fois le virement traité.`,
+            message: `Le versement de votre solde (${formatEur(outcome.montant)}) a été déclenché automatiquement — la suppression aboutira une fois le virement traité.`,
           });
-        } else {
+        } else if (outcome.result === 'already_pending') {
+          // Garde anti-doublon : un versement attend déjà son traitement.
           blockers.push({
             code: 'WALLET_BALANCE',
-            withdrawalCreated: false,
-            message: `Votre portefeuille présente un solde de ${formatEur(solde)} qui doit vous être versé avant la suppression.`,
-          });
-          blockers.push({
-            code: 'NO_IBAN',
-            message:
-              'Renseignez vos coordonnées bancaires pour récupérer votre solde avant la suppression.',
+            withdrawalCreated: true,
+            message: `Le versement de votre solde (${formatEur(outcome.montant)}) est déjà en cours de traitement — la suppression aboutira une fois le virement traité.`,
           });
         }
+        // 'no_balance' : le solde a été drainé entre-temps (race) et aucun
+        // versement n'est en attente — plus rien à bloquer côté portefeuille.
       }
     }
 
@@ -236,50 +269,117 @@ export class DeleteAccountUseCase {
   }
 
   /**
-   * Même flux que POST /payments/retrait (payment.controller.ts) : transaction
-   * RETRAIT en_attente_paiement, débit immédiat du wallet, alerte aux rôles
-   * financiers pour traitement manuel. Reproduit ici car ce flux vit encore
-   * inline dans le controller (non injectable).
+   * Retrait automatique du solde total, ATOMIQUE (corrige un TOCTOU de double
+   * paiement). Même flux fonctionnel que POST /payments/retrait (transaction
+   * RETRAIT en_attente_paiement + débit du wallet + alerte financière), mais
+   * l'ensemble « lecture du solde → contrôle anti-doublon → écriture tx →
+   * débit » vit dans UNE seule transaction avec verrou pessimiste sur la ligne
+   * wallet (SELECT … FOR UPDATE). Deux DELETE concurrents sont ainsi
+   * sérialisés : le second acquiert le verrou après commit du premier, relit
+   * un solde à 0 (ou voit le retrait déjà en attente) et ne double ni la
+   * transaction ni le débit. Défense en profondeur : clé d'idempotence
+   * DÉTERMINISTE `retrait:suppression:<userId>` — la contrainte unique bloque
+   * un second retrait de suppression même hors fenêtre de course.
+   *
+   * `dirtySolde` (lecture hors verrou) ne sert que de repli d'affichage si la
+   * course est perdue avant la lecture verrouillée ; le montant qui fait foi
+   * est toujours le solde relu sous verrou.
    */
   private async createFullBalanceWithdrawal(
     userId: number,
-    wallet: WalletEntity,
-    montant: number,
+    walletId: string,
+    dirtySolde: number,
     iban: string,
-  ): Promise<void> {
-    const idempotencyKey = `retrait:${userId}:${Date.now()}`;
-    const tx = await this.txRepo.save(
-      this.txRepo.create({
-        walletId: wallet.id,
-        type: TransactionType.RETRAIT,
-        montant,
-        devise: wallet.devise ?? 'EUR',
-        statut: TransactionStatus.EN_ATTENTE_PAIEMENT,
-        fournisseur: TransactionFournisseur.STRIPE,
-        fournisseurRef: iban,
-        idempotencyKey,
-        metadata: { ibanDestination: iban, source: 'suppression_compte' },
-      }),
-    );
+  ): Promise<WithdrawalOutcome> {
+    const idempotencyKey = `retrait:suppression:${userId}`;
+    let outcome: WithdrawalOutcome;
+    let createdTxId: string | null = null;
+    let versedMontant = 0;
+    let devise = 'EUR';
 
-    await this.walletRepo.decrement({ id: wallet.id }, 'solde', montant);
+    try {
+      outcome = await this.dataSource.transaction(async (manager) => {
+        const wallet = await manager.findOne(WalletEntity, {
+          where: { id: walletId },
+          lock: { mode: 'pessimistic_write' },
+        });
+        if (!wallet) return { result: 'no_balance', montant: 0 };
+        devise = wallet.devise ?? 'EUR';
 
-    this.notifications
-      .pushToAdmins({
-        type: NotificationType.RETRAIT_TRAITE,
-        titre: 'Nouvelle demande de retrait',
-        message: `Retrait automatique du solde (${formatEur(montant)}) de l'utilisateur #${userId} vers ${iban}, déclenché par sa demande de suppression de compte.`,
-        roles: [UserRole.SUPER_ADMIN, UserRole.FINANCIER],
-        metadata: {
-          userId,
-          transactionId: tx.id,
-          amount: montant,
-          currency: wallet.devise ?? 'EUR',
-          ibanDestination: iban,
-          source: 'suppression_compte',
-        },
-      })
-      .catch(() => {});
+        // Anti-doublon sous verrou : un versement en attente existe déjà.
+        const pending = await manager.findOne(TransactionEntity, {
+          where: {
+            walletId,
+            type: TransactionType.RETRAIT,
+            statut: In(PENDING_RETRAIT_STATUSES),
+          },
+        });
+        if (pending) {
+          return { result: 'already_pending', montant: Number(pending.montant) };
+        }
+
+        // Re-vérification du solde SOUS VERROU (cf. payment.controller:217) :
+        // le montant versé est le solde verrouillé, jamais la lecture sale.
+        const soldeVerrouille = Number(wallet.solde);
+        if (soldeVerrouille <= 0) {
+          return { result: 'no_balance', montant: 0 };
+        }
+
+        const tx = await manager.save(
+          TransactionEntity,
+          manager.create(TransactionEntity, {
+            walletId,
+            type: TransactionType.RETRAIT,
+            montant: soldeVerrouille,
+            devise,
+            statut: TransactionStatus.EN_ATTENTE_PAIEMENT,
+            fournisseur: TransactionFournisseur.STRIPE,
+            fournisseurRef: iban,
+            idempotencyKey,
+            metadata: { ibanDestination: iban, source: 'suppression_compte' },
+          }),
+        );
+
+        // Débit dans la MÊME transaction : si l'une des deux écritures échoue,
+        // tout est annulé (plus d'échec partiel tx-sans-débit).
+        wallet.solde = 0;
+        await manager.save(WalletEntity, wallet);
+
+        createdTxId = tx.id;
+        versedMontant = soldeVerrouille;
+        return { result: 'created', montant: soldeVerrouille };
+      });
+    } catch (err) {
+      // Collision de clé d'idempotence (retrait de suppression déjà émis) :
+      // traité comme un versement déjà en cours — jamais un second débit.
+      if (isUniqueViolation(err)) {
+        return { result: 'already_pending', montant: dirtySolde };
+      }
+      throw err;
+    }
+
+    // Alerte financière hors transaction (best-effort) uniquement si un retrait
+    // vient réellement d'être créé.
+    if (outcome.result === 'created') {
+      this.notifications
+        .pushToAdmins({
+          type: NotificationType.RETRAIT_TRAITE,
+          titre: 'Nouvelle demande de retrait',
+          message: `Retrait automatique du solde (${formatEur(versedMontant)}) de l'utilisateur #${userId} vers ${iban}, déclenché par sa demande de suppression de compte.`,
+          roles: [UserRole.SUPER_ADMIN, UserRole.FINANCIER],
+          metadata: {
+            userId,
+            transactionId: createdTxId,
+            amount: versedMontant,
+            currency: devise,
+            ibanDestination: iban,
+            source: 'suppression_compte',
+          },
+        })
+        .catch(() => {});
+    }
+
+    return outcome;
   }
 
   /** Confirmation au titulaire (in-app + email) + event back-office existant. */
