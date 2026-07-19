@@ -28,6 +28,7 @@ import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructu
 import { NotificationsModule } from 'src/notifications/notifications.module';
 import { InvestmentsModule } from 'src/investments/applications/investments.module';
 import { ProfilesModule } from 'src/profiles/applications/profiles.module';
+import { UsersModule } from 'src/users/applications/users.module';
 
 @Module({
   imports: [
@@ -48,6 +49,7 @@ import { ProfilesModule } from 'src/profiles/applications/profiles.module';
     NotificationsModule,
     InvestmentsModule,
     ProfilesModule,
+    UsersModule,
   ],
   controllers: [
     AdminController,

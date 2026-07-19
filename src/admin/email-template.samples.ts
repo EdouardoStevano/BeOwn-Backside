@@ -53,6 +53,7 @@ export const EMAIL_TEMPLATE_SAMPLES: Record<string, Record<string, unknown>> = {
   },
   'depot-confirmed': { prenom: 'Awa', montant: formatEur(5000) },
   'retrait-processed': { prenom: 'Awa', montant: formatEur(2000) },
+  'compte-supprime': { prenom: 'Awa' },
 };
 
 /**
@@ -72,4 +73,6 @@ export const TRIGGER_EVENTS: Record<string, string> = {
   echeance: 'Échéance de paiement à venir sur un investissement',
   'depot-confirmed': 'Dépôt crédité sur le portefeuille',
   'retrait-processed': 'Demande de retrait prise en charge',
+  'compte-supprime':
+    "Suppression du compte (self-service ou back-office) une fois tous les bloqueurs levés",
 };

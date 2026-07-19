@@ -18,7 +18,7 @@ import {
 } from '@nestjs/common';
 import { IsEnum } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
-import { UserStatus, UserType } from 'src/users/infrastructure/persistences/entities/user.entity';
+import { UserType } from 'src/users/infrastructure/persistences/entities/user.entity';
 import { HASHING_SERVICE } from 'src/common/hashing/hashing.service';
 import type { HashingService } from 'src/common/hashing/hashing.service';
 import { IsString, IsNotEmpty } from 'class-validator';
@@ -52,6 +52,7 @@ import type { DocumentRepository } from 'src/documents/applications/ports/reposi
 import { WALLET_REPOSITORY } from 'src/wallets/applications/ports/repositories/wallet.repository';
 import type { WalletRepository } from 'src/wallets/applications/ports/repositories/wallet.repository';
 import { WalletType } from 'src/wallets/domains/enums/wallet.enum';
+import { DeleteAccountUseCase } from 'src/users/applications/usecases/delete-account.usecase';
 import { SkipThrottle } from '@nestjs/throttler';
 
 /** Rôles détenant `users:read` — back-office consultation d'un profil tiers. */
@@ -77,6 +78,7 @@ export class UserController {
     @Inject(HASHING_SERVICE)
     private readonly hashingService: HashingService,
     private readonly notificationEvents: NotificationEventService,
+    private readonly deleteAccountUseCase: DeleteAccountUseCase,
   ) {}
 
   // ─── Helper ───────────────────────────────────────────────────────────────
@@ -370,9 +372,10 @@ export class UserController {
     return safe;
   }
 
-  @ApiOperation({ summary: 'Supprimer mon compte (soft-delete après confirmation de mot de passe)' })
+  @ApiOperation({ summary: 'Supprimer mon compte (soft-delete après confirmation de mot de passe et levée des bloqueurs)' })
   @ApiResponse({ status: 204, description: 'Compte supprimé' })
-  @ApiResponse({ status: 401, description: 'Mot de passe incorrect' })
+  @ApiResponse({ status: 401, description: 'Mot de passe incorrect (code INVALID_PASSWORD)' })
+  @ApiResponse({ status: 409, description: 'Suppression bloquée (ACCOUNT_DELETION_BLOCKED)' })
   @HttpCode(HttpStatus.NO_CONTENT)
   @Delete('me')
   async deleteMe(
@@ -386,11 +389,19 @@ export class UserController {
     if (!passwordHash) throw new UnauthorizedException('Confirmation impossible.');
 
     const valid = await this.hashingService.compare(dto.password, passwordHash);
-    if (!valid) throw new UnauthorizedException('Mot de passe incorrect.');
+    if (!valid) {
+      // Code structuré : le Frontside branche un intercepteur dessus. Sans ce
+      // code, son intercepteur croit à une session expirée, rafraîchit le
+      // token et rejoue le DELETE.
+      throw new UnauthorizedException({
+        message: 'Mot de passe incorrect.',
+        code: 'INVALID_PASSWORD',
+      });
+    }
 
-    (found as any).status = UserStatus.SUPPRIME;
-    await this.userRepository.update(found);
-
-    this.notificationEvents.accountDeletedByUser(found);
+    await this.deleteAccountUseCase.execute(user.userId, {
+      userId: user.userId,
+      role: (found as any).role ?? user.role ?? '',
+    });
   }
 }

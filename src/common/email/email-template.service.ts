@@ -91,6 +91,11 @@ export const DEFAULT_TEMPLATE_META: Record<string, TemplateMeta> = {
     description: "Confirmation de la prise en charge d'un retrait.",
     sujet: 'Votre retrait est en cours de traitement',
   },
+  'compte-supprime': {
+    nom: 'Compte supprimé',
+    description: 'Confirmation de la suppression du compte utilisateur.',
+    sujet: 'Votre compte BeOwn a été supprimé',
+  },
 };
 
 /** Mots-clés Handlebars à exclure de l'extraction de variables. */
