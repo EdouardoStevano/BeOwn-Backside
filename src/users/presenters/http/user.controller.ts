@@ -382,7 +382,9 @@ export class UserController {
     @CurrentUser() user: ActiveUser,
     @Body() dto: DeleteAccountDto,
   ) {
-    const found = await this.userRepository.findById(user.userId);
+    // findByIdWithPassword : findById laisse la colonne password (select:false)
+    // à undefined, ce qui casserait la vérification pour TOUS les comptes.
+    const found = await this.userRepository.findByIdWithPassword(user.userId);
     if (!found) throw new NotFoundException('Utilisateur introuvable.');
 
     const passwordHash = (found as any).password;
