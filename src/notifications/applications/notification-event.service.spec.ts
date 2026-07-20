@@ -2,6 +2,7 @@ import { NotificationEventService } from './notification-event.service';
 import { NotificationService } from './notification.service';
 import { NotificationType } from '../infrastructure/persistences/entities/notification.entity';
 import { UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
+import { formatEur } from 'src/common/money/format-eur';
 
 describe('NotificationEventService', () => {
   let service: NotificationEventService;
@@ -196,14 +197,14 @@ describe('NotificationEventService.retraitProcessed', () => {
     } as unknown as jest.Mocked<NotificationService>;
     const service = new NotificationEventService(notifications);
 
-    await service.retraitProcessed(42, 100000, 'XOF', 'tx-uuid');
+    await service.retraitProcessed(42, 100000, 'tx-uuid');
 
     expect(notifications.push).toHaveBeenCalledWith({
       utilisateurId: 42,
       type: NotificationType.RETRAIT_TRAITE,
       titre: 'Retrait traité ✓',
-      message: 'Votre retrait de 100000 XOF a été envoyé vers votre compte bancaire. Référence : tx-uuid.',
-      metadata: { montant: 100000, devise: 'XOF', reference: 'tx-uuid' },
+      message: `Votre retrait de ${formatEur(100000)} a été envoyé vers votre compte bancaire. Référence : tx-uuid.`,
+      metadata: { montant: 100000, reference: 'tx-uuid' },
     });
   });
 });
@@ -276,7 +277,7 @@ describe('NotificationEventService.secondaryOrderCreated', () => {
     expect(notifications.pushToRoles).toHaveBeenCalledWith(expect.objectContaining({
       type: NotificationType.MARCHE_SECONDAIRE,
       titre: 'Nouvelle annonce marché secondaire',
-      message: 'Jean Dupont a mis en vente 5 fraction(s) de "Résidence Pelican" à 1000 XOF/fraction.',
+      message: `Jean Dupont a mis en vente 5 fraction(s) de "Résidence Pelican" à ${formatEur(1000)}/fraction.`,
       roles: [UserRole.SUPER_ADMIN, UserRole.COMPLIANCE, UserRole.FINANCIER],
       metadata: { ordreId: 'o-uuid', projetId: 'p-uuid', vendeurId: 42, nbFractions: 5, prixUnitaire: 1000 },
     }));
@@ -305,7 +306,7 @@ describe('NotificationEventService.investmentCreated', () => {
     expect(notifications.pushToRoles).toHaveBeenCalledWith(expect.objectContaining({
       type: NotificationType.INVESTISSEMENT,
       titre: 'Nouvel investissement',
-      message: 'Jean Dupont a investi 250000 XOF dans "Résidence Pelican" (5 fraction(s)).',
+      message: `Jean Dupont a investi ${formatEur(250000)} dans "Résidence Pelican" (5 fraction(s)).`,
       roles: [UserRole.SUPER_ADMIN, UserRole.FINANCIER, UserRole.COMPLIANCE],
     }));
   });
@@ -332,7 +333,7 @@ describe('NotificationEventService.fractionsToppedUp', () => {
     expect(notifications.pushToRoles).toHaveBeenCalledWith(expect.objectContaining({
       titre: 'Top-up investissement',
       roles: [UserRole.SUPER_ADMIN, UserRole.FINANCIER],
-      message: 'Jean Dupont a ajouté 3 fraction(s) dans "Résidence Pelican" (+30000 XOF).',
+      message: `Jean Dupont a ajouté 3 fraction(s) dans "Résidence Pelican" (+${formatEur(30000)}).`,
     }));
   });
 });

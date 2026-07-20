@@ -10,6 +10,7 @@ import { CloudStorageService } from 'src/common/cloud-storage/cloud-storage.serv
 import { DocumentEntity } from 'src/documents/infrastructure/persistences/entities/document.entity';
 import { DocumentType, DocumentRelatedTo } from 'src/documents/domains/enums/document-type.enum';
 import { NotificationEventService } from 'src/notifications/applications/notification-event.service';
+import { formatEur } from 'src/common/money/format-eur';
 import PDFDocument from 'pdfkit';
 
 interface IfuAggregate {
@@ -149,11 +150,11 @@ export class IfuGenerationService {
       doc.moveDown(0.5);
       doc.fontSize(11);
       doc.text(`Nombre d'échéances perçues : ${agg.nbEcheances}`);
-      doc.text(`Total intérêts bruts perçus : ${agg.totalInterets.toFixed(2)} XOF`);
-      doc.text(`Prélèvement à la source — IR (12,8 %) : ${agg.totalIR.toFixed(2)} XOF`);
-      doc.text(`Prélèvement à la source — CSG/CRDS (17,2 %) : ${agg.totalCSG.toFixed(2)} XOF`);
+      doc.text(`Total intérêts bruts perçus : ${formatEur(agg.totalInterets)}`);
+      doc.text(`Prélèvement à la source — IR (12,8 %) : ${formatEur(agg.totalIR)}`);
+      doc.text(`Prélèvement à la source — CSG/CRDS (17,2 %) : ${formatEur(agg.totalCSG)}`);
       doc.text(
-        `Intérêts nets crédités : ${(agg.totalInterets - agg.totalIR - agg.totalCSG).toFixed(2)} XOF`,
+        `Intérêts nets crédités : ${formatEur(agg.totalInterets - agg.totalIR - agg.totalCSG)}`,
       );
       doc.moveDown(2);
 

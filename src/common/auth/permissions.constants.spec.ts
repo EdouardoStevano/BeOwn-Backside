@@ -17,6 +17,7 @@ describe('permissions.constants', () => {
       'projects:validate',
       'platform:wallet',
       'roles:assign',
+      'users:delete',
     ] as const;
     const others = Object.values(UserRole).filter(
       (r) => r !== UserRole.SUPER_ADMIN,
@@ -71,6 +72,7 @@ describe('permissions.constants', () => {
       'echeancier:pay',
       'platform:wallet',
       'settings:manage',
+      'users:delete',
     ];
     for (const perm of wildcardOnly) expect(explicit.has(perm)).toBe(false);
   });

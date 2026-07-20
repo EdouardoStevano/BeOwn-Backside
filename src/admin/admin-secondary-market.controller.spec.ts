@@ -64,9 +64,9 @@ describe('AdminSecondaryMarketController — cancelOrder Cas B (reverse)', () =>
     feeTxsList = [];
     signatureFindOneResult = null;
 
-    sellerWallet = { id: 'w-seller', proprietaireUserId: 1, type: WalletType.INVESTISSEUR, solde: 1000, devise: 'XOF' };
-    buyerWallet = { id: 'w-buyer', proprietaireUserId: 2, type: WalletType.INVESTISSEUR, solde: 0, devise: 'XOF' };
-    platformWallet = { id: 'w-plat', type: WalletType.FRAIS_PLATEFORME, solde: 100, devise: 'XOF' };
+    sellerWallet = { id: 'w-seller', proprietaireUserId: 1, type: WalletType.INVESTISSEUR, solde: 1000, devise: 'EUR' };
+    buyerWallet = { id: 'w-buyer', proprietaireUserId: 2, type: WalletType.INVESTISSEUR, solde: 0, devise: 'EUR' };
+    platformWallet = { id: 'w-plat', type: WalletType.FRAIS_PLATEFORME, solde: 100, devise: 'EUR' };
     sellerInvest = { id: 'inv-seller', nbTitres: 60, montant: 600, statut: InvestmentStatus.CONFIRME };
     buyerInvest = { id: 'inv-buyer', utilisateurId: 2, projetId: 'proj-1', nbTitres: 40, montant: 400, statut: InvestmentStatus.CONFIRME };
     ordreSaved = null;

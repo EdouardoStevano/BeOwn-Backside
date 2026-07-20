@@ -39,6 +39,7 @@ import {
   WalletType,
 } from 'src/wallets/domains/enums/wallet.enum';
 import { Public } from 'src/common/auth/public.decorator';
+import { formatEur } from 'src/common/money/format-eur';
 import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
 import { UseGuards } from '@nestjs/common';
@@ -128,7 +129,7 @@ export class PaymentController {
         type: WalletType.INVESTISSEUR,
         proprietaireUserId: user.userId,
         fournisseurRef: `INV-${user.userId}-auto`,
-        devise: 'XOF',
+        devise: 'EUR',
         solde: 0,
       });
       wallet = await this.walletRepo.save(wallet);
@@ -152,7 +153,7 @@ export class PaymentController {
         walletId: wallet.id,
         type: TransactionType.DEPOT,
         montant: amountMajor,
-        devise: 'XOF',
+        devise: 'EUR',
         statut: TransactionStatus.REUSSI,
         fournisseur: TransactionFournisseur.STRIPE,
         fournisseurRef: dto.paymentIntentId,
@@ -164,7 +165,7 @@ export class PaymentController {
       utilisateurId: user.userId,
       type: NotificationType.DEPOT_CONFIRME,
       titre: 'Dépôt confirmé',
-      message: `Votre dépôt de ${amountMajor} XOF a été crédité sur votre wallet.`,
+      message: `Votre dépôt de ${formatEur(amountMajor)} a été crédité sur votre wallet.`,
       metadata: { paymentIntentId: dto.paymentIntentId, montant: amountMajor },
     }).catch(() => {});
 
@@ -172,7 +173,7 @@ export class PaymentController {
       .pushToAdmins({
         type: NotificationType.DEPOT_CONFIRME,
         titre: 'Dépôt utilisateur',
-        message: `User #${user.userId} a déposé ${amountMajor} XOF.`,
+        message: `User #${user.userId} a déposé ${formatEur(amountMajor)}.`,
         roles: [UserRole.SUPER_ADMIN, UserRole.FINANCIER],
         metadata: { userId: user.userId, paymentIntentId: dto.paymentIntentId, montant: amountMajor },
       })
@@ -405,7 +406,7 @@ export class PaymentController {
                 type: WalletType.INVESTISSEUR,
                 proprietaireUserId: userId,
                 fournisseurRef: `INV-${userId}-auto`,
-                devise: 'XOF',
+                devise: 'EUR',
                 solde: 0,
               }),
             );
@@ -422,7 +423,7 @@ export class PaymentController {
               walletId: wallet.id,
               type: TransactionType.DEPOT,
               montant: amountMajor,
-              devise: 'XOF',
+              devise: 'EUR',
               statut: TransactionStatus.REUSSI,
               fournisseur: TransactionFournisseur.STRIPE,
               fournisseurRef: intent.id,
@@ -434,7 +435,7 @@ export class PaymentController {
             utilisateurId: userId,
             type: NotificationType.DEPOT_CONFIRME,
             titre: 'Dépôt confirmé',
-            message: `Votre dépôt de ${amountMajor} XOF a été crédité sur votre wallet.`,
+            message: `Votre dépôt de ${formatEur(amountMajor)} a été crédité sur votre wallet.`,
             metadata: { paymentIntentId: intent.id, montant: amountMajor },
           }).catch(() => {});
         }

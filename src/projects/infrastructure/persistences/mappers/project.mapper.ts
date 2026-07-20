@@ -50,6 +50,8 @@ export class ProjectMapper {
     domain.modeleEconomique =
       entity.modeleEconomique ?? ModeleEconomique.OBLIGATAIRE;
     domain.nbUnitesLouables = entity.nbUnitesLouables ?? null;
+    domain.broadcastAnnonceAt = entity.broadcastAnnonceAt ?? null;
+    domain.broadcastCollecteAt = entity.broadcastCollecteAt ?? null;
     domain.createdAt = entity.createdAt;
     domain.updatedAt = entity.updatedAt;
     return domain;
@@ -94,6 +96,15 @@ export class ProjectMapper {
     entity.modeleEconomique =
       domain.modeleEconomique ?? ModeleEconomique.OBLIGATAIRE;
     entity.nbUnitesLouables = domain.nbUnitesLouables ?? null;
+    // Posés uniquement par BroadcastService (UPDATE ciblé) : on ne les écrase
+    // que si le domaine les porte, pour qu'un save() issu d'un domaine
+    // reconstruit sans ces champs ne les remette jamais à null.
+    if (domain.broadcastAnnonceAt !== undefined) {
+      entity.broadcastAnnonceAt = domain.broadcastAnnonceAt;
+    }
+    if (domain.broadcastCollecteAt !== undefined) {
+      entity.broadcastCollecteAt = domain.broadcastCollecteAt;
+    }
     return entity;
   }
 

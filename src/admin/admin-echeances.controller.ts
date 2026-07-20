@@ -29,6 +29,7 @@ import { RequirePermission } from 'src/common/auth/require-permission.decorator'
 import { rolesWithPermission } from 'src/common/auth/permissions.constants';
 import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
+import { formatEur } from 'src/common/money/format-eur';
 import {
   UserEntity,
   UserRole,
@@ -206,7 +207,7 @@ export class AdminEcheancesController {
             utilisateurId: invest.utilisateurId,
             type: NotificationType.ECHEANCE,
             titre: `Échéance #${numero} reçue`,
-            message: `Vous avez reçu ${montant} XOF sur votre wallet (échéance ${numero} du projet).`,
+            message: `Vous avez reçu ${formatEur(montant)} sur votre wallet (échéance ${numero} du projet).`,
             metadata: { investissementId: invest.id, echeanceId: ech.id, montant, numero },
           })
           .catch(() => {});
@@ -219,7 +220,7 @@ export class AdminEcheancesController {
       .pushToAdmins({
         type: NotificationType.ECHEANCE,
         titre: `Échéance #${numero} déclenchée`,
-        message: `Admin a déclenché l'échéance ${numero} : ${paidCount} investisseur(s) crédité(s) pour ${totalAmount} XOF.`,
+        message: `Admin a déclenché l'échéance ${numero} : ${paidCount} investisseur(s) crédité(s) pour ${formatEur(totalAmount)}.`,
         roles: [UserRole.SUPER_ADMIN, UserRole.FINANCIER, UserRole.COMPLIANCE],
         metadata: { projectId, numero, paidCount, totalAmount, triggeredBy: admin.userId },
       })

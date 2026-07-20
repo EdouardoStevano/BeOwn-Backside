@@ -145,4 +145,64 @@ describe('AdminSettingsController.update — validation commissions', () => {
     ).rejects.toThrow(ForbiddenException);
     expect(settingsRepo.update).not.toHaveBeenCalled();
   });
+
+  it('ignore silencieusement les clés platform legacy (defaultCurrency, timezone) lors du merge', async () => {
+    const { controller } = makeController({
+      platform: {
+        name: 'BeOwn',
+        defaultCurrency: 'EUR',
+        timezone: 'Africa/Abidjan',
+      },
+    });
+
+    const merged = await controller.update(
+      { platform: { contactEmail: 'contact@beown.fr' } },
+      admin,
+    );
+
+    expect(merged.platform).toEqual({
+      name: 'BeOwn',
+      contactEmail: 'contact@beown.fr',
+    });
+  });
+});
+
+describe('AdminSettingsController.get — tolérance blobs legacy', () => {
+  const admin = { userId: 1 } as any;
+
+  it('ne renvoie plus defaultCurrency/timezone pour une ligne persistée avant leur retrait', async () => {
+    const userRepo = {
+      findOne: jest
+        .fn()
+        .mockResolvedValue({ userId: 1, role: UserRole.SUPER_ADMIN }),
+    };
+    const row = {
+      id: 'default',
+      settings: {
+        platform: {
+          name: 'BeOwn',
+          contactEmail: 'support@beown.fr',
+          defaultCurrency: 'EUR',
+          timezone: 'Africa/Abidjan',
+        },
+      },
+      updatedAt: new Date('2026-01-01T00:00:00Z'),
+    };
+    const settingsRepo = {
+      findOne: jest.fn().mockResolvedValue(row),
+    };
+    const controller = new AdminSettingsController(
+      userRepo as any,
+      settingsRepo as any,
+    );
+
+    const result = await controller.get(admin);
+
+    expect(result.platform).toEqual({
+      name: 'BeOwn',
+      contactEmail: 'support@beown.fr',
+    });
+    expect(result.platform).not.toHaveProperty('defaultCurrency');
+    expect(result.platform).not.toHaveProperty('timezone');
+  });
 });

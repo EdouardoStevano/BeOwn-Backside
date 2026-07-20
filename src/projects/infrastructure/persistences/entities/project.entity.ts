@@ -198,6 +198,19 @@ export class ProjectEntity {
   @Column({ type: 'timestamptz', nullable: true })
   annuleLe: Date | null;
 
+  /**
+   * Horodatages anti-doublon des diffusions (BroadcastService) : posés AVANT
+   * les envois, ils garantissent qu'une campagne « ouverture de réservation »
+   * (passage en annonce) et « nouveau projet » (passage en collecte) ne partent
+   * qu'une seule fois par projet, même si l'action admin est rejouée ou
+   * appelée deux fois en parallèle.
+   */
+  @Column({ type: 'timestamptz', nullable: true })
+  broadcastAnnonceAt: Date | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  broadcastCollecteAt: Date | null;
+
   @CreateDateColumn()
   createdAt: Date;
 

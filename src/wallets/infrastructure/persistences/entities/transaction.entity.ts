@@ -29,7 +29,7 @@ export class TransactionEntity {
   @Column({ type: 'decimal', precision: 18, scale: 2 })
   montant: number;
 
-  @Column({ type: 'char', length: 3, default: 'XOF' })
+  @Column({ type: 'char', length: 3, default: 'EUR' })
   devise: string;
 
   @Column({ type: 'varchar' })

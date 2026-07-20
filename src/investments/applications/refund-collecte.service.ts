@@ -14,6 +14,7 @@ import {
 } from 'src/wallets/domains/enums/wallet.enum';
 import { NotificationService } from 'src/notifications/applications/notification.service';
 import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
+import { formatEur } from 'src/common/money/format-eur';
 
 /** Investissements remboursables (fonds engagés, ni rétractés ni déjà annulés). */
 const REFUNDABLE_INVESTMENT_STATUSES = [
@@ -87,7 +88,7 @@ export class RefundCollecteService {
           walletSource: null,
           walletDestination: wallet.id,
           montant: amount,
-          devise: wallet.devise ?? 'XOF',
+          devise: wallet.devise ?? 'EUR',
           type: TransactionType.REMBOURSEMENT_COLLECTE_ECHEC,
           fournisseur: TransactionFournisseur.INTERNE,
           statut: TransactionStatus.REUSSI,
@@ -123,7 +124,7 @@ export class RefundCollecteService {
             titre: `Collecte non aboutie : ${project.titre}`,
             message:
               `L'objectif de collecte n'a pas été atteint. ` +
-              `${amount.toLocaleString('fr-FR')} XOF ont été intégralement recrédités sur votre wallet.` +
+              `${formatEur(amount)} ont été intégralement recrédités sur votre wallet.` +
               (options.reason ? ` Motif : ${options.reason}` : ''),
             metadata: {
               projectId: project.id,
@@ -151,7 +152,7 @@ export class RefundCollecteService {
       );
 
       this.logger.log(
-        `Projet ${projectId} → ${options.targetStatus} : ${refundedCount} investisseur(s) remboursé(s) pour ${refundedAmount} XOF`,
+        `Projet ${projectId} → ${options.targetStatus} : ${refundedCount} investisseur(s) remboursé(s) pour ${formatEur(refundedAmount)}`,
       );
 
       return { refundedCount, refundedAmount };
@@ -170,7 +171,7 @@ export class RefundCollecteService {
       wallet = manager.create(WalletEntity, {
         proprietaireUserId: userId,
         type: WalletType.INVESTISSEUR,
-        devise: 'XOF',
+        devise: 'EUR',
         solde: 0,
       } as Partial<WalletEntity>);
       wallet = await manager.save(wallet);

@@ -20,8 +20,8 @@ import { UserRole } from 'src/users/infrastructure/persistences/entities/user.en
  * d'un vrai vendor AML (SumSub, Veriff, ComplyAdvantage) viendra en Phase 11.
  */
 
-const AML_THRESHOLD_SINGLE = Number(process.env.AML_THRESHOLD_SINGLE ?? 10_000_000); // XOF
-const AML_THRESHOLD_MONTHLY = Number(process.env.AML_THRESHOLD_MONTHLY ?? 50_000_000);
+const AML_THRESHOLD_SINGLE = Number(process.env.AML_THRESHOLD_SINGLE ?? 10_000); // EUR
+const AML_THRESHOLD_MONTHLY = Number(process.env.AML_THRESHOLD_MONTHLY ?? 50_000);
 
 export interface AmlContext {
   userId: number;

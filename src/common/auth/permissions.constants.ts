@@ -8,6 +8,7 @@ import { UserRole } from 'src/users/infrastructure/persistences/entities/user.en
 export type Permission =
   | 'users:read'
   | 'users:manage'
+  | 'users:delete'
   | 'roles:assign'
   | 'kyc:validate'
   | 'aml:manage'

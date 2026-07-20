@@ -21,6 +21,7 @@ import { RequirePermission } from 'src/common/auth/require-permission.decorator'
 import { rolesWithPermission } from 'src/common/auth/permissions.constants';
 import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
+import { formatEur } from 'src/common/money/format-eur';
 import {
   UserEntity,
   UserRole,
@@ -156,7 +157,7 @@ export class AdminReportsController {
         );
         doc.moveDown(0.5);
         doc.fontSize(11).text(`Investissements sur la période : ${recent.length}`);
-        doc.text(`Montant total : ${totalAmount.toLocaleString('fr-FR')} XOF`);
+        doc.text(`Montant total : ${formatEur(totalAmount)}`);
         break;
       }
       case 'investors': {

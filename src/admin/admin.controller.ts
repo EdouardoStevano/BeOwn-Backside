@@ -1,6 +1,9 @@
 import {
   Controller,
+  Delete,
   Get,
+  HttpCode,
+  HttpStatus,
   Patch,
   Query,
   Param,
@@ -26,6 +29,7 @@ import { RequirePermission } from 'src/common/auth/require-permission.decorator'
 import { rolesWithPermission } from 'src/common/auth/permissions.constants';
 import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
+import { formatEur } from 'src/common/money/format-eur';
 import { NotificationEventService } from 'src/notifications/applications/notification-event.service';
 import {
   UserEntity,
@@ -39,6 +43,7 @@ import { OrdreMarcheEntity } from 'src/secondarymarket/infrastructure/persistenc
 import { OrdreMarcheStatus } from 'src/secondarymarket/domains/ordre-marche';
 import { ProjectStatus } from 'src/projects/domains/enums/project-status.enum';
 import { InvestmentStatus } from 'src/investments/domains/enums/investment-status.enum';
+import { DeleteAccountUseCase } from 'src/users/applications/usecases/delete-account.usecase';
 import { SkipThrottle } from '@nestjs/throttler';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -79,6 +84,7 @@ export class AdminController {
     @InjectRepository(OrdreMarcheEntity)
     private readonly ordreRepo: Repository<OrdreMarcheEntity>,
     private readonly notificationEvents: NotificationEventService,
+    private readonly deleteAccountUseCase: DeleteAccountUseCase,
   ) {}
 
   // ─── Guard helper ──────────────────────────────────────────────────────────
@@ -210,6 +216,29 @@ export class AdminController {
       this.notificationEvents.accountClosed(id, body.motif ?? null, currentUser.userId);
     }
     return { userId: id, status: body.status };
+  }
+
+  // ─── Suppression de compte (back-office) ────────────────────────────────────
+
+  @ApiOperation({ summary: 'Supprimer le compte d\'un utilisateur (super_admin)' })
+  @ApiParam({ name: 'id', type: Number })
+  @ApiResponse({ status: 204, description: 'Compte supprimé' })
+  @ApiResponse({ status: 400, description: 'Un admin ne peut pas se supprimer lui-même' })
+  @ApiResponse({ status: 404, description: 'Utilisateur introuvable' })
+  @ApiResponse({ status: 409, description: 'Suppression bloquée (ACCOUNT_DELETION_BLOCKED)' })
+  @RequirePermission('users:delete')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Delete('users/:id')
+  async deleteUser(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() currentUser: ActiveUser,
+  ) {
+    // L'audit interceptor loggue automatiquement (action delete). La garde
+    // anti-auto-suppression et les bloqueurs vivent dans le usecase.
+    await this.deleteAccountUseCase.execute(id, {
+      userId: currentUser.userId,
+      role: currentUser.role ?? '',
+    });
   }
 
   // ─── Investments by user ───────────────────────────────────────────────────
@@ -485,7 +514,7 @@ export class AdminController {
               user: this.displayName(i.utilisateur),
               email: i.utilisateur?.userEmail?.email ?? '',
               action: `Investissement — ${(i as any).projet?.titre ?? i.projetId}`,
-              detail: `${Number(i.montant).toLocaleString('fr-FR')} FCFA · ${i.nbTitres ?? 0} titre(s)`,
+              detail: `${formatEur(Number(i.montant))} · ${i.nbTitres ?? 0} titre(s)`,
               status: ACTIVE_INVESTMENT_STATUSES.includes(i.statut) ? 'success' : 'pending',
               date: i.createdAt,
               time: this.relativeTime(i.createdAt),
@@ -536,7 +565,7 @@ export class AdminController {
               user: this.displayName(o.vendeur),
               email: o.vendeur?.userEmail?.email ?? '',
               action: `Ordre marché secondaire — ${o.sens}`,
-              detail: `${Number(o.montant).toLocaleString('fr-FR')} titres · ${Number(o.prixUnitaire).toLocaleString('fr-FR')} FCFA/u`,
+              detail: `${Number(o.nbFractions).toLocaleString('fr-FR')} titres · ${formatEur(Number(o.prixUnitaire))}/u`,
               status: o.statut === OrdreMarcheStatus.EXECUTE ? 'success' : o.statut === OrdreMarcheStatus.ANNULE ? 'error' : 'pending',
               date: o.createdAt,
               time: this.relativeTime(o.createdAt),

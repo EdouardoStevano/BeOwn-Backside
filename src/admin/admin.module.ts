@@ -10,6 +10,10 @@ import { AdminEcheancesController, AdminEcheancesItemController } from './admin-
 import { AdminRetraitsController } from './admin-retraits.controller';
 import { AdminInvestorsController } from './admin-investors.controller';
 import { AdminPlatformWalletController } from './admin-platform-wallet.controller';
+import { AdminEmailTemplatesController } from './admin-email-templates.controller';
+import { EMAIL_SERVICE } from 'src/common/email/email.service';
+import { BrevoEmailService } from 'src/common/email/brevo.service';
+import { EmailTemplateEntity } from 'src/common/email/entities/email-template.entity';
 import { UserEntity } from 'src/users/infrastructure/persistences/entities/user.entity';
 import { ProjectEntity } from 'src/projects/infrastructure/persistences/entities/project.entity';
 import { InvestmentEntity } from 'src/investments/infrastructure/persistences/entities/investment.entity';
@@ -24,6 +28,7 @@ import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructu
 import { NotificationsModule } from 'src/notifications/notifications.module';
 import { InvestmentsModule } from 'src/investments/applications/investments.module';
 import { ProfilesModule } from 'src/profiles/applications/profiles.module';
+import { UsersModule } from 'src/users/applications/users.module';
 
 @Module({
   imports: [
@@ -38,11 +43,13 @@ import { ProfilesModule } from 'src/profiles/applications/profiles.module';
       TransactionEntity,
       ReservationEntity,
       AdminSettingsEntity,
+      EmailTemplateEntity,
     ]),
     IamInfrastructureModule,
     NotificationsModule,
     InvestmentsModule,
     ProfilesModule,
+    UsersModule,
   ],
   controllers: [
     AdminController,
@@ -56,6 +63,8 @@ import { ProfilesModule } from 'src/profiles/applications/profiles.module';
     AdminRetraitsController,
     AdminInvestorsController,
     AdminPlatformWalletController,
+    AdminEmailTemplatesController,
   ],
+  providers: [{ provide: EMAIL_SERVICE, useClass: BrevoEmailService }],
 })
 export class AdminModule {}

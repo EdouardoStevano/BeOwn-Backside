@@ -73,7 +73,6 @@ export class AdminRetraitsController {
       await this.notificationEvents.retraitProcessed(
         wallet.proprietaireUserId,
         Number(tx.montant),
-        tx.devise,
         tx.id,
       );
     }

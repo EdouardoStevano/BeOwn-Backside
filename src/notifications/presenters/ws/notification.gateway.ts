@@ -51,6 +51,17 @@ export class NotificationGateway
         secret: this.configService.get<string>('JWT_SECRET'),
       });
 
+      // Garde anti-confusion de token : la vérification ci-dessus est
+      // secret-only (pas d'audience), donc les tokens typés signés avec le
+      // même secret (`email_verify`, `password_reset`, `notif_unsubscribe`)
+      // passeraient et permettraient de s'abonner à `user-<victimId>`. Les
+      // access tokens légitimes ne portent jamais de claim `type` : tout
+      // token qui en porte un est refusé.
+      if (payload.type) {
+        client.disconnect();
+        return;
+      }
+
       const userId: number = payload.sub ?? payload.userId ?? payload.id;
       client.data.userId = userId;
       await client.join(`user-${userId}`);

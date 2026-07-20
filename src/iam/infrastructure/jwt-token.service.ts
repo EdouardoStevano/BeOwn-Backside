@@ -1,4 +1,4 @@
-﻿import { Inject } from '@nestjs/common';
+﻿import { Inject, UnauthorizedException } from '@nestjs/common';
 import {
   CACHE_MANAGER_SERVICE,
   type CacheManagerService,
@@ -10,10 +10,20 @@ import {
   AuthTokens,
   EmailTokenPayload,
   EmailTokenPurpose,
+  NOTIF_UNSUBSCRIBE_TYPE,
   TokenPayload,
   TokenService,
+  UnsubscribeTokenPayload,
 } from '../domains/ports/token.service';
 import { randomUUID } from 'crypto';
+
+/**
+ * Audience dédiée aux tokens de désinscription. Défense en profondeur : même
+ * si un contrôle de claim `type` était oublié quelque part, un token signé
+ * avec cette audience est structurellement rejeté par toute vérification
+ * utilisant l'audience standard (access, refresh, email).
+ */
+export const UNSUBSCRIBE_TOKEN_AUDIENCE = 'beown-unsubscribe';
 
 export class JwtTokenService implements TokenService {
   constructor(
@@ -93,8 +103,22 @@ export class JwtTokenService implements TokenService {
     } as TokenPayload);
   }
 
-  verifyAccessToken(token: string): Promise<TokenPayload> {
-    return this.jwtService.verifyAsync(token, this.jwtConfiguration);
+  async verifyAccessToken(token: string): Promise<TokenPayload> {
+    const payload: TokenPayload & { type?: string } =
+      await this.jwtService.verifyAsync(token, this.jwtConfiguration);
+
+    // Garde anti-confusion de token (finding CRITIQUE) : les tokens typés
+    // (`email_verify`, `password_reset`, `notif_unsubscribe`) sont signés
+    // avec le même secret et seraient sinon acceptés ici comme access tokens
+    // — un lien de désinscription (90 j, non single-use, distribué en masse
+    // par email) deviendrait un Bearer token de la victime. Les access et
+    // refresh tokens légitimes ne portent JAMAIS de claim `type` (voir
+    // generateTokens/signToken) : tout token qui en porte un est rejeté.
+    if (payload.type) {
+      throw new UnauthorizedException('Token invalide');
+    }
+
+    return payload;
   }
 
   async generateEmailToken(
@@ -112,6 +136,36 @@ export class JwtTokenService implements TokenService {
     return this.jwtService.verifyAsync(token, {
       secret: this.jwtConfiguration.secret,
       audience: this.jwtConfiguration.audience,
+      issuer: this.jwtConfiguration.issuer,
+    });
+  }
+
+  /**
+   * Token de désinscription marketing : pas d'identifiant en cache, donc pas
+   * de single-use — contrairement aux tokens email. Un utilisateur doit
+   * pouvoir recliquer le lien d'un vieil email sans tomber sur une erreur.
+   * L'action est de toute façon idempotente et non destructive.
+   *
+   * Signé avec une audience DÉDIÉE (pas via signToken) : couplé au rejet des
+   * tokens typés dans verifyAccessToken, ce token ne peut structurellement
+   * pas être accepté par une vérification à l'audience standard.
+   */
+  async generateUnsubscribeToken(userId: number): Promise<string> {
+    return this.jwtService.signAsync(
+      { sub: userId, type: NOTIF_UNSUBSCRIBE_TYPE },
+      {
+        audience: UNSUBSCRIBE_TOKEN_AUDIENCE,
+        issuer: this.jwtConfiguration.issuer,
+        secret: this.jwtConfiguration.secret,
+        expiresIn: this.jwtConfiguration.unsubscribeTokenTtl,
+      },
+    );
+  }
+
+  verifyUnsubscribeToken(token: string): Promise<UnsubscribeTokenPayload> {
+    return this.jwtService.verifyAsync(token, {
+      secret: this.jwtConfiguration.secret,
+      audience: UNSUBSCRIBE_TOKEN_AUDIENCE,
       issuer: this.jwtConfiguration.issuer,
     });
   }

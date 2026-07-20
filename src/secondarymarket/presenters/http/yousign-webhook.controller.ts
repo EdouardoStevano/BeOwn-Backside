@@ -27,6 +27,7 @@ import { InvestmentStatus, EcheanceStatus } from 'src/investments/domains/enums/
 import { OrdreMarcheStatus } from 'src/secondarymarket/domains/ordre-marche';
 import { PlatformFeesService } from 'src/common/platform-fees/platform-fees.service';
 import { round2 } from 'src/common/platform-fees/platform-fees.constants';
+import { formatEur } from 'src/common/money/format-eur';
 import { computeCoutAcquisition } from 'src/secondarymarket/domains/cout-acquisition';
 import {
   TransactionFournisseur,
@@ -549,7 +550,7 @@ export class YouSignWebhookController {
       .pushToAdmins({
         type: NotificationType.INVESTISSEMENT,
         titre: 'Nouvel investissement',
-        message: `User #${investment.utilisateurId} a investi ${montant} XOF dans "${project?.titre ?? 'projet'}".`,
+        message: `User #${investment.utilisateurId} a investi ${formatEur(montant)} dans "${project?.titre ?? 'projet'}".`,
         roles: [UserRole.SUPER_ADMIN, UserRole.FINANCIER, UserRole.COMPLIANCE],
         metadata: { investissementId: investment.id, projetId: investment.projetId, montant, userId: investment.utilisateurId },
       })

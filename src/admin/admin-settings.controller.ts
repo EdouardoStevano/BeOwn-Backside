@@ -24,6 +24,8 @@ import { UserEntity } from 'src/users/infrastructure/persistences/entities/user.
 import {
   AdminSettingsEntity,
   AdminSettingsBlob,
+  DEFAULT_BROADCAST_SETTINGS,
+  mergeBroadcastSettings,
 } from './entities/admin-settings.entity';
 import { DEFAULT_FEE_RATES } from 'src/common/platform-fees/platform-fees.service';
 
@@ -42,12 +44,19 @@ const COMMISSION_KEYS = [
   'shareSaleGainFeePct',
 ] as const;
 
+/**
+ * Seules clés de plateforme autorisées à persister/être renvoyées. Le merge
+ * repart de cette liste blanche pour ignorer silencieusement d'anciennes
+ * clés stockées avant ce déploiement (defaultCurrency, timezone — retirées
+ * car la devise de base est désormais fixée à EUR et le fuseau horaire
+ * n'a jamais été branché).
+ */
+const PLATFORM_KEYS = ['name', 'contactEmail', 'supportPhone'] as const;
+
 const DEFAULT_SETTINGS: AdminSettingsBlob = {
   platform: {
     name: 'BeOwn',
-    contactEmail: 'support@beown.com',
-    defaultCurrency: 'XOF',
-    timezone: 'Africa/Abidjan',
+    contactEmail: 'support@beown.fr',
   },
   commissions: { ...DEFAULT_FEE_RATES },
   kyc: {
@@ -55,9 +64,10 @@ const DEFAULT_SETTINGS: AdminSettingsBlob = {
     minScoreAccepted: 60,
   },
   notifications: {
-    defaultEmailFrom: 'noreply@beown.com',
+    defaultEmailFrom: 'noreply@beown.fr',
     smsProvider: 'twilio',
     digestFrequency: 'weekly',
+    broadcast: DEFAULT_BROADCAST_SETTINGS,
   },
   feature_flags: {
     enableSecondaryMarket: true,
@@ -82,7 +92,9 @@ export class AdminSettingsController {
   ) {}
 
   private async ensureRole(currentUser: ActiveUser, roles: string[]) {
-    const u = await this.userRepo.findOne({ where: { userId: currentUser.userId } });
+    const u = await this.userRepo.findOne({
+      where: { userId: currentUser.userId },
+    });
     if (!u || !roles.includes(u.role)) {
       throw new ForbiddenException();
     }
@@ -128,6 +140,54 @@ export class AdminSettingsController {
     return out;
   }
 
+  /**
+   * Fusionne platform stocké + patch en ne conservant QUE les clés connues
+   * (hygiène anti-legacy — voir PLATFORM_KEYS). Utilisé à la fois en lecture
+   * et en écriture pour qu'un blob legacy contenant encore defaultCurrency/
+   * timezone ne soit jamais renvoyé ni ne provoque d'erreur.
+   */
+  private mergePlatform(
+    stored: AdminSettingsBlob['platform'],
+    patch: AdminSettingsBlob['platform'],
+  ): NonNullable<AdminSettingsBlob['platform']> {
+    const merged: Record<string, unknown> = { ...stored, ...patch };
+    const out: Record<string, string> = {};
+    for (const key of PLATFORM_KEYS) {
+      const value = merged[key];
+      if (typeof value === 'string') {
+        out[key] = value;
+      }
+    }
+    return out;
+  }
+
+  /**
+   * Fusionne les notifications stockées + patch, en reconstruisant le
+   * sous-objet `broadcast` clé par clé (mergeBroadcastSettings) : un PATCH
+   * partiel (ex. `{ broadcast: { nouveauProjet: { sms: true } } }`) ne doit
+   * pas effacer les autres canaux/événements, et une lecture doit toujours
+   * renvoyer les 2 événements complets même si la base n'en stocke aucun.
+   */
+  private mergeNotifications(
+    stored: AdminSettingsBlob['notifications'],
+    patch: AdminSettingsBlob['notifications'],
+  ): NonNullable<AdminSettingsBlob['notifications']> {
+    return {
+      ...stored,
+      ...patch,
+      broadcast: mergeBroadcastSettings({
+        nouveauProjet: {
+          ...stored?.broadcast?.nouveauProjet,
+          ...patch?.broadcast?.nouveauProjet,
+        },
+        ouvertureReservation: {
+          ...stored?.broadcast?.ouvertureReservation,
+          ...patch?.broadcast?.ouvertureReservation,
+        },
+      }),
+    };
+  }
+
   private async getOrCreate(): Promise<AdminSettingsEntity> {
     let row = await this.settingsRepo.findOne({ where: { id: 'default' } });
     if (!row) {
@@ -145,7 +205,19 @@ export class AdminSettingsController {
   async get(@CurrentUser() user: ActiveUser) {
     await this.ensureRole(user, ADMIN_ROLES);
     const row = await this.getOrCreate();
-    return { ...DEFAULT_SETTINGS, ...row.settings, updatedAt: row.updatedAt };
+    return {
+      ...DEFAULT_SETTINGS,
+      ...row.settings,
+      platform: this.mergePlatform(
+        DEFAULT_SETTINGS.platform,
+        row.settings.platform,
+      ),
+      notifications: this.mergeNotifications(
+        DEFAULT_SETTINGS.notifications,
+        row.settings.notifications,
+      ),
+      updatedAt: row.updatedAt,
+    };
   }
 
   @ApiOperation({ summary: 'Mettre à jour les paramètres (deep merge)' })
@@ -162,13 +234,16 @@ export class AdminSettingsController {
     const merged: AdminSettingsBlob = {
       ...row.settings,
       ...body,
-      platform: { ...row.settings.platform, ...body.platform },
+      platform: this.mergePlatform(row.settings.platform, body.platform),
       commissions: this.mergeCommissions(
         row.settings.commissions,
         body.commissions,
       ),
       kyc: { ...row.settings.kyc, ...body.kyc },
-      notifications: { ...row.settings.notifications, ...body.notifications },
+      notifications: this.mergeNotifications(
+        row.settings.notifications,
+        body.notifications,
+      ),
       feature_flags: {
         ...row.settings.feature_flags,
         ...body.feature_flags,
