@@ -240,6 +240,75 @@ export class AdminEcheancesController {
   }
 
   @ApiOperation({
+    summary: "Vérifier une échéance (numero) : la marque prête à l'auto-paiement",
+    description:
+      "Passe les EcheanceEntity A_VENIR du projet ayant ce numéro à EN_ATTENTE_PAIEMENT. Le CRON quotidien paiera automatiquement ces échéances à leur date.",
+  })
+  @ApiParam({ name: 'projectId', description: 'UUID du projet' })
+  @ApiParam({ name: 'numero', description: "Numéro d'échéance (1-based)" })
+  @HttpCode(HttpStatus.OK)
+  @RequirePermission('echeancier:pay')
+  @Post(':numero/verify')
+  async verify(
+    @Param('projectId') projectId: string,
+    @Param('numero', ParseIntPipe) numero: number,
+    @CurrentUser() admin: ActiveUser,
+  ): Promise<{ verified: number }> {
+    await this.assertPay(admin);
+    const investments = await this.investRepo.find({ where: { projetId: projectId } });
+    const investmentIds = investments.map((i) => i.id);
+    if (investmentIds.length === 0) {
+      throw new NotFoundException('Aucun investissement sur ce projet');
+    }
+    const targets = await this.echeanceRepo.find({
+      where: { investissementId: In(investmentIds), numero, statut: EcheanceStatus.A_VENIR },
+    });
+    for (const e of targets) {
+      await this.echeanceRepo.update({ id: e.id }, {
+        statut: EcheanceStatus.EN_ATTENTE_PAIEMENT,
+        statutChangeLe: new Date(),
+      });
+    }
+    this.notifications
+      .pushToAdmins({
+        type: NotificationType.ECHEANCE,
+        titre: `Échéance #${numero} vérifiée`,
+        message: `L'échéance ${numero} est vérifiée : elle sera payée automatiquement à sa date (${targets.length} investisseur(s)).`,
+        roles: [UserRole.SUPER_ADMIN, UserRole.FINANCIER],
+        metadata: { projectId, numero, verified: targets.length, by: admin.userId },
+      })
+      .catch(() => {});
+    return { verified: targets.length };
+  }
+
+  @ApiOperation({ summary: "Annuler la vérification d'une échéance (numero)" })
+  @ApiParam({ name: 'projectId', description: 'UUID du projet' })
+  @ApiParam({ name: 'numero', description: "Numéro d'échéance (1-based)" })
+  @HttpCode(HttpStatus.OK)
+  @RequirePermission('echeancier:pay')
+  @Post(':numero/unverify')
+  async unverify(
+    @Param('projectId') projectId: string,
+    @Param('numero', ParseIntPipe) numero: number,
+    @CurrentUser() admin: ActiveUser,
+  ): Promise<{ reverted: number }> {
+    await this.assertPay(admin);
+    const investments = await this.investRepo.find({ where: { projetId: projectId } });
+    const investmentIds = investments.map((i) => i.id);
+    if (investmentIds.length === 0) return { reverted: 0 };
+    const targets = await this.echeanceRepo.find({
+      where: { investissementId: In(investmentIds), numero, statut: EcheanceStatus.EN_ATTENTE_PAIEMENT },
+    });
+    for (const e of targets) {
+      await this.echeanceRepo.update({ id: e.id }, {
+        statut: EcheanceStatus.A_VENIR,
+        statutChangeLe: new Date(),
+      });
+    }
+    return { reverted: targets.length };
+  }
+
+  @ApiOperation({
     summary: "Échéancier agrégé du projet (vue admin, une ligne par numéro)",
     description:
       "Retourne l'échéancier emprunteur en agrégeant les EcheanceEntity de tous les investissements par numéro : somme des capitaux/intérêts/totaux, date partagée, statut le plus avancé.",
