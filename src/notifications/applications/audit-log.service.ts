@@ -1,7 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { AuditLogEntity } from '../infrastructure/persistences/entities/audit-log.entity';
+import { UserEntity } from 'src/users/infrastructure/persistences/entities/user.entity';
+import { describeAuditAction } from './audit-description';
 
 export interface AuditLogFilter {
   page?: number;
@@ -13,8 +15,24 @@ export interface AuditLogFilter {
   dateTo?: string;
 }
 
+export interface AuditLogItemDto {
+  id: number;
+  acteurId: string | null;
+  acteurNom: string | null;
+  acteurEmail: string | null;
+  role: string | null;
+  action: string;
+  description: string;
+  objetType: string | null;
+  objetId: string | null;
+  ip: string | null;
+  userAgent: string | null;
+  metadata: Record<string, unknown> | null;
+  createdAt: Date;
+}
+
 export interface AuditLogPage {
-  items: AuditLogEntity[];
+  items: AuditLogItemDto[];
   total: number;
   page: number;
   limit: number;
@@ -25,6 +43,8 @@ export class AuditLogService {
   constructor(
     @InjectRepository(AuditLogEntity)
     private readonly auditLogRepo: Repository<AuditLogEntity>,
+    @InjectRepository(UserEntity)
+    private readonly userRepo: Repository<UserEntity>,
   ) {}
 
   async create(
@@ -82,7 +102,45 @@ export class AuditLogService {
       .skip((page - 1) * limit)
       .take(limit);
 
-    const [items, total] = await qb.getManyAndCount();
+    const [rows, total] = await qb.getManyAndCount();
+
+    const acteurIds = [
+      ...new Set(rows.map((r) => r.acteurId).filter((x): x is string => !!x)),
+    ];
+    const numIds = acteurIds.map((s) => Number(s)).filter((n) => Number.isInteger(n));
+    const users = numIds.length
+      ? await this.userRepo.find({ where: { userId: In(numIds) } })
+      : [];
+    const byId = new Map<string, { nom: string; email: string | null }>();
+    for (const u of users) {
+      const nom = `${u.firstname ?? ''} ${u.lastname ?? ''}`.trim();
+      const email = u.userEmail?.email ?? null;
+      byId.set(String(u.userId), { nom: nom || email || '', email });
+    }
+
+    const items: AuditLogItemDto[] = rows.map((r) => {
+      const u = r.acteurId ? byId.get(r.acteurId) : undefined;
+      const statusCode =
+        typeof r.metadata?.statusCode === 'number'
+          ? (r.metadata.statusCode as number)
+          : undefined;
+      return {
+        id: r.id,
+        acteurId: r.acteurId,
+        acteurNom: u?.nom || (r.acteurId ? `#${r.acteurId}` : null),
+        acteurEmail: u?.email ?? null,
+        role: r.role,
+        action: r.action,
+        description: describeAuditAction(r.action, r.objetType, statusCode),
+        objetType: r.objetType,
+        objetId: r.objetId,
+        ip: r.ip,
+        userAgent: r.userAgent,
+        metadata: r.metadata,
+        createdAt: r.createdAt,
+      };
+    });
+
     return { items, total, page, limit };
   }
 }
