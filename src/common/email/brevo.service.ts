@@ -19,7 +19,7 @@ export class BrevoEmailService implements EmailService {
   ) {
     this.apiKey = this.config.getOrThrow('BREVO_API_KEY');
     this.senderEmail =
-      this.config.get('BREVO_SENDER_EMAIL') || 'no-reply@beown.com';
+      this.config.get('BREVO_SENDER_EMAIL') || 'no-reply@beown.fr';
     this.senderName = this.config.get('BREVO_SENDER_NAME') || 'BeOwn';
     this.appUrl = this.config.get('FRONTEND_URL') || 'http://localhost:5173';
   }
@@ -39,7 +39,8 @@ export class BrevoEmailService implements EmailService {
   }
 
   async sendPasswordResetEmail(email: string, token: string): Promise<void> {
-    const frontendUrl = this.config.get('FRONTEND_URL') || 'http://localhost:5173';
+    const frontendUrl =
+      this.config.get('FRONTEND_URL') || 'http://localhost:5173';
     const resetLink = `${frontendUrl}/auth/reset-password?token=${token}`;
     await this.sendHtml(
       email,

@@ -55,11 +55,9 @@ import { Public } from 'src/common/auth/public.decorator';
 import { Roles } from 'src/common/auth/roles.decorator';
 import { RequirePermission } from 'src/common/auth/require-permission.decorator';
 import { UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
-import { SkipThrottle } from '@nestjs/throttler';
 import { NotificationService } from 'src/notifications/applications/notification.service';
 import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
 
-@SkipThrottle()
 @ApiTags('Projects')
 @ApiBearerAuth()
 @Controller('projects')
@@ -118,8 +116,8 @@ export class ProjectController {
   @ApiQuery({ name: 'type', enum: ProjectType, required: false })
   @ApiQuery({ name: 'page', type: Number, required: false })
   @ApiQuery({ name: 'limit', type: Number, required: false })
-  @Public()
   @Get()
+  @RequirePermission('projects:read')
   async list(
     @Query('statut') statut?: ProjectStatus,
     @Query('type') type?: ProjectType,
@@ -142,10 +140,10 @@ export class ProjectController {
   @ApiParam({ name: 'id', description: 'UUID du projet' })
   @ApiResponse({ status: 200, description: 'Projet complet' })
   @ApiResponse({ status: 404, description: 'Projet introuvable' })
-  @Public()
   @Get(':id')
+  @RequirePermission('projects:read')
   async findOne(@Param('id') id: string) {
-    return this.buildProjectDetail(id);
+    return this.buildProjectDetail(id, false);
   }
 
   @ApiOperation({ summary: 'Obtenir un projet complet par slug' })
@@ -162,7 +160,7 @@ export class ProjectController {
     // dossier par id (UUID non devinable) ou via leurs espaces dédiés.
     if (!project || project.statut === ProjectStatus.BROUILLON)
       throw new NotFoundException('Projet introuvable.');
-    return this.buildProjectDetail(project.id);
+    return this.buildProjectDetail(project.id, true);
   }
 
   @ApiOperation({ summary: 'Créer un nouveau projet (admin)' })
@@ -299,8 +297,8 @@ export class ProjectController {
   @ApiParam({ name: 'id', description: 'UUID du projet' })
   @ApiResponse({ status: 200, description: 'Token de partage retourné' })
   @ApiResponse({ status: 404, description: 'Projet introuvable' })
-  @Public()
   @Get(':id/share')
+  @RequirePermission('projects:read')
   async getShareToken(@Param('id') id: string) {
     const project = await this.projectRepository.findProjectById(id);
     if (!project) throw new NotFoundException('Projet introuvable.');
@@ -352,7 +350,7 @@ export class ProjectController {
       throw new NotFoundException(
         'Lien de partage invalide ou projet introuvable.',
       );
-    return this.buildProjectDetail(project.id);
+    return this.buildProjectDetail(project.id, true);
   }
 
   // ─── Avis ──────────────────────────────────────────────────────────────────
@@ -365,6 +363,13 @@ export class ProjectController {
   async listAvis(@Param('id') id: string) {
     const project = await this.projectRepository.findProjectById(id);
     if (!project) throw new NotFoundException('Projet introuvable.');
+    if (![
+      ProjectStatus.EN_COLLECTE,
+      ProjectStatus.PRE_INVESTISSEMENT,
+      ProjectStatus.FINANCE,
+    ].includes(project.statut)) {
+      throw new NotFoundException('Projet introuvable.');
+    }
     const [avis, stats] = await Promise.all([
       this.avisRepository.findByProjetId(id),
       this.avisRepository.getStats(id),
@@ -459,7 +464,9 @@ export class ProjectController {
     );
     return projects.map((p, i) => {
       const images = imagesByProject[i]
-        .filter((d) => d.type === DocumentType.PHOTO_PROJET)
+        .filter(
+          (d) => d.type === DocumentType.PHOTO_PROJET && d.isPublic === true,
+        )
         .sort((a, b) => {
           if (a.estPrincipale !== b.estPrincipale)
             return a.estPrincipale ? -1 : 1;
@@ -469,7 +476,7 @@ export class ProjectController {
     });
   }
 
-  private async buildProjectDetail(id: string) {
+  private async buildProjectDetail(id: string, publicView = false) {
     const [project, allInvestments, allDocs, avisStats, fractionsVendues] =
       await Promise.all([
         this.getProjects.executeOne(id),
@@ -505,7 +512,11 @@ export class ProjectController {
     ).size;
 
     const images = allDocs
-      .filter((d) => d.type === DocumentType.PHOTO_PROJET)
+      .filter(
+        (d) =>
+          d.type === DocumentType.PHOTO_PROJET &&
+          (!publicView || d.isPublic === true),
+      )
       .sort((a, b) => {
         if (a.estPrincipale !== b.estPrincipale)
           return a.estPrincipale ? -1 : 1;
@@ -513,7 +524,9 @@ export class ProjectController {
       });
 
     const documents = allDocs.filter(
-      (d) => d.type !== DocumentType.PHOTO_PROJET,
+      (d) =>
+        d.type !== DocumentType.PHOTO_PROJET &&
+        (!publicView || d.isPublic === true),
     );
 
     return {

@@ -3,16 +3,20 @@ import { PassportStrategy } from '@nestjs/passport';
 import { Strategy, VerifyCallback } from 'passport-google-oauth20';
 import { Social } from '../../infrastructures/constant/social';
 import { SocialInterface } from '../../infrastructures/interfaces/social.interface';
+import { CookieOAuthStateStore } from './cookie-oauth-state.store';
 
 @Injectable()
 export class GoogleStrategy extends PassportStrategy(Strategy, Social.GOOGLE) {
   constructor() {
+    // `store` (state store OAuth custom, protection CSRF) est supporté au runtime
+    // par passport-oauth2 mais absent des typings de passport-google-oauth20.
     super({
       clientID: process.env.GOOGLE_CLIENT_ID || '',
       clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
       callbackURL: process.env.GOOGLE_CALLBACK_URL || '',
       scope: ['email', 'profile'],
-    });
+      store: new CookieOAuthStateStore('google'),
+    } as any);
   }
 
   validate(

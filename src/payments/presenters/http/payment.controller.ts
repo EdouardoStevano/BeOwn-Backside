@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  ForbiddenException,
   Get,
   Headers,
   HttpCode,
@@ -21,6 +22,7 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import type { Request } from 'express';
+import { randomUUID } from 'crypto';
 import { StripePaymentService } from '../../infrastructure/stripe-payment.service';
 import { StripeIdentityServiceImpl } from '../../infrastructure/stripe-identity.service';
 import {
@@ -28,8 +30,8 @@ import {
   CreatePaymentIntentDto,
   CreateRetraitDto,
 } from '../dto/payment.dto';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { InjectRepository, InjectDataSource } from '@nestjs/typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/wallet.entity';
 import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entities/transaction.entity';
 import {
@@ -39,6 +41,8 @@ import {
   WalletType,
 } from 'src/wallets/domains/enums/wallet.enum';
 import { Public } from 'src/common/auth/public.decorator';
+import { RequirePermission } from 'src/common/auth/require-permission.decorator';
+import { hasPermission } from 'src/common/auth/permissions.constants';
 import { formatEur } from 'src/common/money/format-eur';
 import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
@@ -55,7 +59,6 @@ import { NotificationType } from 'src/notifications/infrastructure/persistences/
 import { UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
 import { AuditLogService } from 'src/notifications/applications/audit-log.service';
 
-@SkipThrottle({ short: true, medium: true })
 @ApiTags('Payments & KYC')
 @ApiBearerAuth()
 @Controller('payments')
@@ -75,7 +78,21 @@ export class PaymentController {
     private readonly walletRepo: Repository<WalletEntity>,
     @InjectRepository(TransactionEntity)
     private readonly txRepo: Repository<TransactionEntity>,
+    @InjectDataSource()
+    private readonly dataSource: DataSource,
   ) {}
+
+  private async assertCanAccessKycSession(
+    user: ActiveUser,
+    sessionId: string,
+  ): Promise<void> {
+    if (hasPermission(user.role, 'kyc:validate')) return;
+
+    const kyc = await this.profilRepository.findKycByUserId(user.userId);
+    if (kyc?.fournisseurRef === sessionId) return;
+
+    throw new ForbiddenException('Acces refuse.');
+  }
 
   // ─── Dépôt ───────────────────────────────────────────────────────────────
 
@@ -120,6 +137,21 @@ export class PaymentController {
       return { success: false, status: intent.status };
     }
 
+    // ── Garde anti-BOLA (H-1) ────────────────────────────────────────────────
+    // Le PaymentIntent porte `metadata.userId` (posé à la création, cf.
+    // stripe-payment.service.ts). On refuse tout crédit si l'appelant n'est pas
+    // le propriétaire du PaymentIntent — sinon un utilisateur pourrait créditer
+    // son wallet avec le dépôt d'un tiers dont il connaît l'id `pi_xxx`.
+    if (intent.metadata?.userId !== String(user.userId)) {
+      this.logger.warn(
+        `Tentative de confirmation de dépôt non autorisée: appelant=${user.userId} ` +
+        `propriétaire PaymentIntent=${intent.metadata?.userId ?? 'inconnu'} pi=${dto.paymentIntentId}`,
+      );
+      throw new ForbiddenException(
+        'Ce paiement n\'appartient pas à votre compte.',
+      );
+    }
+
     let wallet = await this.walletRepo.findOne({
       where: { proprietaireUserId: user.userId, type: WalletType.INVESTISSEUR },
     });
@@ -144,7 +176,8 @@ export class PaymentController {
     await this.walletRepo
       .createQueryBuilder()
       .update(WalletEntity)
-      .set({ solde: () => `solde + ${amountMajor}` })
+      .set({ solde: () => 'solde + :amount' })
+      .setParameter('amount', amountMajor)
       .where('id = :id', { id: wallet.id })
       .execute();
 
@@ -196,35 +229,76 @@ export class PaymentController {
     @Body() dto: CreateRetraitDto,
     @CurrentUser() user: ActiveUser,
   ) {
-    const wallet = await this.walletRepo.findOne({
-      where: { id: dto.walletId, proprietaireUserId: user.userId },
-    });
-    if (!wallet) return { success: false, message: 'Wallet introuvable' };
-    if (Number(wallet.solde) < dto.amount) {
-      return { success: false, message: 'Solde insuffisant' };
+    // ── Idempotence explicite (L-2) ──────────────────────────────────────────
+    // Si le client fournit une clé, une resoumission de la même demande renvoie
+    // le retrait déjà enregistré au lieu d'en créer un second.
+    if (dto.idempotencyKey) {
+      const existing = await this.txRepo.findOne({
+        where: { idempotencyKey: `retrait:${user.userId}:${dto.idempotencyKey}` },
+      });
+      if (existing) {
+        return {
+          success: true,
+          transactionId: existing.id,
+          status: existing.statut,
+          alreadyProcessed: true,
+        };
+      }
     }
 
-    const idempotencyKey = `retrait:${user.userId}:${Date.now()}`;
-    const tx = await this.txRepo.save(
-      this.txRepo.create({
-        walletId: wallet.id,
-        type: TransactionType.RETRAIT,
-        montant: dto.amount,
-        devise: dto.currency,
-        statut: TransactionStatus.EN_ATTENTE_PAIEMENT,
-        fournisseur: TransactionFournisseur.STRIPE,
-        fournisseurRef: dto.ibanDestination,
-        idempotencyKey,
-        metadata: { ibanDestination: dto.ibanDestination },
-      }),
-    );
+    // ── Section critique atomique (H-2) ──────────────────────────────────────
+    // Verrou pessimiste sur le wallet + décrément CONDITIONNEL (`solde >= amount`)
+    // dans une seule transaction : deux retraits concurrents ne peuvent plus
+    // passer tous deux un contrôle sur une lecture obsolète (solde négatif /
+    // double-débit). Le débit et l'écriture du ledger sont validés ensemble.
+    const result = await this.dataSource.transaction(async (manager) => {
+      const walletRow = await manager.findOne(WalletEntity, {
+        where: { id: dto.walletId, proprietaireUserId: user.userId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!walletRow) {
+        return { ok: false as const, message: 'Wallet introuvable' };
+      }
 
-    await this.walletRepo
-      .createQueryBuilder()
-      .update(WalletEntity)
-      .set({ solde: () => `solde - ${dto.amount}` })
-      .where('id = :id', { id: wallet.id })
-      .execute();
+      const upd = await manager
+        .createQueryBuilder()
+        .update(WalletEntity)
+        .set({ solde: () => 'solde - :amount' })
+        .setParameter('amount', dto.amount)
+        .where('id = :id AND solde >= :amount', {
+          id: walletRow.id,
+          amount: dto.amount,
+        })
+        .execute();
+      if (!upd.affected) {
+        return { ok: false as const, message: 'Solde insuffisant' };
+      }
+
+      const idempotencyKey = dto.idempotencyKey
+        ? `retrait:${user.userId}:${dto.idempotencyKey}`
+        : `retrait:${user.userId}:${randomUUID()}`;
+
+      const tx = await manager.save(
+        manager.create(TransactionEntity, {
+          walletId: walletRow.id,
+          type: TransactionType.RETRAIT,
+          montant: dto.amount,
+          devise: dto.currency,
+          statut: TransactionStatus.EN_ATTENTE_PAIEMENT,
+          fournisseur: TransactionFournisseur.STRIPE,
+          fournisseurRef: dto.ibanDestination,
+          idempotencyKey,
+          metadata: { ibanDestination: dto.ibanDestination },
+        }),
+      );
+
+      return { ok: true as const, tx };
+    });
+
+    if (!result.ok) {
+      return { success: false, message: result.message };
+    }
+    const tx = result.tx;
 
     // Alerte aux admins (Financier) — un retrait attend traitement manuel
     this.notificationService
@@ -314,6 +388,7 @@ export class PaymentController {
   @ApiParam({ name: 'userId', description: 'ID numérique de l\'utilisateur' })
   @ApiResponse({ status: 200, description: 'URLs signées ou null si pas de KYC validé' })
   @Get('kyc/images/:userId')
+  @RequirePermission('kyc:validate')
   async getKycImagesForUser(@Param('userId') userId: string) {
     const uid = parseInt(userId, 10);
     if (isNaN(uid)) throw new BadRequestException('userId invalide');
@@ -338,7 +413,11 @@ export class PaymentController {
   })
   @ApiResponse({ status: 200, description: 'Statut de la session KYC' })
   @Get('kyc/session/:sessionId')
-  async getKycSession(@Param('sessionId') sessionId: string) {
+  async getKycSession(
+    @Param('sessionId') sessionId: string,
+    @CurrentUser() user: ActiveUser,
+  ) {
+    await this.assertCanAccessKycSession(user, sessionId);
     return this.identityService.retrieveVerificationSession(sessionId);
   }
 
@@ -350,7 +429,11 @@ export class PaymentController {
   @ApiResponse({ status: 204, description: 'Session annulée' })
   @HttpCode(HttpStatus.NO_CONTENT)
   @Post('kyc/session/:sessionId/cancel')
-  async cancelKycSession(@Param('sessionId') sessionId: string) {
+  async cancelKycSession(
+    @Param('sessionId') sessionId: string,
+    @CurrentUser() user: ActiveUser,
+  ) {
+    await this.assertCanAccessKycSession(user, sessionId);
     return this.identityService.cancelVerificationSession(sessionId);
   }
 
@@ -368,6 +451,7 @@ export class PaymentController {
   })
   @ApiResponse({ status: 200, description: 'Événement reçu et traité' })
   @Public()
+  @SkipThrottle({ short: true, medium: true, auth: true })
   @Post('webhook/stripe')
   async handleStripeWebhook(
     @Headers('stripe-signature') signature: string,
@@ -415,7 +499,8 @@ export class PaymentController {
           await this.walletRepo
             .createQueryBuilder()
             .update(WalletEntity)
-            .set({ solde: () => `solde + ${amountMajor}` })
+            .set({ solde: () => 'solde + :amount' })
+            .setParameter('amount', amountMajor)
             .where('id = :id', { id: wallet.id })
             .execute();
           await this.txRepo.save(

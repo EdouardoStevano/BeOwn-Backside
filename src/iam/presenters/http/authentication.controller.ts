@@ -71,7 +71,7 @@ export class AuthenticationController {
     status: 429,
     description: 'Trop de tentatives — réessayez dans 15 min',
   })
-  @Throttle({ auth: { ttl: 900_000, limit: 500 } })
+  @Throttle({ auth: { ttl: 900_000, limit: 10 } })
   @Public()
   @HttpCode(HttpStatus.OK)
   @Post('sign-in')
@@ -82,7 +82,7 @@ export class AuthenticationController {
   @ApiOperation({ summary: "Rafraîchir les tokens d'accès" })
   @ApiResponse({ status: 200, description: 'Nouveaux tokens retournés' })
   @ApiResponse({ status: 401, description: 'Refresh token invalide ou expiré' })
-  @Throttle({ medium: { ttl: 60_000, limit: 500 } })
+  @Throttle({ medium: { ttl: 60_000, limit: 30 } })
   @Public()
   @HttpCode(HttpStatus.OK)
   @Post('refresh-tokens')
@@ -179,7 +179,7 @@ export class AuthenticationController {
 
   @ApiOperation({ summary: 'Inscription (sign-up)' })
   @ApiResponse({ status: 201, description: 'Compte créé avec succès' })
-  @Throttle({ auth: { ttl: 900_000, limit: 200 } })
+  @Throttle({ auth: { ttl: 900_000, limit: 10 } })
   @Public()
   @Post('sign-up')
   async signUp(@Body() dto: SignUpDto) {

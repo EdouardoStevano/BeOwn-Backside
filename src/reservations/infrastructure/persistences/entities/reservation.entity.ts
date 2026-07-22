@@ -13,6 +13,10 @@ import { UserEntity } from 'src/users/infrastructure/persistences/entities/user.
 import { ReservationStatus } from 'src/reservations/domains/enums/reservation-status.enum';
 
 @Entity('reservation')
+@Index('UQ_reservation_project_rank', ['projetId', 'rangFile'], {
+  unique: true,
+  where: '"rangFile" IS NOT NULL',
+})
 export class ReservationEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;

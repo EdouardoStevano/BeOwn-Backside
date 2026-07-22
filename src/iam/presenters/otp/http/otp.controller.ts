@@ -1,6 +1,8 @@
 import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { Public } from 'src/common/auth/public.decorator';
+import { CurrentUser } from 'src/common/auth/current-user.decorator';
+import type { ActiveUser } from 'src/common/auth/current-user.decorator';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import {
   CreateEmailOtpUseCase,
@@ -49,15 +51,21 @@ export class OtpController {
   @ApiOperation({ summary: 'Configurer le TOTP (Google Authenticator)' })
   @ApiResponse({ status: 201, description: 'Secret + URI pour QR code' })
   @Post('totp/setup')
-  setupTotp(@Body() dto: SetupTotpDto) {
-    return this.totpUseCase.setup(dto);
+  setupTotp(
+    @Body() _dto: SetupTotpDto,
+    @CurrentUser() user: ActiveUser,
+  ) {
+    return this.totpUseCase.setup(user.userId, user.email);
   }
 
   @ApiOperation({ summary: 'Vérifier un code TOTP' })
   @ApiResponse({ status: 200, description: 'TOTP valide' })
   @Post('totp/verify')
-  verifyTotp(@Body() dto: VerifyTotpDto) {
-    return this.totpUseCase.verify(dto);
+  verifyTotp(
+    @Body() dto: VerifyTotpDto,
+    @CurrentUser() user: ActiveUser,
+  ) {
+    return this.totpUseCase.verify(user.userId, dto);
   }
 
   @ApiOperation({ summary: 'Envoyer un OTP par SMS' })

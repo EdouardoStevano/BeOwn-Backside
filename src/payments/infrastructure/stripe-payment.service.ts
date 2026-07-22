@@ -46,6 +46,7 @@ export class StripePaymentService implements PaymentService {
       intentId: intent.id,
       status: intent.status,
       amount: intent.amount,
+      metadata: (intent.metadata ?? {}) as Record<string, string>,
     };
   }
 

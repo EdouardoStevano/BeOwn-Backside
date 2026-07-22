@@ -50,11 +50,16 @@ export class WalletTypeOrmRepository implements WalletRepository {
   }
 
   async updateSolde(walletId: string, delta: number): Promise<Wallet> {
+    if (!Number.isFinite(delta) || delta === 0) {
+      throw new Error('Wallet balance delta must be a finite non-zero number.');
+    }
     await this.walletRepo
       .createQueryBuilder()
       .update()
-      .set({ solde: () => `solde + ${delta}` })
+      .set({ solde: () => 'solde + :delta' })
       .where('id = :id', { id: walletId })
+      .andWhere('solde + :delta >= 0')
+      .setParameters({ delta })
       .execute();
     const updated = await this.walletRepo.findOneOrFail({
       where: { id: walletId },

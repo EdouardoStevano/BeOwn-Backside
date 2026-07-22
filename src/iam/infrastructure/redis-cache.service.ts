@@ -85,8 +85,21 @@ export class RedisCacheService implements CacheManagerService {
   }
 
   async getAndDeleteOAuthCode(code: string): Promise<AuthTokens | null> {
-    const tokens = await this.cacheManager.get<AuthTokens>(`oauth-code:${code}`);
-    if (tokens) await this.cacheManager.del(`oauth-code:${code}`);
+    const key = `oauth-code:${code}`;
+    // cache-manager v7 : la propriété `store` (singulier) n'existe plus dans les
+    // types (c'est `stores`, un tableau de Keyv). L'accès brut au client Redis
+    // reste possible au runtime si un store Redis est câblé ; sinon on retombe
+    // sur le get+del non atomique ci-dessous (code OAuth à usage unique, TTL 30s).
+    const store = (this.cacheManager as any).store;
+    const client = store?.getClient?.();
+    if (client?.getdel) {
+      const raw = await client.getdel(key);
+      return raw ? (JSON.parse(raw) as AuthTokens) : null;
+    }
+
+    // Fallback for non-Redis test stores. Production uses Redis GETDEL above.
+    const tokens = await this.cacheManager.get<AuthTokens>(key);
+    if (tokens) await this.cacheManager.del(key);
     return tokens ?? null;
   }
 }

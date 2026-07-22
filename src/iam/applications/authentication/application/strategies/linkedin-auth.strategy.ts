@@ -4,6 +4,7 @@ import { Strategy } from 'passport-oauth2';
 import axios from 'axios';
 import { Social } from '../../infrastructures/constant/social';
 import { SocialInterface } from '../../infrastructures/interfaces/social.interface';
+import { CookieOAuthStateStore } from './cookie-oauth-state.store';
 
 // LinkedIn deprecated r_liteprofile / r_emailaddress (old API /v2/me).
 // New apps must use OpenID Connect scopes: openid profile email
@@ -15,6 +16,8 @@ export class LinkedinStrategy extends PassportStrategy(
   Social.LINKEDIN,
 ) {
   constructor() {
+    // `store` (state store OAuth custom, protection CSRF) est supporté au runtime
+    // par passport-oauth2 mais absent des typings exposés ici.
     super({
       authorizationURL:
         'https://www.linkedin.com/oauth/v2/authorization',
@@ -26,7 +29,8 @@ export class LinkedinStrategy extends PassportStrategy(
       // Skip passport-oauth2's built-in profile fetch — we do it ourselves
       // with the new OIDC userinfo endpoint
       skipUserProfile: true,
-    });
+      store: new CookieOAuthStateStore('linkedin'),
+    } as any);
   }
 
   async validate(accessToken: string, _refreshToken: string, _profile: unknown): Promise<SocialInterface> {

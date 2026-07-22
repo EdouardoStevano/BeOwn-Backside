@@ -1,4 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
+import { randomInt } from 'crypto';
 import { CACHE_MANAGER, type Cache } from '@nestjs/cache-manager';
 import {
   HASHING_SERVICE,
@@ -79,7 +80,7 @@ export class RegistrationOtpService {
    * inbox/phone.
    */
   async generate(identifier: string): Promise<string> {
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const code = randomInt(100000, 1_000_000).toString();
     const codeHash = await this.hashingService.hash(code);
     const expiresAt = Date.now() + REGISTRATION_OTP_TTL_SECONDS * 1000;
     const record: RegistrationOtpRecord = { codeHash, attempts: 0, expiresAt };

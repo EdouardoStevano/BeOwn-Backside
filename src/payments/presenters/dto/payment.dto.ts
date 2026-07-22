@@ -47,6 +47,16 @@ export class CreateRetraitDto {
   @ApiProperty({ example: 'SN0800100000015000000160', description: 'IBAN ou numéro de compte destinataire' })
   @IsString()
   ibanDestination: string;
+
+  @ApiPropertyOptional({
+    example: 'a1b2c3d4-...',
+    description:
+      "Clé d'idempotence fournie par le client. Une même clé garantit qu'un retrait n'est traité qu'une seule fois (protection contre la double-soumission).",
+  })
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  idempotencyKey?: string;
 }
 
 export class StartKycVerificationDto {
