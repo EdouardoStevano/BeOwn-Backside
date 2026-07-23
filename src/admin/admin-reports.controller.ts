@@ -87,7 +87,7 @@ export class AdminReportsController {
     description: 'Les rapports BeOwn sont générés à la volée — :id correspond donc au type de rapport.',
   })
   @ApiResponse({ status: 200, description: 'PDF binary stream' })
-  @RequirePermission('data:export')
+  @RequirePermission('reports:read')
   @Get(':id/download')
   async download(
     @Param('id') id: string,
@@ -99,7 +99,7 @@ export class AdminReportsController {
 
   @ApiOperation({ summary: 'Générer et télécharger un rapport PDF' })
   @ApiResponse({ status: 200, description: 'PDF binary stream' })
-  @RequirePermission('data:export')
+  @RequirePermission('reports:read')
   @Post(':type/generate')
   @Get(':type/generate')
   async generate(
@@ -107,11 +107,18 @@ export class AdminReportsController {
     @CurrentUser() user: ActiveUser,
     @Res() res: Response,
   ) {
-    await this.ensureExport(user);
     if (!REPORT_TYPES.includes(type as ReportType)) {
       throw new ForbiddenException(`Type de rapport inconnu : ${type}`);
     }
     const reportType = type as ReportType;
+    // Le rapport « liste investisseurs » contient des PII → export protégé
+    // (data:export). Les rapports agrégés (mensuel, IFU, AMF, AML) restent
+    // accessibles à tout rôle habilité aux rapports (reports:read).
+    if (reportType === 'investors') {
+      await this.ensureExport(user);
+    } else {
+      await this.ensureAdmin(user);
+    }
 
     const filename = `beown-${reportType}-${new Date().toISOString().slice(0, 10)}.pdf`;
     res.setHeader('Content-Type', 'application/pdf');
