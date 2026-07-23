@@ -21,7 +21,7 @@ import {
 } from '@nestjs/swagger';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { UserEntity } from 'src/users/infrastructure/persistences/entities/user.entity';
+import { UserEntity, UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
 import { CreateProfilPPUseCase } from 'src/profiles/applications/usecases/create-profil-pp.usecase';
 import { CreateKycUseCase } from 'src/profiles/applications/usecases/create-kyc.usecase';
 import { UpdateKycStatusUseCase } from 'src/profiles/applications/usecases/update-kyc-status.usecase';
@@ -128,6 +128,40 @@ export class ProfileController {
   ) {
     this.assertSelfOrKycReviewer(user, userId);
     return this.createKyc.execute(userId);
+  }
+
+  @ApiOperation({
+    summary: 'Demander une revue manuelle du KYC (dépôt manuel de documents)',
+    description:
+      "Fallback quand la vérification automatique Stripe Identity n'aboutit " +
+      "pas (pas de réponse webhook, statut bloqué). Après téléversement manuel " +
+      "de la pièce d'identité + selfie, l'utilisateur passe son dossier en " +
+      'revue manuelle (EN_REVUE) ; la compliance est notifiée pour décision ' +
+      'via la route de décision manuelle existante.',
+  })
+  @ApiResponse({ status: 200, description: 'Dossier passé en revue manuelle' })
+  @HttpCode(HttpStatus.OK)
+  @Post(':userId/kyc/manual-review')
+  async requestManualReview(
+    @Param('userId', ParseIntPipe) userId: number,
+    @CurrentUser() user: ActiveUser,
+  ) {
+    this.assertSelfOrKycReviewer(user, userId);
+    const updated = await this.updateKycStatus.execute(
+      userId,
+      KycStatus.EN_REVUE,
+      'Dépôt manuel de documents — revue requise',
+    );
+    this.notifications
+      .pushToAdmins({
+        type: NotificationType.KYC_REVUE_MANUELLE,
+        titre: 'KYC en revue manuelle',
+        message: `Un utilisateur (#${userId}) a déposé ses documents manuellement — dossier à valider.`,
+        roles: [UserRole.COMPLIANCE, UserRole.SUPER_ADMIN],
+        metadata: { userId },
+      })
+      .catch(() => {});
+    return updated;
   }
 
   @ApiOperation({
