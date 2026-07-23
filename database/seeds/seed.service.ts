@@ -607,11 +607,93 @@ Immeuble résidentiel de 6 appartements loués, détenu via la SPV **BeOwn Les J
       } as any) as any,
     )) as ProjectEntity;
 
+    // Projet C : émission OBLIGATAIRE (non résidentiel) — exemple de projet
+    // qui n'est pas locatif : titre de créance à coupon fixe, en collecte.
+    const projetC = (await this.projectRepo.save(
+      this.projectRepo.create({
+        slug: 'bureaux-plateau-abidjan-obligation',
+        titre: 'Bureaux Plateau — Abidjan (obligation)',
+        type: ProjectType.TERTIAIRE,
+        statut: ProjectStatus.EN_COLLECTE,
+        ville: 'Abidjan',
+        region: 'Lagunes',
+        pays: 'CI',
+        adresseComplete: 'Boulevard de la République, Plateau, Abidjan',
+        latitude: 5.32,
+        longitude: -4.02,
+        youtubeUrl: null,
+        capitalCible: 500_000,
+        capitalMinimum: 300_000,
+        ticketMinimum: 500,
+        ticketMaximum: 100_000,
+        nbFractions: 1_000,
+        triCible: 8.5,
+        dureeMois: 24,
+        instrument: ProjectInstrument.OBLIGATION,
+        estPreInvestissable: false,
+        plafondPreInvestissement: null,
+        descriptionMd: `## Bureaux Plateau — Abidjan (obligation)
+
+Financement **obligataire** d'un plateau de bureaux loué à un locataire unique. Les investisseurs souscrivent des **obligations** et perçoivent un **coupon fixe** — il ne s'agit pas d'un placement locatif en parts, mais d'un titre de créance.
+
+- **Montant de l'émission :** 500 000 € (1 000 obligations de 500 €)
+- **Coupon :** 8,5 % / an, versé trimestriellement
+- **Durée :** 24 mois, remboursement du capital in fine
+
+> Investir comporte un risque de perte en capital. Placement illiquide, non garanti par l'État.`,
+        avertissementMd:
+          "Obligations : risque de défaut de l'émetteur et de perte totale du capital. Le coupon n'est pas garanti. Placement illiquide.",
+        chronologie: [
+          {
+            etape: 'Publication du projet',
+            date: this.daysAgo(10).toISOString().slice(0, 10),
+            statut: 'done',
+            description: 'Émission validée et publiée par BeOwn.',
+          },
+          {
+            etape: 'Ouverture de la collecte',
+            date: this.daysAgo(5).toISOString().slice(0, 10),
+            statut: 'in_progress',
+          },
+          {
+            etape: 'Clôture de la collecte',
+            date: new Date(Date.now() + 30 * 86_400_000)
+              .toISOString()
+              .slice(0, 10),
+            statut: 'pending',
+          },
+          {
+            etape: 'Remboursement du capital (in fine)',
+            date: new Date(Date.now() + 24 * 30 * 86_400_000)
+              .toISOString()
+              .slice(0, 10),
+            statut: 'pending',
+          },
+        ],
+        garanties: [
+          {
+            type: 'Nantissement des créances de loyers',
+            description:
+              'Loyers du locataire unique nantis au profit des porteurs obligataires.',
+            rang: 1,
+          },
+        ],
+        previsionnel: null,
+        porteurId: porteur1.userId,
+        spvId: null,
+        datePublication: this.daysAgo(10),
+        dateOuvertureCollecte: this.daysAgo(5),
+        dateCloturePrevue: new Date(Date.now() + 30 * 86_400_000),
+      } as any) as any,
+    )) as ProjectEntity;
+
     await this.audit(porteur1, 'PROJECT_SUBMIT', 'PROJECT', projetA.id);
     await this.audit(admin, 'PROJECT_PUBLISH', 'PROJECT', projetA.id);
     await this.audit(porteur2, 'PROJECT_SUBMIT', 'PROJECT', projetB.id);
+    await this.audit(porteur1, 'PROJECT_SUBMIT', 'PROJECT', projetC.id);
+    await this.audit(admin, 'PROJECT_PUBLISH', 'PROJECT', projetC.id);
     this.logger.log(
-      '✅ 2 projets créés (1 publié/exploité, 1 brouillon soumis)',
+      '✅ 3 projets créés (1 equity exploité, 1 brouillon, 1 obligation en collecte)',
     );
 
     // ════════════════════════════════════════════════════════════════════════
