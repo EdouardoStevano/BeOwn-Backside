@@ -36,6 +36,7 @@ import { FiscaliteModule } from './fiscalite/applications/fiscalite.module';
 import { AmlModule } from './common/aml/aml.module';
 import { PlatformFeesModule } from './common/platform-fees/platform-fees.module';
 import { PlatformSettingsModule } from './common/platform-settings/platform-settings.module';
+import { ContactModule } from './common/contact/contact.module';
 import { SmsModule } from './common/sms/sms.module';
 import { EmailModule } from './common/email/email.module';
 import { MailerModule } from '@nestjs-modules/mailer';
@@ -133,6 +134,7 @@ function requireEnv(name: string): string {
     AmlModule,
     PlatformFeesModule,
     PlatformSettingsModule,
+    ContactModule,
     ...(process.env.ENABLE_TEST_ENDPOINTS === 'true'
       ? [NotificationTestModule]
       : []),
