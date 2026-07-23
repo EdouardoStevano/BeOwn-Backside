@@ -57,6 +57,9 @@ import { RequirePermission } from 'src/common/auth/require-permission.decorator'
 import { UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
 import { NotificationService } from 'src/notifications/applications/notification.service';
 import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { ProjectViewEntity } from '../../infrastructure/persistences/entities/project-view.entity';
 
 @ApiTags('Projects')
 @ApiBearerAuth()
@@ -76,6 +79,8 @@ export class ProjectController {
     @Inject(AVIS_REPOSITORY)
     private readonly avisRepository: AvisRepository,
     private readonly notificationService: NotificationService,
+    @InjectRepository(ProjectViewEntity)
+    private readonly projectViewRepo: Repository<ProjectViewEntity>,
   ) {}
 
   @ApiOperation({
@@ -144,6 +149,60 @@ export class ProjectController {
   @RequirePermission('projects:read')
   async findOne(@Param('id') id: string) {
     return this.buildProjectDetail(id, false);
+  }
+
+  @ApiOperation({
+    summary:
+      "Détail d'un projet pour un investisseur authentifié (hors brouillon)",
+    description:
+      "Endpoint accessible à tout utilisateur connecté (les investisseurs n'ont pas la permission back-office projects:read). Renvoie la vue publique du projet (documents publics) et enregistre la consultation : la 2ᵉ consultation du même projet par le même utilisateur alerte le chargé de relation.",
+  })
+  @ApiParam({ name: 'id', description: 'UUID du projet' })
+  @ApiResponse({ status: 200, description: 'Détail projet (vue investisseur)' })
+  @ApiResponse({ status: 404, description: 'Projet introuvable ou brouillon' })
+  @Get(':id/investor-view')
+  async investorView(
+    @Param('id') id: string,
+    @CurrentUser() user: ActiveUser,
+  ) {
+    const project = await this.getProjects.executeOne(id);
+    if (!project || project.statut === ProjectStatus.BROUILLON) {
+      throw new NotFoundException('Projet introuvable.');
+    }
+    await this.recordProjectView(user.userId, id, project.titre);
+    return this.buildProjectDetail(id, true);
+  }
+
+  /**
+   * Enregistre une consultation et notifie le chargé de relation au passage à
+   * la 2ᵉ consultation distincte du même projet par le même utilisateur (une
+   * seule fois). Entièrement non bloquant : n'interrompt jamais le chargement
+   * du détail en cas d'erreur.
+   */
+  private async recordProjectView(
+    userId: number,
+    projetId: string,
+    projetTitre: string,
+  ): Promise<void> {
+    try {
+      await this.projectViewRepo.save(
+        this.projectViewRepo.create({ userId, projetId }),
+      );
+      const count = await this.projectViewRepo.count({
+        where: { userId, projetId },
+      });
+      if (count === 2) {
+        await this.notificationService.pushToAdmins({
+          type: NotificationType.PROJET_CONSULTE_2X,
+          titre: 'Projet consulté 2 fois',
+          message: `Un investisseur a consulté ce projet (« ${projetTitre} ») une 2ᵉ fois — opportunité de contact.`,
+          roles: [UserRole.CHARGE_RELATION_INVESTISSEUR, UserRole.SUPER_ADMIN],
+          metadata: { userId, projetId },
+        });
+      }
+    } catch {
+      // Traçage best-effort : ne bloque pas la consultation.
+    }
   }
 
   @ApiOperation({ summary: 'Obtenir un projet complet par slug' })

@@ -35,6 +35,7 @@ export enum NotificationType {
   PROFIL_MODIFIE = 'profil_modifie',
   SECURITE = 'securite',
   INVESTISSEUR_INACTIF = 'investisseur_inactif',
+  PROJET_CONSULTE_2X = 'projet_consulte_2x',
 }
 
 @Entity('notification')
