@@ -85,9 +85,9 @@ export class ProjectController {
 
   @ApiOperation({
     summary:
-      'Projets publics visibles (en collecte, pré-investissement, financés)',
+      'Projets publics visibles (en annonce, pré-investissement, en collecte, financés)',
     description:
-      'Retourne les projets ouverts aux investisseurs : en_collecte, pre_investissement et finance. Filtrable par type, paginable.',
+      'Retourne les projets ouverts aux investisseurs : annonce, pre_investissement, en_collecte et finance. Filtrable par type, paginable.',
   })
   @ApiResponse({ status: 200, description: 'Liste des projets publics actifs' })
   @ApiQuery({ name: 'type', enum: ProjectType, required: false })
@@ -102,8 +102,9 @@ export class ProjectController {
   ) {
     const result = await this.getProjects.execute({
       statuts: [
-        ProjectStatus.EN_COLLECTE,
+        ProjectStatus.ANNONCE,
         ProjectStatus.PRE_INVESTISSEMENT,
+        ProjectStatus.EN_COLLECTE,
         ProjectStatus.FINANCE,
       ],
       type,
