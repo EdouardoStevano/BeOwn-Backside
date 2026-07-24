@@ -14,6 +14,7 @@ import { PaymentController } from './payment.controller';
 describe('PaymentController — sécurité des flux monétaires (H-1 / H-2)', () => {
   let controller: PaymentController;
   let stripeService: any;
+  let stripeConnect: any;
   let notificationService: any;
   let walletRepo: any;
   let txRepo: any;
@@ -34,6 +35,17 @@ describe('PaymentController — sécurité des flux monétaires (H-1 / H-2)', ()
 
   beforeEach(() => {
     stripeService = { retrievePaymentIntent: jest.fn() };
+    // Compte Connect non configuré → createRetrait retombe sur le flux legacy
+    // (IBAN + traitement manuel), comportement historiquement testé ici.
+    stripeConnect = {
+      getAccountStatus: jest.fn().mockResolvedValue({
+        connected: false,
+        accountId: null,
+        detailsSubmitted: false,
+        chargesEnabled: false,
+        payoutsEnabled: false,
+      }),
+    };
     notificationService = {
       push: jest.fn().mockResolvedValue(undefined),
       pushToAdmins: jest.fn().mockResolvedValue(undefined),
@@ -54,9 +66,11 @@ describe('PaymentController — sécurité des flux monétaires (H-1 / H-2)', ()
     controller = new PaymentController(
       stripeService,
       /* identityService */ {} as any,
+      stripeConnect,
       /* updateKycStatus */ {} as any,
       notificationService,
       /* auditLog */ {} as any,
+      /* config */ { get: jest.fn() } as any,
       /* profilRepository */ {} as any,
       walletRepo,
       txRepo,

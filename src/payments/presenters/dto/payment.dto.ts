@@ -44,9 +44,14 @@ export class CreateRetraitDto {
   @IsString()
   walletId: string;
 
-  @ApiProperty({ example: 'SN0800100000015000000160', description: 'IBAN ou numéro de compte destinataire' })
+  @ApiPropertyOptional({
+    example: 'SN0800100000015000000160',
+    description:
+      "IBAN/numéro de compte destinataire — requis UNIQUEMENT pour le retrait manuel legacy (secours). Ignoré quand le retrait passe par Stripe Connect (les coordonnées bancaires sont détenues par Stripe via l'onboarding du compte connecté).",
+  })
+  @IsOptional()
   @IsString()
-  ibanDestination: string;
+  ibanDestination?: string;
 
   @ApiPropertyOptional({
     example: 'a1b2c3d4-...',
@@ -57,6 +62,26 @@ export class CreateRetraitDto {
   @IsString()
   @IsNotEmpty()
   idempotencyKey?: string;
+}
+
+export class ConnectOnboardingDto {
+  @ApiPropertyOptional({
+    description:
+      "URL de retour après onboarding Stripe (défaut: FRONTEND_URL/dashboard/wallet?connect=done).",
+  })
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  returnUrl?: string;
+
+  @ApiPropertyOptional({
+    description:
+      "URL de rafraîchissement si le lien d'onboarding expire (défaut: FRONTEND_URL/dashboard/wallet?connect=refresh).",
+  })
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  refreshUrl?: string;
 }
 
 export class StartKycVerificationDto {
