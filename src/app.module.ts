@@ -35,6 +35,7 @@ import { DistributionsModule } from './distributions/applications/distributions.
 import { FiscaliteModule } from './fiscalite/applications/fiscalite.module';
 import { AmlModule } from './common/aml/aml.module';
 import { PlatformFeesModule } from './common/platform-fees/platform-fees.module';
+import { PlatformSettingsModule } from './common/platform-settings/platform-settings.module';
 import { SmsModule } from './common/sms/sms.module';
 import { EmailModule } from './common/email/email.module';
 import { MailerModule } from '@nestjs-modules/mailer';
@@ -80,7 +81,8 @@ function requireEnv(name: string): string {
         process.env.DATABASE_PASSWORD ?? requireEnv('DATABASE_PASSWORD'),
       database: process.env.DATABASE_DB ?? requireEnv('DATABASE_DB'),
       autoLoadEntities: true,
-      synchronize: process.env.NODE_ENV !== 'production',
+      // Schema changes are applied only by reviewed migrations.
+      synchronize: false,
     }),
     MailerModule.forRootAsync({
       useFactory: () => ({
@@ -130,7 +132,10 @@ function requireEnv(name: string): string {
     FiscaliteModule,
     AmlModule,
     PlatformFeesModule,
-    ...(process.env.NODE_ENV !== 'production' ? [NotificationTestModule] : []),
+    PlatformSettingsModule,
+    ...(process.env.ENABLE_TEST_ENDPOINTS === 'true'
+      ? [NotificationTestModule]
+      : []),
   ],
   controllers: [HealthController],
   providers: [

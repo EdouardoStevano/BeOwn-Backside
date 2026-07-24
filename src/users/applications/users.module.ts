@@ -17,6 +17,8 @@ import { WalletsInfrastructureModule } from 'src/wallets/infrastructure/wallets-
 import { NotificationsModule } from 'src/notifications/notifications.module';
 import { RegistrationOtpModule } from 'src/iam/applications/authentication/application/registration-otp.module';
 import { UserEntity } from '../infrastructure/persistences/entities/user.entity';
+import { NotificationEntity } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
+import { InvestorInactivityCronService } from './investor-inactivity-cron.service';
 import { InvestmentEntity } from 'src/investments/infrastructure/persistences/entities/investment.entity';
 import { OrdreMarcheEntity } from 'src/secondarymarket/infrastructure/persistences/entities/ordre-marche.entity';
 import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/wallet.entity';
@@ -26,6 +28,7 @@ import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entit
   imports: [
     TypeOrmModule.forFeature([
       UserEntity,
+      NotificationEntity,
       InvestmentEntity,
       OrdreMarcheEntity,
       WalletEntity,
@@ -43,6 +46,7 @@ import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entit
     UsersService,
     RegisterUseCase,
     DeleteAccountUseCase,
+    InvestorInactivityCronService,
     UserFactory,
     { provide: HASHING_SERVICE, useClass: BcryptService },
     // EMAIL_SERVICE est lié par module (pas de binding global) — même pattern

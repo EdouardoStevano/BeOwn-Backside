@@ -25,12 +25,15 @@ describe('PaymentController — webhook Stripe Identity (KYC auto + fallback rev
   let controller: PaymentController;
   let stripeService: any;
   let identityService: any;
+  let stripeConnect: any;
   let updateKycStatus: any;
   let notificationService: any;
   let auditLog: any;
+  let config: any;
   let profilRepository: any;
   let walletRepo: any;
   let txRepo: any;
+  let dataSource: any;
 
   const req = (body: any) => ({ rawBody: Buffer.from(JSON.stringify(body)) }) as any;
 
@@ -52,22 +55,35 @@ describe('PaymentController — webhook Stripe Identity (KYC auto + fallback rev
       pushToAdmins: jest.fn().mockResolvedValue(undefined),
     };
     auditLog = { create: jest.fn().mockResolvedValue(undefined) };
+    stripeConnect = {
+      syncAccountFromWebhook: jest.fn().mockResolvedValue({ found: false, payoutsJustEnabled: false }),
+      findUserByConnectAccountId: jest.fn().mockResolvedValue(null),
+      getAccountStatus: jest.fn(),
+      createTransfer: jest.fn(),
+      createPayoutOnConnectedAccount: jest.fn(),
+      reverseTransfer: jest.fn(),
+    };
+    config = { get: jest.fn() };
     profilRepository = {
       findKycByUserId: jest.fn(),
       updateKycReportData: jest.fn().mockResolvedValue(undefined),
     };
     walletRepo = {};
     txRepo = { findOne: jest.fn() };
+    dataSource = { transaction: jest.fn() };
 
     controller = new PaymentController(
       stripeService,
       identityService,
+      stripeConnect,
       updateKycStatus,
       notificationService,
       auditLog,
+      config,
       profilRepository,
       walletRepo,
       txRepo,
+      dataSource,
     );
   });
 

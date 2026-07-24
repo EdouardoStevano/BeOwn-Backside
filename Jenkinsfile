@@ -178,7 +178,7 @@ pipeline {
             echo "Échec sur ${env.GIT_BRANCH_NAME} (${env.GIT_COMMIT_SHORT})"
             // emailext subject: "ECHEC CI/CD — BeOwn [${env.GIT_BRANCH_NAME}]",
             //          body:    "Build #${env.BUILD_NUMBER} a échoué.\n${env.BUILD_URL}",
-            //          to:      'team@beown.com'
+            //          to:      'team@beown.fr'
         }
         always {
             cleanWs()

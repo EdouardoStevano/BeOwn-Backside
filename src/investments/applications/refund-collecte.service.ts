@@ -176,11 +176,13 @@ export class RefundCollecteService {
       } as Partial<WalletEntity>);
       wallet = await manager.save(wallet);
     }
-    await manager.update(
-      WalletEntity,
-      { id: wallet.id },
-      { solde: () => `solde + ${amount}` } as never,
-    );
+    await manager
+      .createQueryBuilder()
+      .update(WalletEntity)
+      .set({ solde: () => 'solde + :amount' })
+      .setParameter('amount', amount)
+      .where('id = :id', { id: wallet.id })
+      .execute();
     return wallet;
   }
 }

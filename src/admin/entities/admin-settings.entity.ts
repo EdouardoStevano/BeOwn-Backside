@@ -72,14 +72,8 @@ export interface AdminSettingsBlob {
     /** % de la plus-value du vendeur sur revente d'actions (marché secondaire) */
     shareSaleGainFeePct?: number;
   };
-  kyc?: {
-    provider?: string;
-    minScoreAccepted?: number;
-    autoApproveBelowAmount?: number;
-  };
   notifications?: {
     defaultEmailFrom?: string;
-    smsProvider?: 'twilio' | 'none';
     digestFrequency?: 'daily' | 'weekly' | 'monthly';
     /** Diffusions de masse : canaux activés par événement (voir BroadcastService). */
     broadcast?: BroadcastSettingsPatch;
@@ -89,7 +83,6 @@ export interface AdminSettingsBlob {
     enableNews?: boolean;
     enable2FAEnforcement?: boolean;
     enableMultilingualContent?: boolean;
-    psp_provider?: 'stripe' | 'lemonway' | 'mangopay' | 'none';
   };
 }
 

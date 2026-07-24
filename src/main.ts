@@ -73,7 +73,7 @@ async function bootstrap() {
       `http://localhost:${process.env.API_URL ?? 3002}`,
       'Développement local',
     )
-    .addServer('https://api.beown.com', 'Production')
+    .addServer('https://api.beown.fr', 'Production')
     .addBearerAuth({
       type: 'http',
       scheme: 'bearer',
@@ -108,18 +108,20 @@ async function bootstrap() {
     .addTag('Notifications', 'Notifications in-app et email')
     .build();
 
-  const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api/docs', app, document, {
-    swaggerOptions: {
-      persistAuthorization: true,
-      tagsSorter: 'alpha',
-      operationsSorter: 'alpha',
-      docExpansion: 'none',
-      filter: true,
-      showRequestDuration: true,
-    },
-    customSiteTitle: 'BeOwn API Docs',
-  });
+  if (process.env.NODE_ENV !== 'production') {
+    const document = SwaggerModule.createDocument(app, config);
+    SwaggerModule.setup('api/docs', app, document, {
+      swaggerOptions: {
+        persistAuthorization: false,
+        tagsSorter: 'alpha',
+        operationsSorter: 'alpha',
+        docExpansion: 'none',
+        filter: true,
+        showRequestDuration: true,
+      },
+      customSiteTitle: 'BeOwn API Docs',
+    });
+  }
 
   const allowedOrigins = [
     process.env.FRONTEND_URL ?? 'http://localhost:5173',
@@ -146,6 +148,5 @@ async function bootstrap() {
 }
 bootstrap().catch((err) => {
   console.error('Application failed to start:', err);
-  console.error('This is a test');
   process.exit(1);
 });

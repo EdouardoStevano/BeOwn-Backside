@@ -72,9 +72,11 @@ const SEED_ENTITIES = [
       username: process.env.DATABASE_USERNAME || 'postgres',
       password: process.env.DATABASE_PASSWORD || 'pass123',
       database: process.env.DATABASE_DB || 'postgres',
-      entities: SEED_ENTITIES,
-      // Datafake dev : on aligne le schéma sur les entités (crée notamment les
-      // tables locatif/distribution absentes des migrations historiques).
+      // Glob de TOUTES les entités (même source de vérité que src/data-source.ts) :
+      // le synchronize dev crée l'intégralité du schéma, y compris les entités
+      // récentes (email_templates, user_preferences, charge…) absentes des
+      // migrations historiques. Évite la dérive d'une liste figée à maintenir.
+      entities: ['src/**/*.entity.ts'],
       synchronize: true,
     }),
     TypeOrmModule.forFeature(SEED_ENTITIES),

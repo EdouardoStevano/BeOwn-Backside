@@ -5,6 +5,8 @@ import {
   IsOptional,
   IsPositive,
   IsUUID,
+  IsString,
+  Length,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
@@ -13,6 +15,12 @@ import {
 } from 'src/investments/domains/enums/investment-status.enum';
 
 export class CreateInvestmentDto {
+  @ApiPropertyOptional({ description: 'Clé idempotente fournie par le client' })
+  @IsOptional()
+  @IsString()
+  @Length(16, 128)
+  idempotencyKey?: string;
+
   @ApiProperty({ description: 'UUID du projet', example: 'uuid-du-projet' })
   @IsUUID()
   projetId: string;

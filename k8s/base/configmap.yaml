@@ -41,8 +41,7 @@ data:
   # App
   TFA_APP_NAME: 'BeOwn'
 
-  # reCAPTCHA (clé de test Google — toujours valide)
-  RECAPTCHA_SECRET_KEY: '6LeIxAcTAAAAAGG-vFI1TnRWxMZNFuojJ4WifJWe'
+  # Inject the real value from the Kubernetes Secret, never from this ConfigMap.
 
   # KYC
   KYC_PROVIDER: 'stripe'

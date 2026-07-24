@@ -35,7 +35,11 @@ export class PayEcheanceUseCase {
     });
     if (!echeance) throw new NotFoundException('Échéance introuvable');
 
-    const eligible = [EcheanceStatus.A_VENIR, EcheanceStatus.RETARD];
+    const eligible = [
+      EcheanceStatus.A_VENIR,
+      EcheanceStatus.RETARD,
+      EcheanceStatus.EN_ATTENTE_PAIEMENT,
+    ];
     if (!eligible.includes(echeance.statut as EcheanceStatus)) {
       throw new BadRequestException(`Échéance au statut "${echeance.statut}" non payable`);
     }

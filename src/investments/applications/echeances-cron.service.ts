@@ -1,10 +1,14 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Between, LessThan, Repository } from 'typeorm';
+import { Between, LessThan, LessThanOrEqual, Repository } from 'typeorm';
 import { EcheanceEntity } from '../infrastructure/persistences/entities/echeance.entity';
 import { EcheanceStatus } from '../domains/enums/investment-status.enum';
 import { NotificationEventService } from 'src/notifications/applications/notification-event.service';
+import { PayEcheanceUseCase } from './usecases/pay-echeance.usecase';
+import { NotificationService } from 'src/notifications/applications/notification.service';
+import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
+import { UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
 
 @Injectable()
 export class EcheancesCronService {
@@ -14,6 +18,8 @@ export class EcheancesCronService {
     @InjectRepository(EcheanceEntity)
     private readonly echeanceRepo: Repository<EcheanceEntity>,
     private readonly notificationEvents: NotificationEventService,
+    private readonly payEcheance: PayEcheanceUseCase,
+    private readonly notifications: NotificationService,
   ) {}
 
   @Cron('0 9 * * *')
@@ -65,5 +71,46 @@ export class EcheancesCronService {
     }
 
     this.logger.log(`CRON échéances: J-7=${j7.length}, J-1=${j1.length}, overdue=${overdue.length}`);
+  }
+
+  /**
+   * Auto-paiement quotidien des échéances vérifiées (EN_ATTENTE_PAIEMENT) dont
+   * la date est atteinte. Les échéances dues encore A_VENIR (non vérifiées) sont
+   * signalées à la finance sans être payées. Idempotent (idempotencyKey pay).
+   */
+  @Cron('0 9 * * *')
+  async autoPayVerifiedDue(): Promise<void> {
+    const today = new Date();
+    today.setHours(23, 59, 59, 999);
+
+    const dueVerified = await this.echeanceRepo.find({
+      where: { datePrevue: LessThanOrEqual(today), statut: EcheanceStatus.EN_ATTENTE_PAIEMENT },
+    });
+    let paid = 0;
+    let failed = 0;
+    for (const e of dueVerified) {
+      try {
+        await this.payEcheance.execute(e.id, 0, UserRole.SUPER_ADMIN);
+        paid++;
+      } catch {
+        failed++;
+      }
+    }
+
+    const dueUnverified = await this.echeanceRepo.count({
+      where: { datePrevue: LessThanOrEqual(today), statut: EcheanceStatus.A_VENIR },
+    });
+    if (dueUnverified > 0) {
+      this.notifications
+        .pushToAdmins({
+          type: NotificationType.ECHEANCE,
+          titre: 'Échéances dues non vérifiées',
+          message: `${dueUnverified} échéance(s) sont dues aujourd'hui mais non vérifiées : à vérifier pour paiement.`,
+          roles: [UserRole.SUPER_ADMIN, UserRole.FINANCIER],
+          metadata: { dueUnverified },
+        })
+        .catch(() => {});
+    }
+    this.logger.log(`CRON auto-pay: payées=${paid}, échecs=${failed}, dues non vérifiées=${dueUnverified}`);
   }
 }

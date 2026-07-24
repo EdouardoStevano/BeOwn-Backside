@@ -55,11 +55,12 @@ import { Public } from 'src/common/auth/public.decorator';
 import { Roles } from 'src/common/auth/roles.decorator';
 import { RequirePermission } from 'src/common/auth/require-permission.decorator';
 import { UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
-import { SkipThrottle } from '@nestjs/throttler';
 import { NotificationService } from 'src/notifications/applications/notification.service';
 import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { ProjectViewEntity } from '../../infrastructure/persistences/entities/project-view.entity';
 
-@SkipThrottle()
 @ApiTags('Projects')
 @ApiBearerAuth()
 @Controller('projects')
@@ -78,6 +79,8 @@ export class ProjectController {
     @Inject(AVIS_REPOSITORY)
     private readonly avisRepository: AvisRepository,
     private readonly notificationService: NotificationService,
+    @InjectRepository(ProjectViewEntity)
+    private readonly projectViewRepo: Repository<ProjectViewEntity>,
   ) {}
 
   @ApiOperation({
@@ -118,8 +121,8 @@ export class ProjectController {
   @ApiQuery({ name: 'type', enum: ProjectType, required: false })
   @ApiQuery({ name: 'page', type: Number, required: false })
   @ApiQuery({ name: 'limit', type: Number, required: false })
-  @Public()
   @Get()
+  @RequirePermission('projects:read')
   async list(
     @Query('statut') statut?: ProjectStatus,
     @Query('type') type?: ProjectType,
@@ -142,10 +145,64 @@ export class ProjectController {
   @ApiParam({ name: 'id', description: 'UUID du projet' })
   @ApiResponse({ status: 200, description: 'Projet complet' })
   @ApiResponse({ status: 404, description: 'Projet introuvable' })
-  @Public()
   @Get(':id')
+  @RequirePermission('projects:read')
   async findOne(@Param('id') id: string) {
-    return this.buildProjectDetail(id);
+    return this.buildProjectDetail(id, false);
+  }
+
+  @ApiOperation({
+    summary:
+      "Détail d'un projet pour un investisseur authentifié (hors brouillon)",
+    description:
+      "Endpoint accessible à tout utilisateur connecté (les investisseurs n'ont pas la permission back-office projects:read). Renvoie la vue publique du projet (documents publics) et enregistre la consultation : la 2ᵉ consultation du même projet par le même utilisateur alerte le chargé de relation.",
+  })
+  @ApiParam({ name: 'id', description: 'UUID du projet' })
+  @ApiResponse({ status: 200, description: 'Détail projet (vue investisseur)' })
+  @ApiResponse({ status: 404, description: 'Projet introuvable ou brouillon' })
+  @Get(':id/investor-view')
+  async investorView(
+    @Param('id') id: string,
+    @CurrentUser() user: ActiveUser,
+  ) {
+    const project = await this.getProjects.executeOne(id);
+    if (!project || project.statut === ProjectStatus.BROUILLON) {
+      throw new NotFoundException('Projet introuvable.');
+    }
+    await this.recordProjectView(user.userId, id, project.titre);
+    return this.buildProjectDetail(id, true);
+  }
+
+  /**
+   * Enregistre une consultation et notifie le chargé de relation au passage à
+   * la 2ᵉ consultation distincte du même projet par le même utilisateur (une
+   * seule fois). Entièrement non bloquant : n'interrompt jamais le chargement
+   * du détail en cas d'erreur.
+   */
+  private async recordProjectView(
+    userId: number,
+    projetId: string,
+    projetTitre: string,
+  ): Promise<void> {
+    try {
+      await this.projectViewRepo.save(
+        this.projectViewRepo.create({ userId, projetId }),
+      );
+      const count = await this.projectViewRepo.count({
+        where: { userId, projetId },
+      });
+      if (count === 2) {
+        await this.notificationService.pushToAdmins({
+          type: NotificationType.PROJET_CONSULTE_2X,
+          titre: 'Projet consulté 2 fois',
+          message: `Un investisseur a consulté ce projet (« ${projetTitre} ») une 2ᵉ fois — opportunité de contact.`,
+          roles: [UserRole.CHARGE_RELATION_INVESTISSEUR, UserRole.SUPER_ADMIN],
+          metadata: { userId, projetId },
+        });
+      }
+    } catch {
+      // Traçage best-effort : ne bloque pas la consultation.
+    }
   }
 
   @ApiOperation({ summary: 'Obtenir un projet complet par slug' })
@@ -162,7 +219,7 @@ export class ProjectController {
     // dossier par id (UUID non devinable) ou via leurs espaces dédiés.
     if (!project || project.statut === ProjectStatus.BROUILLON)
       throw new NotFoundException('Projet introuvable.');
-    return this.buildProjectDetail(project.id);
+    return this.buildProjectDetail(project.id, true);
   }
 
   @ApiOperation({ summary: 'Créer un nouveau projet (admin)' })
@@ -299,8 +356,8 @@ export class ProjectController {
   @ApiParam({ name: 'id', description: 'UUID du projet' })
   @ApiResponse({ status: 200, description: 'Token de partage retourné' })
   @ApiResponse({ status: 404, description: 'Projet introuvable' })
-  @Public()
   @Get(':id/share')
+  @RequirePermission('projects:read')
   async getShareToken(@Param('id') id: string) {
     const project = await this.projectRepository.findProjectById(id);
     if (!project) throw new NotFoundException('Projet introuvable.');
@@ -352,7 +409,7 @@ export class ProjectController {
       throw new NotFoundException(
         'Lien de partage invalide ou projet introuvable.',
       );
-    return this.buildProjectDetail(project.id);
+    return this.buildProjectDetail(project.id, true);
   }
 
   // ─── Avis ──────────────────────────────────────────────────────────────────
@@ -365,6 +422,13 @@ export class ProjectController {
   async listAvis(@Param('id') id: string) {
     const project = await this.projectRepository.findProjectById(id);
     if (!project) throw new NotFoundException('Projet introuvable.');
+    if (![
+      ProjectStatus.EN_COLLECTE,
+      ProjectStatus.PRE_INVESTISSEMENT,
+      ProjectStatus.FINANCE,
+    ].includes(project.statut)) {
+      throw new NotFoundException('Projet introuvable.');
+    }
     const [avis, stats] = await Promise.all([
       this.avisRepository.findByProjetId(id),
       this.avisRepository.getStats(id),
@@ -459,7 +523,9 @@ export class ProjectController {
     );
     return projects.map((p, i) => {
       const images = imagesByProject[i]
-        .filter((d) => d.type === DocumentType.PHOTO_PROJET)
+        .filter(
+          (d) => d.type === DocumentType.PHOTO_PROJET && d.isPublic === true,
+        )
         .sort((a, b) => {
           if (a.estPrincipale !== b.estPrincipale)
             return a.estPrincipale ? -1 : 1;
@@ -469,7 +535,7 @@ export class ProjectController {
     });
   }
 
-  private async buildProjectDetail(id: string) {
+  private async buildProjectDetail(id: string, publicView = false) {
     const [project, allInvestments, allDocs, avisStats, fractionsVendues] =
       await Promise.all([
         this.getProjects.executeOne(id),
@@ -505,7 +571,11 @@ export class ProjectController {
     ).size;
 
     const images = allDocs
-      .filter((d) => d.type === DocumentType.PHOTO_PROJET)
+      .filter(
+        (d) =>
+          d.type === DocumentType.PHOTO_PROJET &&
+          (!publicView || d.isPublic === true),
+      )
       .sort((a, b) => {
         if (a.estPrincipale !== b.estPrincipale)
           return a.estPrincipale ? -1 : 1;
@@ -513,7 +583,9 @@ export class ProjectController {
       });
 
     const documents = allDocs.filter(
-      (d) => d.type !== DocumentType.PHOTO_PROJET,
+      (d) =>
+        d.type !== DocumentType.PHOTO_PROJET &&
+        (!publicView || d.isPublic === true),
     );
 
     return {

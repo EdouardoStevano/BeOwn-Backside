@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { EmailService } from './email.service';
 import { EmailTemplateService } from './email-template.service';
+import { PlatformSettingsService } from '../platform-settings/platform-settings.service';
 
 @Injectable()
 export class BrevoEmailService implements EmailService {
@@ -16,10 +17,11 @@ export class BrevoEmailService implements EmailService {
   constructor(
     private readonly config: ConfigService,
     private readonly templates: EmailTemplateService,
+    private readonly platformSettings: PlatformSettingsService,
   ) {
     this.apiKey = this.config.getOrThrow('BREVO_API_KEY');
     this.senderEmail =
-      this.config.get('BREVO_SENDER_EMAIL') || 'no-reply@beown.com';
+      this.config.get('BREVO_SENDER_EMAIL') || 'no-reply@beown.fr';
     this.senderName = this.config.get('BREVO_SENDER_NAME') || 'BeOwn';
     this.appUrl = this.config.get('FRONTEND_URL') || 'http://localhost:5173';
   }
@@ -39,7 +41,8 @@ export class BrevoEmailService implements EmailService {
   }
 
   async sendPasswordResetEmail(email: string, token: string): Promise<void> {
-    const frontendUrl = this.config.get('FRONTEND_URL') || 'http://localhost:5173';
+    const frontendUrl =
+      this.config.get('FRONTEND_URL') || 'http://localhost:5173';
     const resetLink = `${frontendUrl}/auth/reset-password?token=${token}`;
     await this.sendHtml(
       email,
@@ -106,8 +109,10 @@ export class BrevoEmailService implements EmailService {
     subject: string,
     htmlContent: string,
   ): Promise<void> {
+    const adminFrom = await this.platformSettings.getDefaultEmailFrom();
+    const senderEmail = adminFrom ?? this.senderEmail;
     const payload = {
-      sender: { name: this.senderName, email: this.senderEmail },
+      sender: { name: this.senderName, email: senderEmail },
       to: [{ email: to }],
       subject,
       htmlContent,

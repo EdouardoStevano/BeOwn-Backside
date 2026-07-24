@@ -70,5 +70,10 @@ export class ResetPasswordUseCase {
     const hashedPassword = await this.hashingService.hash(dto.newPassword);
     user.password = hashedPassword;
     await this.userRepository.update(user);
+    // A password reset invalidates every refresh session for the account.
+    // (payload.email = l'email du compte porté par le token password_reset,
+    // déjà utilisé plus haut pour invalider le token email — le domaine User
+    // n'expose pas d'accès direct .email ici.)
+    await this.cacheManagerService.invalidateRefreshTokenId(payload.email);
   }
 }

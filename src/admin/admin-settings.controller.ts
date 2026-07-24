@@ -59,13 +59,8 @@ const DEFAULT_SETTINGS: AdminSettingsBlob = {
     contactEmail: 'support@beown.fr',
   },
   commissions: { ...DEFAULT_FEE_RATES },
-  kyc: {
-    provider: 'sumsub',
-    minScoreAccepted: 60,
-  },
   notifications: {
     defaultEmailFrom: 'noreply@beown.fr',
-    smsProvider: 'twilio',
     digestFrequency: 'weekly',
     broadcast: DEFAULT_BROADCAST_SETTINGS,
   },
@@ -74,7 +69,6 @@ const DEFAULT_SETTINGS: AdminSettingsBlob = {
     enableNews: true,
     enable2FAEnforcement: false,
     enableMultilingualContent: false,
-    psp_provider: 'stripe',
   },
 };
 
@@ -239,7 +233,6 @@ export class AdminSettingsController {
         row.settings.commissions,
         body.commissions,
       ),
-      kyc: { ...row.settings.kyc, ...body.kyc },
       notifications: this.mergeNotifications(
         row.settings.notifications,
         body.notifications,
