@@ -35,7 +35,7 @@ export class WalletEntity {
   @Column({ type: 'varchar' })
   fournisseurRef: string;
 
-  @Column({ type: 'char', length: 3, default: 'XOF' })
+  @Column({ type: 'char', length: 3, default: 'EUR' })
   devise: string;
 
   @Column({ type: 'decimal', precision: 18, scale: 2, default: 0 })

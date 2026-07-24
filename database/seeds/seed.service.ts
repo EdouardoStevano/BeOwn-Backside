@@ -233,9 +233,9 @@ export class SeedService {
     const pwdInvestisseur = await bcrypt.hash(this.INVESTISSEUR_PASSWORD, 12);
 
     // ════════════════════════════════════════════════════════════════════════
-    // 1. UTILISATEURS — 1 admin, 2 porteurs, 3 investisseurs (1 email unique)
+    // 1. UTILISATEURS — 1 admin, 4 staff, 2 porteurs, 3 investisseurs
     // ════════════════════════════════════════════════════════════════════════
-    this.logger.log('👥 Création des 6 utilisateurs...');
+    this.logger.log('👥 Création des 10 utilisateurs...');
 
     const createUser = async (
       firstname: string,
@@ -272,15 +272,47 @@ export class SeedService {
     const admin = await createUser(
       'Awa',
       'Diallo',
-      'admin@beown.com',
-      UserRole.ADMIN,
+      'admin@beown.fr',
+      UserRole.SUPER_ADMIN,
+      pwdAdmin,
+      null,
+    );
+    await createUser(
+      'Chloé',
+      'CIO',
+      'cio@beown.fr',
+      UserRole.CIO,
+      pwdAdmin,
+      null,
+    );
+    await createUser(
+      'Marc',
+      'Marketing',
+      'marketing@beown.fr',
+      UserRole.MARKETING,
+      pwdAdmin,
+      null,
+    );
+    await createUser(
+      'Awa',
+      'Analyste',
+      'analyste@beown.fr',
+      UserRole.ANALYSTE_FINANCIER,
+      pwdAdmin,
+      null,
+    );
+    await createUser(
+      'Paul',
+      'Relation',
+      'relation@beown.fr',
+      UserRole.CHARGE_RELATION_INVESTISSEUR,
       pwdAdmin,
       null,
     );
     const porteur1 = await createUser(
       'Mamadou',
       'Sow',
-      'porteur1@beown.com',
+      'porteur1@beown.fr',
       UserRole.PORTEUR,
       pwdPorteur,
       UserType.PM,
@@ -288,7 +320,7 @@ export class SeedService {
     const porteur2 = await createUser(
       'Koffi',
       'Mensah',
-      'porteur2@beown.com',
+      'porteur2@beown.fr',
       UserRole.PORTEUR,
       pwdPorteur,
       UserType.PM,
@@ -296,7 +328,7 @@ export class SeedService {
     const inv1 = await createUser(
       'Fatou',
       'Ndiaye',
-      'investisseur1@beown.com',
+      'investisseur1@beown.fr',
       UserRole.INVESTISSEUR,
       pwdInvestisseur,
       UserType.PP,
@@ -304,7 +336,7 @@ export class SeedService {
     const inv2 = await createUser(
       'Ibrahima',
       'Ba',
-      'investisseur2@beown.com',
+      'investisseur2@beown.fr',
       UserRole.INVESTISSEUR,
       pwdInvestisseur,
       UserType.PP,
@@ -312,14 +344,14 @@ export class SeedService {
     const inv3 = await createUser(
       'Aïssatou',
       'Fall',
-      'investisseur3@beown.com',
+      'investisseur3@beown.fr',
       UserRole.INVESTISSEUR,
       pwdInvestisseur,
       UserType.PP,
     );
     const investors = [inv1, inv2, inv3];
 
-    this.logger.log('✅ 6 utilisateurs créés (emails uniques)');
+    this.logger.log('✅ 10 utilisateurs créés (emails uniques)');
 
     // ════════════════════════════════════════════════════════════════════════
     // 2. PROFILS & KYC
@@ -334,7 +366,7 @@ export class SeedService {
         formeJuridique: 'SARL',
         siren: 'SN-RC-2021-A-1001',
         rcsVille: 'Dakar',
-        capitalSocial: 25_000_000,
+        capitalSocial: 150_000,
         siegeAdresse: '15 Avenue Cheikh Anta Diop, Dakar',
         representantId: porteur1.userId,
         secteurActivite: 'Immobilier',
@@ -347,7 +379,7 @@ export class SeedService {
         formeJuridique: 'SAS',
         siren: 'CI-RC-2020-B-2002',
         rcsVille: 'Abidjan',
-        capitalSocial: 40_000_000,
+        capitalSocial: 250_000,
         siegeAdresse: 'Rue des Bâtisseurs, Cocody, Abidjan',
         representantId: porteur2.userId,
         secteurActivite: 'Immobilier',
@@ -356,9 +388,24 @@ export class SeedService {
 
     // Investisseurs → personnes physiques + KYC validé (peuvent investir)
     const ppData = [
-      { u: inv1, civilite: 'Mme', profession: 'Médecin', cat: CategoriePsfp.AVERTI },
-      { u: inv2, civilite: 'M.', profession: 'Ingénieur', cat: CategoriePsfp.NON_AVERTI },
-      { u: inv3, civilite: 'Mme', profession: 'Cadre bancaire', cat: CategoriePsfp.NON_AVERTI },
+      {
+        u: inv1,
+        civilite: 'Mme',
+        profession: 'Médecin',
+        cat: CategoriePsfp.AVERTI,
+      },
+      {
+        u: inv2,
+        civilite: 'M.',
+        profession: 'Ingénieur',
+        cat: CategoriePsfp.NON_AVERTI,
+      },
+      {
+        u: inv3,
+        civilite: 'Mme',
+        profession: 'Cadre bancaire',
+        cat: CategoriePsfp.NON_AVERTI,
+      },
     ];
     for (const { u, civilite, profession, cat } of ppData) {
       await this.profilPPRepo.save(
@@ -420,9 +467,9 @@ export class SeedService {
     // ════════════════════════════════════════════════════════════════════════
     this.logger.log('🏗️ Création des projets...');
 
-    const CAPITAL_CIBLE = 10_000_000; // 10 M XOF
-    const NB_FRACTIONS = 200;
-    const PRIX_FRACTION = CAPITAL_CIBLE / NB_FRACTIONS; // 50 000 XOF
+    const CAPITAL_CIBLE = 600_000; // 600 000 €
+    const NB_FRACTIONS = 6_000;
+    const PRIX_FRACTION = CAPITAL_CIBLE / NB_FRACTIONS; // 100 €
 
     const projetA = (await this.projectRepo.save(
       this.projectRepo.create({
@@ -438,9 +485,9 @@ export class SeedService {
         longitude: -17.4381,
         youtubeUrl: null,
         capitalCible: CAPITAL_CIBLE,
-        capitalMinimum: 6_000_000,
+        capitalMinimum: 360_000,
         ticketMinimum: PRIX_FRACTION,
-        ticketMaximum: 5_000_000,
+        ticketMaximum: 300_000,
         nbFractions: NB_FRACTIONS,
         triCible: 9.0,
         dureeMois: 36,
@@ -451,27 +498,65 @@ export class SeedService {
 
 Immeuble résidentiel de 6 appartements loués, détenu via la SPV **BeOwn Les Jardins**. Les investisseurs détiennent des **parts sociales** et perçoivent une **distribution mensuelle** au prorata, issue des loyers nets encaissés.
 
-- **Capital collecté :** 10 000 000 XOF (200 parts de 50 000 XOF) — **100 % financé**
-- **Loyer mensuel cible :** 600 000 XOF
+- **Capital collecté :** 600 000 € (6 000 parts de 100 €) — **100 % financé**
+- **Loyer mensuel cible :** 4 500 €
 - **Rendement cible :** 9 % / an (distribution mensuelle)
 
 > Investir comporte un risque de perte en capital. Placement illiquide.`,
         avertissementMd:
-          "Investir comporte des risques de perte partielle ou totale du capital. Les performances passées ne préjugent pas des performances futures. Placement illiquide.",
+          'Investir comporte des risques de perte partielle ou totale du capital. Les performances passées ne préjugent pas des performances futures. Placement illiquide.',
         chronologie: [
-          { etape: 'Publication du projet', date: this.daysAgo(90).toISOString().slice(0, 10), statut: 'done', description: 'Dossier validé et publié par BeOwn.' },
-          { etape: 'Ouverture de la collecte', date: this.daysAgo(85).toISOString().slice(0, 10), statut: 'done' },
-          { etape: 'Clôture — 100 % financé', date: this.daysAgo(60).toISOString().slice(0, 10), statut: 'done', description: '200 / 200 parts souscrites.' },
-          { etape: 'Mise en exploitation', date: this.daysAgo(50).toISOString().slice(0, 10), statut: 'in_progress', description: 'Perception et distribution des loyers.' },
-          { etape: 'Remboursement final', date: new Date(Date.now() + 36 * 30 * 86_400_000).toISOString().slice(0, 10), statut: 'pending' },
+          {
+            etape: 'Publication du projet',
+            date: this.daysAgo(90).toISOString().slice(0, 10),
+            statut: 'done',
+            description: 'Dossier validé et publié par BeOwn.',
+          },
+          {
+            etape: 'Ouverture de la collecte',
+            date: this.daysAgo(85).toISOString().slice(0, 10),
+            statut: 'done',
+          },
+          {
+            etape: 'Clôture — 100 % financé',
+            date: this.daysAgo(60).toISOString().slice(0, 10),
+            statut: 'done',
+            description: '6 000 / 6 000 parts souscrites.',
+          },
+          {
+            etape: 'Mise en exploitation',
+            date: this.daysAgo(50).toISOString().slice(0, 10),
+            statut: 'in_progress',
+            description: 'Perception et distribution des loyers.',
+          },
+          {
+            etape: 'Remboursement final',
+            date: new Date(Date.now() + 36 * 30 * 86_400_000)
+              .toISOString()
+              .slice(0, 10),
+            statut: 'pending',
+          },
         ],
         garanties: [
-          { type: 'Hypothèque 1er rang', description: 'Inscription sur le bien au profit de la SPV.', rang: 1 },
+          {
+            type: 'Hypothèque 1er rang',
+            description: 'Inscription sur le bien au profit de la SPV.',
+            rang: 1,
+          },
         ],
         previsionnel: {
-          operation: { acquisition: 8_000_000, fraisNotaire: 400_000, travaux: 1_000_000, sequestre: 300_000 },
-          financement: { apport: 1_000_000, financementBancaire: 0, montantInvestisseurs: CAPITAL_CIBLE },
-          resultat: { montantRevente: 14_000_000, coutOperation: 9_700_000 },
+          operation: {
+            acquisition: 480_000,
+            fraisNotaire: 35_000,
+            travaux: 60_000,
+            sequestre: 25_000,
+          },
+          financement: {
+            apport: 60_000,
+            financementBancaire: 0,
+            montantInvestisseurs: CAPITAL_CIBLE,
+          },
+          resultat: { montantRevente: 840_000, coutOperation: 600_000 },
         },
         porteurId: porteur1.userId,
         spvId: spv.id,
@@ -497,11 +582,11 @@ Immeuble résidentiel de 6 appartements loués, détenu via la SPV **BeOwn Les J
         latitude: null,
         longitude: null,
         youtubeUrl: null,
-        capitalCible: 20_000_000,
-        capitalMinimum: 12_000_000,
-        ticketMinimum: 100_000,
-        ticketMaximum: 5_000_000,
-        nbFractions: 200,
+        capitalCible: 400_000,
+        capitalMinimum: 240_000,
+        ticketMinimum: 100,
+        ticketMaximum: 200_000,
+        nbFractions: 4_000,
         triCible: 10.0,
         dureeMois: 24,
         instrument: ProjectInstrument.PART_SOCIALE,
@@ -525,14 +610,16 @@ Immeuble résidentiel de 6 appartements loués, détenu via la SPV **BeOwn Les J
     await this.audit(porteur1, 'PROJECT_SUBMIT', 'PROJECT', projetA.id);
     await this.audit(admin, 'PROJECT_PUBLISH', 'PROJECT', projetA.id);
     await this.audit(porteur2, 'PROJECT_SUBMIT', 'PROJECT', projetB.id);
-    this.logger.log('✅ 2 projets créés (1 publié/exploité, 1 brouillon soumis)');
+    this.logger.log(
+      '✅ 2 projets créés (1 publié/exploité, 1 brouillon soumis)',
+    );
 
     // ════════════════════════════════════════════════════════════════════════
     // 5. WALLETS (1 par investisseur + wallet technique du projet + frais)
     // ════════════════════════════════════════════════════════════════════════
     this.logger.log('💰 Création des wallets...');
 
-    const depots = [6_000_000, 3_500_000, 2_500_000]; // dépôts initiaux par investisseur
+    const depots = [310_000, 185_000, 125_000]; // dépôts initiaux par investisseur (EUR)
     const investorWallets: WalletEntity[] = [];
     for (let i = 0; i < investors.length; i++) {
       const w = await this.walletRepo.save(
@@ -540,7 +627,7 @@ Immeuble résidentiel de 6 appartements loués, détenu via la SPV **BeOwn Les J
           type: WalletType.INVESTISSEUR,
           proprietaireUserId: investors[i].userId,
           fournisseurRef: `INV-${investors[i].userId}`,
-          devise: 'XOF',
+          devise: 'EUR',
           solde: depots[i], // mis à jour au fil des opérations ci-dessous
         }),
       );
@@ -552,7 +639,7 @@ Immeuble résidentiel de 6 appartements loués, détenu via la SPV **BeOwn Les J
         type: WalletType.TECHNIQUE_PROJET,
         projetId: projetA.id,
         fournisseurRef: `TECH-${projetA.id.slice(0, 8)}`,
-        devise: 'XOF',
+        devise: 'EUR',
         solde: 0,
       }),
     );
@@ -561,7 +648,7 @@ Immeuble résidentiel de 6 appartements loués, détenu via la SPV **BeOwn Les J
       this.walletRepo.create({
         type: WalletType.FRAIS_PLATEFORME,
         fournisseurRef: 'PLAT-FEES-001',
-        devise: 'XOF',
+        devise: 'EUR',
         solde: 0,
       }),
     );
@@ -573,27 +660,32 @@ Immeuble résidentiel de 6 appartements loués, détenu via la SPV **BeOwn Les J
           walletSource: null,
           walletDestination: investorWallets[i].id,
           montant: depots[i],
-          devise: 'XOF',
+          devise: 'EUR',
           type: TransactionType.DEPOT,
           fournisseur: TransactionFournisseur.CINETPAY,
           fournisseurRef: `dep_${investors[i].userId}`,
           statut: TransactionStatus.REUSSI,
         }),
       );
-      await this.audit(investors[i], 'WALLET_DEPOSIT', 'WALLET', investorWallets[i].id);
+      await this.audit(
+        investors[i],
+        'WALLET_DEPOSIT',
+        'WALLET',
+        investorWallets[i].id,
+      );
     }
     this.logger.log('✅ Wallets + dépôts créés');
 
     // ════════════════════════════════════════════════════════════════════════
-    // 6. INVESTISSEMENTS — collecte financée à 100 % (200/200 parts)
-    //    inv1 = 100 parts (50 %), inv2 = 60 parts (30 %), inv3 = 40 parts (20 %)
+    // 6. INVESTISSEMENTS — collecte financée à 100 % (6 000/6 000 parts)
+    //    inv1 = 3 000 parts (50 %), inv2 = 1 800 parts (30 %), inv3 = 1 200 parts (20 %)
     // ════════════════════════════════════════════════════════════════════════
     this.logger.log('📈 Souscriptions investisseurs (clôture à 100 %)...');
 
     const repartition = [
-      { wallet: investorWallets[0], user: inv1, parts: 100 },
-      { wallet: investorWallets[1], user: inv2, parts: 60 },
-      { wallet: investorWallets[2], user: inv3, parts: 40 },
+      { wallet: investorWallets[0], user: inv1, parts: 3_000 },
+      { wallet: investorWallets[1], user: inv2, parts: 1_800 },
+      { wallet: investorWallets[2], user: inv3, parts: 1_200 },
     ];
 
     let totalCollecte = 0;
@@ -643,7 +735,7 @@ Immeuble résidentiel de 6 appartements loués, détenu via la SPV **BeOwn Les J
           walletSource: r.wallet.id,
           walletDestination: projetWallet.id,
           montant,
-          devise: 'XOF',
+          devise: 'EUR',
           type: TransactionType.SOUSCRIPTION,
           fournisseur: TransactionFournisseur.INTERNE,
           fournisseurRef: `souscr_${investment.id.slice(0, 8)}`,
@@ -659,7 +751,12 @@ Immeuble résidentiel de 6 appartements loués, détenu via la SPV **BeOwn Les J
       projetWallet.solde = Number(projetWallet.solde) + montant;
       await this.walletRepo.save(projetWallet);
 
-      await this.audit(r.user, 'INVESTMENT_CREATE', 'INVESTMENT', investment.id);
+      await this.audit(
+        r.user,
+        'INVESTMENT_CREATE',
+        'INVESTMENT',
+        investment.id,
+      );
       await this.audit(r.user, 'INVESTMENT_SIGN', 'INVESTMENT', investment.id);
       await this.notify(r.user.userId, 'INVESTISSEMENT_CONFIRME', {
         projetId: projetA.id,
@@ -675,7 +772,7 @@ Immeuble résidentiel de 6 appartements loués, détenu via la SPV **BeOwn Les J
       totalCollecte,
     });
     this.logger.log(
-      `✅ Collecte clôturée : ${totalCollecte.toLocaleString('fr-FR')} / ${CAPITAL_CIBLE.toLocaleString('fr-FR')} XOF (100 %)`,
+      `✅ Collecte clôturée : ${totalCollecte.toLocaleString('fr-FR')} / ${CAPITAL_CIBLE.toLocaleString('fr-FR')} € (100 %)`,
     );
 
     // ════════════════════════════════════════════════════════════════════════
@@ -683,7 +780,7 @@ Immeuble résidentiel de 6 appartements loués, détenu via la SPV **BeOwn Les J
     // ════════════════════════════════════════════════════════════════════════
     this.logger.log('🏠 Gestion locative & déclaration des loyers...');
 
-    const LOYER_MENSUEL = 600_000;
+    const LOYER_MENSUEL = 4_500; // 4 500 €/mois — immeuble de 600 000 € (9 % brut/an)
 
     const unite = await this.uniteRepo.save(
       this.uniteRepo.create({
@@ -760,7 +857,9 @@ Immeuble résidentiel de 6 appartements loués, détenu via la SPV **BeOwn Les J
     //    Le loyer net validé est réparti au prorata vers chaque investisseur,
     //    puis crédité automatiquement sur son wallet.
     // ════════════════════════════════════════════════════════════════════════
-    this.logger.log('💸 Distribution du loyer (validation admin + virement)...');
+    this.logger.log(
+      '💸 Distribution du loyer (validation admin + virement)...',
+    );
 
     const totalLoyers = LOYER_MENSUEL;
     const totalCharges = 0;
@@ -779,7 +878,12 @@ Immeuble résidentiel de 6 appartements loués, détenu via la SPV **BeOwn Les J
         distribueeLe: this.daysAgo(5),
       }),
     );
-    await this.audit(admin, 'DISTRIBUTION_VALIDATE', 'DISTRIBUTION', periodeDist.id);
+    await this.audit(
+      admin,
+      'DISTRIBUTION_VALIDATE',
+      'DISTRIBUTION',
+      periodeDist.id,
+    );
 
     // Répartition au prorata des parts détenues + virement automatique
     let totalVerse = 0;
@@ -788,7 +892,7 @@ Immeuble résidentiel de 6 appartements loués, détenu via la SPV **BeOwn Les J
       const wallet = investorWallets[i];
       const pourcentage = (inv.nbTitres ?? 0) / NB_FRACTIONS; // 0.50 / 0.30 / 0.20
       const montantBrut = Math.round(revenuNet * pourcentage);
-      const montantNet = montantBrut; // pas de prélèvement (XOF / hors PFU)
+      const montantNet = montantBrut; // pas de prélèvement à la source dans ce seed (hors PFU)
       totalVerse += montantNet;
 
       await this.distributionPartRepo.save(
@@ -810,14 +914,17 @@ Immeuble résidentiel de 6 appartements loués, détenu via la SPV **BeOwn Les J
           walletSource: projetWallet.id,
           walletDestination: wallet.id,
           montant: montantNet,
-          devise: 'XOF',
+          devise: 'EUR',
           type: TransactionType.PAIEMENT_INTERETS,
           fournisseur: TransactionFournisseur.INTERNE,
           fournisseurRef: `distrib_${periodeDist.id.slice(0, 8)}_${inv.utilisateurId}`,
           statut: TransactionStatus.REUSSI,
           investissementId: inv.id,
           projetId: projetA.id,
-          metadata: { periodeDistributionId: periodeDist.id, periode: periodeDistribuee },
+          metadata: {
+            periodeDistributionId: periodeDist.id,
+            periode: periodeDistribuee,
+          },
         }),
       );
 
@@ -832,7 +939,12 @@ Immeuble résidentiel de 6 appartements loués, détenu via la SPV **BeOwn Les J
         montantNet,
       });
     }
-    await this.audit(admin, 'DISTRIBUTION_EXECUTE', 'DISTRIBUTION', periodeDist.id);
+    await this.audit(
+      admin,
+      'DISTRIBUTION_EXECUTE',
+      'DISTRIBUTION',
+      periodeDist.id,
+    );
 
     // Frais de plateforme prélevés sur la distribution (1 %)
     const frais = Math.round(revenuNet * 0.01);
@@ -841,7 +953,7 @@ Immeuble résidentiel de 6 appartements loués, détenu via la SPV **BeOwn Les J
         walletSource: projetWallet.id,
         walletDestination: fraisWallet.id,
         montant: frais,
-        devise: 'XOF',
+        devise: 'EUR',
         type: TransactionType.FRAIS,
         fournisseur: TransactionFournisseur.INTERNE,
         fournisseurRef: `frais_${periodeDist.id.slice(0, 8)}`,
@@ -853,7 +965,7 @@ Immeuble résidentiel de 6 appartements loués, détenu via la SPV **BeOwn Les J
     await this.walletRepo.save(fraisWallet);
 
     this.logger.log(
-      `✅ Distribution ${periodeDistribuee} : ${totalVerse.toLocaleString('fr-FR')} XOF versés (50/30/20 %) + ${frais.toLocaleString('fr-FR')} XOF de frais`,
+      `✅ Distribution ${periodeDistribuee} : ${totalVerse.toLocaleString('fr-FR')} € versés (50/30/20 %) + ${frais.toLocaleString('fr-FR')} € de frais`,
     );
 
     // ════════════════════════════════════════════════════════════════════════
@@ -864,19 +976,49 @@ Immeuble résidentiel de 6 appartements loués, détenu via la SPV **BeOwn Les J
     this.logger.log('✅ DATAFAKE BeOwn TERMINÉ');
     this.logger.log(line);
     this.logger.log('Comptes (mot de passe) :');
-    this.logger.log(`  ADMIN        admin@beown.com         → ${this.ADMIN_PASSWORD}`);
-    this.logger.log(`  PORTEUR 1    porteur1@beown.com      → ${this.PORTEUR_PASSWORD}`);
-    this.logger.log(`  PORTEUR 2    porteur2@beown.com      → ${this.PORTEUR_PASSWORD}`);
-    this.logger.log(`  INVESTISSEUR investisseur1@beown.com → ${this.INVESTISSEUR_PASSWORD}`);
-    this.logger.log(`  INVESTISSEUR investisseur2@beown.com → ${this.INVESTISSEUR_PASSWORD}`);
-    this.logger.log(`  INVESTISSEUR investisseur3@beown.com → ${this.INVESTISSEUR_PASSWORD}`);
+    this.logger.log(
+      `  ADMIN        admin@beown.fr         → ${this.ADMIN_PASSWORD}`,
+    );
+    this.logger.log(
+      `  CIO          cio@beown.fr           → ${this.ADMIN_PASSWORD}`,
+    );
+    this.logger.log(
+      `  MARKETING    marketing@beown.fr     → ${this.ADMIN_PASSWORD}`,
+    );
+    this.logger.log(
+      `  ANALYSTE     analyste@beown.fr      → ${this.ADMIN_PASSWORD}`,
+    );
+    this.logger.log(
+      `  RELATION     relation@beown.fr      → ${this.ADMIN_PASSWORD}`,
+    );
+    this.logger.log(
+      `  PORTEUR 1    porteur1@beown.fr      → ${this.PORTEUR_PASSWORD}`,
+    );
+    this.logger.log(
+      `  PORTEUR 2    porteur2@beown.fr      → ${this.PORTEUR_PASSWORD}`,
+    );
+    this.logger.log(
+      `  INVESTISSEUR investisseur1@beown.fr → ${this.INVESTISSEUR_PASSWORD}`,
+    );
+    this.logger.log(
+      `  INVESTISSEUR investisseur2@beown.fr → ${this.INVESTISSEUR_PASSWORD}`,
+    );
+    this.logger.log(
+      `  INVESTISSEUR investisseur3@beown.fr → ${this.INVESTISSEUR_PASSWORD}`,
+    );
     this.logger.log(line);
     this.logger.log('Scénario joué sur « Résidence Les Jardins — Dakar » :');
     this.logger.log('  1. Publication (porteur1 → admin)  ✓');
-    this.logger.log('  2. Investissements (inv1/2/3)      ✓  100/60/40 parts');
-    this.logger.log('  3. Clôture 100 % (10 000 000 XOF)  ✓');
-    this.logger.log('  4. Loyer déclaré (porteur1)        ✓  validé admin + 1 en attente');
-    this.logger.log('  5. Distribution + virement auto    ✓  300k/180k/120k XOF');
+    this.logger.log(
+      '  2. Investissements (inv1/2/3)      ✓  3 000/1 800/1 200 parts',
+    );
+    this.logger.log('  3. Clôture 100 % (600 000 €)       ✓');
+    this.logger.log(
+      '  4. Loyer déclaré (porteur1)        ✓  validé admin + 1 en attente',
+    );
+    this.logger.log(
+      '  5. Distribution + virement auto    ✓  2 250/1 350/900 €',
+    );
     this.logger.log(line);
   }
 }

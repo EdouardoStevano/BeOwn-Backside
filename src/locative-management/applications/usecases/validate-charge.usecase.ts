@@ -20,7 +20,7 @@ export class ValidateChargeUseCase {
     private readonly auditLog: AuditLogService,
   ) {}
 
-  async validate(id: string, adminUserId: number): Promise<Charge> {
+  async validate(id: string, adminUserId: number, adminRole?: string): Promise<Charge> {
     const c = await this.chargeRepo.findById(id);
     if (!c) throw new NotFoundException('Charge introuvable.');
     if (c.statut !== StatutDeclaration.DECLARE) {
@@ -36,7 +36,7 @@ export class ValidateChargeUseCase {
     await this.auditLog
       .create(
         String(adminUserId),
-        UserRole.ADMIN,
+        adminRole ?? UserRole.SUPER_ADMIN,
         'equity.charge.validate',
         'charge',
         id,
@@ -52,6 +52,7 @@ export class ValidateChargeUseCase {
     id: string,
     adminUserId: number,
     motif: string,
+    adminRole?: string,
   ): Promise<Charge> {
     if (!motif || motif.trim().length === 0) {
       throw new BadRequestException('Motif de rejet requis.');
@@ -71,7 +72,7 @@ export class ValidateChargeUseCase {
     await this.auditLog
       .create(
         String(adminUserId),
-        UserRole.ADMIN,
+        adminRole ?? UserRole.SUPER_ADMIN,
         'equity.charge.reject',
         'charge',
         id,

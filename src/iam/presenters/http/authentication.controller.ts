@@ -42,6 +42,14 @@ import {
   ResetPasswordDto,
   SignUpDto,
 } from './dto/password.dto';
+import {
+  ResendRegistrationOtpDto,
+  VerifyRegistrationOtpDto,
+} from './dto/registration-otp.dto';
+import {
+  ResendRegistrationOtpCommand,
+  VerifyRegistrationOtpCommand,
+} from 'src/iam/application/registration-otp/commands/registration-otp.commands';
 
 /** Le profil social déposé par Passport, plus l'indice de redirection du guard. */
 type OAuthRequestUser = SocialProfile & { _redirectTo?: 'admin' };
@@ -128,6 +136,63 @@ export class AuthenticationController {
   @Post('refresh-tokens')
   refreshToken(@Body() dto: RefreshTokenDto) {
     return this.commandBus.execute(new RefreshTokenCommand(dto.refreshToken));
+  }
+
+  @ApiOperation({
+    summary: "Vérifier le code OTP d'inscription et activer le compte",
+  })
+  @ApiResponse({
+    status: 200,
+    description:
+      'Compte vérifié — tokens de session retournés (même forme que sign-in)',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Code invalide, expiré, ou trop de tentatives',
+  })
+  @Throttle({
+    short: { ttl: 60_000, limit: 3 },
+    medium: { ttl: 60_000, limit: 3 },
+    auth: { ttl: 60_000, limit: 3 },
+  })
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @Post('verify-otp')
+  verifyOtp(@Body() dto: VerifyRegistrationOtpDto) {
+    return this.commandBus.execute(
+      new VerifyRegistrationOtpCommand(dto.email, dto.code),
+    );
+  }
+
+  @ApiOperation({
+    summary:
+      "Renvoyer le code OTP d'inscription (email par défaut, sms en option)",
+  })
+  @ApiResponse({
+    status: 204,
+    description:
+      'Code renvoyé si le compte existe et reste à vérifier (réponse générique)',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Canal sms demandé sans numéro de téléphone associé',
+  })
+  @ApiResponse({
+    status: 429,
+    description: 'Trop de demandes — réessayez plus tard',
+  })
+  @Throttle({
+    short: { ttl: 60_000, limit: 3 },
+    medium: { ttl: 60_000, limit: 3 },
+    auth: { ttl: 60_000, limit: 3 },
+  })
+  @Public()
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Post('resend-otp')
+  resendOtp(@Body() dto: ResendRegistrationOtpDto) {
+    return this.commandBus.execute(
+      new ResendRegistrationOtpCommand(dto.email, dto.canal ?? 'email'),
+    );
   }
 
   @ApiOperation({ summary: 'Mot de passe oublié' })

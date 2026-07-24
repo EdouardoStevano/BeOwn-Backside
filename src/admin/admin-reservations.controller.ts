@@ -21,25 +21,19 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
-import { Roles } from 'src/common/auth/roles.decorator';
+import { RequirePermission } from 'src/common/auth/require-permission.decorator';
+import { rolesWithPermission } from 'src/common/auth/permissions.constants';
 import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
-import {
-  UserEntity,
-  UserRole,
-} from 'src/users/infrastructure/persistences/entities/user.entity';
+import { formatEur } from 'src/common/money/format-eur';
+import { UserEntity } from 'src/users/infrastructure/persistences/entities/user.entity';
 import { ProjectEntity } from 'src/projects/infrastructure/persistences/entities/project.entity';
 import { ReservationEntity } from 'src/reservations/infrastructure/persistences/entities/reservation.entity';
 import { ReservationStatus } from 'src/reservations/domains/enums/reservation-status.enum';
 import { NotificationService } from 'src/notifications/applications/notification.service';
 import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
 
-const ADMIN_ROLES: string[] = [
-  UserRole.ADMIN,
-  UserRole.SUPPORT,
-  UserRole.COMPLIANCE,
-  UserRole.FINANCIER,
-];
+const ADMIN_ROLES: string[] = rolesWithPermission('reservations:manage');
 
 class CreateReservationAdminDto {
   projectId: string;
@@ -76,7 +70,7 @@ const mapStatus = (s: ReservationStatus): string => {
 @ApiBearerAuth()
 @Controller('admin')
 @UseGuards(JwtAuthGuard)
-@Roles(UserRole.ADMIN, UserRole.SUPPORT, UserRole.COMPLIANCE, UserRole.FINANCIER)
+@RequirePermission('reservations:manage')
 export class AdminReservationsController {
   constructor(
     @InjectRepository(UserEntity)
@@ -161,7 +155,7 @@ export class AdminReservationsController {
           utilisateurId: userIdNum,
           type: NotificationType.AUTRE,
           titre: `Réservation ouverte sur ${project.titre}`,
-          message: `Un administrateur a initié une réservation de ${dto.montantReserve.toLocaleString('fr-FR')} XOF sur le projet "${project.titre}". Finalisez votre investissement depuis votre espace.`,
+          message: `Un administrateur a initié une réservation de ${formatEur(dto.montantReserve)} sur le projet "${project.titre}". Finalisez votre investissement depuis votre espace.`,
           metadata: {
             projectId: project.id,
             projectSlug: project.slug,
@@ -216,7 +210,7 @@ export class AdminReservationsController {
         utilisateurId: r.utilisateurId,
         type: NotificationType.AUTRE,
         titre: 'Votre réservation a été annulée',
-        message: `Votre réservation de ${Number(r.montantReserve).toLocaleString('fr-FR')} XOF a été annulée par un administrateur.`,
+        message: `Votre réservation de ${formatEur(Number(r.montantReserve))} a été annulée par un administrateur.`,
       });
     } catch {}
     return { id, statut: 'annulee' };
@@ -240,7 +234,7 @@ export class AdminReservationsController {
         utilisateurId: r.utilisateurId,
         type: NotificationType.AUTRE,
         titre: `Rappel — Réservation sur ${r.projet?.titre ?? 'un projet'}`,
-        message: `Pensez à finaliser votre réservation de ${Number(r.montantReserve).toLocaleString('fr-FR')} XOF.`,
+        message: `Pensez à finaliser votre réservation de ${formatEur(Number(r.montantReserve))}.`,
         metadata: { reservationId: id, projectId: r.projetId },
       });
     } catch {}

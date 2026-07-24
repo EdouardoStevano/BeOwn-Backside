@@ -1,4 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
+import { EventBus } from '@nestjs/cqrs';
 import {
   HASHING_SERVICE,
   type HashingService,
@@ -27,6 +28,7 @@ import {
   UserAccountService,
   UserAccountSnapshot,
 } from '../contracts/user-account.contract';
+import { UserRegisteredEvent } from '../contracts/user-registered.event';
 import { NotificationEventService } from 'src/notifications/applications/notification-event.service';
 
 /**
@@ -43,6 +45,7 @@ export class UsersAccountService implements UserAccountService {
     @Inject(HASHING_SERVICE) private readonly hashingService: HashingService,
     private readonly userFactory: UserFactory,
     private readonly notificationEvents: NotificationEventService,
+    private readonly eventBus: EventBus,
   ) {}
 
   async findByEmail(email: string): Promise<UserAccountSnapshot | null> {
@@ -76,6 +79,16 @@ export class UsersAccountService implements UserAccountService {
     // qui échoue ne doit pas faire échouer l'inscription.
     const full = await this.userRepository.findById(saved.userId);
     if (full) void this.notificationEvents.userRegistered(full);
+
+    // Users ne sait pas qui écoute : c'est IAM qui accroche l'envoi du code
+    // d'inscription à cet événement (cf. SendOtpOnUserRegistered).
+    this.eventBus.publish(
+      new UserRegisteredEvent(
+        saved.userId,
+        saved.userEmail.email,
+        saved.firstname,
+      ),
+    );
 
     return UsersAccountService.toPublicView(saved);
   }

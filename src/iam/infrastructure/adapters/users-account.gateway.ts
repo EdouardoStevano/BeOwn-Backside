@@ -5,7 +5,9 @@ import {
   type UserAccountSnapshot,
 } from 'src/users/applications/contracts/user-account.contract';
 import { EmailAlreadyInUseError } from 'src/users/domains/errors/user.errors';
+import { UserStatus } from 'src/users/domains/enums/user.enum';
 import { AuthAccount } from 'src/iam/domain/models/auth-account';
+import { AccountStatus } from 'src/iam/domain/enums/account-status.enum';
 import { AccountAlreadyExistsError } from 'src/iam/domain/errors/iam.errors';
 import {
   AccountGateway,
@@ -85,7 +87,26 @@ export class UsersAccountGateway implements AccountGateway {
       snapshot.email,
       snapshot.emailVerified,
       snapshot.hasPassword,
+      UsersAccountGateway.toAccountStatus(snapshot.status),
       snapshot.role,
     );
+  }
+
+  /**
+   * Traduit le cycle de vie de Users vers celui, plus grossier, d'IAM. Les
+   * étapes d'onboarding (CREE, EMAIL_VERIFIE, ACTIF) sont toutes « le compte
+   * n'est pas sanctionné » : c'est `emailVerified` qui porte l'information de
+   * vérification, pas le statut.
+   */
+  private static toAccountStatus(status: UserStatus): AccountStatus {
+    switch (status) {
+      case UserStatus.SUSPENDU:
+        return AccountStatus.SUSPENDED;
+      case UserStatus.CLOS:
+      case UserStatus.SUPPRIME:
+        return AccountStatus.CLOSED;
+      default:
+        return AccountStatus.ACTIVE;
+    }
   }
 }

@@ -19,6 +19,7 @@ import { DocumentType, DocumentRelatedTo } from 'src/documents/domains/enums/doc
 import { SignatureStatus } from 'src/signatures/domains/enums/signature-status.enum';
 import { WalletType } from 'src/wallets/domains/enums/wallet.enum';
 import { CloudStorageService } from 'src/common/cloud-storage/cloud-storage.service';
+import { formatEur } from 'src/common/money/format-eur';
 import { ContractGeneratorService } from './contract-generator.service';
 import { YouSignService } from 'src/common/yousign/yousign.service';
 import { Investment } from 'src/investments/domains/investment';
@@ -104,7 +105,7 @@ export class InitiateInvestmentUseCase {
 
     // ── Vérification solde wallet (sans débiter) ───────────────────────────────
     const wallets = await this.walletRepo.find({
-      where: { proprietaireUserId: userId, type: WalletType.INVESTISSEUR, devise: 'XOF' },
+      where: { proprietaireUserId: userId, type: WalletType.INVESTISSEUR, devise: 'EUR' },
     });
     if (wallets.length === 0) {
       throw new BadRequestException(
@@ -114,7 +115,7 @@ export class InitiateInvestmentUseCase {
     const wallet = wallets.reduce((best, w) => (Number(w.solde) > Number(best.solde) ? w : best));
     if (Number(wallet.solde) < montantTotal) {
       throw new BadRequestException(
-        `Solde insuffisant. Disponible : ${wallet.solde} XOF — Requis : ${montantTotal} XOF`,
+        `Solde insuffisant. Disponible : ${formatEur(Number(wallet.solde))} — Requis : ${formatEur(montantTotal)}`,
       );
     }
 

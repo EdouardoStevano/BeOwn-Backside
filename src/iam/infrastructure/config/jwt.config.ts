@@ -22,5 +22,12 @@ export default registerAs('jwt', () => {
       process.env.JWT_TWO_FACTOR_CHALLENGE_TTL ?? '300',
       10,
     ),
+    // 90 jours : un lien de désinscription doit rester cliquable longtemps
+    // après l'envoi (email archivé), sinon la désinscription devient un
+    // parcours cassé — et un lien mort est pire qu'un opt-out.
+    unsubscribeTokenTtl: parseInt(
+      process.env.JWT_TOKEN_UNSUBSCRIBE_TTL ?? '7776000',
+      10,
+    ),
   };
 });

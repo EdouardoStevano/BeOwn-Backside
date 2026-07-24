@@ -4,7 +4,9 @@ import {
   IsInt,
   IsOptional,
   IsPositive,
+  IsString,
   IsUUID,
+  MaxLength,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
@@ -35,6 +37,16 @@ export class CreateInvestmentDto {
   @IsOptional()
   @IsUUID()
   reservationId?: string;
+
+  @ApiPropertyOptional({
+    description:
+      "Clé d'idempotence fournie par le client : rejouer la même requête (double clic, retry réseau) renvoie l'investissement déjà créé au lieu d'en créer un second.",
+    example: 'b3f1c0de-0000-4000-8000-000000000000',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  idempotencyKey?: string;
 
   @ApiPropertyOptional({
     description: 'Consentement explicite pour dépasser la limite recommandée (non-avertis uniquement). Le client doit cocher cette case si le montant dépasse max(1000€, 5% du patrimoine déclaré).',

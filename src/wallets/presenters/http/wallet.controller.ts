@@ -47,7 +47,7 @@ export class WalletController {
     wallet.projetId = null;
     wallet.spvId = null;
     wallet.fournisseurRef = dto.fournisseurRef;
-    wallet.devise = dto.devise ?? 'XOF';
+    wallet.devise = dto.devise ?? 'EUR';
     wallet.solde = 0;
     wallet.statut = 'actif';
     return this.walletRepository.saveWallet(wallet);
@@ -72,7 +72,7 @@ export class WalletController {
       newWallet.projetId = null;
       newWallet.spvId = null;
       newWallet.fournisseurRef = `INV-${userId}-auto`;
-      newWallet.devise = 'XOF';
+      newWallet.devise = 'EUR';
       newWallet.solde = 0;
       newWallet.statut = 'actif';
       wallet = await this.walletRepository.saveWallet(newWallet);
@@ -109,7 +109,7 @@ export class WalletController {
     tx.walletSource = dto.walletSourceId ?? null;
     tx.walletDestination = dto.walletDestinationId ?? null;
     tx.montant = dto.montant;
-    tx.devise = 'XOF';
+    tx.devise = 'EUR';
     tx.type = dto.type;
     tx.referenceExterne = null;
     tx.fournisseur = dto.fournisseur ?? TransactionFournisseur.STRIPE;

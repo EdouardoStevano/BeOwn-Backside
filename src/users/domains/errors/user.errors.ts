@@ -47,7 +47,12 @@ export class EmailAlreadyInUseError extends ConflictDomainError {
 }
 
 export class PasswordConfirmationFailedError extends UnauthorizedDomainError {
-  readonly code = 'PASSWORD_CONFIRMATION_FAILED';
+  /**
+   * Code attendu tel quel par le Frontside, qui branche un intercepteur dessus :
+   * sans lui, il prend le 401 pour une session expirée, rafraîchit le token et
+   * rejoue le DELETE.
+   */
+  readonly code = 'INVALID_PASSWORD';
 
   constructor(message = 'Mot de passe incorrect.') {
     super(message);

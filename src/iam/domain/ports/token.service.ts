@@ -40,6 +40,19 @@ export interface TwoFactorChallengePayload {
 }
 
 /**
+ * Discriminant du jeton de désinscription. Il doit rester valable très
+ * longtemps (un email marketing s'archive), donc pas d'usage unique : c'est le
+ * claim `type` qui empêche qu'un jeton de confirmation d'email soit rejoué sur
+ * l'endpoint de désinscription, et réciproquement.
+ */
+export const NOTIF_UNSUBSCRIBE_TYPE = 'notif_unsubscribe';
+
+export interface UnsubscribeTokenPayload {
+  sub: number;
+  type: typeof NOTIF_UNSUBSCRIBE_TYPE;
+}
+
+/**
  * Frappe et vérification des jetons. Le domaine ignore que ce sont des JWT :
  * il demande « un token de reset valable pour ce compte », pas « signe-moi
  * ceci en HS256 ».
@@ -60,4 +73,12 @@ export interface TokenService {
   verifyTwoFactorChallengeToken(
     token: string,
   ): Promise<TwoFactorChallengePayload>;
+
+  /**
+   * Jeton longue durée (90 j) porté par le lien « se désinscrire » des
+   * diffusions marketing.
+   */
+  generateUnsubscribeToken(userId: number): Promise<string>;
+  /** Vérifie signature, émetteur et expiration. Le claim `type` est contrôlé par l'appelant. */
+  verifyUnsubscribeToken(token: string): Promise<UnsubscribeTokenPayload>;
 }

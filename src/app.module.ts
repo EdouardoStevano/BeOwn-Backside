@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { APP_FILTER, APP_GUARD } from '@nestjs/core';
+import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { DomainExceptionFilter } from './common/presenters/domain-exception.filter';
 import { HashingModule } from './common/hashing/hashing.module';
 import { EmailModule } from './common/email/email.module';
@@ -14,7 +14,11 @@ import { HealthController } from './health/health.controller';
 import { IamModule } from './iam/iam.module';
 import { IamInfrastructureModule } from './iam/infrastructure/iam-infrastructure.module';
 import { JwtAuthGuard } from './common/auth/jwt-auth.guard';
+import { AccountStatusGuard } from './common/auth/account-status.guard';
 import { RolesGuard } from './common/auth/roles.guard';
+import { PermissionsGuard } from './common/auth/permissions.guard';
+import { UserEntity } from './users/infrastructure/persistences/entities/user.entity';
+import { AuditInterceptor } from './common/audit/audit.interceptor';
 import { ProfilesModule } from './profiles/applications/profiles.module';
 import { ProjectsModule } from './projects/applications/projects.module';
 import { ReservationsModule } from './reservations/applications/reservations.module';
@@ -34,6 +38,7 @@ import { LocativeManagementModule } from './locative-management/applications/loc
 import { DistributionsModule } from './distributions/applications/distributions.module';
 import { FiscaliteModule } from './fiscalite/applications/fiscalite.module';
 import { AmlModule } from './common/aml/aml.module';
+import { PlatformFeesModule } from './common/platform-fees/platform-fees.module';
 import { MailerModule } from '@nestjs-modules/mailer';
 import { HandlebarsAdapter } from '@nestjs-modules/mailer/adapters/handlebars.adapter';
 import { join } from 'path';
@@ -100,6 +105,9 @@ function requireEnv(name: string): string {
         },
       }),
     }),
+    // Alimente AccountStatusGuard : lecture per-request du statut du compte,
+    // indépendante de ce qu'exporte UsersModule (cf. account-status.guard.ts).
+    TypeOrmModule.forFeature([UserEntity]),
     // Modules globaux : un seul binding pour chaque port partagé, au lieu d'un
     // re-binding dans chaque module qui en avait besoin.
     HashingModule,
@@ -126,13 +134,17 @@ function requireEnv(name: string): string {
     DistributionsModule,
     FiscaliteModule,
     AmlModule,
+    PlatformFeesModule,
     ...(process.env.NODE_ENV !== 'production' ? [NotificationTestModule] : []),
   ],
   controllers: [HealthController],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
+    { provide: APP_GUARD, useClass: AccountStatusGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
+    { provide: APP_GUARD, useClass: PermissionsGuard },
+    { provide: APP_INTERCEPTOR, useClass: AuditInterceptor },
     // Traduit les erreurs métier en réponses HTTP. `@Catch(DomainError)` : les
     // HttpException des modules non encore migrés restent gérées par Nest.
     { provide: APP_FILTER, useClass: DomainExceptionFilter },

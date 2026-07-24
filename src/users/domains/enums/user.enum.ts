@@ -4,15 +4,22 @@
  */
 
 export enum UserRole {
+  // Utilisateurs plateforme
   INVESTISSEUR = 'investisseur',
   PORTEUR = 'porteur',
-  ADMIN = 'admin',
+  CGP = 'cgp',
+  // Back-office — nouveaux rôles (2026-07)
+  SUPER_ADMIN = 'super_admin',
+  CIO = 'cio',
+  MARKETING = 'marketing',
+  ANALYSTE_FINANCIER = 'analyste_financier',
+  CHARGE_RELATION_INVESTISSEUR = 'charge_relation_investisseur',
+  // Back-office — legacy conservés
   SUPPORT = 'support',
   COMPLIANCE = 'compliance',
   DPO = 'dpo',
   RCCI = 'rcci',
   FINANCIER = 'financier',
-  CGP = 'cgp',
 }
 
 export enum UserStatus {
@@ -29,11 +36,16 @@ export enum UserStatus {
  * « qui est administrateur » est une règle métier — pas une constante de contrôleur.
  */
 export const ADMIN_ROLES: readonly UserRole[] = [
-  UserRole.ADMIN,
+  UserRole.SUPER_ADMIN,
+  UserRole.CIO,
+  UserRole.MARKETING,
+  UserRole.ANALYSTE_FINANCIER,
+  UserRole.CHARGE_RELATION_INVESTISSEUR,
   UserRole.SUPPORT,
   UserRole.COMPLIANCE,
-  UserRole.FINANCIER,
+  UserRole.DPO,
   UserRole.RCCI,
+  UserRole.FINANCIER,
 ];
 
 export enum UserType {

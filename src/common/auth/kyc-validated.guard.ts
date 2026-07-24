@@ -2,6 +2,7 @@ import {
   CanActivate,
   ExecutionContext,
   ForbiddenException,
+  HttpStatus,
   Injectable,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -10,11 +11,26 @@ import { KycEntity } from 'src/profiles/infrastructure/persistences/entities/kyc
 import { KycStatus } from 'src/profiles/domains/enums/kyc-status.enum';
 import type { ActiveUser } from './current-user.decorator';
 
+/** Code d'erreur stable consommé par le front pour distinguer ce refus d'un 403 générique. */
+export const KYC_NOT_VALIDATED_CODE = 'KYC_NOT_VALIDATED';
+
+/** Message affiché au front — contrat fixe, ne pas varier selon la cause du refus. */
+export const KYC_NOT_VALIDATED_MESSAGE =
+  'Profil non validé — complétez votre vérification d\'identité.';
+
+const kycNotValidatedException = (): ForbiddenException =>
+  new ForbiddenException({
+    statusCode: HttpStatus.FORBIDDEN,
+    message: KYC_NOT_VALIDATED_MESSAGE,
+    code: KYC_NOT_VALIDATED_CODE,
+  });
+
 /**
  * Use after JwtAuthGuard. Blocks the route if the authenticated user does not
  * have an approved KYC (statut = VALIDE). KYC validation by admin implies that
  * the profile is complete and identity is verified, so it is the single
- * authoritative signal for "user may perform investment actions".
+ * authoritative signal for "user may perform financial actions" (dépôt,
+ * investissement, marché secondaire, retrait).
  */
 @Injectable()
 export class KycValidatedGuard implements CanActivate {
@@ -35,21 +51,15 @@ export class KycValidatedGuard implements CanActivate {
     });
 
     if (!kyc) {
-      throw new ForbiddenException(
-        "Vous devez compléter votre profil KYC avant toute action d'investissement.",
-      );
+      throw kycNotValidatedException();
     }
 
     if (kyc.statut !== KycStatus.VALIDE) {
-      throw new ForbiddenException(
-        `Votre KYC doit être validé (statut actuel: ${kyc.statut}). Veuillez attendre la validation ou compléter votre dossier.`,
-      );
+      throw kycNotValidatedException();
     }
 
     if (kyc.valideJusquAu && new Date(kyc.valideJusquAu) < new Date()) {
-      throw new ForbiddenException(
-        'Votre KYC a expiré. Veuillez le renouveler.',
-      );
+      throw kycNotValidatedException();
     }
 
     return true;

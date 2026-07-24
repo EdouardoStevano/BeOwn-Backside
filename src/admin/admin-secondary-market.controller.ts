@@ -16,14 +16,20 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, ILike, Repository } from 'typeorm';
 import { SkipThrottle } from '@nestjs/throttler';
 import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
-import { Roles } from 'src/common/auth/roles.decorator';
+import { RequirePermission } from 'src/common/auth/require-permission.decorator';
+import { rolesWithPermission } from 'src/common/auth/permissions.constants';
 import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
+import { formatEur } from 'src/common/money/format-eur';
 import { OrdreMarcheEntity } from 'src/secondarymarket/infrastructure/persistences/entities/ordre-marche.entity';
+import { SignatureEntity } from 'src/signatures/infrastructure/persistences/entities/signature.entity';
+import { SignatureStatus } from 'src/signatures/domains/enums/signature-status.enum';
 import { InvestmentEntity } from 'src/investments/infrastructure/persistences/entities/investment.entity';
 import { UserEntity, UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
 import { OrdreMarcheStatus } from 'src/secondarymarket/domains/ordre-marche';
-import { computeSecondaryMarketCommission } from 'src/secondarymarket/domains/commission';
+import { computeCoutAcquisition } from 'src/secondarymarket/domains/cout-acquisition';
+import { PlatformFeesService } from 'src/common/platform-fees/platform-fees.service';
+import { round2 } from 'src/common/platform-fees/platform-fees.constants';
 import { InvestmentStatus } from 'src/investments/domains/enums/investment-status.enum';
 import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/wallet.entity';
 import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entities/transaction.entity';
@@ -38,20 +44,14 @@ import { NotificationType } from 'src/notifications/infrastructure/persistences/
 import { NotificationEventService } from 'src/notifications/applications/notification-event.service';
 import { ProjectEntity } from 'src/projects/infrastructure/persistences/entities/project.entity';
 
-const ADMIN_ROLES = [
-  UserRole.ADMIN,
-  UserRole.SUPPORT,
-  UserRole.COMPLIANCE,
-  UserRole.FINANCIER,
-  UserRole.RCCI,
-];
+const ADMIN_ROLES = rolesWithPermission('market:manage');
 
 @SkipThrottle()
 @ApiTags('Admin — Marché Secondaire')
 @ApiBearerAuth()
 @Controller('admin/secondary-market')
 @UseGuards(JwtAuthGuard)
-@Roles(UserRole.ADMIN, UserRole.SUPPORT, UserRole.COMPLIANCE, UserRole.FINANCIER, UserRole.RCCI)
+@RequirePermission('market:manage')
 export class AdminSecondaryMarketController {
   constructor(
     @InjectRepository(OrdreMarcheEntity)
@@ -69,6 +69,7 @@ export class AdminSecondaryMarketController {
     private readonly dataSource: DataSource,
     private readonly notificationService: NotificationService,
     private readonly notificationEvents: NotificationEventService,
+    private readonly platformFees: PlatformFeesService,
   ) {}
 
   private async assertAdmin(user: ActiveUser): Promise<void> {
@@ -169,11 +170,70 @@ export class AdminSecondaryMarketController {
     const commissionKey = `secmarket:commission:order:${id}`;
 
     await this.dataSource.transaction(async (em) => {
-      // Lookup de la commission réellement prélevée pour cet ordre (legacy = 0)
-      const commissionTx = await em.findOne(TransactionEntity, {
+      // Lookup des frais réellement prélevés pour cet ordre :
+      // - legacy : une seule tx commission `secmarket:commission:order:<id>` ;
+      // - frais configurables : une tx par frais, retrouvées via
+      //   metadata.ordreId + metadata.source (revente_transaction /
+      //   gain_revente_actions). Ordres très anciens = 0.
+      const legacyCommissionTx = await em.findOne(TransactionEntity, {
         where: { idempotencyKey: commissionKey, statut: TransactionStatus.REUSSI },
       });
-      const commissionPrelevee = commissionTx ? Number(commissionTx.montant) : 0;
+      const feeTxs = await em
+        .createQueryBuilder(TransactionEntity, 'tx')
+        .where(`tx.metadata ->> 'ordreId' = :ordreId`, { ordreId: id })
+        .andWhere(`tx.metadata ->> 'source' IN (:...sources)`, {
+          sources: ['revente_transaction', 'gain_revente_actions'],
+        })
+        .andWhere('tx.statut = :statut', { statut: TransactionStatus.REUSSI })
+        .getMany();
+
+      // Un ordre peut avoir été rempli en plusieurs fois (fills successifs
+      // sur le carnet EN_CARNET, tant que l'ordre n'est pas totalement
+      // absorbé) : chaque fill webhook écrit ses frais avec un
+      // metadata.signatureId qui lui est propre (yousign-webhook, étape 12).
+      // L'état courant de l'ordre (nbFractions, acheteurId) ne reflète QUE le
+      // DERNIER fill — reverser la somme des frais de TOUS les fills
+      // suralimenterait le remboursement acheteur et sous-débiterait le
+      // vendeur. On ne reverse donc que les frais du fill actuellement en
+      // vigueur, identifié via la signature YouSign SIGNED (ordreId,
+      // acheteurId) la plus récente. Un fill sans signature (force-execute
+      // admin, metadata.signatureId absent) compte comme son propre groupe.
+      const distinctSignatureIds = new Set(
+        feeTxs
+          .map((t) => (t.metadata as Record<string, unknown> | null)?.signatureId)
+          .filter((v): v is string => typeof v === 'string'),
+      );
+      const hasUnsignedFeeTx = feeTxs.some(
+        (t) => (t.metadata as Record<string, unknown> | null)?.signatureId == null,
+      );
+      const nbFillGroups = distinctSignatureIds.size + (hasUnsignedFeeTx ? 1 : 0);
+
+      let scopedFeeTxs = feeTxs;
+      if (nbFillGroups > 1) {
+        const lastSignature = await em.findOne(SignatureEntity, {
+          where: {
+            ordreId: id,
+            userId: buyerUserId,
+            statut: SignatureStatus.SIGNED,
+          },
+          order: { signedAt: 'DESC' },
+        });
+        if (!lastSignature || !distinctSignatureIds.has(lastSignature.id)) {
+          throw new BadRequestException(
+            'Ordre multi-remplissages : annulation globale impossible, traiter par remplissage',
+          );
+        }
+        scopedFeeTxs = feeTxs.filter(
+          (t) =>
+            (t.metadata as Record<string, unknown> | null)?.signatureId ===
+            lastSignature.id,
+        );
+      }
+
+      const commissionPrelevee = round2(
+        (legacyCommissionTx ? Number(legacyCommissionTx.montant) : 0) +
+          scopedFeeTxs.reduce((s, t) => s + Number(t.montant), 0),
+      );
       const montantNetVendeurInitial = montantTotal - commissionPrelevee;
 
       // 1. Restaurer fractions vendeur sur son investissement source
@@ -239,7 +299,7 @@ export class AdminSecondaryMarketController {
         walletDestination: buyerWallet?.id ?? null,
         type: TransactionType.SOUSCRIPTION,
         montant: montantTotal,
-        devise: buyerWallet?.devise ?? sellerWallet?.devise ?? 'XOF',
+        devise: buyerWallet?.devise ?? sellerWallet?.devise ?? 'EUR',
         statut: TransactionStatus.REUSSI,
         fournisseur: TransactionFournisseur.INTERNE,
         investissementId: ordre.investissementId,
@@ -276,7 +336,7 @@ export class AdminSecondaryMarketController {
       utilisateurId: sellerUserId,
       type: NotificationType.MARCHE_SECONDAIRE,
       titre: "Vente d'ordre refusée — fractions restaurées",
-      message: `Votre vente de ${nbFractions} fraction(s) à ${prixUnitaire} XOF a été annulée par l'administration. Les fractions ont été restaurées sur votre investissement.`,
+      message: `Votre vente de ${nbFractions} fraction(s) à ${formatEur(prixUnitaire)} a été annulée par l'administration. Les fractions ont été restaurées sur votre investissement.`,
       metadata: { ordreId: id, reverse: true, montantRestaure: montantTotal },
     }).catch(() => {});
 
@@ -284,7 +344,7 @@ export class AdminSecondaryMarketController {
       utilisateurId: buyerUserId,
       type: NotificationType.MARCHE_SECONDAIRE,
       titre: "Achat annulé — remboursement effectué",
-      message: `L'achat de ${nbFractions} fraction(s) a été annulé par l'administration. ${montantTotal} XOF ont été recrédités sur votre wallet.`,
+      message: `L'achat de ${nbFractions} fraction(s) a été annulé par l'administration. ${formatEur(montantTotal)} ont été recrédités sur votre wallet.`,
       metadata: { ordreId: id, reverse: true, montantRembourse: montantTotal },
     }).catch(() => {});
 
@@ -318,9 +378,25 @@ export class AdminSecondaryMarketController {
 
     const nbFractions = ordre.nbFractions;
     const prixUnitaire = Number(ordre.prixUnitaire);
-    const montantTotal = nbFractions * prixUnitaire;
-    const commission = computeSecondaryMarketCommission(montantTotal);
-    const montantNetVendeur = montantTotal - commission;
+    const montantTotal = round2(nbFractions * prixUnitaire);
+    // Plus-value vendeur = prix de vente − coût d'acquisition (coût moyen
+    // pondéré — voir domains/cout-acquisition.ts), calculée AVANT réduction
+    // de l'investissement vendeur.
+    const coutAcquisition = computeCoutAcquisition(
+      ordre.investissement,
+      nbFractions,
+      prixUnitaire,
+    );
+    const plusValueVendeur = round2(montantTotal - coutAcquisition);
+    // Frais vendeur depuis UN SEUL snapshot de taux (R1)
+    const feeRates = await this.platformFees.getRates();
+    const { transactionFee, gainFee } = await this.platformFees.computeResaleFees(
+      montantTotal,
+      plusValueVendeur,
+      feeRates,
+    );
+    const totalFrais = round2(transactionFee + gainFee);
+    const montantNetVendeur = round2(montantTotal - totalFrais);
     const projetId = ordre.investissement.projetId;
     const buyerUserId = ordre.acheteurId;
 
@@ -384,9 +460,9 @@ export class AdminSecondaryMarketController {
         await em.save(WalletEntity, sellerWallet);
       }
 
-      // Commission plateforme — wallet system-wide créé à la volée si absent.
+      // Frais plateforme — wallet system-wide créé à la volée si absent.
       let platformWallet: WalletEntity | null = null;
-      if (commission > 0) {
+      if (totalFrais > 0) {
         platformWallet = await em.findOne(WalletEntity, {
           where: { type: WalletType.FRAIS_PLATEFORME },
         });
@@ -402,7 +478,7 @@ export class AdminSecondaryMarketController {
             }),
           );
         }
-        platformWallet.solde = Number(platformWallet.solde) + commission;
+        platformWallet.solde = Number(platformWallet.solde) + totalFrais;
         await em.save(WalletEntity, platformWallet);
       }
 
@@ -419,24 +495,48 @@ export class AdminSecondaryMarketController {
         projetId,
         idempotencyKey: `admin-force:buyer:${id}`,
         fraisPsp: 0,
-        fraisPlateforme: commission,
+        fraisPlateforme: totalFrais,
       }));
 
-      // Ledger transaction commission plateforme
-      if (platformWallet && commission > 0) {
+      // Ledger frais plateforme — une transaction PAR frais (metadata.source),
+      // retrouvables au reverse admin via metadata.ordreId.
+      if (platformWallet && transactionFee > 0) {
         await em.save(TransactionEntity, em.create(TransactionEntity, {
           walletSource: null,
           walletDestination: platformWallet.id,
           type: TransactionType.SOUSCRIPTION,
-          montant: commission,
+          montant: transactionFee,
           devise: platformWallet.devise,
           statut: TransactionStatus.REUSSI,
           fournisseur: TransactionFournisseur.INTERNE,
           investissementId: ordre.investissementId,
           projetId,
-          idempotencyKey: `secmarket:commission:order:${id}`,
+          idempotencyKey: `secmarket:fee:revente_transaction:order:${id}:admin`,
           fraisPsp: 0,
           fraisPlateforme: 0,
+          metadata: { source: 'revente_transaction', ordreId: id },
+        }));
+      }
+      if (platformWallet && gainFee > 0) {
+        await em.save(TransactionEntity, em.create(TransactionEntity, {
+          walletSource: null,
+          walletDestination: platformWallet.id,
+          type: TransactionType.SOUSCRIPTION,
+          montant: gainFee,
+          devise: platformWallet.devise,
+          statut: TransactionStatus.REUSSI,
+          fournisseur: TransactionFournisseur.INTERNE,
+          investissementId: ordre.investissementId,
+          projetId,
+          idempotencyKey: `secmarket:fee:gain_revente_actions:order:${id}:admin`,
+          fraisPsp: 0,
+          fraisPlateforme: 0,
+          metadata: {
+            source: 'gain_revente_actions',
+            ordreId: id,
+            plusValueVendeur,
+            coutAcquisition,
+          },
         }));
       }
 

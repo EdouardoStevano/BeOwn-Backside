@@ -21,6 +21,7 @@ import {
 } from '@nestjs/swagger';
 import { SkipThrottle } from '@nestjs/throttler';
 import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
+import { RequirePermission } from 'src/common/auth/require-permission.decorator';
 import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
 import {
@@ -208,6 +209,7 @@ export class UserController {
   @ApiResponse({ status: 200, description: 'Utilisateur mis à jour' })
   @ApiResponse({ status: 403, description: 'Accès refusé — rôle admin requis' })
   @ApiResponse({ status: 404, description: 'Utilisateur introuvable' })
+  @RequirePermission('users:manage')
   @Patch(':id')
   updateById(
     @Param('id', ParseIntPipe) id: number,
@@ -231,7 +233,8 @@ export class UserController {
       'Supprimer mon compte (soft-delete après confirmation de mot de passe)',
   })
   @ApiResponse({ status: 204, description: 'Compte supprimé' })
-  @ApiResponse({ status: 401, description: 'Mot de passe incorrect' })
+  @ApiResponse({ status: 401, description: 'Mot de passe incorrect (code INVALID_PASSWORD)' })
+  @ApiResponse({ status: 409, description: 'Suppression bloquée (ACCOUNT_DELETION_BLOCKED)' })
   @HttpCode(HttpStatus.NO_CONTENT)
   @Delete('me')
   deleteMe(@CurrentUser() user: ActiveUser, @Body() dto: DeleteAccountDto) {

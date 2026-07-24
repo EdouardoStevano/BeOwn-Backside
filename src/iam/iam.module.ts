@@ -4,10 +4,12 @@ import { AuthenticationModule } from './application/authentication/authenticatio
 import { OtpModule } from './application/otp/otp.module';
 import { TwoFactorModule } from './application/two-factor/two-factor.module';
 import { EmailVerificationModule } from './application/email-verification/email-verification.module';
+import { RegistrationOtpModule } from './application/registration-otp/registration-otp.module';
 
 /**
  * Racine du contexte IAM : les adapters d'un côté, les familles de use cases de
- * l'autre (authentification, OTP, second facteur, vérification d'email).
+ * l'autre (authentification, OTP d'inscription, OTP de second facteur, second
+ * facteur, vérification d'email).
  *
  * Plus de forwardRef : le cycle avec OtpModule n'existait que pour propager
  * SMS_SERVICE, désormais fourni globalement par SmsModule.
@@ -19,6 +21,7 @@ import { EmailVerificationModule } from './application/email-verification/email-
     OtpModule,
     TwoFactorModule,
     EmailVerificationModule,
+    RegistrationOtpModule,
   ],
 })
 export class IamModule {}

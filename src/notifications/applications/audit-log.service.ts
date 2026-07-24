@@ -3,6 +3,23 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AuditLogEntity } from '../infrastructure/persistences/entities/audit-log.entity';
 
+export interface AuditLogFilter {
+  page?: number;
+  limit?: number;
+  acteurId?: string;
+  action?: string;
+  objetType?: string;
+  dateFrom?: string;
+  dateTo?: string;
+}
+
+export interface AuditLogPage {
+  items: AuditLogEntity[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
 @Injectable()
 export class AuditLogService {
   constructor(
@@ -33,26 +50,39 @@ export class AuditLogService {
     return this.auditLogRepo.save(log);
   }
 
-  async findByActor(actorId: string): Promise<AuditLogEntity[]> {
-    return this.auditLogRepo.find({
-      where: { acteurId: actorId },
-      order: { createdAt: 'DESC' },
-      take: 100,
-    });
-  }
+  /**
+   * Journal d'activité paginé et filtrable — contrat consommé par le
+   * back-office (GET /audit-logs). Restreint via @RequirePermission('audit:read')
+   * sur le contrôleur.
+   */
+  async findFiltered(filter: AuditLogFilter): Promise<AuditLogPage> {
+    // Number(...) || défaut : neutralise aussi NaN (ex. ?page=abc).
+    const page = Math.max(1, Number(filter.page) || 1);
+    const limit = Math.min(100, Math.max(1, Number(filter.limit) || 50));
 
-  async findByObjectType(objetType: string): Promise<AuditLogEntity[]> {
-    return this.auditLogRepo.find({
-      where: { objetType: objetType },
-      order: { createdAt: 'DESC' },
-      take: 100,
-    });
-  }
+    const qb = this.auditLogRepo.createQueryBuilder('log');
 
-  async findAll(limit: number = 100): Promise<AuditLogEntity[]> {
-    return this.auditLogRepo.find({
-      order: { createdAt: 'DESC' },
-      take: limit,
-    });
+    if (filter.acteurId) {
+      qb.andWhere('log.acteurId = :acteurId', { acteurId: filter.acteurId });
+    }
+    if (filter.action) {
+      qb.andWhere('log.action ILIKE :action', { action: `${filter.action}%` });
+    }
+    if (filter.objetType) {
+      qb.andWhere('log.objetType = :objetType', { objetType: filter.objetType });
+    }
+    if (filter.dateFrom) {
+      qb.andWhere('log.createdAt >= :dateFrom', { dateFrom: filter.dateFrom });
+    }
+    if (filter.dateTo) {
+      qb.andWhere('log.createdAt <= :dateTo', { dateTo: filter.dateTo });
+    }
+
+    qb.orderBy('log.createdAt', 'DESC')
+      .skip((page - 1) * limit)
+      .take(limit);
+
+    const [items, total] = await qb.getManyAndCount();
+    return { items, total, page, limit };
   }
 }

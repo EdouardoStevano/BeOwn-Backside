@@ -13,15 +13,24 @@ import {
   PasswordConfirmationFailedError,
   UserNotFoundError,
 } from 'src/users/domains/errors/user.errors';
-import { NotificationEventService } from 'src/notifications/applications/notification-event.service';
+import { DeleteAccountUseCase } from '../usecases/delete-account.usecase';
 import { DeleteAccountCommand } from './delete-account.command';
 
+/**
+ * Suppression self-service : confirmation du mot de passe ici, puis délégation
+ * des règles de suppression (bloqueurs financiers, versement automatique du
+ * solde, notifications) à DeleteAccountUseCase.
+ *
+ * Le découpage n'est pas cosmétique : la confirmation du mot de passe ne
+ * concerne que le parcours self-service, alors que le reste vaut aussi pour la
+ * suppression déclenchée par un administrateur.
+ */
 @CommandHandler(DeleteAccountCommand)
 export class DeleteAccountHandler implements ICommandHandler<DeleteAccountCommand> {
   constructor(
     @Inject(USER_REPOSITORY) private readonly userRepository: UserRepository,
     @Inject(HASHING_SERVICE) private readonly hashingService: HashingService,
-    private readonly notificationEvents: NotificationEventService,
+    private readonly deleteAccount: DeleteAccountUseCase,
   ) {}
 
   async execute(command: DeleteAccountCommand): Promise<void> {
@@ -36,11 +45,9 @@ export class DeleteAccountHandler implements ICommandHandler<DeleteAccountComman
     );
     if (!confirmed) throw new PasswordConfirmationFailedError();
 
-    user.markAsDeleted();
-    await this.userRepository.update(user);
-
-    // `void` : notification en fire-and-forget — le compte est supprimé, que
-    // l'email de confirmation parte ou non.
-    void this.notificationEvents.accountDeletedByUser(user);
+    await this.deleteAccount.execute(command.userId, {
+      userId: command.userId,
+      role: user.role,
+    });
   }
 }

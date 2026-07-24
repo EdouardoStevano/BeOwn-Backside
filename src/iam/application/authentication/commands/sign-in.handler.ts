@@ -40,9 +40,6 @@ export class SignInHandler implements ICommandHandler<SignInCommand> {
       throw new InvalidCredentialsError();
     }
 
-    // L'invariant vit dans l'agrégat, pas dans ce handler.
-    account.ensureCanSignIn();
-
     // Le mot de passe est vérifié par le contexte qui le détient : IAM ne voit
     // jamais le hash.
     const isValid = await this.accounts.verifyPassword(
@@ -52,6 +49,13 @@ export class SignInHandler implements ICommandHandler<SignInCommand> {
     if (!isValid) {
       throw new InvalidCredentialsError();
     }
+
+    // Après la vérification du mot de passe, et pas avant : « email non
+    // vérifié » et « compte suspendu » sont bien plus bavards que « identifiants
+    // invalides ». Les lever d'abord permettrait à qui connaît une adresse de
+    // sonder l'état du compte sans jamais fournir de mot de passe valide.
+    // L'invariant lui-même vit dans l'agrégat, pas dans ce handler.
+    account.ensureCanSignIn();
 
     const enrollment = await this.twoFactor.findActive(account.email);
     if (!enrollment) {

@@ -30,6 +30,17 @@ export class PeriodeDistributionEntity {
   @Column({ type: 'decimal', precision: 18, scale: 2, default: 0 })
   revenuNet: number;
 
+  // Frais figés au calcul (snapshot de taux) ; encaissés seulement à
+  // l'exécution — voir ExecuteDistributionUseCase.
+  @Column({ type: 'decimal', precision: 18, scale: 2, default: 0 })
+  fraisPlateformeAnnuel: number;
+
+  @Column({ type: 'decimal', precision: 18, scale: 2, default: 0 })
+  fraisGestionLocative: number;
+
+  @Column({ type: 'boolean', default: false })
+  fraisPlafonnes: boolean;
+
   @Column({ type: 'varchar', default: StatutPeriodeDistribution.CALCULEE })
   statut: StatutPeriodeDistribution;
 

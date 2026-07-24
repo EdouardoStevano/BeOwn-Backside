@@ -7,8 +7,7 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
-import { Roles } from 'src/common/auth/roles.decorator';
-import { UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
+import { RequirePermission } from 'src/common/auth/require-permission.decorator';
 import { IfuCronService } from '../../applications/ifu-cron.service';
 import { GenerateInvestisseurIfuUseCase } from '../../applications/usecases/generate-investisseur-ifu.usecase';
 
@@ -16,7 +15,7 @@ import { GenerateInvestisseurIfuUseCase } from '../../applications/usecases/gene
 @ApiBearerAuth()
 @Controller('admin/fiscalite')
 @UseGuards(JwtAuthGuard)
-@Roles(UserRole.ADMIN, UserRole.FINANCIER, UserRole.COMPLIANCE)
+@RequirePermission('fiscal:manage')
 export class AdminFiscaliteController {
   constructor(
     private readonly cronService: IfuCronService,

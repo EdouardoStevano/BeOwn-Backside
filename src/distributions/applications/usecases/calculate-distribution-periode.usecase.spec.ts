@@ -3,6 +3,9 @@ import { StatutPeriodeDistribution } from '../../domains/enums/statut-periode-di
 import { ModeleEconomique } from 'src/projects/domains/enums/modele-economique.enum';
 import { ProjectStatus } from 'src/projects/domains/enums/project-status.enum';
 import { InvestmentStatus } from 'src/investments/domains/enums/investment-status.enum';
+import { DEFAULT_FEE_RATES } from 'src/common/platform-fees/platform-fees.service';
+
+const round2 = (n: number) => Math.round(n * 100) / 100;
 
 describe('CalculateDistributionPeriodeUseCase', () => {
   let useCase: CalculateDistributionPeriodeUseCase;
@@ -12,6 +15,7 @@ describe('CalculateDistributionPeriodeUseCase', () => {
   let chargeRepo: any;
   let projectRepo: any;
   let investmentRepo: any;
+  let platformFees: any;
 
   beforeEach(() => {
     periodeRepo = {
@@ -35,6 +39,22 @@ describe('CalculateDistributionPeriodeUseCase', () => {
     };
     investmentRepo = { findByProjetId: jest.fn().mockResolvedValue([]) };
 
+    // Mock PlatformFeesService : mêmes formules que le vrai service,
+    // paramétrées par le snapshot passé en argument.
+    platformFees = {
+      getRates: jest.fn().mockResolvedValue({ ...DEFAULT_FEE_RATES }),
+      computeMonthlyPlatformFee: jest.fn(
+        async (capital: number, rates: any) =>
+          round2((capital * (rates.annualPlatformFeePct / 100)) / 12),
+      ),
+      computeRentManagementFee: jest.fn(async (loyers: number, rates: any) =>
+        loyers <= 0 ? 0 : round2(loyers * (rates.rentManagementFeePct / 100)),
+      ),
+    };
+
+    // Note : le usecase n'a plus de dépendance DataSource/wallet/transaction
+    // — le calcul ne fait QUE persister les montants de frais sur la
+    // période ; il ne les encaisse jamais (voir ExecuteDistributionUseCase).
     useCase = new CalculateDistributionPeriodeUseCase(
       periodeRepo,
       partRepo,
@@ -42,10 +62,11 @@ describe('CalculateDistributionPeriodeUseCase', () => {
       chargeRepo,
       projectRepo,
       investmentRepo,
+      platformFees,
     );
   });
 
-  it('calcule revenuNet = (totalLoyers − charges) − management fee 1%/12 et statut CALCULEE', async () => {
+  it('calcule revenuNet = loyers − charges − frais plateforme (annuel/12 sur capital initial) − gestion locative (7 % des loyers)', async () => {
     loyerRepo.findValidesParProjetEtPeriode.mockResolvedValue([
       { montant: 600_000 },
       { montant: 400_000 },
@@ -55,11 +76,59 @@ describe('CalculateDistributionPeriodeUseCase', () => {
     ]);
     const r = await useCase.execute('proj-1', '2026-06');
     expect(r.periode.totalLoyers).toBe(1_000_000);
-    // totalCharges = 150_000 + management fee (1/12 du 1%/an sur revenu avant gestion 850_000)
-    //              = 150_000 + 708.33
-    expect(r.periode.totalCharges).toBeCloseTo(150_708.33, 2);
-    expect(r.periode.revenuNet).toBeCloseTo(849_291.67, 2);
+    // plateforme_annuel = 1 000 000 (capitalCible) × 1 %/12 = 833.33
+    // gestion_locative  = 1 000 000 (loyers) × 7 % = 70 000
+    // totalCharges = 150 000 + 833.33 + 70 000 = 220 833.33
+    expect(r.periode.totalCharges).toBeCloseTo(220_833.33, 2);
+    expect(r.periode.revenuNet).toBeCloseTo(779_166.67, 2);
     expect(r.periode.statut).toBe(StatutPeriodeDistribution.CALCULEE);
+  });
+
+  it('calcule les deux frais depuis UN SEUL snapshot de taux et les PERSISTE sur la période sans les encaisser', async () => {
+    loyerRepo.findValidesParProjetEtPeriode.mockResolvedValue([
+      { montant: 1_000_000 },
+    ]);
+    const r = await useCase.execute('proj-1', '2026-06');
+
+    // Un seul read des taux pour toute l'opération (R1)
+    expect(platformFees.getRates).toHaveBeenCalledTimes(1);
+    const snapshot = await platformFees.getRates.mock.results[0].value;
+    expect(platformFees.computeMonthlyPlatformFee).toHaveBeenCalledWith(
+      1_000_000,
+      snapshot,
+    );
+    expect(platformFees.computeRentManagementFee).toHaveBeenCalledWith(
+      1_000_000,
+      snapshot,
+    );
+
+    // Les montants sont persistés sur la période...
+    expect(r.periode.fraisPlateformeAnnuel).toBeCloseTo(833.33, 2);
+    expect(r.periode.fraisGestionLocative).toBeCloseTo(70_000, 2);
+    expect(r.periode.fraisPlafonnes).toBe(false);
+    // ... mais AUCUN wallet/transaction n'est écrit au calcul : le seul
+    // write est celui de la période elle-même (periodeRepo.save), pas de
+    // dataSource/em.save de transaction FRAIS_PLATEFORME.
+    expect(periodeRepo.save).toHaveBeenCalledTimes(1);
+  });
+
+  it('plafonne les frais au revenu distribuable (proportionnellement, fraisPlafonnes:true)', async () => {
+    loyerRepo.findValidesParProjetEtPeriode.mockResolvedValue([
+      { montant: 1000 },
+    ]);
+    chargeRepo.findValidesParProjetEtPeriode.mockResolvedValue([
+      { montant: 900 },
+    ]);
+    const r = await useCase.execute('proj-1', '2026-06');
+
+    // Frais théoriques : 833.33 (plateforme) + 70 (gestion) = 903.33
+    // Revenu disponible : 1000 − 900 = 100 → plafonnement proportionnel :
+    // plateforme = round2(833.33 × 100/903.33) = 92.25 ; gestion = 100 − 92.25 = 7.75
+    expect(r.periode.fraisPlateformeAnnuel).toBeCloseTo(92.25, 2);
+    expect(r.periode.fraisGestionLocative).toBeCloseTo(7.75, 2);
+    expect(r.periode.fraisPlafonnes).toBe(true);
+    // Les frais consomment tout le revenu disponible : rien à distribuer
+    expect(r.periode.revenuNet).toBe(0);
   });
 
   it('génère une DistributionPart par investisseur CONFIRME, au prorata', async () => {
@@ -74,13 +143,13 @@ describe('CalculateDistributionPeriodeUseCase', () => {
     const r = await useCase.execute('proj-1', '2026-06');
     expect(r.parts).toHaveLength(2);
     expect(r.parts[0].pourcentageDetention).toBe(0.5);
-    // Avec management fee 833.33, revenuNet = 999_166.67 → inv-1 (50%) ≈ 499_583.33
-    expect(r.parts[0].montantBrut).toBeCloseTo(499_583.33, 1);
+    // revenuNet = 1 000 000 − 833.33 − 70 000 = 929 166.67 → inv-1 (50 %) ≈ 464 583.33
+    expect(r.parts[0].montantBrut).toBeCloseTo(464_583.33, 1);
     expect(r.parts[1].pourcentageDetention).toBe(0.3);
-    expect(r.parts[1].montantBrut).toBeCloseTo(299_750, 1);
+    expect(r.parts[1].montantBrut).toBeCloseTo(278_750, 1);
   });
 
-  it('applique IR 12.8% + CSG 17.2% sur brut positif (après management fee)', async () => {
+  it('applique IR 12.8% + CSG 17.2% sur brut positif (après frais plateforme)', async () => {
     loyerRepo.findValidesParProjetEtPeriode.mockResolvedValue([
       { montant: 100_000 },
     ]);
@@ -88,14 +157,15 @@ describe('CalculateDistributionPeriodeUseCase', () => {
       { id: 'inv-1', montant: 1_000_000, statut: InvestmentStatus.CONFIRME },
     ]);
     const r = await useCase.execute('proj-1', '2026-06');
-    // managementFee = 100_000 × 0.01/12 = 83.33 → revenuNet = 99_916.67
-    expect(r.parts[0].montantBrut).toBeCloseTo(99_916.67, 2);
-    expect(r.parts[0].prelevementIR).toBeCloseTo(12_789.33, 2);
-    expect(r.parts[0].prelevementCSG).toBeCloseTo(17_185.67, 2);
-    expect(r.parts[0].montantNet).toBeCloseTo(69_941.67, 2);
+    // frais = 833.33 (plateforme) + 7 000 (gestion 7 % de 100 000)
+    // revenuNet = 100 000 − 7 833.33 = 92 166.67
+    expect(r.parts[0].montantBrut).toBeCloseTo(92_166.67, 2);
+    expect(r.parts[0].prelevementIR).toBeCloseTo(11_797.33, 2);
+    expect(r.parts[0].prelevementCSG).toBeCloseTo(15_852.67, 2);
+    expect(r.parts[0].montantNet).toBeCloseTo(64_516.67, 2);
   });
 
-  it('ne prélève pas IR/CSG sur revenu négatif (mois déficitaire)', async () => {
+  it('ne prélève ni frais ni IR/CSG sur période déficitaire', async () => {
     chargeRepo.findValidesParProjetEtPeriode.mockResolvedValue([
       { montant: 200_000 },
     ]);
@@ -103,6 +173,9 @@ describe('CalculateDistributionPeriodeUseCase', () => {
       { id: 'inv-1', montant: 1_000_000, statut: InvestmentStatus.CONFIRME },
     ]);
     const r = await useCase.execute('proj-1', '2026-06');
+    // Aucun loyer, 200 000 de charges : frais plafonnés à 0
+    expect(r.periode.fraisPlateformeAnnuel).toBe(0);
+    expect(r.periode.fraisGestionLocative).toBe(0);
     expect(r.parts[0].montantBrut).toBe(-200_000);
     expect(r.parts[0].prelevementIR).toBe(0);
     expect(r.parts[0].prelevementCSG).toBe(0);

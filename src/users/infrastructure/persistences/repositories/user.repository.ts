@@ -54,6 +54,9 @@ export class UserTypeOrmRepository implements UserRepository {
   }
 
   async findByIdWithPassword(userId: number): Promise<User | null> {
+    // Colonne `password` en `select: false` : on la charge explicitement,
+    // uniquement pour la vérification du mot de passe (suppression
+    // self-service). findById reste sans le hash pour ne pas le faire fuiter.
     const entity = await this.usersRepository
       .createQueryBuilder('user')
       .leftJoinAndSelect('user.userEmail', 'userEmail')

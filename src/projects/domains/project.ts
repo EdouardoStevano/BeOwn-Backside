@@ -49,6 +49,9 @@ export class Project {
   // Equity-locatif extension (Phase 1)
   modeleEconomique: ModeleEconomique;
   nbUnitesLouables: number | null;
+  /** Horodatages anti-doublon des diffusions email/SMS (voir BroadcastService). */
+  broadcastAnnonceAt: Date | null;
+  broadcastCollecteAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }

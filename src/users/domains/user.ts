@@ -48,8 +48,17 @@ export class User {
 
   // ─── Email ───────────────────────────────────────────────────────────────
 
+  /**
+   * Confirme l'adresse et fait avancer le cycle de vie du compte. La transition
+   * ne va que de CREE vers EMAIL_VERIFIE : un compte déjà ACTIF (onboarding
+   * terminé) ou sanctionné ne redescend pas d'un cran parce qu'il reconfirme
+   * son adresse.
+   */
   verifyEmail(): void {
     this.userEmail.verify();
+    if (this.status === UserStatus.CREE) {
+      this.status = UserStatus.EMAIL_VERIFIE;
+    }
   }
 
   get isEmailVerified(): boolean {

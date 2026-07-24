@@ -6,16 +6,40 @@ import jwtConfig from '../config/jwt.config';
 import {
   AuthTokens,
   EmailTokenPayload,
+  NOTIF_UNSUBSCRIBE_TYPE,
   PasswordResetTokenPayload,
   TokenPayload,
   TokenService,
   TwoFactorChallengePayload,
+  UnsubscribeTokenPayload,
 } from 'src/iam/domain/ports/token.service';
 import {
   SESSION_TOKEN_STORE,
   type SessionTokenStore,
 } from 'src/iam/domain/ports/session-token.store';
-import { InvalidRefreshTokenError } from 'src/iam/domain/errors/iam.errors';
+import {
+  InvalidOrExpiredTokenError,
+  InvalidRefreshTokenError,
+} from 'src/iam/domain/errors/iam.errors';
+
+/**
+ * Audience dédiée aux jetons de désinscription. Défense en profondeur : même
+ * si un contrôle du claim `type` était oublié quelque part, un jeton signé
+ * avec cette audience est structurellement rejeté par toute vérification
+ * utilisant l'audience standard (access, refresh, email).
+ */
+export const UNSUBSCRIBE_TOKEN_AUDIENCE = 'beown-unsubscribe';
+
+/**
+ * Discriminant porté par tous les jetons qui ne sont PAS des jetons de session.
+ * Access et refresh tokens n'en portent jamais : c'est ce qui permet à
+ * `verifyAccessToken` de refuser tout le reste d'un seul test.
+ */
+const TokenType = {
+  EMAIL_VERIFY: 'email_verify',
+  PASSWORD_RESET: 'password_reset',
+  TWO_FACTOR_CHALLENGE: 'two_factor_challenge',
+} as const;
 
 @Injectable()
 export class JwtTokenService implements TokenService {
@@ -72,79 +96,119 @@ export class JwtTokenService implements TokenService {
     return this.generateTokens({ sub, email, role });
   }
 
-  verifyAccessToken(token: string): Promise<TokenPayload> {
-    return this.jwtService.verifyAsync(token, this.jwtConfiguration);
-  }
+  async verifyAccessToken(token: string): Promise<TokenPayload> {
+    const payload: TokenPayload & { type?: string } =
+      await this.jwtService.verifyAsync(token, this.jwtConfiguration);
 
-  generateEmailToken(payload: EmailTokenPayload): Promise<string> {
-    return this.signToken<EmailTokenPayload>(
-      payload.sub,
-      this.jwtConfiguration.emailTokenTtl,
-      payload,
-    );
-  }
-
-  verifyEmailToken(token: string): Promise<EmailTokenPayload> {
-    return this.jwtService.verifyAsync(token, {
-      secret: this.jwtConfiguration.secret,
-      audience: this.jwtConfiguration.audience,
-      issuer: this.jwtConfiguration.issuer,
-    });
-  }
-
-  generatePasswordResetToken(
-    payload: PasswordResetTokenPayload,
-  ): Promise<string> {
-    return this.signToken<PasswordResetTokenPayload>(
-      payload.sub,
-      this.jwtConfiguration.passwordResetTtl,
-      payload,
-    );
-  }
-
-  async verifyPasswordResetToken(
-    token: string,
-  ): Promise<PasswordResetTokenPayload> {
-    const payload =
-      await this.jwtService.verifyAsync<PasswordResetTokenPayload>(token, {
-        secret: this.jwtConfiguration.secret,
-        audience: this.jwtConfiguration.audience,
-        issuer: this.jwtConfiguration.issuer,
-      });
-
-    // Tous nos tokens partagent le même secret : sans ce garde-fou, un token de
-    // confirmation d'email (valable 24h) serait accepté ici comme token de reset.
-    if (!payload.resetTokenId) {
-      throw new Error('Not a password reset token');
+    // Garde anti-confusion de jetons : tous nos jetons sont signés avec le même
+    // secret, un lien de reset ou de désinscription serait donc accepté ici
+    // comme Bearer token de la victime — celui de désinscription vaut 90 jours,
+    // n'est pas à usage unique, et part en masse par email. Les jetons de
+    // session ne portent jamais de claim `type` : tout jeton qui en porte un
+    // est refusé.
+    if (payload.type) {
+      throw new InvalidOrExpiredTokenError();
     }
 
     return payload;
   }
 
-  generateTwoFactorChallengeToken(
-    payload: TwoFactorChallengePayload,
+  generateEmailToken(payload: EmailTokenPayload): Promise<string> {
+    return this.signToken(payload.sub, this.jwtConfiguration.emailTokenTtl, {
+      ...payload,
+      type: TokenType.EMAIL_VERIFY,
+    });
+  }
+
+  verifyEmailToken(token: string): Promise<EmailTokenPayload> {
+    return this.verifyTyped<EmailTokenPayload>(token, TokenType.EMAIL_VERIFY);
+  }
+
+  generatePasswordResetToken(
+    payload: PasswordResetTokenPayload,
   ): Promise<string> {
-    return this.signToken<TwoFactorChallengePayload>(
-      payload.sub,
-      this.jwtConfiguration.twoFactorChallengeTtl,
-      payload,
+    return this.signToken(payload.sub, this.jwtConfiguration.passwordResetTtl, {
+      ...payload,
+      type: TokenType.PASSWORD_RESET,
+    });
+  }
+
+  verifyPasswordResetToken(token: string): Promise<PasswordResetTokenPayload> {
+    return this.verifyTyped<PasswordResetTokenPayload>(
+      token,
+      TokenType.PASSWORD_RESET,
     );
   }
 
-  async verifyTwoFactorChallengeToken(
+  generateTwoFactorChallengeToken(
+    payload: TwoFactorChallengePayload,
+  ): Promise<string> {
+    return this.signToken(
+      payload.sub,
+      this.jwtConfiguration.twoFactorChallengeTtl,
+      { ...payload, type: TokenType.TWO_FACTOR_CHALLENGE },
+    );
+  }
+
+  verifyTwoFactorChallengeToken(
     token: string,
   ): Promise<TwoFactorChallengePayload> {
-    const payload =
-      await this.jwtService.verifyAsync<TwoFactorChallengePayload>(token, {
+    return this.verifyTyped<TwoFactorChallengePayload>(
+      token,
+      TokenType.TWO_FACTOR_CHALLENGE,
+    );
+  }
+
+  /**
+   * Pas d'identifiant mémorisé côté serveur, donc pas d'usage unique —
+   * contrairement aux liens de vérification et de reset : on doit pouvoir
+   * recliquer le lien d'un vieil email sans tomber sur une erreur, et l'action
+   * est idempotente.
+   *
+   * Signé avec une audience DÉDIÉE (pas via `signToken`) : couplé au refus des
+   * jetons typés dans `verifyAccessToken`, ce jeton ne peut structurellement
+   * pas passer une vérification à l'audience standard.
+   */
+  generateUnsubscribeToken(userId: number): Promise<string> {
+    return this.jwtService.signAsync(
+      { sub: userId, type: NOTIF_UNSUBSCRIBE_TYPE },
+      {
+        audience: UNSUBSCRIBE_TOKEN_AUDIENCE,
+        issuer: this.jwtConfiguration.issuer,
+        secret: this.jwtConfiguration.secret,
+        expiresIn: this.jwtConfiguration.unsubscribeTokenTtl,
+      },
+    );
+  }
+
+  verifyUnsubscribeToken(token: string): Promise<UnsubscribeTokenPayload> {
+    return this.jwtService.verifyAsync(token, {
+      secret: this.jwtConfiguration.secret,
+      audience: UNSUBSCRIBE_TOKEN_AUDIENCE,
+      issuer: this.jwtConfiguration.issuer,
+    });
+  }
+
+  /**
+   * Vérifie la signature puis le claim `type`. Sans ce second contrôle, un lien
+   * de confirmation d'email (24 h) servirait de jeton de réinitialisation de
+   * mot de passe, et un access token suffirait à franchir l'étape 2FA.
+   */
+  private async verifyTyped<T>(
+    token: string,
+    expected: (typeof TokenType)[keyof typeof TokenType],
+  ): Promise<T> {
+    const payload = await this.jwtService.verifyAsync<T & { type?: string }>(
+      token,
+      {
         secret: this.jwtConfiguration.secret,
         audience: this.jwtConfiguration.audience,
         issuer: this.jwtConfiguration.issuer,
-      });
+      },
+    );
 
-    // Même garde-fou que pour le reset : sans discriminant, un access token
-    // signé avec le même secret suffirait à franchir l'étape 2FA.
-    if (!payload.challengeId) {
-      throw new Error('Not a two-factor challenge token');
+    if (payload.type !== expected) {
+      throw new InvalidOrExpiredTokenError();
     }
 
     return payload;

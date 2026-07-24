@@ -5,6 +5,14 @@ import {
   NotFoundDomainError,
   UnauthorizedDomainError,
 } from 'src/common/domain/domain-error';
+import {
+  ACCOUNT_CLOSED_CODE,
+  ACCOUNT_CLOSED_MESSAGE,
+  ACCOUNT_SUSPENDED_CODE,
+  ACCOUNT_SUSPENDED_MESSAGE,
+  OTP_REQUIRED_CODE,
+  OTP_REQUIRED_MESSAGE,
+} from 'src/common/auth/account-status.codes';
 
 // ─── Authentification ──────────────────────────────────────────────────────
 
@@ -21,10 +29,32 @@ export class InvalidCredentialsError extends UnauthorizedDomainError {
 }
 
 export class EmailNotVerifiedError extends UnauthorizedDomainError {
-  readonly code = 'EMAIL_NOT_VERIFIED';
+  readonly code = OTP_REQUIRED_CODE;
 
   constructor() {
-    super('Veuillez vérifier votre adresse email avant de vous connecter.');
+    super(OTP_REQUIRED_MESSAGE);
+  }
+}
+
+/**
+ * Sanction administrative. Même contrat d'erreur (401 + code stable) que le
+ * contrôle par requête d'AccountStatusGuard, pour que le front n'ait qu'un
+ * seul cas à traiter, qu'il découvre la suspension à la connexion ou en cours
+ * de session.
+ */
+export class AccountSuspendedError extends UnauthorizedDomainError {
+  readonly code = ACCOUNT_SUSPENDED_CODE;
+
+  constructor() {
+    super(ACCOUNT_SUSPENDED_MESSAGE);
+  }
+}
+
+export class AccountClosedError extends UnauthorizedDomainError {
+  readonly code = ACCOUNT_CLOSED_CODE;
+
+  constructor() {
+    super(ACCOUNT_CLOSED_MESSAGE);
   }
 }
 

@@ -18,9 +18,12 @@ import {
 import { SESSION_TOKEN_STORE } from 'src/iam/domain/ports/session-token.store';
 import { OAUTH_HANDOFF_STORE } from 'src/iam/domain/ports/oauth-handoff.store';
 import { AuthAccount } from 'src/iam/domain/models/auth-account';
+import { AccountStatus } from 'src/iam/domain/enums/account-status.enum';
 import {
   AccountAlreadyExistsError,
   EmailDeliveryFailedError,
+  AccountClosedError,
+  AccountSuspendedError,
   EmailNotVerifiedError,
   InvalidCredentialsError,
   InvalidOAuthCodeError,
@@ -102,6 +105,7 @@ describe('authentication use cases', () => {
     'a@b.com',
     true,
     true,
+    AccountStatus.ACTIVE,
     'investisseur',
   );
 
@@ -156,14 +160,52 @@ describe('authentication use cases', () => {
       accounts.findByEmail.mockResolvedValue(
         new AuthAccount(1, 'a@b.com', false, true),
       );
+      accounts.verifyPassword.mockResolvedValue(true);
 
       await expect(
         commandBus.execute(new SignInCommand('a@b.com', 'Secret123!')),
       ).rejects.toThrow(EmailNotVerifiedError);
-
-      // L'invariant est vérifié avant le mot de passe : inutile d'interroger Users.
-      expect(accounts.verifyPassword).not.toHaveBeenCalled();
     });
+
+    it.each([
+      [AccountStatus.SUSPENDED, AccountSuspendedError],
+      [AccountStatus.CLOSED, AccountClosedError],
+    ])(
+      'refuses to sign in a %s account, even with the right password',
+      async (status, expected) => {
+        accounts.findByEmail.mockResolvedValue(
+          new AuthAccount(1, 'a@b.com', true, true, status, 'investisseur'),
+        );
+        accounts.verifyPassword.mockResolvedValue(true);
+
+        await expect(
+          commandBus.execute(new SignInCommand('a@b.com', 'Secret123!')),
+        ).rejects.toThrow(expected);
+        expect(tokenService.generateTokens).not.toHaveBeenCalled();
+      },
+    );
+
+    // Anti-énumération : ces motifs de refus sont bien plus bavards que
+    // « identifiants invalides ». Les révéler sans mot de passe valide
+    // laisserait sonder l'état de n'importe quel compte à partir de sa seule
+    // adresse.
+    it.each([
+      ['unverified', new AuthAccount(1, 'a@b.com', false, true)],
+      [
+        'suspended',
+        new AuthAccount(1, 'a@b.com', true, true, AccountStatus.SUSPENDED),
+      ],
+    ])(
+      'answers a wrong password on a %s account with the generic error',
+      async (_label, account) => {
+        accounts.findByEmail.mockResolvedValue(account);
+        accounts.verifyPassword.mockResolvedValue(false);
+
+        await expect(
+          commandBus.execute(new SignInCommand('a@b.com', 'wrong')),
+        ).rejects.toThrow(InvalidCredentialsError);
+      },
+    );
 
     it('rejects a wrong password', async () => {
       accounts.findByEmail.mockResolvedValue(verifiedAccount);
