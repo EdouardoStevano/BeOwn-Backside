@@ -1,0 +1,77 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: beown-backend
+  labels:
+    app: beown-backend
+spec:
+  # replicas géré par le HorizontalPodAutoscaler (voir hpa.yaml).
+  # On ne fixe pas replicas ici pour éviter qu'un kubectl apply ne réinitialise
+  # le nombre de pods décidé par le HPA.
+  selector:
+    matchLabels:
+      app: beown-backend
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: beown-backend
+    spec:
+      # Attendre que postgres et redis soient prêts avant le premier pod
+      initContainers:
+        - name: wait-for-postgres
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              until nc -z postgres-service 5432; do
+                echo "En attente de PostgreSQL..."; sleep 2;
+              done
+        - name: wait-for-redis
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              until nc -z redis-service 6379; do
+                echo "En attente de Redis..."; sleep 2;
+              done
+      containers:
+        - name: beown-backend
+          # Le tag est surchargé par overlay (images:) et/ou par `kubectl set image` dans le pipeline
+          image: ravikazaha/beown-backside:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: beown-backend-config
+            - secretRef:
+                name: beown-backend-secrets
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: '250m'
+              memory: '256Mi'
+            limits:
+              cpu: '1000m'
+              memory: '512Mi'

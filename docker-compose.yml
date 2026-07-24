@@ -1,0 +1,22 @@
+services:
+  db:
+    image: postgres:16-alpine
+    volumes:
+      - postgres_data_dev:/var/lib/postgresql/data
+    ports:
+      - '${DATABASE_PORT}:5432'
+    environment:
+      POSTGRES_USER: ${DATABASE_USERNAME}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
+      POSTGRES_DB: ${DATABASE_DB}
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis_data_dev:/data
+    ports:
+      - '6379:6379'
+
+volumes:
+  postgres_data_dev:
+  redis_data_dev:
