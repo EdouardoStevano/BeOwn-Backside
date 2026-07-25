@@ -1,4 +1,5 @@
 import { Body, Controller, Get, HttpCode, HttpStatus, Post, Query } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { VerifyEmailService } from './verify-email.service';
 import { EmailVerificationDto } from './dto/email-verification.dto';
@@ -10,7 +11,9 @@ export class VerifyEmailController {
   constructor(private readonly verifyEmailService: VerifyEmailService) {}
 
   @ApiOperation({ summary: 'Envoyer un email de vérification' })
-  @ApiResponse({ status: 204, description: 'Email envoyé' })
+  @ApiResponse({ status: 204, description: 'Email envoyé (réponse générique, que le compte existe ou non)' })
+  @ApiResponse({ status: 429, description: 'Trop de demandes — réessayez plus tard' })
+  @Throttle({ short: { ttl: 60_000, limit: 3 }, medium: { ttl: 60_000, limit: 3 }, auth: { ttl: 60_000, limit: 3 } })
   @Public()
   @HttpCode(HttpStatus.NO_CONTENT)
   @Post('send-verification')

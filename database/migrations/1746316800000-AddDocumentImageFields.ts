@@ -4,6 +4,7 @@ export class AddDocumentImageFields1746316800000 implements MigrationInterface {
   name = 'AddDocumentImageFields1746316800000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
+    if (!(await queryRunner.hasTable('document'))) return;
     await queryRunner.query(
       `ALTER TABLE "document" ADD COLUMN IF NOT EXISTS "ordre" integer DEFAULT NULL`,
     );

@@ -9,13 +9,16 @@ import { InvestmentStatus } from 'src/investments/domains/enums/investment-statu
 import { NotificationService } from 'src/notifications/applications/notification.service';
 import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
 import { UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
+import { formatEur } from 'src/common/money/format-eur';
+import { RefundCollecteService } from './refund-collecte.service';
 
 /**
  * Daily cron that closes EN_COLLECTE projects whose dateCloturePrevue has
- * passed. If the project reached its funding target it transitions to FINANCE
- * (the borrower schedule is then created manually by an admin); otherwise
- * admins are notified to decide between extending the close date or marking
- * ECHEC.
+ * passed. Applies the crowdfunding "all-or-nothing" rule against the MINIMUM
+ * funding threshold (capitalMinimum):
+ *  - raised >= minimum  → FINANCE (success, even if below capitalCible)
+ *  - raised <  minimum  → ECHEC + full automatic refund of every investor
+ * The borrower schedule for financed projects is created manually by an admin.
  */
 @Injectable()
 export class CollecteCloseCronService {
@@ -27,6 +30,7 @@ export class CollecteCloseCronService {
     @InjectRepository(InvestmentEntity)
     private readonly investRepo: Repository<InvestmentEntity>,
     private readonly notifications: NotificationService,
+    private readonly refundService: RefundCollecteService,
   ) {}
 
   @Cron(CronExpression.EVERY_DAY_AT_8AM)
@@ -45,13 +49,16 @@ export class CollecteCloseCronService {
     }
 
     let financed = 0;
-    let flaggedToAdmins = 0;
+    let failed = 0;
 
     for (const project of projects) {
       try {
         const raised = await this.computeRaisedAmount(project.id);
         const target = Number(project.capitalCible ?? 0);
-        const reached = target > 0 && raised >= target;
+        // Seuil de succès = objectif MINIMUM de collecte (fallback sur la cible
+        // si aucun minimum n'a été défini). C'est le « tout ou rien » PSFP.
+        const minimum = Number(project.capitalMinimum ?? 0) || target;
+        const reached = minimum > 0 && raised >= minimum;
 
         if (reached) {
           await this.projectRepo.update(
@@ -62,31 +69,45 @@ export class CollecteCloseCronService {
             .pushToAdmins({
               type: NotificationType.AUTRE,
               titre: 'Collecte financée — créer l\'échéancier',
-              message: `« ${project.titre} » est financé (${raised} / ${target} XOF). Créez l'échéancier emprunteur depuis la fiche projet.`,
-              roles: [UserRole.ADMIN, UserRole.FINANCIER, UserRole.COMPLIANCE],
-              metadata: { projectId: project.id, raised, target },
+              message: `« ${project.titre} » a atteint son objectif minimum (${formatEur(raised)} / min ${formatEur(minimum)}, cible ${formatEur(target)}). Créez l'échéancier emprunteur depuis la fiche projet.`,
+              roles: [UserRole.SUPER_ADMIN, UserRole.FINANCIER, UserRole.COMPLIANCE],
+              metadata: { projectId: project.id, raised, minimum, target },
             })
             .catch(() => {});
           financed++;
           this.logger.log(
-            `Project ${project.id} (${project.titre}) auto-FINANCE: raised ${raised} / ${target}`,
+            `Project ${project.id} (${project.titre}) auto-FINANCE: raised ${raised} / min ${minimum}`,
           );
         } else {
+          // Objectif minimum non atteint → échec + remboursement intégral
+          const result = await this.refundService.refundProjectCollecte(
+            project.id,
+            {
+              targetStatus: ProjectStatus.ECHEC,
+              reason: `Objectif minimum de collecte non atteint à la date de clôture (${formatEur(raised)} / min ${formatEur(minimum)}).`,
+              triggeredByUserId: null,
+            },
+          );
           await this.notifications
             .pushToAdmins({
               type: NotificationType.AUTRE,
-              titre: 'Collecte expirée non financée',
-              message: `« ${project.titre} » : date de clôture dépassée, seulement ${raised} / ${target} XOF collectés. Décidez entre prolonger ou marquer en échec.`,
-              roles: [UserRole.ADMIN, UserRole.FINANCIER, UserRole.COMPLIANCE],
+              titre: 'Collecte échouée — investisseurs remboursés',
+              message: `« ${project.titre} » : objectif minimum non atteint (${formatEur(raised)} / min ${formatEur(minimum)}). ${result.refundedCount} investisseur(s) remboursé(s) pour ${formatEur(result.refundedAmount)}. Projet passé en ÉCHEC.`,
+              roles: [UserRole.SUPER_ADMIN, UserRole.FINANCIER, UserRole.COMPLIANCE],
               metadata: {
                 projectId: project.id,
                 raised,
+                minimum,
                 target,
-                ratio: target > 0 ? raised / target : 0,
+                refundedCount: result.refundedCount,
+                refundedAmount: result.refundedAmount,
               },
             })
             .catch(() => {});
-          flaggedToAdmins++;
+          failed++;
+          this.logger.log(
+            `Project ${project.id} (${project.titre}) auto-ECHEC + refund: raised ${raised} / min ${minimum}, refunded ${result.refundedAmount}`,
+          );
         }
       } catch (err: any) {
         this.logger.error(
@@ -97,7 +118,7 @@ export class CollecteCloseCronService {
     }
 
     this.logger.log(
-      `CRON close-collecte: scanned ${projects.length} expired projects → ${financed} auto-financed, ${flaggedToAdmins} flagged to admins`,
+      `CRON close-collecte: scanned ${projects.length} expired projects → ${financed} auto-financed, ${failed} failed+refunded`,
     );
   }
 

@@ -40,6 +40,10 @@ import type { ActiveUser } from 'src/common/auth/current-user.decorator';
 import { UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
 import { KycValidatedGuard } from 'src/common/auth/kyc-validated.guard';
+import { Roles } from 'src/common/auth/roles.decorator';
+import { RequirePermission } from 'src/common/auth/require-permission.decorator';
+import { hasPermission } from 'src/common/auth/permissions.constants';
+import { UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
 import { SkipThrottle } from '@nestjs/throttler';
 import { EcheanceEntity } from 'src/investments/infrastructure/persistences/entities/echeance.entity';
 import { EcheanceStatus } from 'src/investments/domains/enums/investment-status.enum';
@@ -72,6 +76,23 @@ export class InvestmentController {
     private readonly echeanceRepo: Repository<EcheanceEntity>,
   ) {}
 
+  private canReadInvestment(user: ActiveUser, ownerUserId: number): boolean {
+    return (
+      user.userId === ownerUserId ||
+      hasPermission(user.role, 'projects:read') ||
+      hasPermission(user.role, 'funds:disburse') ||
+      hasPermission(user.role, 'users:read')
+    );
+  }
+
+  private assertCanReadInvestment(
+    user: ActiveUser,
+    ownerUserId: number,
+  ): void {
+    if (this.canReadInvestment(user, ownerUserId)) return;
+    throw new ForbiddenException('Acces refuse.');
+  }
+
   @ApiOperation({ summary: 'Créer un investissement (souscription)' })
   @ApiResponse({
     status: 201,
@@ -79,6 +100,7 @@ export class InvestmentController {
   })
   @ApiResponse({ status: 403, description: 'KYC non validé' })
   @UseGuards(KycValidatedGuard)
+  @Roles(UserRole.INVESTISSEUR)
   @Post()
   create(@Body() dto: CreateInvestmentDto, @CurrentUser() user: ActiveUser) {
     return this.createInvestment.execute(user.userId, dto);
@@ -88,6 +110,7 @@ export class InvestmentController {
   @ApiResponse({ status: 201, description: '{ signingUrl, signatureId }' })
   @ApiResponse({ status: 403, description: 'KYC non validé' })
   @UseGuards(KycValidatedGuard)
+  @Roles(UserRole.INVESTISSEUR)
   @Post('initiate')
   initiateWithYouSign(@Body() dto: InitiateInvestmentDto, @CurrentUser() user: ActiveUser) {
     return this.initiateInvestment.execute(user.userId, dto.projetId, dto.nbFractions);
@@ -102,7 +125,11 @@ export class InvestmentController {
     @Param('userId', ParseIntPipe) userId: number,
     @CurrentUser() currentUser: ActiveUser,
   ) {
-    if (currentUser.userId !== userId) {
+    if (
+      currentUser.userId !== userId &&
+      !hasPermission(currentUser.role, 'users:read') &&
+      !hasPermission(currentUser.role, 'projects:read')
+    ) {
       throw new ForbiddenException('Accès refusé.');
     }
     return this.investmentRepository.findByUserId(userId);
@@ -112,6 +139,7 @@ export class InvestmentController {
   @ApiParam({ name: 'projetId', description: 'UUID du projet' })
   @ApiResponse({ status: 200, description: 'Liste des investissements du projet' })
   @Get('project/:projetId')
+  @RequirePermission('projects:read')
   listByProject(@Param('projetId') projetId: string) {
     return this.investmentRepository.findByProjetId(projetId);
   }
@@ -121,9 +149,13 @@ export class InvestmentController {
   @ApiResponse({ status: 200, description: 'Investissement trouvé' })
   @ApiResponse({ status: 404, description: 'Investissement introuvable' })
   @Get(':id')
-  async findOne(@Param('id') id: string) {
+  async findOne(
+    @Param('id') id: string,
+    @CurrentUser() user: ActiveUser,
+  ) {
     const inv = await this.investmentRepository.findInvestmentById(id);
     if (!inv) throw new NotFoundException('Investissement introuvable.');
+    this.assertCanReadInvestment(user, inv.utilisateurId);
     return inv;
   }
 
@@ -131,7 +163,13 @@ export class InvestmentController {
   @ApiParam({ name: 'id', description: "UUID de l'investissement" })
   @ApiResponse({ status: 200, description: 'Echéancier de remboursement' })
   @Get(':id/schedule')
-  getSchedule(@Param('id') id: string) {
+  async getSchedule(
+    @Param('id') id: string,
+    @CurrentUser() user: ActiveUser,
+  ) {
+    const inv = await this.investmentRepository.findInvestmentById(id);
+    if (!inv) throw new NotFoundException('Investissement introuvable.');
+    this.assertCanReadInvestment(user, inv.utilisateurId);
     return this.investmentRepository.findEcheancesByInvestissement(id);
   }
 
@@ -142,6 +180,7 @@ export class InvestmentController {
   @ApiResponse({ status: 200, description: 'Statut mis à jour' })
   @ApiResponse({ status: 404, description: 'Investissement introuvable' })
   @HttpCode(HttpStatus.OK)
+  @RequirePermission('funds:disburse')
   @Patch(':id/status')
   patchStatus(@Param('id') id: string, @Body() dto: UpdateInvestmentStatusDto) {
     return this.investmentRepository.updateInvestmentStatus(id, dto.statut);
@@ -220,6 +259,7 @@ export class InvestmentController {
   @ApiResponse({ status: 200, description: 'Investissement mis à jour' })
   @ApiResponse({ status: 403, description: 'KYC non validé' })
   @UseGuards(KycValidatedGuard)
+  @Roles(UserRole.INVESTISSEUR)
   @HttpCode(HttpStatus.OK)
   @Patch(':id/top-up')
   topUp(
@@ -234,6 +274,7 @@ export class InvestmentController {
   @ApiParam({ name: 'id', description: "UUID de l'investissement" })
   @ApiResponse({ status: 204, description: 'Investissement annulé avec remboursement' })
   @HttpCode(HttpStatus.NO_CONTENT)
+  @Roles(UserRole.INVESTISSEUR)
   @Post(':id/retract')
   async retract(
     @Param('id') id: string,

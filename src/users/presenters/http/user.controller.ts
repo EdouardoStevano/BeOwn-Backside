@@ -18,7 +18,7 @@ import {
 } from '@nestjs/common';
 import { IsEnum } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
-import { UserRole, UserStatus, UserType } from 'src/users/infrastructure/persistences/entities/user.entity';
+import { UserType } from 'src/users/infrastructure/persistences/entities/user.entity';
 import { HASHING_SERVICE } from 'src/common/hashing/hashing.service';
 import type { HashingService } from 'src/common/hashing/hashing.service';
 import { IsString, IsNotEmpty } from 'class-validator';
@@ -38,6 +38,8 @@ import {
 import { UsersService } from 'src/users/applications/users.service';
 import { RegisterDto, UpdateUserDto, UpdateUserAdminDto, UpdatePreferencesDto } from '../dto/user.dto';
 import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
+import { RequirePermission } from 'src/common/auth/require-permission.decorator';
+import { rolesWithPermission } from 'src/common/auth/permissions.constants';
 import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
 import { NotificationEventService } from 'src/notifications/applications/notification-event.service';
@@ -50,15 +52,13 @@ import type { DocumentRepository } from 'src/documents/applications/ports/reposi
 import { WALLET_REPOSITORY } from 'src/wallets/applications/ports/repositories/wallet.repository';
 import type { WalletRepository } from 'src/wallets/applications/ports/repositories/wallet.repository';
 import { WalletType } from 'src/wallets/domains/enums/wallet.enum';
+import { DeleteAccountUseCase } from 'src/users/applications/usecases/delete-account.usecase';
 import { SkipThrottle } from '@nestjs/throttler';
 
-const ADMIN_ROLES: string[] = [
-  UserRole.ADMIN,
-  UserRole.SUPPORT,
-  UserRole.COMPLIANCE,
-  UserRole.FINANCIER,
-  UserRole.RCCI,
-];
+/** Rôles détenant `users:read` — back-office consultation d'un profil tiers. */
+const READ_ROLES: string[] = rolesWithPermission('users:read');
+/** Rôles détenant `users:manage` — back-office mutation d'un profil tiers. */
+const MANAGE_ROLES: string[] = rolesWithPermission('users:manage');
 
 @SkipThrottle()
 @ApiTags('Users')
@@ -78,13 +78,14 @@ export class UserController {
     @Inject(HASHING_SERVICE)
     private readonly hashingService: HashingService,
     private readonly notificationEvents: NotificationEventService,
+    private readonly deleteAccountUseCase: DeleteAccountUseCase,
   ) {}
 
   // ─── Helper ───────────────────────────────────────────────────────────────
 
-  private async isAdmin(userId: number): Promise<boolean> {
+  private async hasRole(userId: number, roles: string[]): Promise<boolean> {
     const user = await this.userRepository.findById(userId);
-    return ADMIN_ROLES.includes((user as any)?.role ?? '');
+    return roles.includes((user as any)?.role ?? '');
   }
 
   // ─── Endpoints ────────────────────────────────────────────────────────────
@@ -316,8 +317,8 @@ export class UserController {
     @CurrentUser() currentUser: ActiveUser,
   ) {
     const isSelf = currentUser.userId === id;
-    const admin = isSelf ? false : await this.isAdmin(currentUser.userId);
-    if (!isSelf && !admin) throw new ForbiddenException('Accès refusé.');
+    const canRead = isSelf || (await this.hasRole(currentUser.userId, READ_ROLES));
+    if (!canRead) throw new ForbiddenException('Accès refusé.');
 
     const found = await this.userRepository.findById(id);
     if (!found) throw new NotFoundException('Utilisateur introuvable.');
@@ -336,13 +337,14 @@ export class UserController {
   @ApiResponse({ status: 200, description: 'Utilisateur mis à jour' })
   @ApiResponse({ status: 403, description: 'Accès refusé — rôle admin requis' })
   @ApiResponse({ status: 404, description: 'Utilisateur introuvable' })
+  @RequirePermission('users:manage')
   @Patch(':id')
   async updateById(
     @Param('id', ParseIntPipe) id: number,
     @CurrentUser() currentUser: ActiveUser,
     @Body() dto: UpdateUserAdminDto,
   ) {
-    if (!(await this.isAdmin(currentUser.userId))) {
+    if (!(await this.hasRole(currentUser.userId, MANAGE_ROLES))) {
       throw new ForbiddenException('Accès réservé aux administrateurs.');
     }
     const found = await this.userRepository.findById(id);
@@ -357,10 +359,6 @@ export class UserController {
       found.lastname = dto.lastname ?? null;
       changed.push('lastname');
     }
-    if (dto.role !== undefined && dto.role !== (found as any).role) {
-      (found as any).role = dto.role;
-      changed.push('role');
-    }
     if (dto.status !== undefined && dto.status !== (found as any).status) {
       (found as any).status = dto.status;
       changed.push('status');
@@ -374,27 +372,38 @@ export class UserController {
     return safe;
   }
 
-  @ApiOperation({ summary: 'Supprimer mon compte (soft-delete après confirmation de mot de passe)' })
+  @ApiOperation({ summary: 'Supprimer mon compte (soft-delete après confirmation de mot de passe et levée des bloqueurs)' })
   @ApiResponse({ status: 204, description: 'Compte supprimé' })
-  @ApiResponse({ status: 401, description: 'Mot de passe incorrect' })
+  @ApiResponse({ status: 401, description: 'Mot de passe incorrect (code INVALID_PASSWORD)' })
+  @ApiResponse({ status: 409, description: 'Suppression bloquée (ACCOUNT_DELETION_BLOCKED)' })
   @HttpCode(HttpStatus.NO_CONTENT)
   @Delete('me')
   async deleteMe(
     @CurrentUser() user: ActiveUser,
     @Body() dto: DeleteAccountDto,
   ) {
-    const found = await this.userRepository.findById(user.userId);
+    // findByIdWithPassword : findById laisse la colonne password (select:false)
+    // à undefined, ce qui casserait la vérification pour TOUS les comptes.
+    const found = await this.userRepository.findByIdWithPassword(user.userId);
     if (!found) throw new NotFoundException('Utilisateur introuvable.');
 
     const passwordHash = (found as any).password;
     if (!passwordHash) throw new UnauthorizedException('Confirmation impossible.');
 
     const valid = await this.hashingService.compare(dto.password, passwordHash);
-    if (!valid) throw new UnauthorizedException('Mot de passe incorrect.');
+    if (!valid) {
+      // Code structuré : le Frontside branche un intercepteur dessus. Sans ce
+      // code, son intercepteur croit à une session expirée, rafraîchit le
+      // token et rejoue le DELETE.
+      throw new UnauthorizedException({
+        message: 'Mot de passe incorrect.',
+        code: 'INVALID_PASSWORD',
+      });
+    }
 
-    (found as any).status = UserStatus.SUPPRIME;
-    await this.userRepository.update(found);
-
-    this.notificationEvents.accountDeletedByUser(found);
+    await this.deleteAccountUseCase.execute(user.userId, {
+      userId: user.userId,
+      role: (found as any).role ?? user.role ?? '',
+    });
   }
 }

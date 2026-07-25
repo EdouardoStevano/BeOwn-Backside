@@ -23,7 +23,7 @@ export class WalletEntity {
   proprietaireUserId: number | null;
 
   @ManyToOne(() => UserEntity, { nullable: true })
-  @JoinColumn({ name: 'proprietaire_user_id' })
+  @JoinColumn({ name: 'proprietaireUserId' })
   proprietaire: UserEntity;
 
   @Column({ type: 'uuid', nullable: true })
@@ -35,7 +35,7 @@ export class WalletEntity {
   @Column({ type: 'varchar' })
   fournisseurRef: string;
 
-  @Column({ type: 'char', length: 3, default: 'XOF' })
+  @Column({ type: 'char', length: 3, default: 'EUR' })
   devise: string;
 
   @Column({ type: 'decimal', precision: 18, scale: 2, default: 0 })

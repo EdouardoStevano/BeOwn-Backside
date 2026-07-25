@@ -22,6 +22,7 @@ import { WalletType } from 'src/wallets/domains/enums/wallet.enum';
 import { CloudStorageService } from 'src/common/cloud-storage/cloud-storage.service';
 import { ContractGeneratorService } from 'src/investments/applications/usecases/contract-generator.service';
 import { YouSignService } from 'src/common/yousign/yousign.service';
+import { formatEur } from 'src/common/money/format-eur';
 
 @Injectable()
 export class InitiateBuyUseCase {
@@ -84,7 +85,7 @@ export class InitiateBuyUseCase {
     }
     if (Number(wallet.solde) < totalCost) {
       throw new BadRequestException(
-        `Solde insuffisant. Disponible : ${wallet.solde} XOF — Requis : ${totalCost} XOF`,
+        `Solde insuffisant. Disponible : ${formatEur(Number(wallet.solde))} — Requis : ${formatEur(totalCost)}`,
       );
     }
 

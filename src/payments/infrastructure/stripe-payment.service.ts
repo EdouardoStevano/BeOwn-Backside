@@ -18,6 +18,15 @@ export class StripePaymentService implements PaymentService {
     });
   }
 
+  /**
+   * Expose le client Stripe déjà instancié ici (clés configurées à un seul
+   * endroit). Les services Connect/retrait le réutilisent au lieu de re-créer
+   * une instance et de relire les clés — cf. StripeConnectService.
+   */
+  get client(): any {
+    return this.stripe;
+  }
+
   async createPaymentIntent(
     params: CreatePaymentIntentParams,
   ): Promise<PaymentIntentResult> {
@@ -46,6 +55,7 @@ export class StripePaymentService implements PaymentService {
       intentId: intent.id,
       status: intent.status,
       amount: intent.amount,
+      metadata: (intent.metadata ?? {}) as Record<string, string>,
     };
   }
 

@@ -17,9 +17,11 @@ import type { Response } from 'express';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
-import { Roles } from 'src/common/auth/roles.decorator';
+import { RequirePermission } from 'src/common/auth/require-permission.decorator';
+import { rolesWithPermission } from 'src/common/auth/permissions.constants';
 import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
+import { formatEur } from 'src/common/money/format-eur';
 import {
   UserEntity,
   UserRole,
@@ -29,12 +31,8 @@ import { InvestmentEntity } from 'src/investments/infrastructure/persistences/en
 import { InvestmentStatus } from 'src/investments/domains/enums/investment-status.enum';
 import PDFDocument = require('pdfkit');
 
-const ADMIN_ROLES: string[] = [
-  UserRole.ADMIN,
-  UserRole.FINANCIER,
-  UserRole.RCCI,
-  UserRole.COMPLIANCE,
-];
+const ADMIN_ROLES: string[] = rolesWithPermission('reports:read');
+const EXPORT_ROLES: string[] = rolesWithPermission('data:export');
 
 const REPORT_TYPES = ['monthly', 'investors', 'ifu', 'amf', 'aml'] as const;
 type ReportType = (typeof REPORT_TYPES)[number];
@@ -51,7 +49,7 @@ const REPORT_LABEL: Record<ReportType, string> = {
 @ApiBearerAuth()
 @Controller('admin/reports')
 @UseGuards(JwtAuthGuard)
-@Roles(UserRole.ADMIN, UserRole.FINANCIER, UserRole.RCCI, UserRole.COMPLIANCE)
+@RequirePermission('reports:read')
 export class AdminReportsController {
   constructor(
     @InjectRepository(UserEntity)
@@ -65,6 +63,11 @@ export class AdminReportsController {
   private async ensureAdmin(currentUser: ActiveUser): Promise<void> {
     const u = await this.userRepo.findOne({ where: { userId: currentUser.userId } });
     if (!u || !ADMIN_ROLES.includes(u.role)) throw new ForbiddenException();
+  }
+
+  private async ensureExport(currentUser: ActiveUser): Promise<void> {
+    const u = await this.userRepo.findOne({ where: { userId: currentUser.userId } });
+    if (!u || !EXPORT_ROLES.includes(u.role)) throw new ForbiddenException();
   }
 
   @ApiOperation({ summary: 'Liste des types de rapports disponibles' })
@@ -84,6 +87,7 @@ export class AdminReportsController {
     description: 'Les rapports BeOwn sont générés à la volée — :id correspond donc au type de rapport.',
   })
   @ApiResponse({ status: 200, description: 'PDF binary stream' })
+  @RequirePermission('reports:read')
   @Get(':id/download')
   async download(
     @Param('id') id: string,
@@ -95,6 +99,7 @@ export class AdminReportsController {
 
   @ApiOperation({ summary: 'Générer et télécharger un rapport PDF' })
   @ApiResponse({ status: 200, description: 'PDF binary stream' })
+  @RequirePermission('reports:read')
   @Post(':type/generate')
   @Get(':type/generate')
   async generate(
@@ -102,11 +107,18 @@ export class AdminReportsController {
     @CurrentUser() user: ActiveUser,
     @Res() res: Response,
   ) {
-    await this.ensureAdmin(user);
     if (!REPORT_TYPES.includes(type as ReportType)) {
       throw new ForbiddenException(`Type de rapport inconnu : ${type}`);
     }
     const reportType = type as ReportType;
+    // Le rapport « liste investisseurs » contient des PII → export protégé
+    // (data:export). Les rapports agrégés (mensuel, IFU, AMF, AML) restent
+    // accessibles à tout rôle habilité aux rapports (reports:read).
+    if (reportType === 'investors') {
+      await this.ensureExport(user);
+    } else {
+      await this.ensureAdmin(user);
+    }
 
     const filename = `beown-${reportType}-${new Date().toISOString().slice(0, 10)}.pdf`;
     res.setHeader('Content-Type', 'application/pdf');
@@ -152,7 +164,7 @@ export class AdminReportsController {
         );
         doc.moveDown(0.5);
         doc.fontSize(11).text(`Investissements sur la période : ${recent.length}`);
-        doc.text(`Montant total : ${totalAmount.toLocaleString('fr-FR')} XOF`);
+        doc.text(`Montant total : ${formatEur(totalAmount)}`);
         break;
       }
       case 'investors': {

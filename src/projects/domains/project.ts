@@ -29,6 +29,8 @@ export class Project {
   ticketMinimum: number;
   ticketMaximum: number | null;
   triCible: number | null;
+  /** Échelle de risque 1 (très faible) à 5 (très élevé). */
+  indiceRisque: number;
   dureeMois: number;
   instrument: ProjectInstrument;
   statut: ProjectStatus;
@@ -47,6 +49,9 @@ export class Project {
   // Equity-locatif extension (Phase 1)
   modeleEconomique: ModeleEconomique;
   nbUnitesLouables: number | null;
+  /** Horodatages anti-doublon des diffusions email/SMS (voir BroadcastService). */
+  broadcastAnnonceAt: Date | null;
+  broadcastCollecteAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }

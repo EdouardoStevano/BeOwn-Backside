@@ -2,6 +2,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
 
 export class AddRiskScoringToProfilPP1747530000000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
+    if (!(await queryRunner.hasTable('profil_personne_physique'))) return;
     await queryRunner.query(`
       ALTER TABLE "profil_personne_physique"
         ADD COLUMN IF NOT EXISTS "niveauRisque" character varying NULL,

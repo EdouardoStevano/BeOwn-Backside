@@ -85,7 +85,7 @@ export class ProjectEntity {
   spvId: string | null;
 
   @ManyToOne(() => SpvEntity, { nullable: true })
-  @JoinColumn({ name: 'spv_id' })
+  @JoinColumn({ name: 'spvId' })
   spv: SpvEntity;
 
   @Column({ type: 'integer', nullable: true })
@@ -129,6 +129,10 @@ export class ProjectEntity {
 
   @Column({ type: 'decimal', precision: 5, scale: 2, nullable: true })
   triCible: number | null;
+
+  /** Échelle de risque du projet (1 = très faible … 5 = très élevé), fixée par l'admin lors de l'analyse. */
+  @Column({ type: 'integer', default: 3 })
+  indiceRisque: number;
 
   @Column({ type: 'integer' })
   dureeMois: number;
@@ -193,6 +197,19 @@ export class ProjectEntity {
 
   @Column({ type: 'timestamptz', nullable: true })
   annuleLe: Date | null;
+
+  /**
+   * Horodatages anti-doublon des diffusions (BroadcastService) : posés AVANT
+   * les envois, ils garantissent qu'une campagne « ouverture de réservation »
+   * (passage en annonce) et « nouveau projet » (passage en collecte) ne partent
+   * qu'une seule fois par projet, même si l'action admin est rejouée ou
+   * appelée deux fois en parallèle.
+   */
+  @Column({ type: 'timestamptz', nullable: true })
+  broadcastAnnonceAt: Date | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  broadcastCollecteAt: Date | null;
 
   @CreateDateColumn()
   createdAt: Date;

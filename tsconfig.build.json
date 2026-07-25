@@ -10,13 +10,6 @@
     "test",
     "dist",
     "**/*spec.ts",
-    "database",
-    "src/seeds",
-    "src/investments/infrastructures",
-    "src/notifications/infrastructures",
-    "src/profiles/infrastructures",
-    "src/reservations/infrastructures",
-    "src/wallets/infrastructures",
-    "src/secondary-market"
+    "database"
   ]
 }

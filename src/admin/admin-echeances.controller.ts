@@ -25,9 +25,11 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, Repository } from 'typeorm';
 import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
-import { Roles } from 'src/common/auth/roles.decorator';
+import { RequirePermission } from 'src/common/auth/require-permission.decorator';
+import { rolesWithPermission } from 'src/common/auth/permissions.constants';
 import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
+import { formatEur } from 'src/common/money/format-eur';
 import {
   UserEntity,
   UserRole,
@@ -51,12 +53,8 @@ import { NotificationType } from 'src/notifications/infrastructure/persistences/
 import { PayEcheanceUseCase } from 'src/investments/applications/usecases/pay-echeance.usecase';
 import { ProjectScheduleGeneratorService } from 'src/investments/applications/project-schedule-generator.service';
 
-const ADMIN_ROLES = [
-  UserRole.ADMIN,
-  UserRole.FINANCIER,
-  UserRole.COMPLIANCE,
-  UserRole.RCCI,
-];
+const ADMIN_ROLES = rolesWithPermission('echeancier:read');
+const PAY_ROLES: string[] = rolesWithPermission('echeancier:pay');
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -82,7 +80,7 @@ class InitializeScheduleDto {
 @ApiBearerAuth()
 @Controller('admin/projects/:projectId/echeances')
 @UseGuards(JwtAuthGuard)
-@Roles(UserRole.ADMIN, UserRole.FINANCIER, UserRole.COMPLIANCE, UserRole.RCCI)
+@RequirePermission('echeancier:read')
 export class AdminEcheancesController {
   constructor(
     @InjectRepository(UserEntity) private readonly userRepo: Repository<UserEntity>,
@@ -103,21 +101,29 @@ export class AdminEcheancesController {
     }
   }
 
-  @Post(':numero/trigger-payment')
-  @HttpCode(HttpStatus.OK)
+  private async assertPay(user: ActiveUser): Promise<void> {
+    const u = await this.userRepo.findOne({ where: { userId: user.userId } });
+    if (!u || !PAY_ROLES.includes(u.role as UserRole)) {
+      throw new ForbiddenException("Accès réservé à l'équipe finance/admin");
+    }
+  }
+
   @ApiOperation({
     summary: "Déclencher manuellement le paiement d'une échéance pour tous les investisseurs",
   })
   @ApiParam({ name: 'projectId', description: 'UUID du projet' })
   @ApiParam({ name: 'numero', description: "Numéro de l'échéance (1-based)" })
   @ApiResponse({ status: 200, description: 'Récap : nb investisseurs payés + montant total' })
+  @HttpCode(HttpStatus.OK)
+  @RequirePermission('echeancier:pay')
+  @Post(':numero/trigger-payment')
   async triggerPayment(
     @Param('projectId') projectId: string,
     @Param('numero', ParseIntPipe) numero: number,
     @CurrentUser() admin: ActiveUser,
     @Body() body?: { motif?: string },
   ): Promise<{ paidCount: number; totalAmount: number; skipped: number }> {
-    await this.assertAdmin(admin);
+    await this.assertPay(admin);
     if (numero < 1) throw new BadRequestException("Numéro d'échéance invalide");
 
     // 1. Charger les investissements confirmés du projet
@@ -201,7 +207,7 @@ export class AdminEcheancesController {
             utilisateurId: invest.utilisateurId,
             type: NotificationType.ECHEANCE,
             titre: `Échéance #${numero} reçue`,
-            message: `Vous avez reçu ${montant} XOF sur votre wallet (échéance ${numero} du projet).`,
+            message: `Vous avez reçu ${formatEur(montant)} sur votre wallet (échéance ${numero} du projet).`,
             metadata: { investissementId: invest.id, echeanceId: ech.id, montant, numero },
           })
           .catch(() => {});
@@ -214,8 +220,8 @@ export class AdminEcheancesController {
       .pushToAdmins({
         type: NotificationType.ECHEANCE,
         titre: `Échéance #${numero} déclenchée`,
-        message: `Admin a déclenché l'échéance ${numero} : ${paidCount} investisseur(s) crédité(s) pour ${totalAmount} XOF.`,
-        roles: [UserRole.ADMIN, UserRole.FINANCIER, UserRole.COMPLIANCE],
+        message: `Admin a déclenché l'échéance ${numero} : ${paidCount} investisseur(s) crédité(s) pour ${formatEur(totalAmount)}.`,
+        roles: [UserRole.SUPER_ADMIN, UserRole.FINANCIER, UserRole.COMPLIANCE],
         metadata: { projectId, numero, paidCount, totalAmount, triggeredBy: admin.userId },
       })
       .catch(() => {});
@@ -226,10 +232,80 @@ export class AdminEcheancesController {
   @ApiOperation({ summary: "Marquer une échéance comme payée (crédite le wallet)" })
   @ApiParam({ name: 'id', description: "UUID de l'échéance" })
   @HttpCode(HttpStatus.OK)
+  @RequirePermission('echeancier:pay')
   @Post(':id/pay')
   async markPaid(@Param('id') id: string, @CurrentUser() user: ActiveUser) {
-    await this.assertAdmin(user);
-    return this.payEcheance.execute(id, user.userId);
+    await this.assertPay(user);
+    return this.payEcheance.execute(id, user.userId, user.role);
+  }
+
+  @ApiOperation({
+    summary: "Vérifier une échéance (numero) : la marque prête à l'auto-paiement",
+    description:
+      "Passe les EcheanceEntity A_VENIR du projet ayant ce numéro à EN_ATTENTE_PAIEMENT. Le CRON quotidien paiera automatiquement ces échéances à leur date.",
+  })
+  @ApiParam({ name: 'projectId', description: 'UUID du projet' })
+  @ApiParam({ name: 'numero', description: "Numéro d'échéance (1-based)" })
+  @HttpCode(HttpStatus.OK)
+  @RequirePermission('echeancier:pay')
+  @Post(':numero/verify')
+  async verify(
+    @Param('projectId') projectId: string,
+    @Param('numero', ParseIntPipe) numero: number,
+    @CurrentUser() admin: ActiveUser,
+  ): Promise<{ verified: number }> {
+    await this.assertPay(admin);
+    const investments = await this.investRepo.find({ where: { projetId: projectId } });
+    const investmentIds = investments.map((i) => i.id);
+    if (investmentIds.length === 0) {
+      throw new NotFoundException('Aucun investissement sur ce projet');
+    }
+    const targets = await this.echeanceRepo.find({
+      where: { investissementId: In(investmentIds), numero, statut: EcheanceStatus.A_VENIR },
+    });
+    for (const e of targets) {
+      await this.echeanceRepo.update({ id: e.id }, {
+        statut: EcheanceStatus.EN_ATTENTE_PAIEMENT,
+        statutChangeLe: new Date(),
+      });
+    }
+    this.notifications
+      .pushToAdmins({
+        type: NotificationType.ECHEANCE,
+        titre: `Échéance #${numero} vérifiée`,
+        message: `L'échéance ${numero} est vérifiée : elle sera payée automatiquement à sa date (${targets.length} investisseur(s)).`,
+        roles: [UserRole.SUPER_ADMIN, UserRole.FINANCIER],
+        metadata: { projectId, numero, verified: targets.length, by: admin.userId },
+      })
+      .catch(() => {});
+    return { verified: targets.length };
+  }
+
+  @ApiOperation({ summary: "Annuler la vérification d'une échéance (numero)" })
+  @ApiParam({ name: 'projectId', description: 'UUID du projet' })
+  @ApiParam({ name: 'numero', description: "Numéro d'échéance (1-based)" })
+  @HttpCode(HttpStatus.OK)
+  @RequirePermission('echeancier:pay')
+  @Post(':numero/unverify')
+  async unverify(
+    @Param('projectId') projectId: string,
+    @Param('numero', ParseIntPipe) numero: number,
+    @CurrentUser() admin: ActiveUser,
+  ): Promise<{ reverted: number }> {
+    await this.assertPay(admin);
+    const investments = await this.investRepo.find({ where: { projetId: projectId } });
+    const investmentIds = investments.map((i) => i.id);
+    if (investmentIds.length === 0) return { reverted: 0 };
+    const targets = await this.echeanceRepo.find({
+      where: { investissementId: In(investmentIds), numero, statut: EcheanceStatus.EN_ATTENTE_PAIEMENT },
+    });
+    for (const e of targets) {
+      await this.echeanceRepo.update({ id: e.id }, {
+        statut: EcheanceStatus.A_VENIR,
+        statutChangeLe: new Date(),
+      });
+    }
+    return { reverted: targets.length };
   }
 
   @ApiOperation({
@@ -531,7 +607,7 @@ export class AdminEcheancesController {
 @ApiBearerAuth()
 @Controller('admin/echeances')
 @UseGuards(JwtAuthGuard)
-@Roles(UserRole.ADMIN, UserRole.FINANCIER, UserRole.COMPLIANCE, UserRole.RCCI)
+@RequirePermission('echeancier:read')
 export class AdminEcheancesItemController {
   constructor(
     @InjectRepository(UserEntity) private readonly userRepo: Repository<UserEntity>,
@@ -545,15 +621,23 @@ export class AdminEcheancesItemController {
     }
   }
 
+  private async assertPay(user: ActiveUser): Promise<void> {
+    const u = await this.userRepo.findOne({ where: { userId: user.userId } });
+    if (!u || !PAY_ROLES.includes(u.role as UserRole)) {
+      throw new ForbiddenException("Accès réservé à l'équipe finance/admin");
+    }
+  }
+
   @ApiOperation({ summary: "Mettre à jour une échéance" })
   @ApiParam({ name: 'id', description: "UUID de l'échéance" })
+  @RequirePermission('echeancier:pay')
   @Patch(':id')
   async update(
     @Param('id') id: string,
     @Body() dto: UpdateEcheanceDto,
     @CurrentUser() user: ActiveUser,
   ): Promise<EcheanceEntity> {
-    await this.assertAdmin(user);
+    await this.assertPay(user);
     const ech = await this.echeanceRepo.findOne({ where: { id } });
     if (!ech) throw new NotFoundException('Échéance introuvable.');
     if (ech.statut === EcheanceStatus.PAYE) {

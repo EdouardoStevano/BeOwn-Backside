@@ -14,7 +14,7 @@ import { Repository } from 'typeorm';
 import { ApiProperty } from '@nestjs/swagger';
 import { IsBoolean, IsOptional, IsString } from 'class-validator';
 import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
-import { Roles } from 'src/common/auth/roles.decorator';
+import { RequirePermission } from 'src/common/auth/require-permission.decorator';
 import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
 import {
@@ -40,7 +40,7 @@ export class SetPepFlagDto {
 @ApiBearerAuth()
 @Controller('admin/compliance')
 @UseGuards(JwtAuthGuard)
-@Roles(UserRole.ADMIN, UserRole.COMPLIANCE, UserRole.RCCI)
+@RequirePermission('aml:manage')
 export class AdminComplianceController {
   constructor(
     @InjectRepository(UserEntity)
@@ -89,7 +89,7 @@ export class AdminComplianceController {
     await this.auditLog
       .create(
         String(admin.userId),
-        UserRole.COMPLIANCE,
+        admin.role ?? UserRole.COMPLIANCE,
         dto.pepFlagged ? 'compliance.pep.flag' : 'compliance.pep.unflag',
         'user',
         String(targetUserId),

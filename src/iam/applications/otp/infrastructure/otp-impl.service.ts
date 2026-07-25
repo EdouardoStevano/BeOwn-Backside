@@ -9,6 +9,7 @@ import {
 } from 'src/iam/domains/ports/cahe-manager.service';
 import { generateSecret, generateURI, verify } from 'otplib';
 import { ConfigService } from '@nestjs/config';
+import { randomInt } from 'crypto';
 
 interface OtpRecord {
   otp: string;
@@ -26,7 +27,7 @@ export class RedisImplService implements OtpService {
   ) {}
 
   async generateOtp(key: string): Promise<string> {
-    const otpGenerated = Math.floor(100000 + Math.random() * 900000).toString();
+    const otpGenerated = randomInt(100000, 1_000_000).toString();
     await this.saveOtp(key, otpGenerated);
     return otpGenerated;
   }

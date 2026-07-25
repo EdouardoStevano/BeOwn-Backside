@@ -31,6 +31,7 @@ import { IfuGenerationService } from './ifu-generation.service';
 import { PayEcheanceUseCase } from './usecases/pay-echeance.usecase';
 import { ProjectScheduleGeneratorService } from './project-schedule-generator.service';
 import { CollecteCloseCronService } from './collecte-close-cron.service';
+import { RefundCollecteService } from './refund-collecte.service';
 import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entities/transaction.entity';
 
 @Module({
@@ -70,12 +71,14 @@ import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entit
     PayEcheanceUseCase,
     ProjectScheduleGeneratorService,
     CollecteCloseCronService,
+    RefundCollecteService,
   ],
   controllers: [InvestmentController],
   exports: [
     PayEcheanceUseCase,
     IfuGenerationService,
     ProjectScheduleGeneratorService,
+    RefundCollecteService,
   ],
 })
 export class InvestmentsModule {}

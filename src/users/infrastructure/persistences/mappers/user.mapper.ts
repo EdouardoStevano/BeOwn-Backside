@@ -49,6 +49,10 @@ export class UserMapper {
     entity.lastname = domain.lastname;
     entity.socialId = domain.socialId;
     entity.password = domain.password;
+    // Sans ce mapping, un changement de statut au niveau domaine (ex.
+    // CREE → EMAIL_VERIFIE lors de la confirmation d'email) était perdu au
+    // save(). Undefined reste ignoré par TypeORM (insert → défaut CREE).
+    if (domain.status) entity.status = domain.status;
 
     if (domain.userEmail) {
       const emailEntity = new UserEmailEntity();

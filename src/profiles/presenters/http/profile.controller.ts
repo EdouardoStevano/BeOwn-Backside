@@ -1,5 +1,6 @@
 import {
   Body,
+  ConflictException,
   Controller,
   ForbiddenException,
   Param,
@@ -20,10 +21,7 @@ import {
 } from '@nestjs/swagger';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import {
-  UserEntity,
-  UserRole,
-} from 'src/users/infrastructure/persistences/entities/user.entity';
+import { UserEntity, UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
 import { CreateProfilPPUseCase } from 'src/profiles/applications/usecases/create-profil-pp.usecase';
 import { CreateKycUseCase } from 'src/profiles/applications/usecases/create-kyc.usecase';
 import { UpdateKycStatusUseCase } from 'src/profiles/applications/usecases/update-kyc-status.usecase';
@@ -43,10 +41,30 @@ import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
 import { UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
+import { RequirePermission } from 'src/common/auth/require-permission.decorator';
+import {
+  hasPermission,
+  rolesWithPermission,
+} from 'src/common/auth/permissions.constants';
 import { NotificationService } from 'src/notifications/applications/notification.service';
 import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
 import { NotificationEventService } from 'src/notifications/applications/notification-event.service';
 import { KycStatus } from 'src/profiles/domains/enums/kyc-status.enum';
+
+/** Rôles détenant `kyc:validate` — Compliance (+ super_admin via wildcard). */
+const KYC_REVIEWER_ROLES: string[] = rolesWithPermission('kyc:validate');
+
+/**
+ * Le KYC est validé AUTOMATIQUEMENT par Stripe Identity (voir webhook
+ * `identity.verification_session.verified` dans PaymentController). L'admin
+ * n'intervient QUE lorsque Stripe n'a pas pu vérifier automatiquement — le
+ * dossier passe alors en revue manuelle (EN_REVUE) et l'utilisateur est invité
+ * à renvoyer ses documents. Cette route est donc réservée aux dossiers
+ * EN_REVUE : un dossier déjà auto-validé (ou pas encore soumis) est en
+ * lecture seule pour l'admin.
+ */
+const KYC_MANUAL_REVIEW_REQUIRED_MESSAGE =
+  "Ce dossier n'est pas en revue manuelle : il a été validé automatiquement par Stripe Identity, ou n'a pas encore été soumis pour vérification. Seuls les dossiers en revue manuelle peuvent faire l'objet d'une décision manuelle.";
 
 @ApiTags('Profiles & KYC')
 @ApiBearerAuth()
@@ -70,19 +88,21 @@ export class ProfileController {
     private readonly notificationEvents: NotificationEventService,
   ) {}
 
-  /** KYC-status mutation is reserved to admin / compliance / support staff. */
+  /** Défense en profondeur : mutation KYC réservée à `kyc:validate` (Compliance + super_admin). */
   private async assertKycReviewer(user: ActiveUser): Promise<void> {
     const u = await this.userRepo.findOne({ where: { userId: user.userId } });
-    const allowed: string[] = [
-      UserRole.ADMIN,
-      UserRole.SUPPORT,
-      UserRole.COMPLIANCE,
-      UserRole.RCCI,
-    ];
-    if (!u || !allowed.includes(u.role)) {
+    if (!u || !KYC_REVIEWER_ROLES.includes(u.role)) {
       throw new ForbiddenException(
         "Action réservée aux équipes admin / compliance.",
       );
+    }
+  }
+
+  /** Auto-accès (son propre dossier) ou permission kyc:validate. */
+  private assertSelfOrKycReviewer(user: ActiveUser, targetUserId: number): void {
+    if (String(user.userId) === String(targetUserId)) return;
+    if (!hasPermission(user.role, 'kyc:validate')) {
+      throw new ForbiddenException('Accès réservé.');
     }
   }
 
@@ -93,22 +113,71 @@ export class ProfileController {
   createPP(
     @Param('userId', ParseIntPipe) userId: number,
     @Body() dto: CreateProfilPPDto,
+    @CurrentUser() user: ActiveUser,
   ) {
+    this.assertSelfOrKycReviewer(user, userId);
     return this.createProfilPP.execute(userId, dto);
   }
 
   @ApiOperation({ summary: 'Initialiser le dossier KYC' })
   @ApiResponse({ status: 201, description: 'KYC créé' })
   @Post(':userId/kyc')
-  initKyc(@Param('userId', ParseIntPipe) userId: number) {
+  initKyc(
+    @Param('userId', ParseIntPipe) userId: number,
+    @CurrentUser() user: ActiveUser,
+  ) {
+    this.assertSelfOrKycReviewer(user, userId);
     return this.createKyc.execute(userId);
   }
 
-  @ApiOperation({ summary: 'Mettre à jour le statut KYC (admin)' })
+  @ApiOperation({
+    summary: 'Demander une revue manuelle du KYC (dépôt manuel de documents)',
+    description:
+      "Fallback quand la vérification automatique Stripe Identity n'aboutit " +
+      "pas (pas de réponse webhook, statut bloqué). Après téléversement manuel " +
+      "de la pièce d'identité + selfie, l'utilisateur passe son dossier en " +
+      'revue manuelle (EN_REVUE) ; la compliance est notifiée pour décision ' +
+      'via la route de décision manuelle existante.',
+  })
+  @ApiResponse({ status: 200, description: 'Dossier passé en revue manuelle' })
+  @HttpCode(HttpStatus.OK)
+  @Post(':userId/kyc/manual-review')
+  async requestManualReview(
+    @Param('userId', ParseIntPipe) userId: number,
+    @CurrentUser() user: ActiveUser,
+  ) {
+    this.assertSelfOrKycReviewer(user, userId);
+    const updated = await this.updateKycStatus.execute(
+      userId,
+      KycStatus.EN_REVUE,
+      'Dépôt manuel de documents — revue requise',
+    );
+    this.notifications
+      .pushToAdmins({
+        type: NotificationType.KYC_REVUE_MANUELLE,
+        titre: 'KYC en revue manuelle',
+        message: `Un utilisateur (#${userId}) a déposé ses documents manuellement — dossier à valider.`,
+        roles: [UserRole.COMPLIANCE, UserRole.SUPER_ADMIN],
+        metadata: { userId },
+      })
+      .catch(() => {});
+    return updated;
+  }
+
+  @ApiOperation({
+    summary: 'Décision manuelle sur un dossier KYC en revue (admin)',
+    description:
+      'Le KYC est validé automatiquement par Stripe Identity. Cette route ' +
+      "n'agit que sur les dossiers passés en revue manuelle (EN_REVUE) suite " +
+      "à un échec de la vérification automatique — un dossier auto-validé " +
+      'ou pas encore soumis est en lecture seule pour l\'admin (409).',
+  })
   @ApiResponse({ status: 200, description: 'Statut KYC mis à jour' })
   @ApiResponse({ status: 403, description: 'Réservé aux équipes admin / compliance' })
   @ApiResponse({ status: 404, description: 'KYC introuvable' })
+  @ApiResponse({ status: 409, description: "Dossier pas en revue manuelle — décision manuelle impossible" })
   @HttpCode(HttpStatus.OK)
+  @RequirePermission('kyc:validate')
   @Patch(':userId/kyc/status')
   async patchKycStatus(
     @Param('userId', ParseIntPipe) userId: number,
@@ -116,6 +185,15 @@ export class ProfileController {
     @CurrentUser() currentUser: ActiveUser,
   ) {
     await this.assertKycReviewer(currentUser);
+
+    // Fallback manuel réservé aux dossiers en revue manuelle : la validation
+    // auto (Stripe Identity) rend un dossier déjà VALIDE en lecture seule, et
+    // un dossier pas encore soumis n'a rien à décider.
+    const current = await this.getKyc.execute(userId);
+    if (current.statut !== KycStatus.EN_REVUE) {
+      throw new ConflictException(KYC_MANUAL_REVIEW_REQUIRED_MESSAGE);
+    }
+
     const updated = await this.updateKycStatus.execute(userId, dto.status, dto.motifRefus);
 
     if (dto.status === KycStatus.VALIDE) {
@@ -181,6 +259,7 @@ export class ProfileController {
 
   @ApiOperation({ summary: 'Lister tous les KYC (admin)' })
   @ApiResponse({ status: 200, description: 'Liste paginée des KYC avec données utilisateur' })
+  @RequirePermission('kyc:validate')
   @Get('kyc/all')
   listAllKyc(
     @Query('page') page?: string,

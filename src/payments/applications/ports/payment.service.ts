@@ -13,6 +13,9 @@ export interface PaymentIntentResult {
   status: string;
   /** Amount in the currency's smallest unit (e.g. cents for EUR/USD) */
   amount: number;
+  /** Metadata Stripe (contient notamment userId/operationType) — requis pour
+   *  vérifier la propriété du PaymentIntent avant tout crédit (anti-BOLA). */
+  metadata?: Record<string, string>;
 }
 
 export interface PaymentService {

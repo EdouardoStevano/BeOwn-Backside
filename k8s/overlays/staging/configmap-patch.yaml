@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: beown-backend-config
+data:
+  NODE_ENV: 'staging'
+  FRONTEND_URL: 'https://staging.beown.fr'
+  ADMIN_URL: 'https://admin-staging.beown.fr'
+  API_URL: 'https://api-staging.beown.fr'
+  CONFIRM_EMAIL_URL: 'https://api-staging.beown.fr/email/verify'
+  JWT_TOKEN_AUDIENCE: 'https://api-staging.beown.fr'
+  JWT_TOKEN_ISSUER: 'https://api-staging.beown.fr'
+  GOOGLE_CALLBACK_URL: 'https://api-staging.beown.fr/auth/google/callback'
+  FACEBOOK_CALLBACK_URL: 'https://api-staging.beown.fr/auth/facebook/callback'
+  LINKEDIN_CALLBACK_URL: 'https://api-staging.beown.fr/auth/linkedin/callback'

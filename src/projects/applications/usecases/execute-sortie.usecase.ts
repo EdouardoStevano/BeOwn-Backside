@@ -30,7 +30,7 @@ import {
   TransactionType,
   WalletType,
 } from 'src/wallets/domains/enums/wallet.enum';
-import { computePerformanceFee } from 'src/common/platform-fees/platform-fees.constants';
+import { PlatformFeesService } from 'src/common/platform-fees/platform-fees.service';
 import { AuditLogService } from 'src/notifications/applications/audit-log.service';
 import { UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
 import { AmlMonitorService } from 'src/common/aml/aml-monitor.service';
@@ -90,11 +90,13 @@ export class ExecuteSortieUseCase {
     private readonly dataSource: DataSource,
     private readonly auditLog: AuditLogService,
     private readonly amlMonitor: AmlMonitorService,
+    private readonly platformFees: PlatformFeesService,
   ) {}
 
   async execute(
     sortieId: string,
     adminUserId?: number,
+    adminRole?: string,
   ): Promise<ExecuteSortieResult> {
     const sortie = await this.sortieRepo.findById(sortieId);
     if (!sortie) throw new NotFoundException('Sortie introuvable.');
@@ -118,9 +120,12 @@ export class ExecuteSortieUseCase {
       (i) => i.statut === InvestmentStatus.CONFIRME,
     );
 
-    // Performance fee (Phase 9) — prélevée par la plateforme sur la PV positive
-    // AVANT distribution aux investisseurs.
-    const performanceFee = computePerformanceFee(sortie.plusValueBrute);
+    // Frais sur plus-value à la vente du bien (taux configurable
+    // propertySaleGainFeePct) — prélevé par la plateforme sur la PV positive
+    // AVANT distribution aux investisseurs. 0 si moins-value.
+    const performanceFee = await this.platformFees.computePropertySaleGainFee(
+      Number(sortie.plusValueBrute),
+    );
     const plusValueDistribuable = round2(sortie.plusValueBrute - performanceFee);
 
     let nbInvestisseursPayes = 0;
@@ -138,8 +143,8 @@ export class ExecuteSortieUseCase {
         let walletPlat = await em.findOne(WalletEntity, {
           where: { type: WalletType.FRAIS_PLATEFORME },
         });
-        // Devise sera prise sur le premier wallet investisseur, fallback XOF
-        const fallbackDevise = 'XOF';
+        // Devise sera prise sur le premier wallet investisseur, fallback EUR
+        const fallbackDevise = 'EUR';
         if (!walletPlat) {
           walletPlat = await em.save(
             WalletEntity,
@@ -168,6 +173,11 @@ export class ExecuteSortieUseCase {
             idempotencyKey: `sortie:performance-fee:${sortieId}`,
             fraisPsp: 0,
             fraisPlateforme: 0,
+            metadata: {
+              source: 'gain_vente_bien',
+              sortieId,
+              plusValueBrute: Number(sortie.plusValueBrute),
+            },
           }),
         );
       }
@@ -370,7 +380,7 @@ export class ExecuteSortieUseCase {
       await this.auditLog
         .create(
           String(adminUserId),
-          UserRole.ADMIN,
+          adminRole ?? UserRole.SUPER_ADMIN,
           'equity.sortie.execute',
           'sortie_projet',
           sortieId,

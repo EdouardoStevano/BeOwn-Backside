@@ -11,8 +11,10 @@ import {
 import type { Response } from 'express';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
+import { Roles } from 'src/common/auth/roles.decorator';
 import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
+import { UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
 import {
   DOCUMENT_FISCAL_REPOSITORY,
   type DocumentFiscalRepository,
@@ -28,6 +30,7 @@ import {
 @ApiBearerAuth()
 @Controller('investisseur/documents-fiscaux')
 @UseGuards(JwtAuthGuard)
+@Roles(UserRole.INVESTISSEUR)
 export class InvestisseurFiscaliteController {
   constructor(
     @Inject(DOCUMENT_FISCAL_REPOSITORY)

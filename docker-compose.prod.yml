@@ -7,12 +7,12 @@ services:
       db-prod:
         condition: service_healthy
     env_file:
-      - ./.env.production.local
+      - ./.env.production
     ports:
-      - '80:3000'
+      - '${PORT}:8080'
 
   db-prod:
-    image: postgres
+    image: postgres:16-alpine
     volumes:
       - postgres_data_prod:/var/lib/postgresql/data
     environment:
@@ -26,7 +26,7 @@ services:
       retries: 5
 
   redis-prod:
-    image: redis
+    image: redis:7-alpine
     volumes:
       - redis_data_prod:/data
 

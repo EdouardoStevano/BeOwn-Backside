@@ -23,7 +23,7 @@ export class CreateWalletDto {
   @IsString()
   fournisseurRef: string;
 
-  @ApiPropertyOptional({ example: 'XOF', default: 'XOF' })
+  @ApiPropertyOptional({ example: 'EUR', default: 'EUR' })
   @IsOptional()
   @IsString()
   devise?: string;

@@ -5,6 +5,22 @@ import { AvisEntity } from '../entities/avis.entity';
 import { AvisRepository } from 'src/avis/applications/ports/repositories/avis.repository';
 import { Avis } from 'src/avis/domains/avis';
 
+type AvisRawRow = {
+  id: string;
+  projetId: string;
+  userId: number;
+  note: number;
+  commentaire: string | null;
+  createdAt: Date;
+  userFirstname: string | null;
+  userLastname: string | null;
+};
+
+type StatsRawRow = {
+  avg: string | null;
+  count: string;
+};
+
 @Injectable()
 export class AvisTypeOrmRepository implements AvisRepository {
   constructor(
@@ -47,7 +63,7 @@ export class AvisTypeOrmRepository implements AvisRepository {
         'u.firstname AS "userFirstname"',
         'u.lastname AS "userLastname"',
       ])
-      .getRawMany();
+      .getRawMany<AvisRawRow>();
     return rows.map((r) => {
       const avis = new Avis();
       avis.id = r.id;
@@ -78,7 +94,7 @@ export class AvisTypeOrmRepository implements AvisRepository {
       .select('AVG(a.note)', 'avg')
       .addSelect('COUNT(*)', 'count')
       .where('a.projetId = :projetId', { projetId })
-      .getRawOne();
+      .getRawOne<StatsRawRow>();
     return {
       noteMoyenne: result?.avg ? Math.round(Number(result.avg) * 10) / 10 : 0,
       nbAvis: Number(result?.count ?? 0),

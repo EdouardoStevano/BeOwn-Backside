@@ -32,6 +32,7 @@ export class UpdateProjectUseCase {
     if (dto.ticketMaximum !== undefined)
       project.ticketMaximum = dto.ticketMaximum ?? null;
     if (dto.triCible !== undefined) project.triCible = dto.triCible ?? null;
+    if (dto.indiceRisque !== undefined) project.indiceRisque = dto.indiceRisque;
     if (dto.dureeMois !== undefined) project.dureeMois = dto.dureeMois;
     if (dto.instrument !== undefined) project.instrument = dto.instrument;
     if (dto.estPreInvestissable !== undefined)

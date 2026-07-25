@@ -12,15 +12,22 @@ import { UserEmailEntity } from './user-email.entity';
 import { TFAMethodEntity } from './tfa-method.entity';
 
 export enum UserRole {
+  // Utilisateurs plateforme
   INVESTISSEUR = 'investisseur',
   PORTEUR = 'porteur',
-  ADMIN = 'admin',
+  CGP = 'cgp',
+  // Back-office — nouveaux rôles (2026-07)
+  SUPER_ADMIN = 'super_admin',
+  CIO = 'cio',
+  MARKETING = 'marketing',
+  ANALYSTE_FINANCIER = 'analyste_financier',
+  CHARGE_RELATION_INVESTISSEUR = 'charge_relation_investisseur',
+  // Back-office — legacy conservés
   SUPPORT = 'support',
   COMPLIANCE = 'compliance',
   DPO = 'dpo',
   RCCI = 'rcci',
   FINANCIER = 'financier',
-  CGP = 'cgp',
 }
 
 export enum UserStatus {
@@ -98,6 +105,26 @@ export class UserEntity {
 
   @Column({ type: 'varchar', length: 500, nullable: true })
   pepNote: string | null;
+
+  // ─── Stripe Connect Express (E3 — retrait) ────────────────────────────────
+  // Identifiant du compte Stripe Connect Express de l'investisseur (acct_xxx),
+  // créé au premier onboarding. Sert de destination aux Transfer/Payout lors
+  // d'un retrait. Nullable (créé à la demande), unique. Champ ajouté via le
+  // synchronize du seed (pas de migration — cf. MEMORY schéma dev).
+  @Column({ type: 'varchar', nullable: true, unique: true })
+  stripeConnectAccountId: string | null;
+
+  // Drapeaux d'état du compte connecté, rafraîchis par le webhook
+  // `account.updated` et par GET /payments/connect/status. `payoutsEnabled`
+  // est le garde-fou du retrait (un retrait n'est possible que si true).
+  @Column({ type: 'boolean', default: false })
+  stripeConnectPayoutsEnabled: boolean;
+
+  @Column({ type: 'boolean', default: false })
+  stripeConnectChargesEnabled: boolean;
+
+  @Column({ type: 'boolean', default: false })
+  stripeConnectDetailsSubmitted: boolean;
 
   @CreateDateColumn()
   createdAt: Date;

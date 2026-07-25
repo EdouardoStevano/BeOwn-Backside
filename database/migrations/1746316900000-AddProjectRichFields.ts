@@ -4,15 +4,17 @@ export class AddProjectRichFields1746316900000 implements MigrationInterface {
   name = 'AddProjectRichFields1746316900000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`ALTER TABLE "projet" ADD COLUMN IF NOT EXISTS "adresseComplete" varchar DEFAULT NULL`);
-    await queryRunner.query(`ALTER TABLE "projet" ADD COLUMN IF NOT EXISTS "latitude" decimal(10,7) DEFAULT NULL`);
-    await queryRunner.query(`ALTER TABLE "projet" ADD COLUMN IF NOT EXISTS "longitude" decimal(10,7) DEFAULT NULL`);
-    await queryRunner.query(`ALTER TABLE "projet" ADD COLUMN IF NOT EXISTS "youtubeUrl" varchar DEFAULT NULL`);
-    await queryRunner.query(`ALTER TABLE "projet" ADD COLUMN IF NOT EXISTS "nbFractions" integer DEFAULT NULL`);
-    await queryRunner.query(`ALTER TABLE "projet" ADD COLUMN IF NOT EXISTS "prixFraction" decimal(18,2) DEFAULT NULL`);
-    await queryRunner.query(`ALTER TABLE "projet" ADD COLUMN IF NOT EXISTS "previsionnel" jsonb DEFAULT NULL`);
-    await queryRunner.query(`ALTER TABLE "projet" ADD COLUMN IF NOT EXISTS "chronologie" jsonb NOT NULL DEFAULT '[]'`);
-    await queryRunner.query(`ALTER TABLE "projet" ADD COLUMN IF NOT EXISTS "garanties" jsonb NOT NULL DEFAULT '[]'`);
+    if (await queryRunner.hasTable('projet')) {
+      await queryRunner.query(`ALTER TABLE "projet" ADD COLUMN IF NOT EXISTS "adresseComplete" varchar DEFAULT NULL`);
+      await queryRunner.query(`ALTER TABLE "projet" ADD COLUMN IF NOT EXISTS "latitude" decimal(10,7) DEFAULT NULL`);
+      await queryRunner.query(`ALTER TABLE "projet" ADD COLUMN IF NOT EXISTS "longitude" decimal(10,7) DEFAULT NULL`);
+      await queryRunner.query(`ALTER TABLE "projet" ADD COLUMN IF NOT EXISTS "youtubeUrl" varchar DEFAULT NULL`);
+      await queryRunner.query(`ALTER TABLE "projet" ADD COLUMN IF NOT EXISTS "nbFractions" integer DEFAULT NULL`);
+      await queryRunner.query(`ALTER TABLE "projet" ADD COLUMN IF NOT EXISTS "prixFraction" decimal(18,2) DEFAULT NULL`);
+      await queryRunner.query(`ALTER TABLE "projet" ADD COLUMN IF NOT EXISTS "previsionnel" jsonb DEFAULT NULL`);
+      await queryRunner.query(`ALTER TABLE "projet" ADD COLUMN IF NOT EXISTS "chronologie" jsonb NOT NULL DEFAULT '[]'`);
+      await queryRunner.query(`ALTER TABLE "projet" ADD COLUMN IF NOT EXISTS "garanties" jsonb NOT NULL DEFAULT '[]'`);
+    }
 
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS "avis" (

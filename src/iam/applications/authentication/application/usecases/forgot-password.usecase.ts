@@ -7,6 +7,10 @@ import {
   EmailTokenPayload,
 } from 'src/iam/domains/ports/token.service';
 import {
+  CACHE_MANAGER_SERVICE,
+  type CacheManagerService,
+} from 'src/iam/domains/ports/cahe-manager.service';
+import {
   USER_REPOSITORY,
   type UserRepository,
 } from 'src/users/applications/ports/repositories/user.repository';
@@ -21,6 +25,8 @@ export class ForgotPasswordUseCase {
     @Inject(USER_REPOSITORY) private readonly userRepository: UserRepository,
     @Inject(TOKEN_SERVICE) private readonly tokenService: TokenService,
     @Inject(EMAIL_SERVICE) private readonly emailService: EmailService,
+    @Inject(CACHE_MANAGER_SERVICE)
+    private readonly cacheManagerService: CacheManagerService,
   ) {}
 
   async execute(dto: ForgotPasswordDto): Promise<void> {
@@ -32,13 +38,26 @@ export class ForgotPasswordUseCase {
       return;
     }
 
-    const payload: EmailTokenPayload = {
+    const emailTokenId = randomBytes(32).toString('hex');
+    const payload: Omit<EmailTokenPayload, 'type'> = {
       sub: user.userId,
       email: user.userEmail.email,
-      emailTokenId: randomBytes(32).toString('hex'),
+      emailTokenId,
     };
 
-    const token = await this.tokenService.generateEmailToken(payload);
+    const token = await this.tokenService.generateEmailToken(
+      payload,
+      'password_reset',
+    );
+
+    // Single-use, same Redis pattern as email verification: store the
+    // tokenId now, ResetPasswordUseCase checks-and-invalidates it so a
+    // reset link can't be replayed after first use.
+    await this.cacheManagerService.insertEmailTokenId(
+      user.userEmail.email,
+      emailTokenId,
+      'password_reset',
+    );
 
     if (this.emailService.sendPasswordResetEmail) {
       try {

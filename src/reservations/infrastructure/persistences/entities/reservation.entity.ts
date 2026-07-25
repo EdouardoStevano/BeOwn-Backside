@@ -13,6 +13,10 @@ import { UserEntity } from 'src/users/infrastructure/persistences/entities/user.
 import { ReservationStatus } from 'src/reservations/domains/enums/reservation-status.enum';
 
 @Entity('reservation')
+@Index('UQ_reservation_project_rank', ['projetId', 'rangFile'], {
+  unique: true,
+  where: '"rangFile" IS NOT NULL',
+})
 export class ReservationEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -22,7 +26,7 @@ export class ReservationEntity {
   projetId: string;
 
   @ManyToOne(() => ProjectEntity)
-  @JoinColumn({ name: 'projet_id' })
+  @JoinColumn({ name: 'projetId' })
   projet: ProjectEntity;
 
   @Column({ type: 'integer' })
@@ -30,7 +34,7 @@ export class ReservationEntity {
   utilisateurId: number;
 
   @ManyToOne(() => UserEntity)
-  @JoinColumn({ name: 'utilisateur_id' })
+  @JoinColumn({ name: 'utilisateurId' })
   utilisateur: UserEntity;
 
   @Column({ type: 'decimal', precision: 18, scale: 2 })

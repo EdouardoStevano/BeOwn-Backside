@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Delete,
+  ForbiddenException,
   Get,
   HttpCode,
   HttpStatus,
@@ -29,6 +30,11 @@ import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
 import { UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
+import { KycValidatedGuard } from 'src/common/auth/kyc-validated.guard';
+import { RequirePermission } from 'src/common/auth/require-permission.decorator';
+import { hasPermission } from 'src/common/auth/permissions.constants';
+import { Roles } from 'src/common/auth/roles.decorator';
+import { UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
 
 @ApiTags('Reservations (Pré-investissement)')
 @ApiBearerAuth()
@@ -56,6 +62,8 @@ export class ReservationController {
     description: 'Projet non ouvert aux réservations ou montant invalide',
   })
   @ApiResponse({ status: 404, description: 'Projet introuvable' })
+  @UseGuards(KycValidatedGuard)
+  @Roles(UserRole.INVESTISSEUR)
   @Post()
   create(@Body() dto: CreateReservationDto, @CurrentUser() user: ActiveUser) {
     return this.createReservation.execute(user.userId, dto);
@@ -65,7 +73,17 @@ export class ReservationController {
   @ApiParam({ name: 'userId', description: "ID numérique de l'utilisateur" })
   @ApiResponse({ status: 200, description: 'Liste des réservations' })
   @Get('user/:userId')
-  listByUser(@Param('userId', ParseIntPipe) userId: number) {
+  listByUser(
+    @Param('userId', ParseIntPipe) userId: number,
+    @CurrentUser() user: ActiveUser,
+  ) {
+    if (
+      user.userId !== userId &&
+      !hasPermission(user.role, 'reservations:manage') &&
+      !hasPermission(user.role, 'users:read')
+    ) {
+      throw new ForbiddenException('Acces refuse.');
+    }
     return this.reservationRepository.findByUserId(userId);
   }
 
@@ -73,6 +91,7 @@ export class ReservationController {
   @ApiParam({ name: 'projetId', description: 'UUID du projet' })
   @ApiResponse({ status: 200, description: 'Liste des réservations du projet' })
   @Get('project/:projetId')
+  @RequirePermission('reservations:manage')
   listByProject(@Param('projetId') projetId: string) {
     return this.reservationRepository.findByProjetId(projetId);
   }
@@ -96,7 +115,12 @@ export class ReservationController {
   @ApiResponse({ status: 200, description: 'Réservation annulée par admin' })
   @HttpCode(HttpStatus.OK)
   @Delete(':id/admin-cancel')
-  adminCancel(@Param('id') id: string, @Body() dto: CancelReservationDto) {
-    return this.cancelReservation.execute(id, 0, true, dto.motif);
+  @RequirePermission('reservations:manage')
+  adminCancel(
+    @Param('id') id: string,
+    @Body() dto: CancelReservationDto,
+    @CurrentUser() user: ActiveUser,
+  ) {
+    return this.cancelReservation.execute(id, user.userId, true, dto.motif);
   }
 }

@@ -19,6 +19,7 @@ import { ConfigModule } from '@nestjs/config';
 import { RegisterUseCase } from 'src/users/applications/usecases/register.usecase';
 import { RecaptchaService } from 'src/common/recaptcha/recaptcha.service';
 import { NotificationsModule } from 'src/notifications/notifications.module';
+import { RegistrationOtpModule } from './registration-otp.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { NotificationsModule } from 'src/notifications/notifications.module';
     UsersModule,
     ConfigModule,
     NotificationsModule,
+    RegistrationOtpModule,
   ],
   providers: [
     SignInUsecase,

@@ -1,5 +1,6 @@
 import { ValidateLoyerEncaisseUseCase } from './validate-loyer-encaisse.usecase';
 import { StatutDeclaration } from '../../domains/enums/statut-declaration.enum';
+import { UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
 
 describe('ValidateLoyerEncaisseUseCase', () => {
   let useCase: ValidateLoyerEncaisseUseCase;
@@ -30,6 +31,17 @@ describe('ValidateLoyerEncaisseUseCase', () => {
       expect(result.statut).toBe(StatutDeclaration.VALIDE);
       expect(result.valideParUserId).toBe(99);
       expect(result.valideLe).toBeInstanceOf(Date);
+      // Sans adminRole fourni, l'audit retombe sur SUPER_ADMIN (compat legacy)
+      expect(auditLog.create).toHaveBeenCalledWith(
+        '99',
+        UserRole.SUPER_ADMIN,
+        'equity.loyer.validate',
+        'loyer_encaisse',
+        'l1',
+        undefined,
+        undefined,
+        expect.any(Object),
+      );
     });
 
     it('rejette si statut ≠ DECLARE', async () => {
@@ -43,6 +55,20 @@ describe('ValidateLoyerEncaisseUseCase', () => {
     it('rejette si introuvable', async () => {
       loyerRepo.findById.mockResolvedValue(null);
       await expect(useCase.validate('x', 99)).rejects.toThrow(/introuvable/);
+    });
+
+    it('audite avec le rôle réel de l\'acteur (pas SUPER_ADMIN) quand adminRole est fourni', async () => {
+      await useCase.validate('l1', 99, UserRole.CIO);
+      expect(auditLog.create).toHaveBeenCalledWith(
+        '99',
+        UserRole.CIO,
+        'equity.loyer.validate',
+        'loyer_encaisse',
+        'l1',
+        undefined,
+        undefined,
+        expect.any(Object),
+      );
     });
   });
 

@@ -28,14 +28,18 @@ export class PayEcheanceUseCase {
     private readonly auditLog: AuditLogService,
   ) {}
 
-  async execute(echeanceId: string, adminId: number): Promise<EcheanceEntity> {
+  async execute(echeanceId: string, adminId: number, adminRole?: string): Promise<EcheanceEntity> {
     const echeance = await this.echeanceRepo.findOne({
       where: { id: echeanceId },
       relations: ['investissement', 'investissement.projet'],
     });
     if (!echeance) throw new NotFoundException('Échéance introuvable');
 
-    const eligible = [EcheanceStatus.A_VENIR, EcheanceStatus.RETARD];
+    const eligible = [
+      EcheanceStatus.A_VENIR,
+      EcheanceStatus.RETARD,
+      EcheanceStatus.EN_ATTENTE_PAIEMENT,
+    ];
     if (!eligible.includes(echeance.statut as EcheanceStatus)) {
       throw new BadRequestException(`Échéance au statut "${echeance.statut}" non payable`);
     }
@@ -154,7 +158,7 @@ export class PayEcheanceUseCase {
     await this.notificationEvents.echeancePaid(echeance, project);
     await this.auditLog.create(
       String(adminId),
-      UserRole.ADMIN,
+      adminRole ?? UserRole.SUPER_ADMIN,
       'echeance.pay',
       'echeance',
       echeance.id,

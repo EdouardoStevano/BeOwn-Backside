@@ -43,6 +43,8 @@ lerna-debug.log*
 .env.production.local
 .env.local
 .env.*
+# fichiers env à nom non standard (.staging.env, .test.env, prod.env, ...)
+*.env
 !.env.example
 
 # temp directory
@@ -58,3 +60,10 @@ pids
 # Diagnostic reports (https://nodejs.org/api/report.html)
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 .worktrees/
+
+# Secrets Kubernetes — ne jamais committer de vraies valeurs (garder uniquement *.example.yaml)
+k8s/02-secrets.yaml
+k8s/base/secrets.yaml
+k8s/**/secrets.yaml
+!k8s/**/secrets.example.yaml
+k8s/06-ingress.yaml

@@ -27,6 +27,7 @@ export class ProjectMapper {
     domain.ticketMaximum =
       entity.ticketMaximum != null ? Number(entity.ticketMaximum) : null;
     domain.triCible = entity.triCible != null ? Number(entity.triCible) : null;
+    domain.indiceRisque = entity.indiceRisque != null ? Number(entity.indiceRisque) : 3;
     domain.dureeMois = entity.dureeMois;
     domain.instrument = entity.instrument;
     domain.statut = entity.statut;
@@ -49,6 +50,8 @@ export class ProjectMapper {
     domain.modeleEconomique =
       entity.modeleEconomique ?? ModeleEconomique.OBLIGATAIRE;
     domain.nbUnitesLouables = entity.nbUnitesLouables ?? null;
+    domain.broadcastAnnonceAt = entity.broadcastAnnonceAt ?? null;
+    domain.broadcastCollecteAt = entity.broadcastCollecteAt ?? null;
     domain.createdAt = entity.createdAt;
     domain.updatedAt = entity.updatedAt;
     return domain;
@@ -74,6 +77,7 @@ export class ProjectMapper {
     entity.ticketMinimum = domain.ticketMinimum;
     entity.ticketMaximum = domain.ticketMaximum;
     entity.triCible = domain.triCible;
+    entity.indiceRisque = domain.indiceRisque ?? 3;
     entity.dureeMois = domain.dureeMois;
     entity.instrument = domain.instrument;
     entity.statut = domain.statut;
@@ -92,6 +96,15 @@ export class ProjectMapper {
     entity.modeleEconomique =
       domain.modeleEconomique ?? ModeleEconomique.OBLIGATAIRE;
     entity.nbUnitesLouables = domain.nbUnitesLouables ?? null;
+    // Posés uniquement par BroadcastService (UPDATE ciblé) : on ne les écrase
+    // que si le domaine les porte, pour qu'un save() issu d'un domaine
+    // reconstruit sans ces champs ne les remette jamais à null.
+    if (domain.broadcastAnnonceAt !== undefined) {
+      entity.broadcastAnnonceAt = domain.broadcastAnnonceAt;
+    }
+    if (domain.broadcastCollecteAt !== undefined) {
+      entity.broadcastCollecteAt = domain.broadcastCollecteAt;
+    }
     return entity;
   }
 

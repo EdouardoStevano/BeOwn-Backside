@@ -208,7 +208,7 @@ export class SeedService {
    */
   private async isAlreadySeeded(): Promise<boolean> {
     const adminCount = await this.userRepo.count({
-      where: { role: UserRole.ADMIN },
+      where: { role: UserRole.SUPER_ADMIN },
     });
     return adminCount > 0;
   }
@@ -323,38 +323,62 @@ export class SeedService {
       {
         firstname: 'Admin',
         lastname: 'BeOwn',
-        email: 'admin@beown.com',
-        role: UserRole.ADMIN,
+        email: 'admin@beown.fr',
+        role: UserRole.SUPER_ADMIN,
       },
       {
         firstname: 'Marie',
         lastname: 'Compliance',
-        email: 'compliance@beown.com',
+        email: 'compliance@beown.fr',
         role: UserRole.COMPLIANCE,
       },
       {
         firstname: 'Jean',
         lastname: 'RCCI',
-        email: 'rcci@beown.com',
+        email: 'rcci@beown.fr',
         role: UserRole.RCCI,
       },
       {
         firstname: 'Pierre',
         lastname: 'Financier',
-        email: 'financier@beown.com',
+        email: 'financier@beown.fr',
         role: UserRole.FINANCIER,
       },
       {
         firstname: 'Sophie',
         lastname: 'Support',
-        email: 'support@beown.com',
+        email: 'support@beown.fr',
         role: UserRole.SUPPORT,
       },
       {
         firstname: 'Lucas',
         lastname: 'DPO',
-        email: 'dpo@beown.com',
+        email: 'dpo@beown.fr',
         role: UserRole.DPO,
+      },
+      {
+        firstname: 'Chloé',
+        lastname: 'CIO',
+        email: 'cio@beown.fr',
+        role: UserRole.CIO,
+      },
+      {
+        firstname: 'Marc',
+        lastname: 'Marketing',
+        email: 'marketing@beown.fr',
+        role: UserRole.MARKETING,
+      },
+      {
+        firstname: 'Awa',
+        lastname: 'Analyste',
+        email: 'analyste@beown.fr',
+        role: UserRole.ANALYSTE_FINANCIER,
+      },
+      {
+        firstname: 'Paul',
+        lastname: 'Relation',
+        email: 'relation@beown.fr',
+        role: UserRole.CHARGE_RELATION_INVESTISSEUR,
       },
     ];
 
@@ -570,19 +594,19 @@ export class SeedService {
         raisonSociale: 'Diallo Invest SARL',
         formeJuridique: 'SARL',
         siren: 'SN123456789',
-        capitalSocial: 50000000,
+        capitalSocial: 100_000,
       },
       {
         raisonSociale: 'Techno Plus CI',
         formeJuridique: 'SA',
         siren: 'CI987654321',
-        capitalSocial: 100000000,
+        capitalSocial: 250_000,
       },
       {
         raisonSociale: 'Global Finance Mali',
         formeJuridique: 'SAS',
         siren: 'ML456789123',
-        capitalSocial: 75000000,
+        capitalSocial: 150_000,
       },
     ];
 
@@ -723,16 +747,16 @@ export class SeedService {
         latitude: 14.6937,
         longitude: -17.4441,
         youtubeUrl: 'https://www.youtube.com/watch?v=ScMzIvxBSi4',
-        capitalCible: 50000000,
-        capitalMinimum: 30000000,
-        ticketMinimum: 50000,
-        ticketMaximum: 5000000,
-        nbFractions: 1000,
+        capitalCible: 500_000,
+        capitalMinimum: 300_000,
+        ticketMinimum: 100,
+        ticketMaximum: 50_000,
+        nbFractions: 5_000,
         triCible: 12.5,
         dureeMois: 24,
         instrument: ProjectInstrument.OBLIGATION,
         estPreInvestissable: true,
-        plafondPreInvestissement: 20000000,
+        plafondPreInvestissement: 200_000,
         porteurIndex: 0,
         spvIndex: 0,
         descriptionMd: `## Résidence Dakar Plateau — Investissez au cœur de la capitale
@@ -751,16 +775,16 @@ Situé au **Plateau**, le centre d'affaires historique de Dakar, ce projet rési
         latitude: 5.3365,
         longitude: -4.0267,
         youtubeUrl: 'https://www.youtube.com/watch?v=ScMzIvxBSi4',
-        capitalCible: 80000000,
-        capitalMinimum: 50000000,
-        ticketMinimum: 100000,
-        ticketMaximum: 10000000,
-        nbFractions: 800,
+        capitalCible: 800_000,
+        capitalMinimum: 500_000,
+        ticketMinimum: 100,
+        ticketMaximum: 100_000,
+        nbFractions: 8_000,
         triCible: 9.0,
         dureeMois: 36,
         instrument: ProjectInstrument.OBLIGATION,
         estPreInvestissable: true,
-        plafondPreInvestissement: 30000000,
+        plafondPreInvestissement: 300_000,
         porteurIndex: 1,
         spvIndex: 1,
         descriptionMd: `## Immeuble Commercial Abidjan Plateau — Le cœur économique d'Afrique de l'Ouest
@@ -794,9 +818,9 @@ Cet immeuble de bureaux R+6 est idéalement positionné sur le **Boulevard de la
           : WalletType.TECHNIQUE_PROJET,
         solde:
           Math.random() > 0.5
-            ? Math.floor(Math.random() * 10000000) + 1000000
+            ? Math.floor(Math.random() * 19_000) + 1_000
             : 0,
-        devise: 'XOF',
+        devise: 'EUR',
         dateCreation: this.randomDate(-365, 0),
         estActif: true,
       });

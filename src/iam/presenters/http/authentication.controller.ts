@@ -32,6 +32,10 @@ import {
   ResetPasswordDto,
   SignUpDto,
 } from './dto/password.dto';
+import {
+  ResendRegistrationOtpDto,
+  VerifyRegistrationOtpDto,
+} from './dto/registration-otp.dto';
 import { RegisterUseCase } from 'src/users/applications/usecases/register.usecase';
 import { RecaptchaService } from 'src/common/recaptcha/recaptcha.service';
 import { Public } from 'src/common/auth/public.decorator';
@@ -40,6 +44,8 @@ import {
   CACHE_MANAGER_SERVICE,
   type CacheManagerService,
 } from 'src/iam/domains/ports/cahe-manager.service';
+import { VerifyRegistrationOtpUseCase } from '../../applications/authentication/application/usecases/verify-registration-otp.usecase';
+import { ResendRegistrationOtpUseCase } from '../../applications/authentication/application/usecases/resend-registration-otp.usecase';
 
 @ApiTags('Authentication')
 @Controller('auth')
@@ -52,6 +58,8 @@ export class AuthenticationController {
     private readonly resetPasswordUseCase: ResetPasswordUseCase,
     private readonly registerUseCase: RegisterUseCase,
     private readonly recaptchaService: RecaptchaService,
+    private readonly verifyRegistrationOtpUseCase: VerifyRegistrationOtpUseCase,
+    private readonly resendRegistrationOtpUseCase: ResendRegistrationOtpUseCase,
     @Inject(CACHE_MANAGER_SERVICE)
     private readonly cacheManagerService: CacheManagerService,
   ) {}
@@ -63,7 +71,7 @@ export class AuthenticationController {
     status: 429,
     description: 'Trop de tentatives — réessayez dans 15 min',
   })
-  @Throttle({ auth: { ttl: 900_000, limit: 500 } })
+  @Throttle({ auth: { ttl: 900_000, limit: 10 } })
   @Public()
   @HttpCode(HttpStatus.OK)
   @Post('sign-in')
@@ -74,7 +82,7 @@ export class AuthenticationController {
   @ApiOperation({ summary: "Rafraîchir les tokens d'accès" })
   @ApiResponse({ status: 200, description: 'Nouveaux tokens retournés' })
   @ApiResponse({ status: 401, description: 'Refresh token invalide ou expiré' })
-  @Throttle({ medium: { ttl: 60_000, limit: 500 } })
+  @Throttle({ medium: { ttl: 60_000, limit: 30 } })
   @Public()
   @HttpCode(HttpStatus.OK)
   @Post('refresh-tokens')
@@ -171,7 +179,7 @@ export class AuthenticationController {
 
   @ApiOperation({ summary: 'Inscription (sign-up)' })
   @ApiResponse({ status: 201, description: 'Compte créé avec succès' })
-  @Throttle({ auth: { ttl: 900_000, limit: 200 } })
+  @Throttle({ auth: { ttl: 900_000, limit: 10 } })
   @Public()
   @Post('sign-up')
   async signUp(@Body() dto: SignUpDto) {
@@ -179,6 +187,37 @@ export class AuthenticationController {
     const user = await this.registerUseCase.execute(dto);
     const { password: _p, ...safe } = user as any;
     return safe;
+  }
+
+  @ApiOperation({
+    summary: "Vérifier le code OTP d'inscription et activer le compte",
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Compte vérifié — tokens de session retournés (même forme que sign-in)',
+  })
+  @ApiResponse({ status: 401, description: 'Code invalide, expiré, ou trop de tentatives' })
+  @Throttle({ short: { ttl: 60_000, limit: 3 }, medium: { ttl: 60_000, limit: 3 }, auth: { ttl: 60_000, limit: 3 } })
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @Post('verify-otp')
+  verifyOtp(@Body() dto: VerifyRegistrationOtpDto) {
+    return this.verifyRegistrationOtpUseCase.execute(dto);
+  }
+
+  @ApiOperation({ summary: "Renvoyer le code OTP d'inscription (email par défaut, sms en option)" })
+  @ApiResponse({
+    status: 204,
+    description: 'Code renvoyé si le compte existe et reste à vérifier (réponse générique)',
+  })
+  @ApiResponse({ status: 400, description: 'Canal sms demandé sans numéro de téléphone associé' })
+  @ApiResponse({ status: 429, description: 'Trop de demandes — réessayez plus tard' })
+  @Throttle({ short: { ttl: 60_000, limit: 3 }, medium: { ttl: 60_000, limit: 3 }, auth: { ttl: 60_000, limit: 3 } })
+  @Public()
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Post('resend-otp')
+  resendOtp(@Body() dto: ResendRegistrationOtpDto) {
+    return this.resendRegistrationOtpUseCase.execute(dto);
   }
 
   @ApiOperation({ summary: 'Mot de passe oublié' })

@@ -34,6 +34,9 @@ export enum NotificationType {
   NOUVELLE_INSCRIPTION = 'nouvelle_inscription',
   PROFIL_MODIFIE = 'profil_modifie',
   SECURITE = 'securite',
+  INVESTISSEUR_INACTIF = 'investisseur_inactif',
+  PROJET_CONSULTE_2X = 'projet_consulte_2x',
+  KYC_REVUE_MANUELLE = 'kyc_revue_manuelle',
 }
 
 @Entity('notification')
@@ -46,7 +49,7 @@ export class NotificationEntity {
   utilisateurId: number | null;
 
   @ManyToOne(() => UserEntity, { nullable: true })
-  @JoinColumn({ name: 'utilisateur_id' })
+  @JoinColumn({ name: 'utilisateurId' })
   utilisateur: UserEntity;
 
   @Column({ type: 'varchar', nullable: true })

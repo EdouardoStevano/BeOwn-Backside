@@ -10,25 +10,32 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule, { rawBody: true });
   app.useWebSocketAdapter(new IoAdapter(app));
 
-  app.use(helmet({
-    crossOriginEmbedderPolicy: false,
-    contentSecurityPolicy: {
-      directives: {
-        defaultSrc: ["'self'"],
-        scriptSrc: ["'self'", "'unsafe-inline'", 'https://*.stripe.com', 'https://js.stripe.com'],
-        styleSrc: ["'self'", "'unsafe-inline'"],
-        imgSrc: ["'self'", 'data:', 'https:'],
-        frameSrc: ["'self'", 'https://*.stripe.com'],
-        connectSrc: [
-          "'self'",
-          process.env.FRONTEND_URL ?? 'http://localhost:5173',
-          process.env.ADMIN_URL ?? 'http://localhost:5174',
-          'https://*.stripe.com',
-          'https://*.stripe.network',
-        ],
+  app.use(
+    helmet({
+      crossOriginEmbedderPolicy: false,
+      contentSecurityPolicy: {
+        directives: {
+          defaultSrc: ["'self'"],
+          scriptSrc: [
+            "'self'",
+            "'unsafe-inline'",
+            'https://*.stripe.com',
+            'https://js.stripe.com',
+          ],
+          styleSrc: ["'self'", "'unsafe-inline'"],
+          imgSrc: ["'self'", 'data:', 'https:'],
+          frameSrc: ["'self'", 'https://*.stripe.com'],
+          connectSrc: [
+            "'self'",
+            process.env.FRONTEND_URL ?? 'http://localhost:5173',
+            process.env.ADMIN_URL ?? 'http://localhost:5174',
+            'https://*.stripe.com',
+            'https://*.stripe.network',
+          ],
+        },
       },
-    },
-  }));
+    }),
+  );
 
   app.use(
     '/payments/webhook/stripe',
@@ -50,7 +57,7 @@ async function bootstrap() {
         `BeOwn est une plateforme PSFP (Prestataire de Services de Financement Participatif) ` +
         `permettant l'investissement fractionné dans l'immobilier africain.\n\n` +
         `### Authentification\n` +
-        `La majorité des routes nécessitent un **JWT Bearer token** obtenu via \`POST /auth/sign-in\`.\n` +
+        `La majorité des routes nécessitent un **JWT Bearer token** okay obtenu via \`POST /auth/sign-in\`.\n` +
         `Utilisez le bouton **Authorize** ci-dessus pour renseigner votre token.\n\n` +
         `### Flux principal\n` +
         `1. \`POST /auth/sign-up\` — Créer un compte\n` +
@@ -63,10 +70,10 @@ async function bootstrap() {
     )
     .setVersion('1.0.0')
     .addServer(
-      `http://localhost:${process.env.PORT ?? 3002}`,
+      `http://localhost:${process.env.API_URL ?? 3002}`,
       'Développement local',
     )
-    .addServer('https://api.beown.com', 'Production')
+    .addServer('https://api.beown.fr', 'Production')
     .addBearerAuth({
       type: 'http',
       scheme: 'bearer',
@@ -101,18 +108,20 @@ async function bootstrap() {
     .addTag('Notifications', 'Notifications in-app et email')
     .build();
 
-  const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api/docs', app, document, {
-    swaggerOptions: {
-      persistAuthorization: true,
-      tagsSorter: 'alpha',
-      operationsSorter: 'alpha',
-      docExpansion: 'none',
-      filter: true,
-      showRequestDuration: true,
-    },
-    customSiteTitle: 'BeOwn API Docs',
-  });
+  if (process.env.NODE_ENV !== 'production') {
+    const document = SwaggerModule.createDocument(app, config);
+    SwaggerModule.setup('api/docs', app, document, {
+      swaggerOptions: {
+        persistAuthorization: false,
+        tagsSorter: 'alpha',
+        operationsSorter: 'alpha',
+        docExpansion: 'none',
+        filter: true,
+        showRequestDuration: true,
+      },
+      customSiteTitle: 'BeOwn API Docs',
+    });
+  }
 
   const allowedOrigins = [
     process.env.FRONTEND_URL ?? 'http://localhost:5173',
@@ -120,7 +129,10 @@ async function bootstrap() {
   ];
 
   app.enableCors({
-    origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+    origin: (
+      origin: string | undefined,
+      callback: (err: Error | null, allow?: boolean) => void,
+    ) => {
       if (!origin || allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
@@ -131,7 +143,6 @@ async function bootstrap() {
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
   });
-
 
   await app.listen(process.env.PORT ?? 3001);
 }

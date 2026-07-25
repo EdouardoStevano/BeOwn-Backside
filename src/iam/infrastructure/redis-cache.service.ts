@@ -1,7 +1,7 @@
 import { Inject } from '@nestjs/common';
 import { CacheManagerService } from '../domains/ports/cahe-manager.service';
 import { CACHE_MANAGER, type Cache } from '@nestjs/cache-manager';
-import { AuthTokens } from '../domains/ports/token.service';
+import { AuthTokens, EmailTokenPurpose } from '../domains/ports/token.service';
 import jwtConfig from './config/jwt.config';
 import { type ConfigType } from '@nestjs/config';
 
@@ -49,25 +49,35 @@ export class RedisCacheService implements CacheManagerService {
     return `refresh-${email}`;
   }
 
-  async insertEmailTokenId(email: string, emailTokenId: string): Promise<void> {
+  async insertEmailTokenId(
+    email: string,
+    emailTokenId: string,
+    purpose: EmailTokenPurpose,
+  ): Promise<void> {
     await this.cacheManager.set<string>(
-      this.getEmailTokenId(email),
+      this.getEmailTokenId(email, purpose),
       emailTokenId,
       this.jwtConfiguration.emailTokenTtl * 1000,
     );
   }
 
-  async validateEmailToken(email: string, emailTokenId: string): Promise<boolean> {
-    const storedId = await this.cacheManager.get<string>(this.getEmailTokenId(email));
+  async validateEmailToken(
+    email: string,
+    emailTokenId: string,
+    purpose: EmailTokenPurpose,
+  ): Promise<boolean> {
+    const storedId = await this.cacheManager.get<string>(
+      this.getEmailTokenId(email, purpose),
+    );
     return storedId === emailTokenId;
   }
 
-  async invalidateEmailTokenId(email: string): Promise<void> {
-    await this.cacheManager.del(this.getEmailTokenId(email));
+  async invalidateEmailTokenId(email: string, purpose: EmailTokenPurpose): Promise<void> {
+    await this.cacheManager.del(this.getEmailTokenId(email, purpose));
   }
 
-  private getEmailTokenId(email: string) {
-    return `email-token-${email}`;
+  private getEmailTokenId(email: string, purpose: EmailTokenPurpose) {
+    return `email-token-${purpose}-${email}`;
   }
 
   async insertOAuthCode(code: string, tokens: AuthTokens): Promise<void> {
@@ -75,8 +85,21 @@ export class RedisCacheService implements CacheManagerService {
   }
 
   async getAndDeleteOAuthCode(code: string): Promise<AuthTokens | null> {
-    const tokens = await this.cacheManager.get<AuthTokens>(`oauth-code:${code}`);
-    if (tokens) await this.cacheManager.del(`oauth-code:${code}`);
+    const key = `oauth-code:${code}`;
+    // cache-manager v7 : la propriété `store` (singulier) n'existe plus dans les
+    // types (c'est `stores`, un tableau de Keyv). L'accès brut au client Redis
+    // reste possible au runtime si un store Redis est câblé ; sinon on retombe
+    // sur le get+del non atomique ci-dessous (code OAuth à usage unique, TTL 30s).
+    const store = (this.cacheManager as any).store;
+    const client = store?.getClient?.();
+    if (client?.getdel) {
+      const raw = await client.getdel(key);
+      return raw ? (JSON.parse(raw) as AuthTokens) : null;
+    }
+
+    // Fallback for non-Redis test stores. Production uses Redis GETDEL above.
+    const tokens = await this.cacheManager.get<AuthTokens>(key);
+    if (tokens) await this.cacheManager.del(key);
     return tokens ?? null;
   }
 }

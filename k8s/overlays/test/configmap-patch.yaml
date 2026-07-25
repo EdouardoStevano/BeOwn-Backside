@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: beown-backend-config
+data:
+  NODE_ENV: 'test'
+  FRONTEND_URL: 'https://test.beown.fr'
+  ADMIN_URL: 'https://admin-test.beown.fr'
+  API_URL: 'https://api-test.beown.fr'
+  CONFIRM_EMAIL_URL: 'https://api-test.beown.fr/email/verify'
+  JWT_TOKEN_AUDIENCE: 'https://api-test.beown.fr'
+  JWT_TOKEN_ISSUER: 'https://api-test.beown.fr'
+  GOOGLE_CALLBACK_URL: 'https://api-test.beown.fr/auth/google/callback'
+  FACEBOOK_CALLBACK_URL: 'https://api-test.beown.fr/auth/facebook/callback'
+  LINKEDIN_CALLBACK_URL: 'https://api-test.beown.fr/auth/linkedin/callback'

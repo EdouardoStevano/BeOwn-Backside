@@ -21,7 +21,7 @@ export class ValidateLoyerEncaisseUseCase {
     private readonly auditLog: AuditLogService,
   ) {}
 
-  async validate(id: string, adminUserId: number): Promise<LoyerEncaisse> {
+  async validate(id: string, adminUserId: number, adminRole?: string): Promise<LoyerEncaisse> {
     const l = await this.loyerRepo.findById(id);
     if (!l) throw new NotFoundException('Loyer introuvable.');
     if (l.statut !== StatutDeclaration.DECLARE) {
@@ -37,7 +37,7 @@ export class ValidateLoyerEncaisseUseCase {
     await this.auditLog
       .create(
         String(adminUserId),
-        UserRole.ADMIN,
+        adminRole ?? UserRole.SUPER_ADMIN,
         'equity.loyer.validate',
         'loyer_encaisse',
         id,
@@ -53,6 +53,7 @@ export class ValidateLoyerEncaisseUseCase {
     id: string,
     adminUserId: number,
     motif: string,
+    adminRole?: string,
   ): Promise<LoyerEncaisse> {
     if (!motif || motif.trim().length === 0) {
       throw new BadRequestException('Motif de rejet requis.');
@@ -72,7 +73,7 @@ export class ValidateLoyerEncaisseUseCase {
     await this.auditLog
       .create(
         String(adminUserId),
-        UserRole.ADMIN,
+        adminRole ?? UserRole.SUPER_ADMIN,
         'equity.loyer.reject',
         'loyer_encaisse',
         id,
