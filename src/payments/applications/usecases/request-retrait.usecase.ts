@@ -8,6 +8,7 @@ import {
   TransactionFournisseur,
   TransactionStatus,
   TransactionType,
+  WalletType,
 } from 'src/wallets/domains/enums/wallet.enum';
 import { formatEur } from 'src/common/money/format-eur';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
@@ -109,8 +110,14 @@ export class RequestRetraitUseCase {
     metadata: Record<string, unknown>,
   ): Promise<{ ok: true; tx: TransactionEntity } | { ok: false; message: string }> {
     return this.dataSource.transaction(async (manager) => {
+      // Wallet source : soit l'id fourni (retrait legacy/admin), soit — quand le
+      // front n'envoie que le montant (parcours Stripe Connect) — le wallet
+      // INVESTISSEUR de l'utilisateur authentifié. Toujours scopé par
+      // proprietaireUserId (anti-BOLA).
       const walletRow = await manager.findOne(WalletEntity, {
-        where: { id: dto.walletId, proprietaireUserId: user.userId },
+        where: dto.walletId
+          ? { id: dto.walletId, proprietaireUserId: user.userId }
+          : { proprietaireUserId: user.userId, type: WalletType.INVESTISSEUR },
         lock: { mode: 'pessimistic_write' },
       });
       if (!walletRow) {
