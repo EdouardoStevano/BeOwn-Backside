@@ -26,6 +26,7 @@ import { CreateProjectUseCase } from 'src/projects/applications/usecases/create-
 import { UpdateProjectUseCase } from 'src/projects/applications/usecases/update-project.usecase';
 import { UpdateProjectStatusUseCase } from 'src/projects/applications/usecases/update-project-status.usecase';
 import { GetProjectsUseCase } from 'src/projects/applications/usecases/get-projects.usecase';
+import { ProjectReadModelService } from 'src/projects/applications/project-read-model.service';
 import {
   CreateProjectDto,
   CreateSpvDto,
@@ -39,14 +40,8 @@ import type { ProjectRepository } from 'src/projects/applications/ports/reposito
 import { PROJECT_REPOSITORY } from 'src/projects/applications/ports/repositories/project.repository';
 import { Spv } from 'src/projects/domains/spv';
 import { RegimeFiscal } from 'src/projects/domains/enums/regime-fiscal.enum';
-import { INVESTMENT_REPOSITORY } from 'src/investments/applications/ports/repositories/investment.repository';
-import type { InvestmentRepository } from 'src/investments/applications/ports/repositories/investment.repository';
-import { DOCUMENT_REPOSITORY } from 'src/documents/applications/ports/repositories/document.repository';
-import type { DocumentRepository } from 'src/documents/applications/ports/repositories/document.repository';
 import { AVIS_REPOSITORY } from 'src/avis/applications/ports/repositories/avis.repository';
 import type { AvisRepository } from 'src/avis/applications/ports/repositories/avis.repository';
-import { DocumentType } from 'src/documents/domains/enums/document-type.enum';
-import { InvestmentStatus } from 'src/investments/domains/enums/investment-status.enum';
 import { Avis } from 'src/avis/domains/avis';
 import { CreateAvisDto } from 'src/avis/presenters/dto/avis.dto';
 import { CurrentUser } from 'src/common/auth/current-user.decorator';
@@ -72,15 +67,12 @@ export class ProjectController {
     private readonly getProjects: GetProjectsUseCase,
     @Inject(PROJECT_REPOSITORY)
     private readonly projectRepository: ProjectRepository,
-    @Inject(INVESTMENT_REPOSITORY)
-    private readonly investmentRepository: InvestmentRepository,
-    @Inject(DOCUMENT_REPOSITORY)
-    private readonly documentRepository: DocumentRepository,
     @Inject(AVIS_REPOSITORY)
     private readonly avisRepository: AvisRepository,
     private readonly notificationService: NotificationService,
     @InjectRepository(ProjectViewEntity)
     private readonly projectViewRepo: Repository<ProjectViewEntity>,
+    private readonly projectReadModel: ProjectReadModelService,
   ) {}
 
   @ApiOperation({
@@ -111,8 +103,8 @@ export class ProjectController {
       page: page ? parseInt(page) : 1,
       limit: limit ? parseInt(limit) : 20,
     });
-    const enriched = await this.enrichFractions(result.data);
-    const withImages = await this.enrichImages(enriched);
+    const enriched = await this.projectReadModel.enrichFractions(result.data);
+    const withImages = await this.projectReadModel.enrichImages(enriched);
     return { ...result, data: withImages };
   }
 
@@ -136,7 +128,7 @@ export class ProjectController {
       page: page ? parseInt(page) : 1,
       limit: limit ? parseInt(limit) : 20,
     });
-    return { ...result, data: await this.enrichFractions(result.data) };
+    return { ...result, data: await this.projectReadModel.enrichFractions(result.data) };
   }
 
   @ApiOperation({
@@ -149,7 +141,7 @@ export class ProjectController {
   @Get(':id')
   @RequirePermission('projects:read')
   async findOne(@Param('id') id: string) {
-    return this.buildProjectDetail(id, false);
+    return this.projectReadModel.buildProjectDetail(id, false);
   }
 
   @ApiOperation({
@@ -171,7 +163,7 @@ export class ProjectController {
       throw new NotFoundException('Projet introuvable.');
     }
     await this.recordProjectView(user.userId, id, project.titre);
-    return this.buildProjectDetail(id, true);
+    return this.projectReadModel.buildProjectDetail(id, true);
   }
 
   /**
@@ -220,7 +212,7 @@ export class ProjectController {
     // dossier par id (UUID non devinable) ou via leurs espaces dédiés.
     if (!project || project.statut === ProjectStatus.BROUILLON)
       throw new NotFoundException('Projet introuvable.');
-    return this.buildProjectDetail(project.id, true);
+    return this.projectReadModel.buildProjectDetail(project.id, true);
   }
 
   @ApiOperation({ summary: 'Créer un nouveau projet (admin)' })
@@ -410,7 +402,7 @@ export class ProjectController {
       throw new NotFoundException(
         'Lien de partage invalide ou projet introuvable.',
       );
-    return this.buildProjectDetail(project.id, true);
+    return this.projectReadModel.buildProjectDetail(project.id, true);
   }
 
   // ─── Avis ──────────────────────────────────────────────────────────────────
@@ -476,150 +468,4 @@ export class ProjectController {
     return this.avisRepository.save(avis);
   }
 
-  // ─── Helpers ───────────────────────────────────────────────────────────────
-
-  private async enrichFractions(projects: any[]) {
-    if (projects.length === 0) return projects;
-    const ids = projects.map((p) => p.id);
-    const venduesMap =
-      await this.investmentRepository.countFractionsVenduesBatch(ids);
-
-    return projects.map((p) => {
-      const prixFraction = Number(p.ticketMinimum);
-      const nbFractionsTotal =
-        p.nbFractions ?? Math.floor(Number(p.capitalCible) / prixFraction);
-      const fractionsVendues = venduesMap[p.id] ?? 0;
-      const fractionsDisponibles = Math.max(
-        0,
-        nbFractionsTotal - fractionsVendues,
-      );
-      const tauxRemplissage =
-        nbFractionsTotal > 0
-          ? Math.min(
-              100,
-              Math.round((fractionsVendues / nbFractionsTotal) * 1000) / 10,
-            )
-          : 0;
-      return {
-        ...p,
-        fractions: {
-          total: nbFractionsTotal,
-          vendues: fractionsVendues,
-          disponibles: fractionsDisponibles,
-          prix: prixFraction,
-        },
-        stats: {
-          montantCollecte: fractionsVendues * prixFraction,
-          nbInvestisseurs: 0,
-          tauxRemplissage,
-        },
-      };
-    });
-  }
-
-  private async enrichImages(projects: any[]) {
-    if (projects.length === 0) return projects;
-    const imagesByProject = await Promise.all(
-      projects.map((p) => this.documentRepository.findByProjectId(p.id)),
-    );
-    return projects.map((p, i) => {
-      const images = imagesByProject[i]
-        .filter(
-          (d) => d.type === DocumentType.PHOTO_PROJET && d.isPublic === true,
-        )
-        .sort((a, b) => {
-          if (a.estPrincipale !== b.estPrincipale)
-            return a.estPrincipale ? -1 : 1;
-          return (a.ordre ?? 999) - (b.ordre ?? 999);
-        });
-      return { ...p, images };
-    });
-  }
-
-  private async buildProjectDetail(id: string, publicView = false) {
-    const [project, allInvestments, allDocs, avisStats, fractionsVendues] =
-      await Promise.all([
-        this.getProjects.executeOne(id),
-        this.investmentRepository.findByProjetId(id),
-        this.documentRepository.findByProjectId(id),
-        this.avisRepository.getStats(id),
-        this.investmentRepository.countFractionsVendues(id),
-      ]);
-
-    if (!project) throw new NotFoundException('Projet introuvable.');
-
-    const prixFraction = Number(project.ticketMinimum);
-    const nbFractionsTotal =
-      project.nbFractions ??
-      Math.floor(Number(project.capitalCible) / prixFraction);
-
-    const activeStatuses: InvestmentStatus[] = [
-      InvestmentStatus.CONFIRME,
-      InvestmentStatus.SIGNE,
-      InvestmentStatus.PAYE,
-      InvestmentStatus.REMBOURSE_CAPITAL,
-      InvestmentStatus.REMBOURSE_TOTAL,
-    ];
-    const activeInvestments = allInvestments.filter((i) =>
-      activeStatuses.includes(i.statut),
-    );
-    const montantCollecte = activeInvestments.reduce(
-      (sum, inv) => sum + Number(inv.montant),
-      0,
-    );
-    const nbInvestisseurs = new Set(
-      activeInvestments.map((i) => i.utilisateurId),
-    ).size;
-
-    const images = allDocs
-      .filter(
-        (d) =>
-          d.type === DocumentType.PHOTO_PROJET &&
-          (!publicView || d.isPublic === true),
-      )
-      .sort((a, b) => {
-        if (a.estPrincipale !== b.estPrincipale)
-          return a.estPrincipale ? -1 : 1;
-        return (a.ordre ?? 999) - (b.ordre ?? 999);
-      });
-
-    const documents = allDocs.filter(
-      (d) =>
-        d.type !== DocumentType.PHOTO_PROJET &&
-        (!publicView || d.isPublic === true),
-    );
-
-    return {
-      ...project,
-      prixFraction,
-      localisation: {
-        adresseComplete: project.adresseComplete,
-        ville: project.ville,
-        region: project.region,
-        pays: project.pays,
-        latitude: project.latitude,
-        longitude: project.longitude,
-      },
-      images,
-      documents,
-      avis: avisStats,
-      fractions: {
-        total: nbFractionsTotal,
-        vendues: fractionsVendues,
-        disponibles: Math.max(0, nbFractionsTotal - fractionsVendues),
-        prix: prixFraction,
-      },
-      stats: {
-        montantCollecte,
-        nbInvestisseurs,
-        tauxRemplissage:
-          nbFractionsTotal > 0
-            ? Math.min(
-                100,
-                Math.round((fractionsVendues / nbFractionsTotal) * 1000) / 10,
-              )
-            : null,
-      },
-    };
-  }
 }
