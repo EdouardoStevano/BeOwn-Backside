@@ -44,6 +44,14 @@ import { CancelInitiationUseCase } from 'src/secondarymarket/applications/usecas
 import { SignatureEntity } from 'src/signatures/infrastructure/persistences/entities/signature.entity';
 import { SignatureStatus } from 'src/signatures/domains/enums/signature-status.enum';
 import { UserEntity } from 'src/users/infrastructure/persistences/entities/user.entity';
+import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/wallet.entity';
+import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entities/transaction.entity';
+import {
+  TransactionFournisseur,
+  TransactionStatus,
+  TransactionType,
+  WalletType,
+} from 'src/wallets/domains/enums/wallet.enum';
 
 @SkipThrottle()
 @ApiTags('Marché Secondaire')
@@ -215,8 +223,100 @@ export class SecondaryMarketController {
     if (!investOriginal) throw new NotFoundException('Investissement source introuvable');
 
     const vendeurId = ordre.vendeurId;
+    const totalCost = qtyToBuy * Number(ordre.prixUnitaire);
 
     const result = await this.dataSource.transaction(async (em) => {
+      // ── Verrou + re-validation de l'ordre (anti survente concurrente) ────────
+      // On recharge l'ordre SOUS VERROU dans la transaction : deux achats
+      // concurrents (total/partiel) sur le même ordre sont ainsi sérialisés,
+      // impossible de survendre au-delà des fractions restantes.
+      const lockedOrdre = await em.findOne(OrdreMarcheEntity, {
+        where: { id },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!lockedOrdre || lockedOrdre.statut !== OrdreMarcheStatus.EN_CARNET) {
+        throw new BadRequestException('Ordre non disponible');
+      }
+      if (qtyToBuy > lockedOrdre.nbFractions) {
+        throw new BadRequestException(
+          `Quantité invalide : doit être entre 1 et ${lockedOrdre.nbFractions}`,
+        );
+      }
+
+      // ── Règlement financier ATOMIQUE (correctif C-1) ─────────────────────────
+      // Avant tout transfert de fractions : débit du wallet acheteur (garde de
+      // solde conditionnelle) + crédit du wallet vendeur, dans la même
+      // transaction. Sans ce règlement, `execute` transférait des titres
+      // GRATUITEMENT (acheteur non débité, vendeur non payé).
+      const buyerWallet = await em.findOne(WalletEntity, {
+        where: { proprietaireUserId: user.userId, type: WalletType.INVESTISSEUR },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!buyerWallet) {
+        throw new BadRequestException(
+          "Wallet introuvable. Alimentez votre compte avant d'acheter.",
+        );
+      }
+      if (Number(buyerWallet.solde) < totalCost) {
+        throw new BadRequestException('Solde insuffisant pour cet achat.');
+      }
+      // Débit conditionnel (anti double-débit / solde négatif).
+      const debit = await em
+        .createQueryBuilder()
+        .update(WalletEntity)
+        .set({ solde: () => 'solde - :cost' })
+        .setParameter('cost', totalCost)
+        .where('id = :id AND solde >= :cost', { id: buyerWallet.id, cost: totalCost })
+        .execute();
+      if (!debit.affected) {
+        throw new BadRequestException('Solde insuffisant pour cet achat.');
+      }
+
+      // Crédit du vendeur (wallet créé au besoin).
+      let sellerWallet = await em.findOne(WalletEntity, {
+        where: { proprietaireUserId: vendeurId, type: WalletType.INVESTISSEUR },
+      });
+      if (!sellerWallet) {
+        sellerWallet = await em.save(
+          em.create(WalletEntity, {
+            type: WalletType.INVESTISSEUR,
+            proprietaireUserId: vendeurId,
+            fournisseurRef: `INV-${vendeurId}-auto`,
+            devise: buyerWallet.devise,
+            solde: 0,
+          }),
+        );
+      }
+      await em
+        .createQueryBuilder()
+        .update(WalletEntity)
+        .set({ solde: () => 'solde + :cost' })
+        .setParameter('cost', totalCost)
+        .where('id = :id', { id: sellerWallet.id })
+        .execute();
+
+      // Traces ledger acheteur (débit) + vendeur (crédit).
+      await em.save(TransactionEntity, em.create(TransactionEntity, {
+        walletSource: buyerWallet.id,
+        type: TransactionType.SOUSCRIPTION,
+        montant: totalCost,
+        devise: buyerWallet.devise,
+        statut: TransactionStatus.REUSSI,
+        fournisseur: TransactionFournisseur.INTERNE,
+        projetId: investOriginal.projetId,
+        metadata: { kind: 'achat_marche_secondaire', ordreId: id, vendeurId, nbFractions: qtyToBuy },
+      }));
+      await em.save(TransactionEntity, em.create(TransactionEntity, {
+        walletDestination: sellerWallet.id,
+        type: TransactionType.INTERNE,
+        montant: totalCost,
+        devise: sellerWallet.devise,
+        statut: TransactionStatus.REUSSI,
+        fournisseur: TransactionFournisseur.INTERNE,
+        projetId: investOriginal.projetId,
+        metadata: { kind: 'vente_marche_secondaire', ordreId: id, acheteurId: user.userId, nbFractions: qtyToBuy },
+      }));
+
       // 1. Merge with existing buyer investment in same project, or create new
       const buyerExisting = await em.findOne(InvestmentEntity, {
         where: {
@@ -257,21 +357,22 @@ export class SecondaryMarketController {
         await em.save(InvestmentEntity, sellerInvest);
       }
 
-      // 3. Update order status
-      if (qtyToBuy === ordre.nbFractions) {
-        ordre.acheteurId = user.userId;
-        ordre.statut = OrdreMarcheStatus.EXECUTE;
+      // 3. Update order status (sur l'ordre VERROUILLÉ).
+      if (qtyToBuy === lockedOrdre.nbFractions) {
+        lockedOrdre.acheteurId = user.userId;
+        lockedOrdre.statut = OrdreMarcheStatus.EXECUTE;
       } else {
-        ordre.nbFractions = ordre.nbFractions - qtyToBuy;
-        ordre.montant = ordre.nbFractions * Number(ordre.prixUnitaire);
+        lockedOrdre.nbFractions = lockedOrdre.nbFractions - qtyToBuy;
+        lockedOrdre.montant = lockedOrdre.nbFractions * Number(lockedOrdre.prixUnitaire);
       }
-      await em.save(OrdreMarcheEntity, ordre);
+      await em.save(OrdreMarcheEntity, lockedOrdre);
 
       return {
         success: true,
         investissementId: buyerInvestId,
         fractionsAchetees: qtyToBuy,
-        restantDansOrdre: ordre.statut === OrdreMarcheStatus.EXECUTE ? 0 : ordre.nbFractions,
+        restantDansOrdre:
+          lockedOrdre.statut === OrdreMarcheStatus.EXECUTE ? 0 : lockedOrdre.nbFractions,
         fusionnee: !!buyerExisting,
       };
     });

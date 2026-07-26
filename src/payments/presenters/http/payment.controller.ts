@@ -159,47 +159,15 @@ export class PaymentController {
       );
     }
 
-    let wallet = await this.walletRepo.findOne({
-      where: { proprietaireUserId: user.userId, type: WalletType.INVESTISSEUR },
-    });
-
-    if (!wallet) {
-      wallet = this.walletRepo.create({
-        type: WalletType.INVESTISSEUR,
-        proprietaireUserId: user.userId,
-        fournisseurRef: `INV-${user.userId}-auto`,
-        devise: 'EUR',
-        solde: 0,
-      });
-      wallet = await this.walletRepo.save(wallet);
-    }
-
-    const idempotencyKey = `depot:${dto.paymentIntentId}`;
-    const existing = await this.txRepo.findOne({ where: { idempotencyKey } });
-    if (existing) return { success: true, alreadyProcessed: true };
-
     const amountMajor = Number(intent.amount) / 100;
 
-    await this.walletRepo
-      .createQueryBuilder()
-      .update(WalletEntity)
-      .set({ solde: () => 'solde + :amount' })
-      .setParameter('amount', amountMajor)
-      .where('id = :id', { id: wallet.id })
-      .execute();
-
-    await this.txRepo.save(
-      this.txRepo.create({
-        walletId: wallet.id,
-        type: TransactionType.DEPOT,
-        montant: amountMajor,
-        devise: 'EUR',
-        statut: TransactionStatus.REUSSI,
-        fournisseur: TransactionFournisseur.STRIPE,
-        fournisseurRef: dto.paymentIntentId,
-        idempotencyKey,
-      }),
+    // Crédit atomique + idempotent (H-A) — voir creditDepositAtomic.
+    const { credited, walletId } = await this.creditDepositAtomic(
+      user.userId,
+      dto.paymentIntentId,
+      amountMajor,
     );
+    if (!credited) return { success: true, alreadyProcessed: true };
 
     this.notificationService.push({
       utilisateurId: user.userId,
@@ -219,7 +187,72 @@ export class PaymentController {
       })
       .catch(() => {});
 
-    return { success: true, walletId: wallet.id };
+    return { success: true, walletId };
+  }
+
+  /**
+   * Crédit de dépôt ATOMIQUE et idempotent (correctif H-A). Dans une seule
+   * transaction DB : on INSÈRE d'abord la ligne ledger (clé unique
+   * `depot:<pi>`) — un doublon lève une violation d'unicité (23505) qui
+   * court-circuite le crédit — PUIS on incrémente le wallet. L'incrément ne
+   * peut donc jamais s'exécuter deux fois pour un même PaymentIntent, même sous
+   * appels concurrents (confirmDepot + webhook, ou rafales de confirmDepot).
+   *
+   * @returns credited=true si le wallet vient d'être crédité, false si le
+   *          PaymentIntent avait déjà été traité (no-op idempotent).
+   */
+  private async creditDepositAtomic(
+    userId: number,
+    paymentIntentId: string,
+    amountMajor: number,
+  ): Promise<{ credited: boolean; walletId: string }> {
+    // Wallet garanti présent hors section critique (idempotent : 1 par user/type).
+    let wallet = await this.walletRepo.findOne({
+      where: { proprietaireUserId: userId, type: WalletType.INVESTISSEUR },
+    });
+    if (!wallet) {
+      wallet = await this.walletRepo.save(
+        this.walletRepo.create({
+          type: WalletType.INVESTISSEUR,
+          proprietaireUserId: userId,
+          fournisseurRef: `INV-${userId}-auto`,
+          devise: 'EUR',
+          solde: 0,
+        }),
+      );
+    }
+
+    const idempotencyKey = `depot:${paymentIntentId}`;
+    try {
+      await this.dataSource.transaction(async (em) => {
+        // 1. Insert ledger FIRST — la contrainte unique rejette tout doublon.
+        await em.insert(TransactionEntity, {
+          walletId: wallet!.id,
+          type: TransactionType.DEPOT,
+          montant: amountMajor,
+          devise: 'EUR',
+          statut: TransactionStatus.REUSSI,
+          fournisseur: TransactionFournisseur.STRIPE,
+          fournisseurRef: paymentIntentId,
+          idempotencyKey,
+        });
+        // 2. Crédit atomique — atteint uniquement au 1er traitement.
+        await em
+          .createQueryBuilder()
+          .update(WalletEntity)
+          .set({ solde: () => 'solde + :amount' })
+          .setParameter('amount', amountMajor)
+          .where('id = :id', { id: wallet!.id })
+          .execute();
+      });
+      return { credited: true, walletId: wallet.id };
+    } catch (err: any) {
+      if (err?.code === '23505' || err?.driverError?.code === '23505') {
+        // Dépôt déjà traité (violation d'unicité) → no-op idempotent.
+        return { credited: false, walletId: wallet.id };
+      }
+      throw err;
+    }
   }
 
   // ─── Retrait Stripe Connect Express (E3) ──────────────────────────────────
@@ -434,43 +467,14 @@ export class PaymentController {
       const operationType = intent.metadata?.operationType ?? 'depot';
 
       if (!isNaN(userId) && operationType === 'depot') {
-        const idempotencyKey = `depot:${intent.id}`;
-        const existing = await this.txRepo.findOne({ where: { idempotencyKey } });
-        if (!existing) {
-          let wallet = await this.walletRepo.findOne({
-            where: { proprietaireUserId: userId, type: WalletType.INVESTISSEUR },
-          });
-          if (!wallet) {
-            wallet = await this.walletRepo.save(
-              this.walletRepo.create({
-                type: WalletType.INVESTISSEUR,
-                proprietaireUserId: userId,
-                fournisseurRef: `INV-${userId}-auto`,
-                devise: 'EUR',
-                solde: 0,
-              }),
-            );
-          }
-          const amountMajor = Number(intent.amount) / 100;
-          await this.walletRepo
-            .createQueryBuilder()
-            .update(WalletEntity)
-            .set({ solde: () => 'solde + :amount' })
-            .setParameter('amount', amountMajor)
-            .where('id = :id', { id: wallet.id })
-            .execute();
-          await this.txRepo.save(
-            this.txRepo.create({
-              walletId: wallet.id,
-              type: TransactionType.DEPOT,
-              montant: amountMajor,
-              devise: 'EUR',
-              statut: TransactionStatus.REUSSI,
-              fournisseur: TransactionFournisseur.STRIPE,
-              fournisseurRef: intent.id,
-              idempotencyKey,
-            }),
-          );
+        const amountMajor = Number(intent.amount) / 100;
+        // Crédit atomique + idempotent partagé avec confirmDepot (H-A).
+        const { credited } = await this.creditDepositAtomic(
+          userId,
+          intent.id,
+          amountMajor,
+        );
+        if (credited) {
           this.logger.log(`Wallet crédité: userId=${userId}, montant=${amountMajor}`);
           this.notificationService.push({
             utilisateurId: userId,

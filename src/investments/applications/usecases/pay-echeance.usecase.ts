@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { InjectDataSource } from '@nestjs/typeorm';
+import { DataSource, EntityManager } from 'typeorm';
 import { EcheanceEntity } from '../../infrastructure/persistences/entities/echeance.entity';
 import { EcheanceStatus } from '../../domains/enums/investment-status.enum';
 import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/wallet.entity';
@@ -15,157 +15,234 @@ import { NotificationEventService } from 'src/notifications/applications/notific
 import { AuditLogService } from 'src/notifications/applications/audit-log.service';
 import { UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
 
+/** Statuts d'échéance depuis lesquels un paiement est légitime. */
+const PAYABLE_STATUSES: EcheanceStatus[] = [
+  EcheanceStatus.A_VENIR,
+  EcheanceStatus.RETARD,
+  EcheanceStatus.RETARD_LEGER,
+  EcheanceStatus.RETARD_SIGNIFICATIF,
+  EcheanceStatus.EN_ATTENTE_PAIEMENT,
+];
+
 @Injectable()
 export class PayEcheanceUseCase {
   constructor(
-    @InjectRepository(EcheanceEntity)
-    private readonly echeanceRepo: Repository<EcheanceEntity>,
-    @InjectRepository(WalletEntity)
-    private readonly walletRepo: Repository<WalletEntity>,
-    @InjectRepository(TransactionEntity)
-    private readonly txRepo: Repository<TransactionEntity>,
+    @InjectDataSource()
+    private readonly dataSource: DataSource,
     private readonly notificationEvents: NotificationEventService,
     private readonly auditLog: AuditLogService,
   ) {}
 
-  async execute(echeanceId: string, adminId: number, adminRole?: string): Promise<EcheanceEntity> {
-    const echeance = await this.echeanceRepo.findOne({
-      where: { id: echeanceId },
-      relations: ['investissement', 'investissement.projet'],
-    });
-    if (!echeance) throw new NotFoundException('Échéance introuvable');
+  /**
+   * Paiement d'une échéance (intérêts + capital) avec prélèvement du PFU 30 %
+   * vers les wallets séquestres IR/CSG.
+   *
+   * Correctif H-C (double-crédit au retry du CRON) — tout le règlement est
+   * ATOMIQUE :
+   *  1. dans une transaction DB, on CLAIME d'abord l'échéance via une
+   *     transition d'état conditionnelle (`WHERE statut IN (payables)`,
+   *     `affected === 1`) AVANT tout crédit ;
+   *  2. les wallets (investisseur + séquestres IR/CSG) sont crédités par SQL
+   *     ATOMIQUE (`solde + :x`), plus de read-modify-write ;
+   *  3. les 3 traces ledger (net, IR, CSG) sont insérées dans la même
+   *     transaction.
+   *
+   * Une panne partielle annule TOUT (rollback) → l'échéance reste payable et
+   * le prochain run du CRON peut la rejouer sans double-créditer. Un succès
+   * committe l'échéance en `PAYE`, qui n'est plus payable → idempotent.
+   */
+  async execute(
+    echeanceId: string,
+    adminId: number,
+    adminRole?: string,
+  ): Promise<EcheanceEntity> {
+    const settled = await this.dataSource.transaction(async (em) => {
+      const echeance = await em.findOne(EcheanceEntity, {
+        where: { id: echeanceId },
+        relations: ['investissement', 'investissement.projet'],
+      });
+      if (!echeance) throw new NotFoundException('Échéance introuvable');
 
-    const eligible = [
-      EcheanceStatus.A_VENIR,
-      EcheanceStatus.RETARD,
-      EcheanceStatus.EN_ATTENTE_PAIEMENT,
-    ];
-    if (!eligible.includes(echeance.statut as EcheanceStatus)) {
-      throw new BadRequestException(`Échéance au statut "${echeance.statut}" non payable`);
-    }
+      if (!PAYABLE_STATUSES.includes(echeance.statut as EcheanceStatus)) {
+        throw new BadRequestException(
+          `Échéance au statut "${echeance.statut}" non payable`,
+        );
+      }
 
-    const userId = (echeance as any).investissement.utilisateurId;
-    const project = (echeance as any).investissement.projet;
+      const userId = (echeance as any).investissement.utilisateurId;
+      const project = (echeance as any).investissement.projet;
+      const projetId = (echeance as any).investissement.projetId;
 
-    // ── PFU (Prélèvement Forfaitaire Unique 30%) ─────────────────────────────
-    // IR: 12.8% of interest, CSG/CRDS: 17.2% of interest — applied on montantInterets only
-    const interets = Number(echeance.montantInterets);
-    const prelevementIR = Math.round(interets * 0.128 * 100) / 100;
-    const prelevementCSG = Math.round(interets * 0.172 * 100) / 100;
-    const montantNet = Number(echeance.montantTotal) - prelevementIR - prelevementCSG;
+      // ── PFU (Prélèvement Forfaitaire Unique 30%) ───────────────────────────
+      // IR 12,8 % + CSG/CRDS 17,2 % appliqués sur les intérêts uniquement.
+      const interets = Number(echeance.montantInterets);
+      const prelevementIR = Math.round(interets * 0.128 * 100) / 100;
+      const prelevementCSG = Math.round(interets * 0.172 * 100) / 100;
+      const montantNet = Number(echeance.montantTotal) - prelevementIR - prelevementCSG;
 
-    // ── Investor wallet ──────────────────────────────────────────────────────
-    const wallet = await this.walletRepo.findOne({
-      where: { proprietaireUserId: userId, type: WalletType.INVESTISSEUR },
-    });
-    if (!wallet) throw new NotFoundException('Wallet investisseur introuvable');
+      // 1. CLAIM atomique — transition d'état conditionnelle AVANT tout crédit.
+      const payeLe = new Date();
+      const claim = await em
+        .createQueryBuilder()
+        .update(EcheanceEntity)
+        .set({
+          statut: EcheanceStatus.PAYE,
+          payeLe,
+          statutChangeLe: payeLe,
+          prelevementIR,
+          prelevementCSG,
+        })
+        .where('id = :id AND statut IN (:...payables)', {
+          id: echeanceId,
+          payables: PAYABLE_STATUSES,
+        })
+        .execute();
+      if (!claim.affected) {
+        // Un run concurrent a déjà payé cette échéance.
+        throw new BadRequestException('Échéance déjà payée ou non payable');
+      }
 
-    wallet.solde = Number(wallet.solde) + montantNet;
-    await this.walletRepo.save(wallet);
+      // 2. Crédit ATOMIQUE du wallet investisseur (net).
+      const wallet = await em.findOne(WalletEntity, {
+        where: { proprietaireUserId: userId, type: WalletType.INVESTISSEUR },
+      });
+      if (!wallet) throw new NotFoundException('Wallet investisseur introuvable');
+      await this.creditAtomic(em, wallet.id, montantNet);
 
-    // ── Séquestre wallets (system-wide, created on first use) ────────────────
-    let walletIR = await this.walletRepo.findOne({
-      where: { type: WalletType.SEQUESTRE_IR },
-    });
-    if (!walletIR) {
-      walletIR = await this.walletRepo.save(
-        this.walletRepo.create({
-          type: WalletType.SEQUESTRE_IR,
-          proprietaireUserId: null,
-          fournisseurRef: 'SEQUESTRE-IR',
-          devise: wallet.devise,
-          solde: 0,
-        }),
+      // 3. Séquestres fiscaux (créés à la première utilisation) — crédit atomique.
+      const walletIR = await this.findOrCreateSequestre(
+        em,
+        WalletType.SEQUESTRE_IR,
+        'SEQUESTRE-IR',
+        wallet.devise,
       );
-    }
-    walletIR.solde = Number(walletIR.solde) + prelevementIR;
-    await this.walletRepo.save(walletIR);
+      await this.creditAtomic(em, walletIR.id, prelevementIR);
 
-    let walletCSG = await this.walletRepo.findOne({
-      where: { type: WalletType.SEQUESTRE_CSG },
-    });
-    if (!walletCSG) {
-      walletCSG = await this.walletRepo.save(
-        this.walletRepo.create({
-          type: WalletType.SEQUESTRE_CSG,
-          proprietaireUserId: null,
-          fournisseurRef: 'SEQUESTRE-CSG',
-          devise: wallet.devise,
-          solde: 0,
-        }),
+      const walletCSG = await this.findOrCreateSequestre(
+        em,
+        WalletType.SEQUESTRE_CSG,
+        'SEQUESTRE-CSG',
+        wallet.devise,
       );
+      await this.creditAtomic(em, walletCSG.id, prelevementCSG);
+
+      // 4. Traces ledger (net investisseur + IR + CSG), idempotency-keyées.
+      await em.save(TransactionEntity, em.create(TransactionEntity, {
+        walletDestination: wallet.id,
+        type: TransactionType.PAIEMENT_INTERETS,
+        montant: montantNet,
+        devise: wallet.devise,
+        statut: TransactionStatus.REUSSI,
+        fournisseur: TransactionFournisseur.INTERNE,
+        echeanceId: echeance.id,
+        investissementId: echeance.investissementId,
+        projetId,
+        idempotencyKey: `echeance:pay:${echeance.id}`,
+        fraisPsp: 0,
+        fraisPlateforme: 0,
+      }));
+
+      await em.save(TransactionEntity, em.create(TransactionEntity, {
+        walletDestination: walletIR.id,
+        type: TransactionType.IMPOTS,
+        montant: prelevementIR,
+        devise: wallet.devise,
+        statut: TransactionStatus.REUSSI,
+        fournisseur: TransactionFournisseur.INTERNE,
+        echeanceId: echeance.id,
+        investissementId: echeance.investissementId,
+        projetId,
+        idempotencyKey: `echeance:ir:${echeance.id}`,
+        fraisPsp: 0,
+        fraisPlateforme: 0,
+      }));
+
+      await em.save(TransactionEntity, em.create(TransactionEntity, {
+        walletDestination: walletCSG.id,
+        type: TransactionType.IMPOTS,
+        montant: prelevementCSG,
+        devise: wallet.devise,
+        statut: TransactionStatus.REUSSI,
+        fournisseur: TransactionFournisseur.INTERNE,
+        echeanceId: echeance.id,
+        investissementId: echeance.investissementId,
+        projetId,
+        idempotencyKey: `echeance:csg:${echeance.id}`,
+        fraisPsp: 0,
+        fraisPlateforme: 0,
+      }));
+
+      // Reflète l'état payé sur l'entité renvoyée (relations déjà chargées).
+      echeance.statut = EcheanceStatus.PAYE;
+      echeance.payeLe = payeLe;
+      echeance.statutChangeLe = payeLe;
+      echeance.prelevementIR = prelevementIR;
+      echeance.prelevementCSG = prelevementCSG;
+
+      return { echeance, project, montantNet, prelevementIR, prelevementCSG };
+    });
+
+    // ── Effets de bord APRÈS commit (non bloquants pour le règlement) ────────
+    try {
+      await this.notificationEvents.echeancePaid(settled.echeance, settled.project);
+    } catch {
+      // notification non bloquante
     }
-    walletCSG.solde = Number(walletCSG.solde) + prelevementCSG;
-    await this.walletRepo.save(walletCSG);
+    await this.auditLog
+      .create(
+        String(adminId),
+        adminRole ?? UserRole.SUPER_ADMIN,
+        'echeance.pay',
+        'echeance',
+        settled.echeance.id,
+        undefined,
+        undefined,
+        {
+          montantNet: settled.montantNet,
+          prelevementIR: settled.prelevementIR,
+          prelevementCSG: settled.prelevementCSG,
+          projetId: settled.project?.id,
+        },
+      )
+      .catch(() => undefined);
 
-    // ── Main transaction (net interest credited to investor) ─────────────────
-    const tx = this.txRepo.create({
-      walletDestination: wallet.id,
-      type: TransactionType.PAIEMENT_INTERETS,
-      montant: montantNet,
-      devise: wallet.devise,
-      statut: TransactionStatus.REUSSI,
-      fournisseur: TransactionFournisseur.INTERNE,
-      echeanceId: echeance.id,
-      investissementId: echeance.investissementId,
-      projetId: (echeance as any).investissement.projetId,
-      idempotencyKey: `echeance:pay:${echeance.id}`,
-      fraisPsp: 0,
-      fraisPlateforme: 0,
-    });
-    await this.txRepo.save(tx);
+    return settled.echeance;
+  }
 
-    // ── Audit transactions for séquestre transfers ───────────────────────────
-    const txIR = this.txRepo.create({
-      walletDestination: walletIR.id,
-      type: TransactionType.IMPOTS,
-      montant: prelevementIR,
-      devise: wallet.devise,
-      statut: TransactionStatus.REUSSI,
-      fournisseur: TransactionFournisseur.INTERNE,
-      echeanceId: echeance.id,
-      investissementId: echeance.investissementId,
-      projetId: (echeance as any).investissement.projetId,
-      idempotencyKey: `echeance:ir:${echeance.id}`,
-      fraisPsp: 0,
-      fraisPlateforme: 0,
-    });
-    await this.txRepo.save(txIR);
+  /** Crédit atomique d'un wallet (no-op si delta nul). */
+  private async creditAtomic(
+    em: EntityManager,
+    walletId: string,
+    amount: number,
+  ): Promise<void> {
+    if (!amount) return;
+    await em
+      .createQueryBuilder()
+      .update(WalletEntity)
+      .set({ solde: () => 'solde + :amount' })
+      .setParameter('amount', amount)
+      .where('id = :id', { id: walletId })
+      .execute();
+  }
 
-    const txCSG = this.txRepo.create({
-      walletDestination: walletCSG.id,
-      type: TransactionType.IMPOTS,
-      montant: prelevementCSG,
-      devise: wallet.devise,
-      statut: TransactionStatus.REUSSI,
-      fournisseur: TransactionFournisseur.INTERNE,
-      echeanceId: echeance.id,
-      investissementId: echeance.investissementId,
-      projetId: (echeance as any).investissement.projetId,
-      idempotencyKey: `echeance:csg:${echeance.id}`,
-      fraisPsp: 0,
-      fraisPlateforme: 0,
-    });
-    await this.txRepo.save(txCSG);
-
-    // ── Persist fiscal fields + mark paid ────────────────────────────────────
-    echeance.prelevementIR = prelevementIR;
-    echeance.prelevementCSG = prelevementCSG;
-    echeance.statut = EcheanceStatus.PAYE;
-    echeance.payeLe = new Date();
-    const saved = await this.echeanceRepo.save(echeance);
-
-    await this.notificationEvents.echeancePaid(echeance, project);
-    await this.auditLog.create(
-      String(adminId),
-      adminRole ?? UserRole.SUPER_ADMIN,
-      'echeance.pay',
-      'echeance',
-      echeance.id,
-      undefined,
-      undefined,
-      { montantNet, prelevementIR, prelevementCSG, projetId: project?.id },
+  /** Récupère (ou crée) un wallet séquestre system-wide. */
+  private async findOrCreateSequestre(
+    em: EntityManager,
+    type: WalletType,
+    fournisseurRef: string,
+    devise: string,
+  ): Promise<WalletEntity> {
+    const existing = await em.findOne(WalletEntity, { where: { type } });
+    if (existing) return existing;
+    return em.save(
+      WalletEntity,
+      em.create(WalletEntity, {
+        type,
+        proprietaireUserId: null,
+        fournisseurRef,
+        devise,
+        solde: 0,
+      }),
     );
-    return saved;
   }
 }
