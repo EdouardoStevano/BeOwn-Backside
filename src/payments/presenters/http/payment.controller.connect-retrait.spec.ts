@@ -1,7 +1,9 @@
 import { PaymentController } from './payment.controller';
+import { RequestRetraitUseCase } from '../../applications/usecases/request-retrait.usecase';
 import {
   TransactionStatus,
   TransactionType,
+  WalletType,
 } from 'src/wallets/domains/enums/wallet.enum';
 
 /**
@@ -18,6 +20,7 @@ import {
  */
 describe('PaymentController — retrait Stripe Connect (E3, sécurité argent)', () => {
   let controller: PaymentController;
+  let requestRetrait: RequestRetraitUseCase;
   let stripeConnect: any;
   let notificationService: any;
   let walletRepo: any;
@@ -64,6 +67,15 @@ describe('PaymentController — retrait Stripe Connect (E3, sécurité argent)',
     };
     dataSource = { transaction: jest.fn() };
 
+    // Le usecase porte désormais la logique retrait/recrédit (SRP) ; on l'instancie
+    // avec les mêmes mocks puis on l'injecte dans le contrôleur.
+    requestRetrait = new RequestRetraitUseCase(
+      txRepo,
+      stripeConnect,
+      notificationService,
+      dataSource,
+    );
+
     controller = new PaymentController(
       /* stripeService */ {} as any,
       /* identityService */ {} as any,
@@ -76,7 +88,42 @@ describe('PaymentController — retrait Stripe Connect (E3, sécurité argent)',
       walletRepo,
       txRepo,
       dataSource,
+      requestRetrait,
     );
+  });
+
+  it("sans walletId : résout le wallet INVESTISSEUR de l'utilisateur (front n'envoie que le montant)", async () => {
+    const openManager = {
+      findOne: jest.fn().mockResolvedValue({ id: 'w1', solde: 500, devise: 'EUR' }),
+      createQueryBuilder: jest.fn(() => chainableQB({ affected: 1 })),
+      create: jest.fn((_e: any, x: any) => x),
+      save: jest.fn(async (x: any) => ({ ...x, id: 'tx1' })),
+    };
+    dataSource.transaction.mockImplementationOnce(async (cb: any) => cb(openManager));
+    stripeConnect.createTransfer.mockResolvedValue('tr_1');
+    stripeConnect.createPayoutOnConnectedAccount.mockResolvedValue('po_1');
+
+    // Le front Connect n'envoie que { amount, currency } — pas de walletId.
+    const res = await controller.createRetrait(
+      { amount: 100, currency: 'EUR' } as any,
+      user,
+    );
+
+    expect(res).toEqual(
+      expect.objectContaining({ success: true, transactionId: 'tx1' }),
+    );
+    // Wallet résolu par propriétaire + type INVESTISSEUR (jamais par id fourni).
+    expect(openManager.findOne).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        where: expect.objectContaining({
+          proprietaireUserId: 42,
+          type: WalletType.INVESTISSEUR,
+        }),
+      }),
+    );
+    // Débit atomique bien exécuté sur le wallet résolu.
+    expect(openManager.createQueryBuilder).toHaveBeenCalled();
   });
 
   it('rollback intégral quand le Transfer Stripe échoue (wallet recrédité, ECHOUE)', async () => {
@@ -144,12 +191,12 @@ describe('PaymentController — retrait Stripe Connect (E3, sécurité argent)',
     };
     dataSource.transaction.mockImplementation(async (cb: any) => cb(manager));
 
-    const first = await (controller as any).recreditRetrait(
+    const first = await (requestRetrait as any).recreditRetrait(
       'tx1',
       'payout échoué',
       TransactionStatus.ECHOUE,
     );
-    const second = await (controller as any).recreditRetrait(
+    const second = await (requestRetrait as any).recreditRetrait(
       'tx1',
       'payout échoué (redélivrance)',
       TransactionStatus.ECHOUE,

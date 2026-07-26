@@ -40,9 +40,14 @@ export class CreateRetraitDto {
   @IsIn(['EUR'], { message: 'Seule la devise EUR est acceptée.' })
   currency: string;
 
-  @ApiProperty({ example: 'wallet-uuid', description: 'ID du wallet source' })
+  @ApiPropertyOptional({
+    example: 'wallet-uuid',
+    description:
+      "ID du wallet source. Optionnel : si absent, le wallet INVESTISSEUR de l'utilisateur authentifié est utilisé (parcours Stripe Connect, le front n'envoie que le montant).",
+  })
+  @IsOptional()
   @IsString()
-  walletId: string;
+  walletId?: string;
 
   @ApiPropertyOptional({
     example: 'SN0800100000015000000160',

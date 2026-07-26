@@ -1,5 +1,6 @@
 import { ForbiddenException } from '@nestjs/common';
 import { PaymentController } from './payment.controller';
+import { RequestRetraitUseCase } from '../../applications/usecases/request-retrait.usecase';
 
 /**
  * Tests de non-régression des correctifs de sécurité financière (audit
@@ -13,6 +14,7 @@ import { PaymentController } from './payment.controller';
  */
 describe('PaymentController — sécurité des flux monétaires (H-1 / H-2)', () => {
   let controller: PaymentController;
+  let requestRetrait: RequestRetraitUseCase;
   let stripeService: any;
   let stripeConnect: any;
   let notificationService: any;
@@ -63,6 +65,15 @@ describe('PaymentController — sécurité des flux monétaires (H-1 / H-2)', ()
     };
     dataSource = { transaction: jest.fn() };
 
+    // H-2 (débit atomique conditionnel + idempotence L-2) vit désormais dans le
+    // usecase retrait ; on l'instancie avec les mêmes mocks et on l'injecte.
+    requestRetrait = new RequestRetraitUseCase(
+      txRepo,
+      stripeConnect,
+      notificationService,
+      dataSource,
+    );
+
     controller = new PaymentController(
       stripeService,
       /* identityService */ {} as any,
@@ -75,6 +86,7 @@ describe('PaymentController — sécurité des flux monétaires (H-1 / H-2)', ()
       walletRepo,
       txRepo,
       dataSource,
+      requestRetrait,
     );
   });
 
@@ -114,8 +126,16 @@ describe('PaymentController — sécurité des flux monétaires (H-1 / H-2)', ()
         amount: 100_00,
         metadata: { userId: '42' },
       });
-      walletRepo.findOne.mockResolvedValue({ id: 'w1' });
-      txRepo.findOne.mockResolvedValue(null);
+      walletRepo.findOne.mockResolvedValue({ id: 'w1', devise: 'EUR' });
+
+      // H-A : le crédit est désormais ATOMIQUE — insert ledger (clé unique)
+      // PUIS incrément wallet, dans une transaction DB. On instrumente le
+      // manager pour vérifier l'ordre insert-avant-incrément.
+      const em: any = {
+        insert: jest.fn().mockResolvedValue(undefined),
+        createQueryBuilder: jest.fn(() => chainableQB({ affected: 1 })),
+      };
+      dataSource.transaction.mockImplementation(async (cb: any) => cb(em));
 
       const res = await controller.confirmDepot(
         { paymentIntentId: 'pi_own' } as any,
@@ -123,8 +143,35 @@ describe('PaymentController — sécurité des flux monétaires (H-1 / H-2)', ()
       );
 
       expect(res).toEqual({ success: true, walletId: 'w1' });
-      expect(walletRepo.createQueryBuilder).toHaveBeenCalled();
-      expect(txRepo.save).toHaveBeenCalled();
+      // Ledger inséré EN PREMIER (contrainte unique = garde d'idempotence)…
+      expect(em.insert).toHaveBeenCalled();
+      // …puis crédit atomique du wallet.
+      expect(em.createQueryBuilder).toHaveBeenCalled();
+    });
+
+    it('est idempotent : un dépôt déjà traité (violation 23505) ne re-crédite pas', async () => {
+      stripeService.retrievePaymentIntent.mockResolvedValue({
+        status: 'succeeded',
+        amount: 100_00,
+        metadata: { userId: '42' },
+      });
+      walletRepo.findOne.mockResolvedValue({ id: 'w1', devise: 'EUR' });
+
+      const em: any = {
+        // Doublon : l'insert du ledger lève une violation d'unicité Postgres.
+        insert: jest.fn().mockRejectedValue({ code: '23505' }),
+        createQueryBuilder: jest.fn(() => chainableQB({ affected: 1 })),
+      };
+      dataSource.transaction.mockImplementation(async (cb: any) => cb(em));
+
+      const res = await controller.confirmDepot(
+        { paymentIntentId: 'pi_dup' } as any,
+        user,
+      );
+
+      expect(res).toEqual({ success: true, alreadyProcessed: true });
+      // Aucun incrément de solde ne doit avoir eu lieu (insert a échoué avant).
+      expect(em.createQueryBuilder).not.toHaveBeenCalled();
     });
   });
 

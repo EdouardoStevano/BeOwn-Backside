@@ -16,6 +16,7 @@ import { CloudStorageModule } from 'src/common/cloud-storage/cloud-storage.modul
 import { NotificationsModule } from 'src/notifications/notifications.module';
 import { KycEntity } from 'src/profiles/infrastructure/persistences/entities/kyc.entity';
 import { KycValidatedGuard } from 'src/common/auth/kyc-validated.guard';
+import { RequestRetraitUseCase } from './applications/usecases/request-retrait.usecase';
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { KycValidatedGuard } from 'src/common/auth/kyc-validated.guard';
     StripePaymentService,
     StripeIdentityServiceImpl,
     StripeConnectService,
+    RequestRetraitUseCase,
     KycValidatedGuard,
   ],
   exports: [PAYMENT_SERVICE, StripeIdentityServiceImpl, StripeConnectService],

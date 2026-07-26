@@ -59,11 +59,25 @@ export class RefundCollecteService {
     },
   ): Promise<RefundResult> {
     return this.dataSource.transaction(async (manager) => {
+      // Correctif M-3 — verrou pessimiste sur la ligne projet : sérialise deux
+      // déclenchements concurrents (CRON de clôture + annulation admin) qui,
+      // sinon, liraient tous deux le même lot d'investissements avant tout
+      // commit et rembourseraient deux fois.
       const project = await manager.findOne(ProjectEntity, {
         where: { id: projectId },
+        lock: { mode: 'pessimistic_write' },
       });
       if (!project) {
         throw new Error(`Projet ${projectId} introuvable pour remboursement.`);
+      }
+
+      // Garde d'idempotence : si le projet est déjà dans le statut terminal
+      // visé (remboursement déjà effectué par un run précédent), no-op.
+      if ((project as any).statut === options.targetStatus) {
+        this.logger.log(
+          `Projet ${projectId} déjà en statut "${options.targetStatus}" — remboursement ignoré (idempotent).`,
+        );
+        return { refundedCount: 0, refundedAmount: 0 };
       }
 
       const investments = await manager.find(InvestmentEntity, {
