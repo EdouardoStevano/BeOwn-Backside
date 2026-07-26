@@ -1,4 +1,5 @@
 import { PaymentController } from './payment.controller';
+import { RequestRetraitUseCase } from '../../applications/usecases/request-retrait.usecase';
 import {
   TransactionStatus,
   TransactionType,
@@ -18,6 +19,7 @@ import {
  */
 describe('PaymentController — retrait Stripe Connect (E3, sécurité argent)', () => {
   let controller: PaymentController;
+  let requestRetrait: RequestRetraitUseCase;
   let stripeConnect: any;
   let notificationService: any;
   let walletRepo: any;
@@ -64,6 +66,15 @@ describe('PaymentController — retrait Stripe Connect (E3, sécurité argent)',
     };
     dataSource = { transaction: jest.fn() };
 
+    // Le usecase porte désormais la logique retrait/recrédit (SRP) ; on l'instancie
+    // avec les mêmes mocks puis on l'injecte dans le contrôleur.
+    requestRetrait = new RequestRetraitUseCase(
+      txRepo,
+      stripeConnect,
+      notificationService,
+      dataSource,
+    );
+
     controller = new PaymentController(
       /* stripeService */ {} as any,
       /* identityService */ {} as any,
@@ -76,6 +87,7 @@ describe('PaymentController — retrait Stripe Connect (E3, sécurité argent)',
       walletRepo,
       txRepo,
       dataSource,
+      requestRetrait,
     );
   });
 
@@ -144,12 +156,12 @@ describe('PaymentController — retrait Stripe Connect (E3, sécurité argent)',
     };
     dataSource.transaction.mockImplementation(async (cb: any) => cb(manager));
 
-    const first = await (controller as any).recreditRetrait(
+    const first = await (requestRetrait as any).recreditRetrait(
       'tx1',
       'payout échoué',
       TransactionStatus.ECHOUE,
     );
-    const second = await (controller as any).recreditRetrait(
+    const second = await (requestRetrait as any).recreditRetrait(
       'tx1',
       'payout échoué (redélivrance)',
       TransactionStatus.ECHOUE,

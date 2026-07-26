@@ -1,5 +1,6 @@
 import { ForbiddenException } from '@nestjs/common';
 import { PaymentController } from './payment.controller';
+import { RequestRetraitUseCase } from '../../applications/usecases/request-retrait.usecase';
 
 /**
  * Tests de non-régression des correctifs de sécurité financière (audit
@@ -13,6 +14,7 @@ import { PaymentController } from './payment.controller';
  */
 describe('PaymentController — sécurité des flux monétaires (H-1 / H-2)', () => {
   let controller: PaymentController;
+  let requestRetrait: RequestRetraitUseCase;
   let stripeService: any;
   let stripeConnect: any;
   let notificationService: any;
@@ -63,6 +65,15 @@ describe('PaymentController — sécurité des flux monétaires (H-1 / H-2)', ()
     };
     dataSource = { transaction: jest.fn() };
 
+    // H-2 (débit atomique conditionnel + idempotence L-2) vit désormais dans le
+    // usecase retrait ; on l'instancie avec les mêmes mocks et on l'injecte.
+    requestRetrait = new RequestRetraitUseCase(
+      txRepo,
+      stripeConnect,
+      notificationService,
+      dataSource,
+    );
+
     controller = new PaymentController(
       stripeService,
       /* identityService */ {} as any,
@@ -75,6 +86,7 @@ describe('PaymentController — sécurité des flux monétaires (H-1 / H-2)', ()
       walletRepo,
       txRepo,
       dataSource,
+      requestRetrait,
     );
   });
 
