@@ -2,12 +2,16 @@ import { ExecutionContext, Injectable } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import type { Request } from 'express';
 import { Social } from '../constant/social';
+import { setOAuthRedirectCookie } from './oauth-redirect-cookie';
 
 @Injectable()
 export class LinkedinAuthGuard extends AuthGuard(Social.LINKEDIN) {
   getAuthenticateOptions(context: ExecutionContext) {
     const req = context.switchToHttp().getRequest<Request>();
     const redirectTo = req.query.redirectTo === 'admin' ? 'admin' : 'frontend';
-    return { state: redirectTo };
+    // Cible dans un cookie dédié — surtout PAS dans `state` (réservé au CSRF du
+    // CookieOAuthStateStore ; une string dans `state` casse la pose du cookie).
+    setOAuthRedirectCookie(req, redirectTo);
+    return {};
   }
 }
