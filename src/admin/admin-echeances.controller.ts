@@ -52,6 +52,9 @@ import { NotificationService } from 'src/notifications/applications/notification
 import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
 import { PayEcheanceUseCase } from 'src/investments/applications/usecases/pay-echeance.usecase';
 import { ProjectScheduleGeneratorService } from 'src/investments/applications/project-schedule-generator.service';
+import { TriggerEcheancePaymentUseCase } from './usecases/trigger-echeance-payment.usecase';
+import { GetAggregatedScheduleUseCase } from './usecases/get-aggregated-schedule.usecase';
+import { PatchAggregatedEcheanceUseCase } from './usecases/patch-aggregated-echeance.usecase';
 
 const ADMIN_ROLES = rolesWithPermission('echeancier:read');
 const PAY_ROLES: string[] = rolesWithPermission('echeancier:pay');
@@ -92,6 +95,9 @@ export class AdminEcheancesController {
     private readonly notifications: NotificationService,
     private readonly payEcheance: PayEcheanceUseCase,
     private readonly scheduleGenerator: ProjectScheduleGeneratorService,
+    private readonly triggerEcheancePayment: TriggerEcheancePaymentUseCase,
+    private readonly aggregatedSchedule: GetAggregatedScheduleUseCase,
+    private readonly patchAggregatedEcheance: PatchAggregatedEcheanceUseCase,
   ) {}
 
   private async assertAdmin(user: ActiveUser): Promise<void> {
@@ -124,109 +130,7 @@ export class AdminEcheancesController {
     @Body() body?: { motif?: string },
   ): Promise<{ paidCount: number; totalAmount: number; skipped: number }> {
     await this.assertPay(admin);
-    if (numero < 1) throw new BadRequestException("Numéro d'échéance invalide");
-
-    // 1. Charger les investissements confirmés du projet
-    const investments = await this.investRepo.find({
-      where: { projetId: projectId, statut: InvestmentStatus.CONFIRME },
-    });
-    if (investments.length === 0) {
-      throw new NotFoundException('Aucun investissement confirmé sur ce projet');
-    }
-
-    const investmentIds = investments.map((i) => i.id);
-
-    // 2. Trouver les échéances correspondantes
-    const echeances = await this.echeanceRepo.find({
-      where: { investissementId: In(investmentIds), numero },
-    });
-    if (echeances.length === 0) {
-      throw new NotFoundException(`Aucune échéance #${numero} trouvée pour ce projet`);
-    }
-
-    const investmentByid = new Map(investments.map((i) => [i.id, i]));
-
-    let paidCount = 0;
-    let totalAmount = 0;
-    let skipped = 0;
-
-    // 3. Pour chaque échéance, créditer le wallet investisseur dans une transaction
-    for (const ech of echeances) {
-      if (ech.statut === EcheanceStatus.PAYE) {
-        skipped++;
-        continue;
-      }
-
-      const invest = investmentByid.get(ech.investissementId);
-      if (!invest) {
-        skipped++;
-        continue;
-      }
-      const montant = Number(ech.montantTotal);
-      if (montant <= 0) {
-        skipped++;
-        continue;
-      }
-
-      try {
-        await this.dataSource.transaction(async (em) => {
-          const wallet = await em.findOne(WalletEntity, {
-            where: { proprietaireUserId: invest.utilisateurId, type: WalletType.INVESTISSEUR },
-          });
-          if (!wallet) throw new Error(`Wallet introuvable pour user ${invest.utilisateurId}`);
-
-          wallet.solde = Number(wallet.solde) + montant;
-          await em.save(WalletEntity, wallet);
-
-          await em.save(TransactionEntity, em.create(TransactionEntity, {
-            walletId: wallet.id,
-            walletSource: null,
-            walletDestination: wallet.id,
-            type: TransactionType.REMBOURSEMENT_CAPITAL,
-            montant,
-            devise: wallet.devise,
-            statut: TransactionStatus.REUSSI,
-            fournisseur: TransactionFournisseur.INTERNE,
-            investissementId: invest.id,
-            projetId: projectId,
-            idempotencyKey: `echeance-pay:${ech.id}`,
-            fraisPsp: 0,
-            fraisPlateforme: 0,
-          }));
-
-          ech.statut = EcheanceStatus.PAYE;
-          ech.payeLe = new Date();
-          await em.save(EcheanceEntity, ech);
-        });
-
-        paidCount++;
-        totalAmount += montant;
-
-        this.notifications
-          .push({
-            utilisateurId: invest.utilisateurId,
-            type: NotificationType.ECHEANCE,
-            titre: `Échéance #${numero} reçue`,
-            message: `Vous avez reçu ${formatEur(montant)} sur votre wallet (échéance ${numero} du projet).`,
-            metadata: { investissementId: invest.id, echeanceId: ech.id, montant, numero },
-          })
-          .catch(() => {});
-      } catch {
-        skipped++;
-      }
-    }
-
-    this.notifications
-      .pushToAdmins({
-        type: NotificationType.ECHEANCE,
-        titre: `Échéance #${numero} déclenchée`,
-        message: `Admin a déclenché l'échéance ${numero} : ${paidCount} investisseur(s) crédité(s) pour ${formatEur(totalAmount)}.`,
-        roles: [UserRole.SUPER_ADMIN, UserRole.FINANCIER, UserRole.COMPLIANCE],
-        metadata: { projectId, numero, paidCount, totalAmount, triggeredBy: admin.userId },
-      })
-      .catch(() => {});
-
-    return { paidCount, totalAmount, skipped };
+    return this.triggerEcheancePayment.execute(projectId, numero, admin);
   }
 
   @ApiOperation({ summary: "Marquer une échéance comme payée (crédite le wallet)" })
@@ -333,88 +237,7 @@ export class AdminEcheancesController {
     }>
   > {
     await this.assertAdmin(admin);
-
-    const investments = await this.investRepo.find({
-      where: { projetId: projectId },
-    });
-    const investmentIds = investments.map((i) => i.id);
-    if (investmentIds.length === 0) return [];
-
-    const rows = await this.echeanceRepo.find({
-      where: { investissementId: In(investmentIds) },
-      order: { numero: 'ASC', datePrevue: 'ASC' },
-    });
-
-    const byNumero = new Map<
-      number,
-      {
-        numero: number;
-        datePrevue: string;
-        montantCapital: number;
-        montantInterets: number;
-        montantTotal: number;
-        statuts: EcheanceStatus[];
-      }
-    >();
-
-    for (const r of rows) {
-      const key = r.numero;
-      const dateStr =
-        r.datePrevue instanceof Date
-          ? r.datePrevue.toISOString().slice(0, 10)
-          : String(r.datePrevue).slice(0, 10);
-      const existing = byNumero.get(key);
-      if (existing) {
-        existing.montantCapital += Number(r.montantCapital);
-        existing.montantInterets += Number(r.montantInterets);
-        existing.montantTotal += Number(r.montantTotal);
-        existing.statuts.push(r.statut);
-        if (dateStr < existing.datePrevue) existing.datePrevue = dateStr;
-      } else {
-        byNumero.set(key, {
-          numero: r.numero,
-          datePrevue: dateStr,
-          montantCapital: Number(r.montantCapital),
-          montantInterets: Number(r.montantInterets),
-          montantTotal: Number(r.montantTotal),
-          statuts: [r.statut],
-        });
-      }
-    }
-
-    const sorted = [...byNumero.values()].sort((a, b) => a.numero - b.numero);
-    const totalCapital = sorted.reduce((s, r) => s + r.montantCapital, 0);
-
-    let running = totalCapital;
-    return sorted.map((r) => {
-      const before = round2(running);
-      const after = round2(running - r.montantCapital);
-      running = after;
-
-      const allPaid = r.statuts.every((s) => s === EcheanceStatus.PAYE);
-      const anyLate = r.statuts.some((s) => s === EcheanceStatus.RETARD);
-      const anyUnpaid = r.statuts.some((s) => s === EcheanceStatus.IMPAYE);
-      const statut = anyUnpaid
-        ? EcheanceStatus.IMPAYE
-        : anyLate
-        ? EcheanceStatus.RETARD
-        : allPaid
-        ? EcheanceStatus.PAYE
-        : EcheanceStatus.A_VENIR;
-
-      return {
-        numero: r.numero,
-        datePrevue: r.datePrevue,
-        montantCapital: round2(r.montantCapital),
-        montantInterets: round2(r.montantInterets),
-        montantTotal: round2(r.montantTotal),
-        capitalRestantAvant: before,
-        capitalRestantApres: after,
-        statut,
-        nbInvestisseurs: r.statuts.length,
-        nbPayes: r.statuts.filter((s) => s === EcheanceStatus.PAYE).length,
-      };
-    });
+    return this.aggregatedSchedule.execute(projectId);
   }
 
   @ApiOperation({
@@ -432,75 +255,7 @@ export class AdminEcheancesController {
     @CurrentUser() admin: ActiveUser,
   ): Promise<{ updated: number }> {
     await this.assertAdmin(admin);
-    const investments = await this.investRepo.find({
-      where: { projetId: projectId },
-    });
-    if (investments.length === 0) {
-      throw new NotFoundException('Aucun investissement sur ce projet');
-    }
-
-    const investmentIds = investments.map((i) => i.id);
-    const targets = await this.echeanceRepo.find({
-      where: { investissementId: In(investmentIds), numero },
-    });
-    const editable = targets.filter((e) => e.statut === EcheanceStatus.A_VENIR);
-    if (editable.length === 0) {
-      throw new BadRequestException(
-        "Aucune échéance modifiable pour ce numéro (toutes sont payées ou en retard).",
-      );
-    }
-
-    const editableInvestIds = new Set(editable.map((e) => e.investissementId));
-    const editableInvests = investments.filter((i) => editableInvestIds.has(i.id));
-    const totalFractions = editableInvests.reduce(
-      (s, i) => s + Number(i.nbTitres),
-      0,
-    );
-
-    const hasMontant =
-      dto.montantCapital !== undefined ||
-      dto.montantInterets !== undefined ||
-      dto.montantTotal !== undefined;
-
-    if (hasMontant && totalFractions === 0) {
-      throw new BadRequestException(
-        'Impossible de répartir : aucune fraction détenue par les investisseurs actifs.',
-      );
-    }
-
-    for (const ech of editable) {
-      const patch: Partial<EcheanceEntity> = {};
-      if (dto.datePrevue) patch.datePrevue = new Date(dto.datePrevue);
-
-      if (hasMontant) {
-        const inv = editableInvests.find((i) => i.id === ech.investissementId);
-        if (!inv) continue;
-        const share = Number(inv.nbTitres) / totalFractions;
-
-        const newCap =
-          dto.montantCapital !== undefined
-            ? round2(dto.montantCapital * share)
-            : Number(ech.montantCapital);
-        const newInt =
-          dto.montantInterets !== undefined
-            ? round2(dto.montantInterets * share)
-            : Number(ech.montantInterets);
-        const newTotal =
-          dto.montantTotal !== undefined
-            ? round2(dto.montantTotal * share)
-            : round2(newCap + newInt);
-
-        patch.montantCapital = newCap;
-        patch.montantInterets = newInt;
-        patch.montantTotal = newTotal;
-      }
-
-      if (Object.keys(patch).length > 0) {
-        await this.echeanceRepo.update({ id: ech.id }, patch);
-      }
-    }
-
-    return { updated: editable.length };
+    return this.patchAggregatedEcheance.execute(projectId, numero, dto);
   }
 
   @ApiOperation({

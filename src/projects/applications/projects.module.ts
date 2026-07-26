@@ -15,6 +15,7 @@ import { CreateProjectUseCase } from './usecases/create-project.usecase';
 import { UpdateProjectUseCase } from './usecases/update-project.usecase';
 import { UpdateProjectStatusUseCase } from './usecases/update-project-status.usecase';
 import { GetProjectsUseCase } from './usecases/get-projects.usecase';
+import { ProjectReadModelService } from './project-read-model.service';
 import { DeclareSortieUseCase } from './usecases/declare-sortie.usecase';
 import { ExecuteSortieUseCase } from './usecases/execute-sortie.usecase';
 import { ProjectController } from '../presenters/http/project.controller';
@@ -42,6 +43,7 @@ import { ProjectTimelineCronService } from './project-timeline-cron.service';
     UpdateProjectUseCase,
     UpdateProjectStatusUseCase,
     GetProjectsUseCase,
+    ProjectReadModelService,
     DeclareSortieUseCase,
     ExecuteSortieUseCase,
     ProjectTimelineCronService,
