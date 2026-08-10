@@ -6,7 +6,7 @@ import type { ProfilRepository } from '../ports/repositories/profil.repository';
 import { CreateProfilPPDto } from 'src/profiles/presenters/dto/profil.dto';
 import { ProfilPP } from 'src/profiles/domains/profil-pp';
 import { CategoriePsfp } from 'src/profiles/domains/enums/kyc-status.enum';
-import { UserEntity } from 'src/users/infrastructure/persistences/entities/user.entity';
+import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 
 @Injectable()
 export class CreateProfilPPUseCase {

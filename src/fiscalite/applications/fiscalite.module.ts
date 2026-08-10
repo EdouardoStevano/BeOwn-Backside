@@ -2,7 +2,7 @@ import { Module } from '@nestjs/common';
 import { FiscaliteInfrastructureModule } from '../infrastructure/fiscalite-infrastructure.module';
 import { DistributionsInfrastructureModule } from 'src/distributions/infrastructure/distributions-infrastructure.module';
 import { InvestmentsInfrastructureModule } from 'src/investments/infrastructure/investments-infrastructure.module';
-import { UsersInfrastructureModule } from 'src/users/infrastructure/users-infrastructure.module';
+import { UsersInfrastructureModule } from 'src/iam/infrastructure/users-infrastructure.module';
 import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructure.module';
 import { GenerateInvestisseurIfuUseCase } from './usecases/generate-investisseur-ifu.usecase';
 import { IfuPdfService } from './ifu-pdf.service';

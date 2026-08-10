@@ -60,7 +60,7 @@ import { Kyc } from 'src/profiles/domains/kyc';
 import { SkipThrottle } from '@nestjs/throttler';
 import { NotificationService } from 'src/notifications/applications/notification.service';
 import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
-import { UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
+import { UserRole } from 'src/iam/domains/enums/user.enum';
 import { AuditLogService } from 'src/notifications/applications/audit-log.service';
 
 @ApiTags('Payments & KYC')

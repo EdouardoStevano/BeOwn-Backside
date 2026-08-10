@@ -19,7 +19,7 @@ import {
 } from '../../infrastructure/stripe-connect.service';
 import { NotificationService } from 'src/notifications/applications/notification.service';
 import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
-import { UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
+import { UserRole } from 'src/iam/domains/enums/user.enum';
 
 /**
  * Cas d'usage « demande de retrait » (extrait de PaymentController — SRP).

@@ -11,10 +11,8 @@ import { AdminRetraitsController } from './admin-retraits.controller';
 import { AdminInvestorsController } from './admin-investors.controller';
 import { AdminPlatformWalletController } from './admin-platform-wallet.controller';
 import { AdminEmailTemplatesController } from './admin-email-templates.controller';
-import { EMAIL_SERVICE } from 'src/common/email/email.service';
-import { BrevoEmailService } from 'src/common/email/brevo.service';
 import { EmailTemplateEntity } from 'src/common/email/entities/email-template.entity';
-import { UserEntity } from 'src/users/infrastructure/persistences/entities/user.entity';
+import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 import { ProjectEntity } from 'src/projects/infrastructure/persistences/entities/project.entity';
 import { InvestmentEntity } from 'src/investments/infrastructure/persistences/entities/investment.entity';
 import { EcheanceEntity } from 'src/investments/infrastructure/persistences/entities/echeance.entity';
@@ -28,7 +26,7 @@ import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructu
 import { NotificationsModule } from 'src/notifications/notifications.module';
 import { InvestmentsModule } from 'src/investments/applications/investments.module';
 import { ProfilesModule } from 'src/profiles/applications/profiles.module';
-import { UsersModule } from 'src/users/applications/users.module';
+import { UsersModule } from 'src/iam/applications/users/users.module';
 import { TriggerEcheancePaymentUseCase } from './usecases/trigger-echeance-payment.usecase';
 import { GetAggregatedScheduleUseCase } from './usecases/get-aggregated-schedule.usecase';
 import { PatchAggregatedEcheanceUseCase } from './usecases/patch-aggregated-echeance.usecase';
@@ -69,7 +67,6 @@ import { PatchAggregatedEcheanceUseCase } from './usecases/patch-aggregated-eche
     AdminEmailTemplatesController,
   ],
   providers: [
-    { provide: EMAIL_SERVICE, useClass: BrevoEmailService },
     TriggerEcheancePaymentUseCase,
     GetAggregatedScheduleUseCase,
     PatchAggregatedEcheanceUseCase,

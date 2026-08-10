@@ -6,7 +6,7 @@ import { Column, Entity, PrimaryColumn, UpdateDateColumn } from 'typeorm';
  *
  * `key` = nom du fichier .hbs historique sans extension (ex. "activation",
  * "kyc-validated"…) : c'est la clé passée à EmailTemplateService.render()
- * par les transports (nodemailer/brevo). Les lignes manquantes sont seedées
+ * par les transports (brevo/mailpit). Les lignes manquantes sont seedées
  * au bootstrap depuis les .hbs du code (seedDefaults) ; une ligne existante
  * n'est JAMAIS écrasée par le seed.
  */

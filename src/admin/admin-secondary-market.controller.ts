@@ -25,7 +25,8 @@ import { OrdreMarcheEntity } from 'src/secondarymarket/infrastructure/persistenc
 import { SignatureEntity } from 'src/signatures/infrastructure/persistences/entities/signature.entity';
 import { SignatureStatus } from 'src/signatures/domains/enums/signature-status.enum';
 import { InvestmentEntity } from 'src/investments/infrastructure/persistences/entities/investment.entity';
-import { UserEntity, UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
+import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
+import { UserRole } from 'src/iam/domains/enums/user.enum';
 import { OrdreMarcheStatus } from 'src/secondarymarket/domains/ordre-marche';
 import { computeCoutAcquisition } from 'src/secondarymarket/domains/cout-acquisition';
 import { PlatformFeesService } from 'src/common/platform-fees/platform-fees.service';

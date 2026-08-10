@@ -8,8 +8,8 @@ import { EmailTemplateEntity } from './entities/email-template.entity';
 import { LAYOUT_STYLE_MAP, wrapInLayout } from './layout';
 
 /**
- * Dossier des templates .hbs historiques — même convention que la config
- * MailerModule d'app.module.ts (les .hbs vivent dans src/ même en prod).
+ * Dossier des templates .hbs historiques — les .hbs vivent dans src/ même en
+ * prod (ils sont lus à l'exécution, pas compilés dans dist/).
  */
 export const TEMPLATES_DIR = join(
   process.cwd(),
@@ -195,7 +195,7 @@ export function extractCorps(source: string): string | null {
  * - fallback sur le fichier .hbs du code si la clé n'existe pas en base ;
  * - template désactivé → null (l'appelant loggue et n'envoie pas).
  *
- * Exposé globalement via EmailModule (@Global) : transports Brevo/Nodemailer,
+ * Exposé globalement via EmailModule (@Global) : transports Brevo/Mailpit,
  * API admin des templates (V2-T2), BroadcastService…
  */
 @Injectable()

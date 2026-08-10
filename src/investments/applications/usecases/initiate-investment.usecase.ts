@@ -11,8 +11,8 @@ import { InvestmentEntity } from 'src/investments/infrastructure/persistences/en
 import { DocumentEntity } from 'src/documents/infrastructure/persistences/entities/document.entity';
 import { SignatureEntity } from 'src/signatures/infrastructure/persistences/entities/signature.entity';
 import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/wallet.entity';
-import { UserEntity } from 'src/users/infrastructure/persistences/entities/user.entity';
-import { UserEmailEntity } from 'src/users/infrastructure/persistences/entities/user-email.entity';
+import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
+import { UserEmailEntity } from 'src/iam/infrastructure/persistence/entities/user-email.entity';
 import { ProjectStatus } from 'src/projects/domains/enums/project-status.enum';
 import { InvestmentStatus } from 'src/investments/domains/enums/investment-status.enum';
 import { DocumentType, DocumentRelatedTo } from 'src/documents/domains/enums/document-type.enum';

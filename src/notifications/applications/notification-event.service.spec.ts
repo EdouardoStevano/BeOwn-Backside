@@ -1,7 +1,7 @@
 import { NotificationEventService } from './notification-event.service';
 import { NotificationService } from './notification.service';
 import { NotificationType } from '../infrastructure/persistences/entities/notification.entity';
-import { UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
+import { UserRole } from 'src/iam/domains/enums/user.enum';
 import { formatEur } from 'src/common/money/format-eur';
 
 describe('NotificationEventService', () => {
@@ -43,7 +43,8 @@ describe('NotificationEventService.kyc', () => {
       utilisateurId: 42,
       type: NotificationType.KYC_VALIDE,
       titre: 'Identité vérifiée ✓',
-      message: 'Votre KYC a été validé par notre équipe. Vous pouvez désormais investir.',
+      message:
+        'Votre KYC a été validé par notre équipe. Vous pouvez désormais investir.',
       metadata: { adminId: 1 },
     });
   });
@@ -54,7 +55,8 @@ describe('NotificationEventService.kyc', () => {
       utilisateurId: 42,
       type: NotificationType.KYC_REJETE,
       titre: 'KYC refusé',
-      message: 'Votre dossier KYC a été refusé. Motif : documents illisibles. Vous pouvez resoumettre vos documents.',
+      message:
+        'Votre dossier KYC a été refusé. Motif : documents illisibles. Vous pouvez resoumettre vos documents.',
       metadata: { motif: 'documents illisibles', adminId: 1 },
     });
   });
@@ -77,7 +79,8 @@ describe('NotificationEventService.accountStatus', () => {
       utilisateurId: 42,
       type: NotificationType.COMPTE_SUSPENDU,
       titre: 'Compte suspendu',
-      message: "Votre compte a été suspendu par l'équipe BeOwn. Motif : multiples tentatives échouées.",
+      message:
+        "Votre compte a été suspendu par l'équipe BeOwn. Motif : multiples tentatives échouées.",
       metadata: { motif: 'multiples tentatives échouées', adminId: 1 },
     });
   });
@@ -98,7 +101,8 @@ describe('NotificationEventService.accountStatus', () => {
       utilisateurId: 42,
       type: NotificationType.COMPTE_REACTIVE,
       titre: 'Compte réactivé ✓',
-      message: 'Votre compte a été réactivé. Vous pouvez à nouveau accéder à la plateforme.',
+      message:
+        'Votre compte a été réactivé. Vous pouvez à nouveau accéder à la plateforme.',
       metadata: { adminId: 1 },
     });
   });
@@ -109,7 +113,8 @@ describe('NotificationEventService.accountStatus', () => {
       utilisateurId: 42,
       type: NotificationType.COMPTE_CLOS,
       titre: 'Compte clôturé',
-      message: "Votre compte a été clôturé par l'équipe BeOwn. Motif : demande RGPD.",
+      message:
+        "Votre compte a été clôturé par l'équipe BeOwn. Motif : demande RGPD.",
       metadata: { motif: 'demande RGPD', adminId: 1 },
     });
   });
@@ -128,7 +133,8 @@ describe('NotificationEventService.profileUpdatedByAdmin', () => {
       utilisateurId: 42,
       type: NotificationType.PROFIL_MODIFIE,
       titre: 'Profil mis à jour',
-      message: "Votre profil a été modifié par l'équipe BeOwn (lastname, role).",
+      message:
+        "Votre profil a été modifié par l'équipe BeOwn (lastname, role).",
       metadata: { changedFields: ['lastname', 'role'], adminId: 1 },
     });
   });
@@ -158,35 +164,41 @@ describe('NotificationEventService.echeance', () => {
 
   it('echeanceUpcoming pushes ECHEANCE to the user', async () => {
     await service.echeanceUpcoming(echeance, project);
-    expect(notifications.push).toHaveBeenCalledWith(expect.objectContaining({
-      utilisateurId: 42,
-      type: NotificationType.ECHEANCE,
-      titre: 'Échéance à venir',
-      metadata: expect.objectContaining({
-        echeanceId: 'ech-uuid',
-        projetId: 'p-uuid',
-        numero: 3,
-        montant: 50000,
+    expect(notifications.push).toHaveBeenCalledWith(
+      expect.objectContaining({
+        utilisateurId: 42,
+        type: NotificationType.ECHEANCE,
+        titre: 'Échéance à venir',
+        metadata: expect.objectContaining({
+          echeanceId: 'ech-uuid',
+          projetId: 'p-uuid',
+          numero: 3,
+          montant: 50000,
+        }),
       }),
-    }));
+    );
   });
 
   it('echeancePaid pushes ECHEANCE confirmed to the user', async () => {
     await service.echeancePaid(echeance, project);
-    expect(notifications.push).toHaveBeenCalledWith(expect.objectContaining({
-      utilisateurId: 42,
-      type: NotificationType.ECHEANCE,
-      titre: 'Échéance payée ✓',
-    }));
+    expect(notifications.push).toHaveBeenCalledWith(
+      expect.objectContaining({
+        utilisateurId: 42,
+        type: NotificationType.ECHEANCE,
+        titre: 'Échéance payée ✓',
+      }),
+    );
   });
 
   it('echeanceOverdueAdmin pushes ECHEANCE to ADMIN/FINANCIER', async () => {
     await service.echeanceOverdueAdmin(echeance, project);
-    expect(notifications.pushToRoles).toHaveBeenCalledWith(expect.objectContaining({
-      type: NotificationType.ECHEANCE,
-      titre: 'Échéance en retard',
-      roles: [UserRole.SUPER_ADMIN, UserRole.FINANCIER],
-    }));
+    expect(notifications.pushToRoles).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: NotificationType.ECHEANCE,
+        titre: 'Échéance en retard',
+        roles: [UserRole.SUPER_ADMIN, UserRole.FINANCIER],
+      }),
+    );
   });
 });
 
@@ -225,13 +237,16 @@ describe('NotificationEventService.accountDeletedByUser', () => {
 
     await service.accountDeletedByUser(user);
 
-    expect(notifications.pushToRoles).toHaveBeenCalledWith(expect.objectContaining({
-      type: NotificationType.COMPTE_SUPPRIME,
-      titre: 'Compte supprimé',
-      message: 'Jean Dupont (jean@example.com) a supprimé son compte (soft-delete).',
-      roles: [UserRole.SUPER_ADMIN, UserRole.COMPLIANCE, UserRole.SUPPORT],
-      metadata: { userId: 42, email: 'jean@example.com' },
-    }));
+    expect(notifications.pushToRoles).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: NotificationType.COMPTE_SUPPRIME,
+        titre: 'Compte supprimé',
+        message:
+          'Jean Dupont (jean@example.com) a supprimé son compte (soft-delete).',
+        roles: [UserRole.SUPER_ADMIN, UserRole.COMPLIANCE, UserRole.SUPPORT],
+        metadata: { userId: 42, email: 'jean@example.com' },
+      }),
+    );
   });
 });
 
@@ -251,13 +266,16 @@ describe('NotificationEventService.userRegistered', () => {
 
     await service.userRegistered(user);
 
-    expect(notifications.pushToRoles).toHaveBeenCalledWith(expect.objectContaining({
-      type: NotificationType.NOUVELLE_INSCRIPTION,
-      titre: 'Nouvelle inscription',
-      message: "Alice Martin (alice@example.com) vient de s'inscrire sur la plateforme.",
-      roles: [UserRole.SUPER_ADMIN, UserRole.SUPPORT],
-      metadata: { userId: 42, email: 'alice@example.com' },
-    }));
+    expect(notifications.pushToRoles).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: NotificationType.NOUVELLE_INSCRIPTION,
+        titre: 'Nouvelle inscription',
+        message:
+          "Alice Martin (alice@example.com) vient de s'inscrire sur la plateforme.",
+        roles: [UserRole.SUPER_ADMIN, UserRole.SUPPORT],
+        metadata: { userId: 42, email: 'alice@example.com' },
+      }),
+    );
   });
 });
 
@@ -270,17 +288,30 @@ describe('NotificationEventService.secondaryOrderCreated', () => {
 
     const ordre = { id: 'o-uuid', nbFractions: 5, prixUnitaire: 1000 } as any;
     const project = { id: 'p-uuid', titre: 'Résidence Pelican' } as any;
-    const vendeur = { userId: 42, firstname: 'Jean', lastname: 'Dupont', userEmail: { email: 'j@x.com' } } as any;
+    const vendeur = {
+      userId: 42,
+      firstname: 'Jean',
+      lastname: 'Dupont',
+      userEmail: { email: 'j@x.com' },
+    } as any;
 
     await service.secondaryOrderCreated(ordre, project, vendeur);
 
-    expect(notifications.pushToRoles).toHaveBeenCalledWith(expect.objectContaining({
-      type: NotificationType.MARCHE_SECONDAIRE,
-      titre: 'Nouvelle annonce marché secondaire',
-      message: `Jean Dupont a mis en vente 5 fraction(s) de "Résidence Pelican" à ${formatEur(1000)}/fraction.`,
-      roles: [UserRole.SUPER_ADMIN, UserRole.COMPLIANCE, UserRole.FINANCIER],
-      metadata: { ordreId: 'o-uuid', projetId: 'p-uuid', vendeurId: 42, nbFractions: 5, prixUnitaire: 1000 },
-    }));
+    expect(notifications.pushToRoles).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: NotificationType.MARCHE_SECONDAIRE,
+        titre: 'Nouvelle annonce marché secondaire',
+        message: `Jean Dupont a mis en vente 5 fraction(s) de "Résidence Pelican" à ${formatEur(1000)}/fraction.`,
+        roles: [UserRole.SUPER_ADMIN, UserRole.COMPLIANCE, UserRole.FINANCIER],
+        metadata: {
+          ordreId: 'o-uuid',
+          projetId: 'p-uuid',
+          vendeurId: 42,
+          nbFractions: 5,
+          prixUnitaire: 1000,
+        },
+      }),
+    );
   });
 });
 
@@ -292,23 +323,37 @@ describe('NotificationEventService.investmentCreated', () => {
     } as unknown as jest.Mocked<NotificationService>;
     const service = new NotificationEventService(notifications);
 
-    const investment = { id: 'i-uuid', utilisateurId: 42, montant: 250000, nbTitres: 5 } as any;
+    const investment = {
+      id: 'i-uuid',
+      utilisateurId: 42,
+      montant: 250000,
+      nbTitres: 5,
+    } as any;
     const project = { id: 'p-uuid', titre: 'Résidence Pelican' } as any;
-    const user = { userId: 42, firstname: 'Jean', lastname: 'Dupont', userEmail: { email: 'j@x.com' } } as any;
+    const user = {
+      userId: 42,
+      firstname: 'Jean',
+      lastname: 'Dupont',
+      userEmail: { email: 'j@x.com' },
+    } as any;
 
     await service.investmentCreated(investment, project, user);
 
-    expect(notifications.push).toHaveBeenCalledWith(expect.objectContaining({
-      utilisateurId: 42,
-      type: NotificationType.INVESTISSEMENT,
-      titre: 'Investissement confirmé',
-    }));
-    expect(notifications.pushToRoles).toHaveBeenCalledWith(expect.objectContaining({
-      type: NotificationType.INVESTISSEMENT,
-      titre: 'Nouvel investissement',
-      message: `Jean Dupont a investi ${formatEur(250000)} dans "Résidence Pelican" (5 fraction(s)).`,
-      roles: [UserRole.SUPER_ADMIN, UserRole.FINANCIER, UserRole.COMPLIANCE],
-    }));
+    expect(notifications.push).toHaveBeenCalledWith(
+      expect.objectContaining({
+        utilisateurId: 42,
+        type: NotificationType.INVESTISSEMENT,
+        titre: 'Investissement confirmé',
+      }),
+    );
+    expect(notifications.pushToRoles).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: NotificationType.INVESTISSEMENT,
+        titre: 'Nouvel investissement',
+        message: `Jean Dupont a investi ${formatEur(250000)} dans "Résidence Pelican" (5 fraction(s)).`,
+        roles: [UserRole.SUPER_ADMIN, UserRole.FINANCIER, UserRole.COMPLIANCE],
+      }),
+    );
   });
 });
 
@@ -326,15 +371,19 @@ describe('NotificationEventService.fractionsToppedUp', () => {
 
     await service.fractionsToppedUp(investment, project, user, 3, 30000);
 
-    expect(notifications.push).toHaveBeenCalledWith(expect.objectContaining({
-      utilisateurId: 42,
-      titre: 'Fractions ajoutées',
-    }));
-    expect(notifications.pushToRoles).toHaveBeenCalledWith(expect.objectContaining({
-      titre: 'Top-up investissement',
-      roles: [UserRole.SUPER_ADMIN, UserRole.FINANCIER],
-      message: `Jean Dupont a ajouté 3 fraction(s) dans "Résidence Pelican" (+${formatEur(30000)}).`,
-    }));
+    expect(notifications.push).toHaveBeenCalledWith(
+      expect.objectContaining({
+        utilisateurId: 42,
+        titre: 'Fractions ajoutées',
+      }),
+    );
+    expect(notifications.pushToRoles).toHaveBeenCalledWith(
+      expect.objectContaining({
+        titre: 'Top-up investissement',
+        roles: [UserRole.SUPER_ADMIN, UserRole.FINANCIER],
+        message: `Jean Dupont a ajouté 3 fraction(s) dans "Résidence Pelican" (+${formatEur(30000)}).`,
+      }),
+    );
   });
 });
 
@@ -353,18 +402,25 @@ describe('NotificationEventService.secondaryTradeExecuted', () => {
 
     await service.secondaryTradeExecuted(ordre, project, buyer, seller, 5);
 
-    expect(notifications.push).toHaveBeenCalledWith(expect.objectContaining({
-      utilisateurId: 42,
-      titre: 'Achat de fractions confirmé',
-    }));
-    expect(notifications.push).toHaveBeenCalledWith(expect.objectContaining({
-      utilisateurId: 99,
-      titre: 'Vente de fractions exécutée',
-    }));
-    expect(notifications.pushToRoles).toHaveBeenCalledWith(expect.objectContaining({
-      titre: 'Trade marché secondaire',
-      message: 'Alice Martin a acheté 5 fraction(s) à Jean Dupont pour "Résidence Pelican".',
-      roles: [UserRole.SUPER_ADMIN, UserRole.FINANCIER, UserRole.COMPLIANCE],
-    }));
+    expect(notifications.push).toHaveBeenCalledWith(
+      expect.objectContaining({
+        utilisateurId: 42,
+        titre: 'Achat de fractions confirmé',
+      }),
+    );
+    expect(notifications.push).toHaveBeenCalledWith(
+      expect.objectContaining({
+        utilisateurId: 99,
+        titre: 'Vente de fractions exécutée',
+      }),
+    );
+    expect(notifications.pushToRoles).toHaveBeenCalledWith(
+      expect.objectContaining({
+        titre: 'Trade marché secondaire',
+        message:
+          'Alice Martin a acheté 5 fraction(s) à Jean Dupont pour "Résidence Pelican".',
+        roles: [UserRole.SUPER_ADMIN, UserRole.FINANCIER, UserRole.COMPLIANCE],
+      }),
+    );
   });
 });

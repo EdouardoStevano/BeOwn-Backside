@@ -2,7 +2,7 @@ import { BadRequestException } from '@nestjs/common';
 import { PaymentController } from './payment.controller';
 import { KycStatus } from 'src/profiles/domains/enums/kyc-status.enum';
 import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
-import { UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
+import { UserRole } from 'src/iam/domains/enums/user.enum';
 
 /**
  * KYC validé AUTOMATIQUEMENT par Stripe Identity via le webhook

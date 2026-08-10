@@ -1,29 +1,40 @@
-import { Module, forwardRef } from '@nestjs/common';
-import { IamInfrastructureModule } from './infrastructure/iam-infrastructure.module';
-import { AuthenticationModule } from './applications/authentication/application/authentication.module';
-import { OtpModule } from './applications/authentication/application/otp.module';
-import { UsersInfrastructureModule } from 'src/users/infrastructure/users-infrastructure.module';
-import { VerifyEmailService } from './applications/verify-email/verify-email.service';
-import { VerifyEmailController } from './applications/verify-email/verify-email.controller';
-import { TOKEN_SERVICE } from './domains/ports/token.service';
+import { Module } from '@nestjs/common';
+import { APP_FILTER } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
+import { IamErrorFilter } from './presenters/http/filters/iam-error.filter';
+import { IamInfrastructureModule } from './infrastructure/iam-infrastructure.module';
+import { AuthenticationModule } from './applications/authentication/authentication.module';
+import { EmailVerificationModule } from './applications/email-verification/email-verification.module';
+import { OtpModule } from './applications/otp/otp.module';
+import { UsersModule } from './applications/users/users.module';
 
-// SMS_SERVICE used to be bound here (unconditional TwilioSmsService, for the
-// 2FA/login SMS OTP flow). V2-T2 moved it to the global SmsModule (imported
-// once in AppModule) so the whole app shares one sender with a Noop fallback
-// when Twilio creds are absent — binding it again here would shadow that
-// global provider for OtpModule (imported below via forwardRef) and bring
-// back the "crashes on boot without Twilio creds" behaviour.
+/**
+ * Façade du Bounded Context IAM : agrège ses features et ne réexporte que le
+ * noyau d'infrastructure (tokens + cache) dont dépendent les autres contextes.
+ *
+ * Deux points d'histoire, à ne pas défaire :
+ * - `SMS_SERVICE` était lié ici (TwilioSmsService inconditionnel, pour l'OTP
+ *   SMS de connexion). V2-T2 l'a déplacé dans le `SmsModule` global (importé
+ *   une seule fois par AppModule) : le relier ici masquerait ce provider
+ *   global pour OtpModule et ferait revenir le crash au démarrage quand les
+ *   identifiants Twilio sont absents.
+ * - Le `forwardRef` mutuel IamModule <-> OtpModule n'avait plus de raison
+ *   d'être une fois ce binding parti ; il a été supprimé.
+ */
 @Module({
   imports: [
     IamInfrastructureModule,
     AuthenticationModule,
-    forwardRef(() => OtpModule),
-    UsersInfrastructureModule,
+    EmailVerificationModule,
+    OtpModule,
+    UsersModule,
     ConfigModule,
   ],
-  providers: [VerifyEmailService],
-  controllers: [VerifyEmailController],
+  // Traduit les erreurs de domaine IAM en réponses HTTP. Enregistré via
+  // APP_FILTER donc actif sur toute l'application : un use case IAM appelé
+  // depuis AdminModule ou PaymentsModule doit produire la même réponse.
+  // `@Catch(IamError)` limite sa portée au vocabulaire du domaine.
+  providers: [{ provide: APP_FILTER, useClass: IamErrorFilter }],
   exports: [IamInfrastructureModule],
 })
 export class IamModule {}

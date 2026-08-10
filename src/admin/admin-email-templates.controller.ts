@@ -35,7 +35,7 @@ import {
 } from 'src/common/email/email.service';
 import { EmailTemplateService } from 'src/common/email/email-template.service';
 import { EmailTemplateEntity } from 'src/common/email/entities/email-template.entity';
-import { UserEntity } from 'src/users/infrastructure/persistences/entities/user.entity';
+import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 import {
   EMAIL_TEMPLATE_SAMPLES,
   TRIGGER_EVENTS,

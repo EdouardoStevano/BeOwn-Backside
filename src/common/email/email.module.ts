@@ -2,12 +2,17 @@ import { Global, Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { EmailTemplateEntity } from './entities/email-template.entity';
 import { EmailTemplateService } from './email-template.service';
+import { EMAIL_SERVICE } from './email.service';
+import { emailServiceProvider } from './email-driver.provider';
 
 /**
- * Module global des templates d'emails : EmailTemplateService est injectable
- * partout (transports Brevo/Nodemailer fournis localement par d'autres
- * modules via EMAIL_SERVICE, future API admin V2-T2, BroadcastService…) sans
- * ré-import explicite — même pattern que PlatformFeesModule/SmsModule.
+ * Module global de l'email : templates ET transport.
+ *
+ * `EMAIL_SERVICE` est désormais fourni ici, une seule fois, par
+ * `emailServiceProvider` (Mailpit en dev, Brevo en prod — cf.
+ * email-driver.provider.ts). Les six modules qui liaient chacun
+ * `useClass: BrevoEmailService` en local n'ont plus à le faire : le driver
+ * se choisit à un seul endroit.
  *
  * Le seed des templates par défaut se fait au bootstrap
  * (EmailTemplateService.onModuleInit → seedDefaults, idempotent).
@@ -15,7 +20,7 @@ import { EmailTemplateService } from './email-template.service';
 @Global()
 @Module({
   imports: [TypeOrmModule.forFeature([EmailTemplateEntity])],
-  providers: [EmailTemplateService],
-  exports: [EmailTemplateService],
+  providers: [EmailTemplateService, emailServiceProvider],
+  exports: [EmailTemplateService, EMAIL_SERVICE],
 })
 export class EmailModule {}

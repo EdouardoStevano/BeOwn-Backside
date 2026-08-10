@@ -1,7 +1,7 @@
 import { ExecutionContext, ForbiddenException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { PermissionsGuard } from './permissions.guard';
-import { UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
+import { UserRole } from 'src/iam/domains/enums/user.enum';
 import { IS_PUBLIC_KEY } from './public.decorator';
 import type { Permission } from './permissions.constants';
 
@@ -10,7 +10,9 @@ const ctx = (role?: string): ExecutionContext =>
     getHandler: () => ({}),
     getClass: () => ({}),
     // getResponse/getNext omis — le guard n'utilise que getRequest
-    switchToHttp: () => ({ getRequest: () => ({ user: role ? { role } : undefined }) }),
+    switchToHttp: () => ({
+      getRequest: () => ({ user: role ? { role } : undefined }),
+    }),
   }) as unknown as ExecutionContext;
 
 describe('PermissionsGuard', () => {

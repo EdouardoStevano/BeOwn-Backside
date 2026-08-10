@@ -4,7 +4,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { EcheanceEntity } from '../infrastructure/persistences/entities/echeance.entity';
 import { InvestmentEntity } from '../infrastructure/persistences/entities/investment.entity';
-import { UserEntity } from 'src/users/infrastructure/persistences/entities/user.entity';
+import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 import { EcheanceStatus } from '../domains/enums/investment-status.enum';
 import { CloudStorageService } from 'src/common/cloud-storage/cloud-storage.service';
 import { DocumentEntity } from 'src/documents/infrastructure/persistences/entities/document.entity';

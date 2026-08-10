@@ -9,7 +9,7 @@ import { Reflector } from '@nestjs/core';
 import {
   TOKEN_SERVICE,
   type TokenService,
-} from 'src/iam/domains/ports/token.service';
+} from 'src/iam/domains/ports/token.port';
 import { IS_PUBLIC_KEY } from '../auth/public.decorator';
 
 @Injectable()

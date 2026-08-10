@@ -31,11 +31,8 @@ import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
 import { formatEur } from 'src/common/money/format-eur';
 import { NotificationEventService } from 'src/notifications/applications/notification-event.service';
-import {
-  UserEntity,
-  UserRole,
-  UserStatus,
-} from 'src/users/infrastructure/persistences/entities/user.entity';
+import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
+import { UserRole, UserStatus } from 'src/iam/domains/enums/user.enum';
 import { ProjectEntity } from 'src/projects/infrastructure/persistences/entities/project.entity';
 import { InvestmentEntity } from 'src/investments/infrastructure/persistences/entities/investment.entity';
 import { KycEntity } from 'src/profiles/infrastructure/persistences/entities/kyc.entity';
@@ -43,7 +40,7 @@ import { OrdreMarcheEntity } from 'src/secondarymarket/infrastructure/persistenc
 import { OrdreMarcheStatus } from 'src/secondarymarket/domains/ordre-marche';
 import { ProjectStatus } from 'src/projects/domains/enums/project-status.enum';
 import { InvestmentStatus } from 'src/investments/domains/enums/investment-status.enum';
-import { DeleteAccountUseCase } from 'src/users/applications/usecases/delete-account.usecase';
+import { DeleteAccountUseCase } from 'src/iam/applications/users/usecases/delete-account.usecase';
 import { SkipThrottle } from '@nestjs/throttler';
 
 // ─── Constants ────────────────────────────────────────────────────────────────

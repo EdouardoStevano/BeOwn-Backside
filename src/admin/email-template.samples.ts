@@ -4,7 +4,7 @@ import { formatEur } from 'src/common/money/format-eur';
  * Données d'exemple par clé de template, pour la prévisualisation et l'envoi
  * de test de l'API admin (V2-T2). Les noms de variables reproduisent
  * EXACTEMENT les contextes réellement passés à EmailTemplateService.render()
- * par les transports (voir nodemailer.service.ts / brevo.service.ts) ET les
+ * par les transports (voir brevo.service.ts / mailpit.service.ts) ET les
  * variables déclarées dans les .hbs (src/common/email/templates). Les montants
  * (prix, montant) sont pré-formatés comme en production — le rendu ne les
  * reformate pas, il n'interpole que la chaîne fournie.

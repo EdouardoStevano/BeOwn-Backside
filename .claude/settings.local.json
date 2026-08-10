@@ -11,7 +11,19 @@
       "Bash(node extract_pdf6.mjs)",
       "PowerShell(npm run build 2>&1)",
       "PowerShell(npm install stripe twilio @getbrevo/brevo 2>&1)",
-      "PowerShell(npm install --save-dev @types/twilio 2>&1)"
+      "PowerShell(npm install --save-dev @types/twilio 2>&1)",
+      "Bash(mkdir -p src/iam/domains/models src/iam/domains/ports)",
+      "Bash(git mv *)",
+      "Bash(python -)",
+      "Bash(npx eslint *)",
+      "Bash(git stash *)",
+      "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{JSON.parse\\(d\\).filter\\(r=>r.errorCount||r.warningCount\\).forEach\\(r=>console.log\\(r.errorCount+'e/'+r.warningCount+'w', r.filePath.split\\('beown-backside\\\\\\\\\\\\\\\\'\\)[1]\\)\\)}\\)\")",
+      "Bash(npx tsc *)",
+      "Bash(npx jest *)",
+      "Bash(cp \"C:/Users/Charl/AppData/Local/Temp/claude/E--NvimProjects-BeOwn-beown-backside/67af8fb5-09a9-40f6-b818-37a8349971cf/scratchpad/boot-check.ts\" ./boot-check.tmp.ts)",
+      "Bash(npx ts-node *)",
+      "Bash(grep -rn \"iam/infrastructure\\\\|from '\\\\.\\\\./\\\\.\\\\./infrastructure\\\\|from 'src/.*infrastructure\" src/iam/applications --include=*.ts)",
+      "Bash(grep -v \"from '\\\\./\\\\|from '\\\\.\\\\./\\\\|domains/\")"
     ]
   }
 }

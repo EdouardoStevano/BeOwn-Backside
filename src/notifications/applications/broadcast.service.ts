@@ -8,20 +8,21 @@ import {
   BroadcastSettings,
   mergeBroadcastSettings,
 } from 'src/admin/entities/admin-settings.entity';
-import { EMAIL_SERVICE, type EmailService } from 'src/common/email/email.service';
+import {
+  EMAIL_SERVICE,
+  type EmailService,
+} from 'src/common/email/email.service';
 import { EmailTemplateService } from 'src/common/email/email-template.service';
 import { SMS_SERVICE, type SmsService } from 'src/common/sms/sms.service';
 import {
   TOKEN_SERVICE,
   type TokenService,
-} from 'src/iam/domains/ports/token.service';
+} from 'src/iam/domains/ports/token.port';
 import { ProfilPPEntity } from 'src/profiles/infrastructure/persistences/entities/profil-pp.entity';
 import { ProjectEntity } from 'src/projects/infrastructure/persistences/entities/project.entity';
-import { UserPreferencesEntity } from 'src/users/infrastructure/persistences/entities/user-preferences.entity';
-import {
-  UserEntity,
-  UserStatus,
-} from 'src/users/infrastructure/persistences/entities/user.entity';
+import { UserPreferencesEntity } from 'src/iam/infrastructure/persistence/entities/user-preferences.entity';
+import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
+import { UserStatus } from 'src/iam/domains/enums/user.enum';
 import { NotificationType } from '../infrastructure/persistences/entities/notification.entity';
 import { AuditLogService } from './audit-log.service';
 import { NotificationService } from './notification.service';
@@ -444,7 +445,7 @@ export class BroadcastService {
           }
         } else if (!this.emailService.sendTransactionalEmail) {
           this.logger.warn(
-            "Le transport email ne supporte pas sendTransactionalEmail — diffusion sans email.",
+            'Le transport email ne supporte pas sendTransactionalEmail — diffusion sans email.',
           );
         } else {
           await this.emailService.sendTransactionalEmail(

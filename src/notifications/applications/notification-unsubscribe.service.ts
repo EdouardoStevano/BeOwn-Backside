@@ -4,11 +4,11 @@ import {
   TOKEN_SERVICE,
   type TokenService,
   type UnsubscribeTokenPayload,
-} from 'src/iam/domains/ports/token.service';
+} from 'src/iam/domains/ports/token.port';
 import {
   USER_REPOSITORY,
   type UserRepository,
-} from 'src/users/applications/ports/repositories/user.repository';
+} from 'src/iam/domains/ports/user.repository';
 
 /**
  * Désinscription des communications marketing depuis le lien présent dans les

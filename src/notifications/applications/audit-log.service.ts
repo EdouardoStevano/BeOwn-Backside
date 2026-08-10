@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { AuditLogEntity } from '../infrastructure/persistences/entities/audit-log.entity';
-import { UserEntity } from 'src/users/infrastructure/persistences/entities/user.entity';
+import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 import { describeAuditAction } from './audit-description';
 
 export interface AuditLogFilter {
@@ -89,7 +89,9 @@ export class AuditLogService {
       qb.andWhere('log.action ILIKE :action', { action: `${filter.action}%` });
     }
     if (filter.objetType) {
-      qb.andWhere('log.objetType = :objetType', { objetType: filter.objetType });
+      qb.andWhere('log.objetType = :objetType', {
+        objetType: filter.objetType,
+      });
     }
     if (filter.dateFrom) {
       qb.andWhere('log.createdAt >= :dateFrom', { dateFrom: filter.dateFrom });
@@ -107,7 +109,9 @@ export class AuditLogService {
     const acteurIds = [
       ...new Set(rows.map((r) => r.acteurId).filter((x): x is string => !!x)),
     ];
-    const numIds = acteurIds.map((s) => Number(s)).filter((n) => Number.isInteger(n));
+    const numIds = acteurIds
+      .map((s) => Number(s))
+      .filter((n) => Number.isInteger(n));
     const users = numIds.length
       ? await this.userRepo.find({ where: { userId: In(numIds) } })
       : [];
@@ -122,7 +126,7 @@ export class AuditLogService {
       const u = r.acteurId ? byId.get(r.acteurId) : undefined;
       const statusCode =
         typeof r.metadata?.statusCode === 'number'
-          ? (r.metadata.statusCode as number)
+          ? r.metadata.statusCode
           : undefined;
       return {
         id: r.id,
