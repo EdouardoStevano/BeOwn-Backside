@@ -57,11 +57,11 @@ async function bootstrap() {
         `BeOwn est une plateforme PSFP (Prestataire de Services de Financement Participatif) ` +
         `permettant l'investissement fractionné dans l'immobilier africain.\n\n` +
         `### Authentification\n` +
-        `La majorité des routes nécessitent un **JWT Bearer token** okay obtenu via \`POST /auth/sign-in\`.\n` +
+        `La majorité des routes nécessitent un **JWT Bearer token** obtenu via \`POST /auth/sign-in\`.\n` +
         `Utilisez le bouton **Authorize** ci-dessus pour renseigner votre token.\n\n` +
         `### Flux principal\n` +
         `1. \`POST /auth/sign-up\` — Créer un compte\n` +
-        `2. \`POST /email/send-verification\` + \`GET /email/verify?token=...\` — Vérifier l'email\n` +
+        `2. \`POST /auth/email/send-verification\` + \`GET /auth/email/verify?token=...\` — Vérifier l'email\n` +
         `3. \`POST /auth/sign-in\` — Obtenir les tokens\n` +
         `4. \`POST /profiles/:userId/pp\` + \`POST /profiles/:userId/kyc\` — Compléter le profil KYC\n` +
         `5. \`GET /projects\` — Parcourir les projets\n` +
@@ -81,12 +81,16 @@ async function bootstrap() {
       in: 'header',
     })
     .addTag('Health', "Vérification de l'état de l'API")
+    // Un seul tag pour tout le parcours d'authentification : `Email
+    // Verification` et `OTP / 2FA` étaient trois modules distincts, ils sont
+    // désormais une seule feature servie sous `/auth`.
     .addTag(
       'Authentication',
-      'Connexion, inscription, OAuth social, tokens JWT',
+      'Connexion, inscription, OAuth social, tokens JWT, vérification ' +
+        "d'adresse email (`/auth/email/*`), OTP de connexion et enrôlement 2FA " +
+        '(`/auth/otp/*`) — TOTP, email ou SMS, le canal étant choisi dans le ' +
+        'body de `POST /auth/otp/enroll`',
     )
-    .addTag('Email Verification', "Envoi et confirmation d'email")
-    .addTag('OTP / 2FA', 'OTP par email et TOTP (Google Authenticator)')
     .addTag('Users', 'Gestion des comptes utilisateurs')
     .addTag('Profiles & KYC', 'Profil investisseur (PP/PM) et dossier KYC')
     .addTag('Projects', 'Projets immobiliers — CRUD, statuts, SPV')

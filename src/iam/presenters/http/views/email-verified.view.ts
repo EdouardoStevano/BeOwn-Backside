@@ -1,5 +1,6 @@
 /**
- * Page de confirmation servie par `GET /email/verify`. Purement présentation :
+ * Page de confirmation servie par `GET /auth/email/verify`. Purement
+ * présentation :
  * elle vivait dans `VerifyEmailService` (couche application), qui rendait donc
  * du HTML en plus d'orchestrer la vérification du token (§12.5).
  */

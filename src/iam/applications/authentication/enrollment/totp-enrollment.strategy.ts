@@ -1,8 +1,8 @@
 import { Inject, Injectable } from '@nestjs/common';
+import { TfaMethodType } from 'src/iam/domains/enums/tfa-method.enum';
 import {
   TOTP_GENERATOR,
   type TotpGenerator,
-  type TotpSecret,
 } from 'src/iam/domains/ports/totp-generator.port';
 import {
   TOTP_METHOD_REPOSITORY,
@@ -21,15 +21,25 @@ import {
   TotpNotConfiguredError,
   UserNotFoundError,
 } from 'src/iam/domains/errors';
+import {
+  TfaEnrollmentChallenge,
+  TfaEnrollmentConfirmation,
+  TfaEnrollmentRequest,
+  TfaEnrollmentStrategy,
+} from './tfa-enrollment.strategy';
 
 /**
- * Enrôlement et vérification TOTP. Pure orchestration : la persistance passe
- * par `TotpMethodRepository`, le chiffrement du secret par `SecretCipher` et
- * le calcul RFC 6238 par `TotpGenerator` — le use case ne connaît ni TypeORM,
- * ni `crypto`, ni otplib.
+ * Enrôlement TOTP (Google Authenticator & co).
+ *
+ * Reprend à l'identique la logique de l'ancien `CreateTotpUseCase` : la
+ * persistance passe par `TotpMethodRepository`, le chiffrement du secret par
+ * `SecretCipher` et le calcul RFC 6238 par `TotpGenerator` — cette classe ne
+ * connaît ni TypeORM, ni `crypto`, ni otplib.
  */
 @Injectable()
-export class CreateTotpUseCase {
+export class TotpEnrollmentStrategy implements TfaEnrollmentStrategy {
+  readonly method = TfaMethodType.TOTP;
+
   constructor(
     @Inject(TOTP_GENERATOR) private readonly totpGenerator: TotpGenerator,
     @Inject(USER_REPOSITORY) private readonly userRepository: UserRepository,
@@ -38,20 +48,31 @@ export class CreateTotpUseCase {
     @Inject(SECRET_CIPHER) private readonly secretCipher: SecretCipher,
   ) {}
 
-  async setup(userId: number, email: string): Promise<TotpSecret> {
-    const user = await this.userRepository.findById(userId);
+  async start(request: TfaEnrollmentRequest): Promise<TfaEnrollmentChallenge> {
+    const user = await this.userRepository.findById(request.userId);
     if (!user) throw new UserNotFoundError();
 
-    const payload = this.totpGenerator.generateSecret(email);
+    const payload = this.totpGenerator.generateSecret(
+      user.email || request.email,
+    );
+
+    // Au plus un secret en attente, comme sur les canaux email/SMS : un QR code
+    // affiché puis abandonné ne doit pas rester enrôlable. Les méthodes déjà
+    // actives ne sont pas touchées — l'ancien authenticator continue de servir
+    // tant que le nouveau n'est pas confirmé.
+    await this.totpMethodRepository.deletePendingForUser(request.userId);
+
     await this.totpMethodRepository.create(
-      userId,
+      request.userId,
       this.secretCipher.encrypt(payload.secret),
     );
 
-    return payload;
+    return { method: this.method, secret: payload.secret, uri: payload.uri };
   }
 
-  async verify(userId: number, otp: string): Promise<boolean> {
+  async confirm(confirmation: TfaEnrollmentConfirmation): Promise<void> {
+    const { userId, otp } = confirmation;
+
     const user = await this.userRepository.findById(userId);
     if (!user) throw new UserNotFoundError();
 
@@ -79,7 +100,5 @@ export class CreateTotpUseCase {
       await this.totpMethodRepository.deactivateAllForUser(userId);
       await this.totpMethodRepository.activate(validMethod.id);
     }
-
-    return true;
   }
 }

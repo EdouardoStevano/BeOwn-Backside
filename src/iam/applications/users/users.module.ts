@@ -21,7 +21,7 @@ import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entit
 
 /**
  * Feature « compte utilisateur » du Bounded Context IAM — au même rang
- * qu'`AuthenticationModule`, `OtpModule` ou `EmailVerificationModule`.
+ * qu'`AuthenticationModule`, l'autre feature du contexte.
  *
  * Le compte a longtemps été un contexte à part (`src/users/`) ; il a été
  * absorbé par IAM, qui possède désormais le référentiel utilisateur en plus de

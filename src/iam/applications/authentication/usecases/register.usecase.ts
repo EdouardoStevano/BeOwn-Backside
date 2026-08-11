@@ -1,6 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { EmailAlreadyRegisteredError } from 'src/iam/domains/errors';
-import { SendEmailVerificationUseCase } from 'src/iam/applications/email-verification/usecases/send-email-verification.usecase';
+import { SendEmailVerificationUseCase } from './send-email-verification.usecase';
 import { UserFactory } from 'src/iam/domains/factories/user.factory';
 import {
   USER_REPOSITORY,
@@ -31,11 +31,11 @@ export interface RegisterInput {
  *
  * Le compte naît CREE, puis le lien de vérification d'adresse part
  * automatiquement dans la foulée (token à usage unique, cf.
- * SendEmailVerificationUseCase) ; c'est `GET /email/verify?token=…` qui fera
- * ensuite avancer CREE → EMAIL_VERIFIE. L'envoi est volontairement délégué au
- * use case de la feature `email-verification` plutôt que réimplémenté ici :
- * une seule façon d'émettre un lien de vérification dans toute l'app, que la
- * demande vienne du sign-up ou de `POST /email/send-verification`.
+ * SendEmailVerificationUseCase) ; c'est `GET /auth/email/verify?token=…` qui
+ * fera ensuite avancer CREE → EMAIL_VERIFIE. L'envoi reste délégué à
+ * `SendEmailVerificationUseCase` plutôt que réimplémenté ici : une seule façon
+ * d'émettre un lien de vérification dans toute l'app, que la demande vienne du
+ * sign-up ou de `POST /auth/email/send-verification`.
  */
 @Injectable()
 export class RegisterUseCase {
@@ -71,12 +71,12 @@ export class RegisterUseCase {
     // Le compte est créé (CREE) que cet envoi aboutisse ou non : une panne du
     // fournisseur d'emails ne doit jamais faire échouer une inscription déjà
     // persistée. En cas d'échec on se contente de logger — l'utilisateur peut
-    // redemander un lien via POST /email/send-verification.
+    // redemander un lien via POST /auth/email/send-verification.
     try {
       await this.sendEmailVerificationUseCase.execute(savedUser.email);
     } catch (err) {
       this.logger.error(
-        `Échec de l'envoi du lien de vérification à ${registerDto.email} lors du sign-up — l'utilisateur pourra le redemander via /email/send-verification.`,
+        `Échec de l'envoi du lien de vérification à ${registerDto.email} lors du sign-up — l'utilisateur pourra le redemander via /auth/email/send-verification.`,
         err instanceof Error ? err.stack : String(err),
       );
     }

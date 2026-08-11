@@ -9,7 +9,7 @@ export const AUTH_MAILER = Symbol('AUTH_MAILER');
  * du HTML (§12.5).
  */
 export interface AuthMailer {
-  /** Lien de confirmation d'adresse email (parcours legacy `GET /email/verify`). */
+  /** Lien de confirmation d'adresse email (`GET /auth/email/verify`). */
   sendEmailVerificationLink(to: string, token: string): Promise<void>;
   /** Code OTP à usage unique du parcours 2FA/connexion. */
   sendLoginOtp(to: string, otp: string): Promise<void>;

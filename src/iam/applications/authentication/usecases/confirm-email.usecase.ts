@@ -11,7 +11,6 @@ import {
   USER_REPOSITORY,
   type UserRepository,
 } from 'src/iam/domains/ports/user.repository';
-import { UserStatus } from 'src/iam/domains/enums/user.enum';
 import {
   EmailVerificationTokenTypeError,
   InvalidEmailVerificationTokenError,

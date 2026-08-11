@@ -40,6 +40,24 @@ export class TypeOrmTotpMethodRepository implements TotpMethodRepository {
     }));
   }
 
+  async deletePendingForUser(userId: number): Promise<void> {
+    // Suppression par identifiants plutôt que par `DELETE ... WHERE user_id` :
+    // la clause d'un query builder de `@ChildEntity` ne porte pas toujours le
+    // discriminant, et un `DELETE` large emporterait les méthodes email/SMS du
+    // même utilisateur. Le `SELECT` préalable passe, lui, par le repository de
+    // la classe fille, donc déjà filtré sur `type_method`.
+    const rows = await this.totpRepo
+      .createQueryBuilder('method')
+      .select('method.TFAMethodId', 'id')
+      .leftJoin('method.user', 'user')
+      .where('user.userId = :userId', { userId })
+      .andWhere('method.isActive = false')
+      .getRawMany<{ id: number }>();
+
+    if (rows.length === 0) return;
+    await this.totpRepo.delete(rows.map((row) => row.id));
+  }
+
   async deactivateAllForUser(userId: number): Promise<void> {
     await this.totpRepo
       .createQueryBuilder()
