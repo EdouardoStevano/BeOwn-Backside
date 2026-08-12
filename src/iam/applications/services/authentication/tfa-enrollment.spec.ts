@@ -25,7 +25,7 @@ import { buildUser } from 'src/iam/domains/models/user.fixture';
 import { EmailEnrollmentStrategy } from './email-enrollment.strategy';
 import { SmsEnrollmentStrategy } from './sms-enrollment.strategy';
 import { TotpEnrollmentStrategy } from './totp-enrollment.strategy';
-import { EnrollTfaUseCase } from '../usecases/enroll-tfa.usecase';
+import { EnrollTfaUseCase } from '../../usecases/authentication/enroll-tfa.usecase';
 import type {
   TfaEnrollmentRequest,
   TfaEnrollmentStrategy,

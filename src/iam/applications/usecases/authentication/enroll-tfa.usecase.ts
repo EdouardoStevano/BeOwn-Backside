@@ -7,7 +7,7 @@ import {
   type TfaEnrollmentConfirmation,
   type TfaEnrollmentRequest,
   type TfaEnrollmentStrategy,
-} from '../enrollment/tfa-enrollment.strategy';
+} from '../../services/authentication/tfa-enrollment.strategy';
 
 /**
  * Point d'entrée unique de l'enrôlement 2FA, quel que soit le canal.

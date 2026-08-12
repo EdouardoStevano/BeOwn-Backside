@@ -4,7 +4,7 @@ import {
   UserNotFoundError,
 } from 'src/iam/domains/errors';
 import { QueryFailedError } from 'typeorm';
-import { DeleteAccountUseCase } from 'src/iam/applications/users/usecases/delete-account.usecase';
+import { DeleteAccountUseCase } from 'src/iam/applications/usecases/users/delete-account.usecase';
 import { UserStatus } from 'src/iam/domains/enums/user.enum';
 import { InvestmentStatus } from 'src/investments/domains/enums/investment-status.enum';
 import { OrdreMarcheStatus } from 'src/secondarymarket/domains/ordre-marche';

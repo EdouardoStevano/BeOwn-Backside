@@ -3,7 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule } from '@nestjs/config';
 import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructure.module';
 import { UsersInfrastructureModule } from 'src/iam/infrastructure/users-infrastructure.module';
-import { UsersModule } from 'src/iam/applications/users/users.module';
+import { UsersModule } from 'src/iam/applications/users.module';
 import { NotificationsModule } from 'src/notifications/notifications.module';
 import { HASHING_SERVICE } from 'src/common/hashing/hashing.service';
 import { BcryptService } from 'src/common/hashing/bcrypt.service';
@@ -32,23 +32,23 @@ import { GoogleStrategy } from 'src/iam/infrastructure/oauth/strategies/google-a
 import { FacebookAuthStrategy } from 'src/iam/infrastructure/oauth/strategies/facebook-auth.strategy';
 import { LinkedinStrategy } from 'src/iam/infrastructure/oauth/strategies/linkedin-auth.strategy';
 import { AuthenticationController } from 'src/iam/presenters/http/authentication.controller';
-import { RegisterUseCase } from './usecases/register.usecase';
-import { SignInUsecase } from './usecases/sign-in.usecase';
-import { RefreshTokenUseCase } from './usecases/refresh-token.usecase';
-import { SocialAuthUseCase } from './usecases/social-auth.usecase';
-import { IssueOAuthCodeUseCase } from './usecases/issue-oauth-code.usecase';
-import { ExchangeOAuthCodeUseCase } from './usecases/exchange-oauth-code.usecase';
-import { ForgotPasswordUseCase } from './usecases/forgot-password.usecase';
-import { ResetPasswordUseCase } from './usecases/reset-password.usecase';
-import { SendEmailVerificationUseCase } from './usecases/send-email-verification.usecase';
-import { ConfirmEmailUseCase } from './usecases/confirm-email.usecase';
-import { CreateEmailOtpUseCase } from './usecases/create-email-otp.usecase';
-import { CreateSmsOtpUseCase } from './usecases/create-sms-otp.usecase';
-import { EnrollTfaUseCase } from './usecases/enroll-tfa.usecase';
-import { TFA_ENROLLMENT_STRATEGIES } from './enrollment/tfa-enrollment.strategy';
-import { TotpEnrollmentStrategy } from './enrollment/totp-enrollment.strategy';
-import { EmailEnrollmentStrategy } from './enrollment/email-enrollment.strategy';
-import { SmsEnrollmentStrategy } from './enrollment/sms-enrollment.strategy';
+import { RegisterUseCase } from './usecases/authentication/register.usecase';
+import { SignInUsecase } from './usecases/authentication/sign-in.usecase';
+import { RefreshTokenUseCase } from './usecases/authentication/refresh-token.usecase';
+import { SocialAuthUseCase } from './usecases/authentication/social-auth.usecase';
+import { IssueOAuthCodeUseCase } from './usecases/authentication/issue-oauth-code.usecase';
+import { ExchangeOAuthCodeUseCase } from './usecases/authentication/exchange-oauth-code.usecase';
+import { ForgotPasswordUseCase } from './usecases/authentication/forgot-password.usecase';
+import { ResetPasswordUseCase } from './usecases/authentication/reset-password.usecase';
+import { SendEmailVerificationUseCase } from './usecases/authentication/send-email-verification.usecase';
+import { ConfirmEmailUseCase } from './usecases/authentication/confirm-email.usecase';
+import { CreateEmailOtpUseCase } from './usecases/authentication/create-email-otp.usecase';
+import { CreateSmsOtpUseCase } from './usecases/authentication/create-sms-otp.usecase';
+import { EnrollTfaUseCase } from './usecases/authentication/enroll-tfa.usecase';
+import { TFA_ENROLLMENT_STRATEGIES } from './services/authentication/tfa-enrollment.strategy';
+import { TotpEnrollmentStrategy } from './services/authentication/totp-enrollment.strategy';
+import { EmailEnrollmentStrategy } from './services/authentication/email-enrollment.strategy';
+import { SmsEnrollmentStrategy } from './services/authentication/sms-enrollment.strategy';
 
 /**
  * Feature « authentification » du Bounded Context IAM : tout ce qui prouve
@@ -62,6 +62,12 @@ import { SmsEnrollmentStrategy } from './enrollment/sms-enrollment.strategy';
  * lien de vérification, et `AUTH_MAILER` était relié deux fois, une fois par
  * module. Les réunir ici applique CCP (§5) ; la frontière qui compte reste
  * celle du contexte IAM, pas celle du parcours.
+ *
+ * Les classes de la feature sont réparties par type au sein de la couche —
+ * `applications/usecases/authentication/` et
+ * `applications/services/authentication/` — et ce module, qui les câble, vit à
+ * la racine de `applications/`. Ajouter un use case à l'authentification veut
+ * donc dire toucher `usecases/authentication/` puis ce fichier.
  *
  * Deux points d'histoire, à ne pas défaire :
  * - `SMS_SERVICE` n'est **pas** relié ici : il vient du `SmsModule` global
@@ -90,7 +96,7 @@ import { SmsEnrollmentStrategy } from './enrollment/sms-enrollment.strategy';
   ],
   providers: [
     // Adapters de sortie (§4 — DIP : le domaine définit le port, l'infra le
-    // remplit ; le câblage vit à la racine de la feature).
+    // remplit ; le câblage vit à la racine de `applications/`).
     { provide: HASHING_SERVICE, useClass: BcryptService },
     { provide: AUTH_MAILER, useClass: NestAuthMailerAdapter },
     { provide: OTP_STORE, useClass: RedisOtpStoreAdapter },
