@@ -1,8 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { Strategy } from 'passport-facebook';
 import { PassportStrategy } from '@nestjs/passport';
-import { Social } from 'src/iam/domains/models/social-provider';
-import { SocialProfile } from 'src/iam/domains/models/social-profile';
+import { Social } from 'src/iam/applications/models/social-provider';
+import { SocialProfile } from 'src/iam/applications/models/social-profile';
 import { CookieOAuthStateStore } from '../cookie-oauth-state.store';
 
 @Injectable()

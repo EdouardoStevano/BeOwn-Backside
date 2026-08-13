@@ -1,4 +1,5 @@
 import { User, UserSnapshot } from './user';
+import { UserMapper } from 'src/iam/domains/mappers/user.mapper';
 import { UserEmail } from 'src/iam/domains/value-objects/user-email.vo';
 import { UserRole, UserStatus } from 'src/iam/domains/enums/user.enum';
 
@@ -6,7 +7,7 @@ import { UserRole, UserStatus } from 'src/iam/domains/enums/user.enum';
  * Builder réservé aux tests (exclu du build — cf. tsconfig.build.json).
  *
  * L'état de `User` étant privé, les specs ne peuvent plus assembler un compte
- * champ par champ ; elles passent par `User.restore`, comme la persistance.
+ * champ par champ ; elles passent par `UserMapper.restore`, comme la persistance.
  * Ce helper évite d'écrire les douze champs du snapshot dans chaque spec.
  */
 export const buildUser = (
@@ -21,7 +22,7 @@ export const buildUser = (
     ...snapshot
   } = overrides;
 
-  return User.restore({
+  return UserMapper.restore({
     userId: 42,
     firstname: 'Jean',
     lastname: null,

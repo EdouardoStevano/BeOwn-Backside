@@ -1,5 +1,13 @@
 import { UserEmail } from 'src/iam/domains/value-objects/user-email.vo';
+import {
+  FirstName,
+  LastName,
+} from 'src/iam/domains/value-objects/person-name.vo';
 import { UserRole, UserStatus } from 'src/iam/domains/enums/user.enum';
+import {
+  UserMapper,
+  type PublicUser,
+} from 'src/iam/domains/mappers/user.mapper';
 
 /**
  * Compare un mot de passe en clair à son empreinte. Injecté à l'appel plutôt
@@ -28,15 +36,19 @@ export interface UserSnapshot {
 }
 
 /**
- * Représentation exposable du compte : ce que le domaine accepte de publier.
- * L'empreinte du mot de passe en est absente par construction — c'est un type,
- * pas une convention, donc l'oubli est impossible.
+ * État interne du compte : le snapshot, mais avec ses Value Objects plutôt que
+ * les primitives qu'attend la persistance.
+ *
+ * @internal Ce que reçoit le constructeur. La traduction dans un sens
+ * (persistance → VO permissifs) appartient à `UserMapper`, dans l'autre
+ * (entrée → VO validants) à `User.register`.
  */
-export interface PublicUser {
+export interface UserState {
   userId: number;
-  firstname: string;
-  lastname: string | null;
+  firstname: FirstName;
+  lastname: LastName | null;
   socialId: string | null;
+  passwordHash: string | null;
   role: UserRole;
   status: UserStatus;
   cguAccepteesLe: Date | null;
@@ -70,62 +82,73 @@ export interface RegisterUserProps {
  *   `user.status === UserStatus.CLOS || user.status === UserStatus.SUPPRIME`.
  *   Ajouter un statut imposait de retrouver toutes ces copies.
  *
- * L'empreinte du mot de passe n'a volontairement **aucun getter** : elle ne
- * sort que par `toSnapshot()`, destiné aux mappers de persistance.
+ * L'empreinte du mot de passe ne sort que par le getter `passwordHash`, marqué
+ * `@internal` et destiné au seul `UserMapper` : un use case qui doit éprouver
+ * un mot de passe passe par `verifyPassword()`, qui ne rend qu'un verdict.
+ *
+ * La conversion vers les représentations sortantes (snapshot de persistance,
+ * projection publiable) appartient à `UserMapper` — cette classe ne porte plus
+ * que le métier (§4 — SRP).
  */
 export class User {
-  private constructor(
-    private _userId: number,
-    private _firstname: string,
-    private _lastname: string | null,
-    private _socialId: string | null,
-    private _passwordHash: string | null,
-    private _role: UserRole,
-    private _status: UserStatus,
-    private _cguAccepteesLe: Date | null,
-    private _lastLoginAt: Date | null,
-    private _createdAt: Date,
-    private _updatedAt: Date,
-    private _userEmail: UserEmail | null,
-  ) {}
+  private _userId: number;
+  private _firstname: FirstName;
+  private _lastname: LastName | null;
+  private _socialId: string | null;
+  private _passwordHash: string | null;
+  private _role: UserRole;
+  private _status: UserStatus;
+  private _cguAccepteesLe: Date | null;
+  private _lastLoginAt: Date | null;
+  private _createdAt: Date;
+  private _updatedAt: Date;
+  private _userEmail: UserEmail | null;
+
+  /**
+   * @internal Réservé à `User.register` et à `UserMapper`.
+   *
+   * Public faute de mieux : TypeScript n'a pas de classe amie, et `UserMapper`
+   * — qui reconstitue un compte depuis la persistance — doit pouvoir
+   * l'appeler. Il n'ouvre rien de plus que l'ancien `User.restore`, public lui
+   * aussi. Les invariants restent portés par `register()`, seul chemin de
+   * **création** d'un compte : passer par ici, c'est se déclarer mapper.
+   */
+  constructor(state: UserState) {
+    this._userId = state.userId;
+    this._firstname = state.firstname;
+    this._lastname = state.lastname;
+    this._socialId = state.socialId;
+    this._passwordHash = state.passwordHash;
+    this._role = state.role;
+    this._status = state.status;
+    this._cguAccepteesLe = state.cguAccepteesLe;
+    this._lastLoginAt = state.lastLoginAt;
+    this._createdAt = state.createdAt;
+    this._updatedAt = state.updatedAt;
+    this._userEmail = state.userEmail;
+  }
 
   /** Nouveau compte : statut CREE, identifiants non encore vérifiés. */
   static register(props: RegisterUserProps): User {
     const email = new UserEmail(props.email);
     if (props.emailVerified) email.verify();
 
-    return new User(
-      undefined as unknown as number, // attribué par la persistance
-      props.firstname,
-      props.lastname,
-      props.socialId,
-      props.passwordHash,
-      UserRole.INVESTISSEUR,
-      UserStatus.CREE,
-      null,
-      null,
-      undefined as unknown as Date,
-      undefined as unknown as Date,
-      email,
-    );
-  }
-
-  /** Reconstitution depuis la persistance. Réservé aux mappers. */
-  static restore(snapshot: UserSnapshot): User {
-    return new User(
-      snapshot.userId,
-      snapshot.firstname,
-      snapshot.lastname,
-      snapshot.socialId,
-      snapshot.passwordHash,
-      snapshot.role,
-      snapshot.status,
-      snapshot.cguAccepteesLe,
-      snapshot.lastLoginAt,
-      snapshot.createdAt,
-      snapshot.updatedAt,
-      snapshot.userEmail,
-    );
+    return new User({
+      userId: undefined as unknown as number, // attribué par la persistance
+      // Éprouvés ici et non par l'appelant : un compte ne peut pas naître avec
+      // un prénom vide, quel que soit le point d'entrée (HTTP, import, script).
+      firstname: FirstName.of(props.firstname),
+      lastname: LastName.of(props.lastname),
+      socialId: props.socialId,
+      passwordHash: props.passwordHash,
+      role: UserRole.INVESTISSEUR,
+      status: UserStatus.CREE,
+      cguAccepteesLe: null,
+      lastLoginAt: null,
+      createdAt: undefined as unknown as Date,
+      updatedAt: undefined as unknown as Date,
+      userEmail: email,
+    });
   }
 
   // ── Lectures (aucun setter) ───────────────────────────────────────────────
@@ -133,11 +156,12 @@ export class User {
   get userId(): number {
     return this._userId;
   }
+  /** Le VO reste interne : les appelants continuent de lire des chaînes. */
   get firstname(): string {
-    return this._firstname;
+    return this._firstname.value;
   }
   get lastname(): string | null {
-    return this._lastname;
+    return this._lastname?.value ?? null;
   }
   get socialId(): string | null {
     return this._socialId;
@@ -235,17 +259,37 @@ export class User {
     this._passwordHash = hash;
   }
 
-  /** Renvoie `true` si quelque chose a changé — utile pour l'audit. */
+  /**
+   * Renvoie `true` si quelque chose a changé — utile pour l'audit.
+   *
+   * Les valeurs passent par les VO, donc renommer obéit exactement aux mêmes
+   * règles que s'inscrire. Auparavant la seule barrière était `UpdateUserDto`,
+   * et elle exigeait 2 caractères là où `SignUpDto` se contentait d'un champ
+   * non vide : le même compte pouvait naître avec un prénom d'une lettre mais
+   * ne plus pouvoir y revenir.
+   */
   rename(firstname?: string, lastname?: string | null): boolean {
     let changed = false;
-    if (firstname !== undefined && firstname !== this._firstname) {
-      this._firstname = firstname;
-      changed = true;
+
+    if (firstname !== undefined) {
+      const next = FirstName.of(firstname);
+      if (!next.equals(this._firstname)) {
+        this._firstname = next;
+        changed = true;
+      }
     }
-    if (lastname !== undefined && (lastname ?? null) !== this._lastname) {
-      this._lastname = lastname ?? null;
-      changed = true;
+
+    if (lastname !== undefined) {
+      const next = LastName.of(lastname);
+      const unchanged = next
+        ? next.equals(this._lastname)
+        : this._lastname === null;
+      if (!unchanged) {
+        this._lastname = next;
+        changed = true;
+      }
     }
+
     return changed;
   }
 
@@ -258,49 +302,18 @@ export class User {
   /**
    * Représentation exposable du compte — **sans l'empreinte du mot de passe**.
    *
-   * Indispensable depuis que l'état est privé : les contrôleurs faisaient
-   * `const { password, ...safe } = user`, ce qui produirait désormais des clés
-   * `_userId`, `_firstname`… et surtout laisserait passer `_passwordHash`.
-   * `res.json()` appelle automatiquement ce `toJSON`, ce qui protège aussi les
-   * chemins de sérialisation indirects.
+   * La mise en forme appartient à {@link UserMapper} (§4 — SRP) ; seul le point
+   * d'accroche reste ici, et il doit y rester : `res.json()` appelle
+   * automatiquement `toJSON()`, ce qui protège aussi les chemins de
+   * sérialisation indirects — un `User` glissé dans une réponse sans passer par
+   * un appel explicite. Sans cette méthode, il ressortirait avec ses clés
+   * privées `_userId`, `_firstname`… et surtout `_passwordHash`.
    */
   toJSON(): PublicUser {
-    return {
-      userId: this._userId,
-      firstname: this._firstname,
-      lastname: this._lastname,
-      socialId: this._socialId,
-      role: this._role,
-      status: this._status,
-      cguAccepteesLe: this._cguAccepteesLe,
-      lastLoginAt: this._lastLoginAt,
-      createdAt: this._createdAt,
-      updatedAt: this._updatedAt,
-      userEmail: this._userEmail,
-    };
+    return UserMapper.toPublic(this);
   }
 
-  // ── Persistance ───────────────────────────────────────────────────────────
-
-  /**
-   * Échappatoire assumée et unique : les mappers ont besoin de l'état complet,
-   * empreinte du mot de passe comprise. Ne pas appeler depuis `applications/`
-   * — les use cases doivent passer par les méthodes ci-dessus.
-   */
-  toSnapshot(): UserSnapshot {
-    return {
-      userId: this._userId,
-      firstname: this._firstname,
-      lastname: this._lastname,
-      socialId: this._socialId,
-      passwordHash: this._passwordHash,
-      role: this._role,
-      status: this._status,
-      cguAccepteesLe: this._cguAccepteesLe,
-      lastLoginAt: this._lastLoginAt,
-      createdAt: this._createdAt,
-      updatedAt: this._updatedAt,
-      userEmail: this._userEmail,
-    };
+  get passwordHash(): string | null {
+    return this._passwordHash;
   }
 }

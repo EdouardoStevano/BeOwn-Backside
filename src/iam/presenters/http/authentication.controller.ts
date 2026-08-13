@@ -22,18 +22,21 @@ import { Public } from 'src/common/auth/public.decorator';
 import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
 import { RecaptchaService } from 'src/common/recaptcha/recaptcha.service';
-import { SignInUsecase } from '../../applications/usecases/authentication/sign-in.usecase';
-import { RefreshTokenUseCase } from '../../applications/usecases/authentication/refresh-token.usecase';
-import { IssueOAuthCodeUseCase } from '../../applications/usecases/authentication/issue-oauth-code.usecase';
-import { ExchangeOAuthCodeUseCase } from '../../applications/usecases/authentication/exchange-oauth-code.usecase';
-import { ForgotPasswordUseCase } from '../../applications/usecases/authentication/forgot-password.usecase';
-import { ResetPasswordUseCase } from '../../applications/usecases/authentication/reset-password.usecase';
-import { RegisterUseCase } from '../../applications/usecases/authentication/register.usecase';
-import { SendEmailVerificationUseCase } from '../../applications/usecases/authentication/send-email-verification.usecase';
-import { ConfirmEmailUseCase } from '../../applications/usecases/authentication/confirm-email.usecase';
-import { CreateEmailOtpUseCase } from '../../applications/usecases/authentication/create-email-otp.usecase';
-import { CreateSmsOtpUseCase } from '../../applications/usecases/authentication/create-sms-otp.usecase';
-import { EnrollTfaUseCase } from '../../applications/usecases/authentication/enroll-tfa.usecase';
+import { SignInUsecase } from '../../applications/usecases/sign-in.usecase';
+import { RefreshTokenUseCase } from '../../applications/usecases/refresh-token.usecase';
+import { IssueOAuthCodeUseCase } from '../../applications/usecases/issue-oauth-code.usecase';
+import { ExchangeOAuthCodeUseCase } from '../../applications/usecases/exchange-oauth-code.usecase';
+import { ForgotPasswordUseCase } from '../../applications/usecases/forgot-password.usecase';
+import { ResetPasswordUseCase } from '../../applications/usecases/reset-password.usecase';
+import { RegisterUseCase } from '../../applications/usecases/register.usecase';
+import { SendEmailVerificationUseCase } from '../../applications/usecases/send-email-verification.usecase';
+import { ConfirmEmailUseCase } from '../../applications/usecases/confirm-email.usecase';
+import { CreateEmailOtpUseCase } from '../../applications/usecases/create-email-otp.usecase';
+import { CreateSmsOtpUseCase } from '../../applications/usecases/create-sms-otp.usecase';
+import { EnrollTfaUseCase } from '../../applications/usecases/enroll-tfa.usecase';
+import { EnableMfaUseCase } from '../../applications/usecases/enable-mfa.usecase';
+import { DisableMfaUseCase } from '../../applications/usecases/disable-mfa.usecase';
+import { VerifyMfaChallengeUseCase } from '../../applications/usecases/verify-mfa-challenge.usecase';
 import { FacebookAuthGuard } from '../guards/facebook-auth.guard';
 import { FacebookCallbackGuard } from '../guards/facebook-callback.guard';
 import { GoogleAuthGuard } from '../guards/google-auth.guard';
@@ -50,14 +53,20 @@ import {
 } from './dto/password.dto';
 import { EmailVerificationDto } from './dto/email-verification.dto';
 import {
-  ConfirmTfaEnrollmentDto,
-  EnrollTfaDto,
   SendEmailOtpDto,
   SendSmsOtpDto,
-  TfaEnrollmentChallengeDto,
   VerifyEmailOtpDto,
   VerifySmsOtpDto,
 } from './dto/otp.dto';
+import {
+  DisableMfaChallengeDto,
+  DisableMfaDto,
+  EnableMfaDto,
+  EnrollMfaDto,
+  MfaChallengeDto,
+  MfaEnrollmentChallengeDto,
+  MfaMethodResponseDto,
+} from './dto/mfa.dto';
 import { emailVerifiedPage } from './views/email-verified.view';
 
 /**
@@ -87,17 +96,26 @@ export class AuthenticationController {
     private readonly emailOtpUseCase: CreateEmailOtpUseCase,
     private readonly smsOtpUseCase: CreateSmsOtpUseCase,
     private readonly enrollTfaUseCase: EnrollTfaUseCase,
+    private readonly enableMfaUseCase: EnableMfaUseCase,
+    private readonly disableMfaUseCase: DisableMfaUseCase,
+    private readonly verifyMfaChallengeUseCase: VerifyMfaChallengeUseCase,
   ) {}
 
   // ─────────────────────────────────────────────────────────────────────────
   // Connexion, inscription, mot de passe
   // ─────────────────────────────────────────────────────────────────────────
 
-  @ApiOperation({ summary: 'Connexion avec email et mot de passe' })
+  @ApiOperation({
+    summary: 'Connexion avec email et mot de passe',
+    description:
+      '**Deux réponses possibles en 200**, à distinguer par la présence de `mfaRequired` :\n\n' +
+      '- compte sans facteur actif → `{ accessToken, refreshToken, user }` ;\n' +
+      '- compte avec facteur actif → `{ mfaRequired: true, challengeId, method, sentTo }`, **sans aucun token ni profil**. La connexion se termine par `POST /auth/mfa/challenge`.',
+  })
   @ApiResponse({
     status: 200,
     description:
-      'Session ouverte : accessToken, refreshToken et le compte (user)',
+      'Session ouverte (accessToken, refreshToken, user), ou défi MFA à relever (`mfaRequired`)',
   })
   @ApiResponse({ status: 401, description: 'Identifiants invalides' })
   @ApiResponse({
@@ -355,77 +373,162 @@ export class AuthenticationController {
   }
 
   // ─────────────────────────────────────────────────────────────────────────
-  // Enrôlement 2FA (TOTP, email, SMS)
+  // Double authentification (MFA) — enrôlement, activation, retrait, défi
   // ─────────────────────────────────────────────────────────────────────────
 
   @ApiOperation({
-    summary: 'Démarrer un enrôlement 2FA',
+    summary: 'Démarrer un enrôlement MFA',
     description:
-      "Le canal est choisi dans le body (`method`) : `totp` renvoie le secret et l'URI du QR code, `email` et `sms` envoient un code à confirmer.\n\n" +
-      "Remplace les anciennes routes par canal (`POST /otp/totp/setup`) : ajouter un canal ne crée plus d'endpoint.\n\n" +
-      '**Destination du code** — `sms` exige `phone` (E.164) ; `email` ignore toute adresse fournie et envoie **toujours** à celle du compte.\n\n' +
-      'Le défi doit ensuite être prouvé via `POST /auth/otp/enroll/confirm` : tant que la confirmation n’a pas eu lieu, la méthode reste inactive.',
+      "Le canal est choisi dans le body (`method`) : `totp` renvoie le secret et l'URI du QR code, `email` et `sms` envoient un code.\n\n" +
+      "**`credential`** porte la destination : numéro E.164 pour `sms`. Il est ignoré pour `totp` (aucune destination) et pour `email`, qui envoie toujours à l'adresse du compte — accepter une adresse arbitraire permettrait de déplacer le second facteur vers une boîte tierce depuis une simple session valide.\n\n" +
+      'Le facteur reste **inactif** tant que `POST /auth/mfa/enable` ne l’a pas confirmé : tant qu’il l’est, il ne sera pas opposé à la connexion.',
   })
   @ApiBearerAuth()
   @ApiResponse({
     status: 201,
     description: 'Défi émis (secret TOTP, ou code envoyé au canal)',
-    type: TfaEnrollmentChallengeDto,
+    type: MfaEnrollmentChallengeDto,
   })
   @ApiResponse({
     status: 400,
     description:
-      'Canal inconnu, numéro manquant ou hors format E.164, ou code déjà actif sur ce canal (attendre le TTL)',
+      'Canal inconnu, `credential` manquant ou hors format E.164, ou code déjà actif sur ce canal (attendre le TTL)',
   })
   @ApiResponse({ status: 401, description: 'Authentification requise' })
   @ApiResponse({
     status: 409,
     description:
-      "Canal `email`/`sms` déjà enrôlé et actif sur cette destination. `totp` n'est pas concerné : un nouvel enrôlement y est toujours accepté (changement de téléphone), et remplace le précédent à la confirmation.",
+      "Canal `email`/`sms` déjà enrôlé et actif sur cette destination. `totp` n'est pas concerné : un nouvel enrôlement y est toujours accepté (changement d'appareil) et remplace le précédent à l'activation.",
   })
   @Throttle({
     short: { ttl: 60_000, limit: 3 },
     medium: { ttl: 60_000, limit: 3 },
     auth: { ttl: 60_000, limit: 3 },
   })
-  @Post('otp/enroll')
-  enroll(@Body() dto: EnrollTfaDto, @CurrentUser() user: ActiveUser) {
+  @Post('mfa/enroll')
+  enrollMfa(@Body() dto: EnrollMfaDto, @CurrentUser() user: ActiveUser) {
     return this.enrollTfaUseCase.start({
       method: dto.method,
       userId: user.userId,
       email: user.email,
-      phone: dto.phone,
+      // Seul le canal SMS lit cette valeur ; les autres résolvent leur
+      // destination eux-mêmes.
+      phone: dto.credential,
     });
   }
 
   @ApiOperation({
-    summary: 'Confirmer un enrôlement 2FA',
+    summary: 'Activer le facteur enrôlé',
     description:
-      'Prouve la possession du facteur enrôlé ; la méthode devient alors la méthode active de son canal — les méthodes précédentes du **même** canal sont désactivées, les autres canaux ne sont pas touchés.\n\n' +
-      "`otp` est le code de l'application authenticator pour `totp`, ou le code reçu par email/SMS pour les autres canaux. Ce code est cloisonné des OTP de connexion : un code d'enrôlement ne peut pas ouvrir de session.",
+      'Prouve la possession du facteur ; il devient alors la méthode active de son canal — les méthodes précédentes du **même** canal sont désactivées, les autres canaux ne sont pas touchés.\n\n' +
+      "Le body ne porte **pas** de `method` : le canal est déduit de l'enrôlement en attente, l'appelant venant d'appeler `/auth/mfa/enroll`. Le canal effectivement activé est renvoyé.\n\n" +
+      "Ce code est cloisonné des OTP de connexion : un code d'enrôlement ne peut pas ouvrir de session.",
   })
   @ApiBearerAuth()
-  @ApiResponse({ status: 204, description: 'Méthode enrôlée et activée' })
   @ApiResponse({
-    status: 400,
-    description: 'Code invalide ou expiré, ou canal inconnu',
+    status: 200,
+    description: 'Facteur activé',
+    type: MfaMethodResponseDto,
   })
+  @ApiResponse({ status: 400, description: 'Code invalide ou expiré' })
   @ApiResponse({ status: 401, description: 'Authentification requise' })
   @ApiResponse({
     status: 404,
     description:
-      'Aucun enrôlement en cours pour ce canal — rappeler `POST /auth/otp/enroll` au préalable',
+      'Aucun enrôlement en cours — appeler `POST /auth/mfa/enroll` au préalable',
   })
-  @HttpCode(HttpStatus.NO_CONTENT)
-  @Post('otp/enroll/confirm')
-  confirmEnrollment(
-    @Body() dto: ConfirmTfaEnrollmentDto,
+  @HttpCode(HttpStatus.OK)
+  @Post('mfa/enable')
+  async enableMfa(@Body() dto: EnableMfaDto, @CurrentUser() user: ActiveUser) {
+    const method = await this.enableMfaUseCase.execute({
+      userId: user.userId,
+      code: dto.code,
+    });
+
+    return { method };
+  }
+
+  @ApiOperation({
+    summary: 'Retirer le facteur MFA',
+    description:
+      "Deux temps sur la même route, parce que retirer une protection vaut au moins autant que ce qu'elle protège : une session volée suffirait sinon à désarmer le compte.\n\n" +
+      '1. Body **vide** (ou `method` seul) → un code part sur le canal actif et un `challengeId` est renvoyé. Pour `totp`, rien n’est envoyé : le code est lu dans l’application.\n' +
+      '2. Body `{ challengeId, code }` → le facteur est retiré.',
+  })
+  @ApiBearerAuth()
+  @ApiResponse({
+    status: 200,
+    description:
+      'Premier appel : défi émis. Second appel : facteur retiré (`{ method }`).',
+    type: DisableMfaChallengeDto,
+  })
+  @ApiResponse({ status: 400, description: 'Code invalide ou expiré' })
+  @ApiResponse({
+    status: 401,
+    description: 'Authentification requise, ou challenge inconnu/expiré/épuisé',
+  })
+  @ApiResponse({
+    status: 404,
+    description: "Aucun facteur actif sur ce compte — il n'y a rien à retirer",
+  })
+  @Throttle({
+    short: { ttl: 60_000, limit: 5 },
+    medium: { ttl: 60_000, limit: 5 },
+    auth: { ttl: 60_000, limit: 5 },
+  })
+  @HttpCode(HttpStatus.OK)
+  @Post('mfa/disable')
+  async disableMfa(
+    @Body() dto: DisableMfaDto,
     @CurrentUser() user: ActiveUser,
   ) {
-    return this.enrollTfaUseCase.confirm({
-      method: dto.method,
+    // `challengeId` absent = premier temps. La distinction est portée par le
+    // body et non par deux routes, pour tenir le contrat demandé
+    // (`{ challengeId, code }`) sans ajouter d'endpoint d'émission.
+    if (!dto.challengeId) {
+      return this.disableMfaUseCase.request({
+        userId: user.userId,
+        method: dto.method,
+      });
+    }
+
+    const method = await this.disableMfaUseCase.confirm({
       userId: user.userId,
-      otp: dto.otp,
+      challengeId: dto.challengeId,
+      code: dto.code as string,
+    });
+
+    return { method };
+  }
+
+  @ApiOperation({
+    summary: 'Relever le défi MFA et terminer la connexion',
+    description:
+      'Second temps de `POST /auth/sign-in` lorsque le compte a un facteur actif : celui-ci renvoie alors `{ mfaRequired: true, challengeId, method, sentTo }` **au lieu** des tokens.\n\n' +
+      "La route est publique — c'est justement la connexion qui n'est pas terminée. Le `challengeId` accompagne le code parce que rien d'autre ne dit au serveur quel compte est en jeu ; il n'est émis qu'après un mot de passe valide, expire au bout de 5 minutes et ne tolère que 3 essais.",
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Facteur prouvé — tokens et profil délivrés',
+  })
+  @ApiResponse({ status: 400, description: 'Code invalide ou expiré' })
+  @ApiResponse({
+    status: 401,
+    description:
+      'Challenge inconnu, expiré ou épuisé — reprendre à `POST /auth/sign-in`',
+  })
+  @Throttle({
+    short: { ttl: 60_000, limit: 5 },
+    medium: { ttl: 60_000, limit: 5 },
+    auth: { ttl: 60_000, limit: 5 },
+  })
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @Post('mfa/challenge')
+  verifyMfaChallenge(@Body() dto: MfaChallengeDto) {
+    return this.verifyMfaChallengeUseCase.execute({
+      challengeId: dto.challengeId,
+      code: dto.code,
     });
   }
 }

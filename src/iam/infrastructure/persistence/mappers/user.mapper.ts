@@ -1,16 +1,21 @@
 import { User } from 'src/iam/domains/models/user';
+// Aliasé : le domaine a lui aussi un `UserMapper`, qui traduit entre l'entité
+// et ses représentations. Celui-ci ne fait que la moitié ORM du chemin et
+// délègue l'autre.
+import { UserMapper as UserDomainMapper } from 'src/iam/domains/mappers/user.mapper';
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 import { UserEmail } from 'src/iam/domains/value-objects/user-email.vo';
 import { UserEmailEntity } from 'src/iam/infrastructure/persistence/entities/user-email.entity';
 
 /**
- * Seul endroit autorisé à manipuler l'état complet de `User` : la
- * reconstitution passe par `User.restore`, la relecture par `toSnapshot()`.
- * Les use cases, eux, n'ont accès qu'aux méthodes métier de l'entité.
+ * Traduction entre l'entité ORM et le compte du domaine (§12.7 : deux classes
+ * distinctes reliées par un mapper). L'état complet de `User` ne se manipule
+ * que par `UserDomainMapper` — les use cases, eux, n'ont accès qu'aux méthodes
+ * métier de l'entité.
  */
 export class UserMapper {
   static toDomain(entity: UserEntity): User {
-    return User.restore({
+    return UserDomainMapper.restore({
       userId: entity.userId,
       firstname: entity.firstname,
       lastname: entity.lastname,
@@ -33,7 +38,7 @@ export class UserMapper {
   }
 
   static toEntity(domain: User): UserEntity {
-    const snapshot = domain.toSnapshot();
+    const snapshot = UserDomainMapper.toSnapshot(domain);
     const entity = new UserEntity();
 
     if (snapshot.userId) entity.userId = snapshot.userId;

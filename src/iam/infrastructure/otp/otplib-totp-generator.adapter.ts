@@ -4,7 +4,7 @@ import { generateSecret, generateURI, verify } from 'otplib';
 import {
   TotpGenerator,
   TotpSecret,
-} from 'src/iam/domains/ports/totp-generator.port';
+} from 'src/iam/applications/ports/totp-generator.port';
 
 @Injectable()
 export class OtplibTotpGeneratorAdapter implements TotpGenerator {

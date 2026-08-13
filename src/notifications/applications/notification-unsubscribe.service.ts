@@ -4,7 +4,7 @@ import {
   TOKEN_SERVICE,
   type TokenService,
   type UnsubscribeTokenPayload,
-} from 'src/iam/domains/ports/token.port';
+} from 'src/iam/applications/ports/token.port';
 import {
   USER_REPOSITORY,
   type UserRepository,

@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule } from '@nestjs/config';
+import { CqrsModule } from '@nestjs/cqrs';
+import jwtConfig from 'src/iam/infrastructure/config/jwt.config';
 import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructure.module';
 import { UsersInfrastructureModule } from 'src/iam/infrastructure/users-infrastructure.module';
 import { UsersModule } from 'src/iam/applications/users.module';
@@ -12,15 +14,15 @@ import { TFAMethodEntity } from 'src/iam/infrastructure/persistence/entities/tfa
 import { TOTPMethodEntity } from 'src/iam/infrastructure/persistence/entities/totp-method.entity';
 import { EmailMethodEntity } from 'src/iam/infrastructure/persistence/entities/email-method.entity';
 import { SMSMethodEntity } from 'src/iam/infrastructure/persistence/entities/sms-method.entity';
-import { AUTH_MAILER } from 'src/iam/domains/ports/auth-mailer.port';
-import { OTP_STORE } from 'src/iam/domains/ports/otp-store.port';
-import { TOTP_GENERATOR } from 'src/iam/domains/ports/totp-generator.port';
+import { AUTH_MAILER } from 'src/iam/applications/ports/auth-mailer.port';
+import { OTP_STORE } from 'src/iam/applications/ports/otp-store.port';
+import { TOTP_GENERATOR } from 'src/iam/applications/ports/totp-generator.port';
 import { TOTP_METHOD_REPOSITORY } from 'src/iam/domains/ports/totp-method.repository';
 import {
   EMAIL_METHOD_REPOSITORY,
   SMS_METHOD_REPOSITORY,
 } from 'src/iam/domains/ports/channel-tfa-method.repository';
-import { SECRET_CIPHER } from 'src/iam/domains/ports/secret-cipher.port';
+import { SECRET_CIPHER } from 'src/iam/applications/ports/secret-cipher.port';
 import { NestAuthMailerAdapter } from 'src/iam/infrastructure/mailer/nest-auth-mailer.adapter';
 import { RedisOtpStoreAdapter } from 'src/iam/infrastructure/otp/redis-otp-store.adapter';
 import { OtplibTotpGeneratorAdapter } from 'src/iam/infrastructure/otp/otplib-totp-generator.adapter';
@@ -32,23 +34,34 @@ import { GoogleStrategy } from 'src/iam/infrastructure/oauth/strategies/google-a
 import { FacebookAuthStrategy } from 'src/iam/infrastructure/oauth/strategies/facebook-auth.strategy';
 import { LinkedinStrategy } from 'src/iam/infrastructure/oauth/strategies/linkedin-auth.strategy';
 import { AuthenticationController } from 'src/iam/presenters/http/authentication.controller';
-import { RegisterUseCase } from './usecases/authentication/register.usecase';
-import { SignInUsecase } from './usecases/authentication/sign-in.usecase';
-import { RefreshTokenUseCase } from './usecases/authentication/refresh-token.usecase';
-import { SocialAuthUseCase } from './usecases/authentication/social-auth.usecase';
-import { IssueOAuthCodeUseCase } from './usecases/authentication/issue-oauth-code.usecase';
-import { ExchangeOAuthCodeUseCase } from './usecases/authentication/exchange-oauth-code.usecase';
-import { ForgotPasswordUseCase } from './usecases/authentication/forgot-password.usecase';
-import { ResetPasswordUseCase } from './usecases/authentication/reset-password.usecase';
-import { SendEmailVerificationUseCase } from './usecases/authentication/send-email-verification.usecase';
-import { ConfirmEmailUseCase } from './usecases/authentication/confirm-email.usecase';
-import { CreateEmailOtpUseCase } from './usecases/authentication/create-email-otp.usecase';
-import { CreateSmsOtpUseCase } from './usecases/authentication/create-sms-otp.usecase';
-import { EnrollTfaUseCase } from './usecases/authentication/enroll-tfa.usecase';
-import { TFA_ENROLLMENT_STRATEGIES } from './services/authentication/tfa-enrollment.strategy';
-import { TotpEnrollmentStrategy } from './services/authentication/totp-enrollment.strategy';
-import { EmailEnrollmentStrategy } from './services/authentication/email-enrollment.strategy';
-import { SmsEnrollmentStrategy } from './services/authentication/sms-enrollment.strategy';
+import { RegisterUseCase } from './usecases/register.usecase';
+import { SignInUsecase } from './usecases/sign-in.usecase';
+import { RefreshTokenUseCase } from './usecases/refresh-token.usecase';
+import { SocialAuthUseCase } from './usecases/social-auth.usecase';
+import { IssueOAuthCodeUseCase } from './usecases/issue-oauth-code.usecase';
+import { ExchangeOAuthCodeUseCase } from './usecases/exchange-oauth-code.usecase';
+import { ForgotPasswordUseCase } from './usecases/forgot-password.usecase';
+import { ResetPasswordUseCase } from './usecases/reset-password.usecase';
+import { SendEmailVerificationUseCase } from './usecases/send-email-verification.usecase';
+import { ConfirmEmailUseCase } from './usecases/confirm-email.usecase';
+import { CreateEmailOtpUseCase } from './usecases/create-email-otp.usecase';
+import { CreateSmsOtpUseCase } from './usecases/create-sms-otp.usecase';
+import { EnrollTfaUseCase } from './usecases/enroll-tfa.usecase';
+import { TFA_ENROLLMENT_STRATEGIES } from './strategies/tfa-enrollment.strategy';
+import { TotpEnrollmentStrategy } from './strategies/totp-enrollment.strategy';
+import { EmailEnrollmentStrategy } from './strategies/email-enrollment.strategy';
+import { SmsEnrollmentStrategy } from './strategies/sms-enrollment.strategy';
+import { TFA_CHALLENGE_STRATEGIES } from './strategies/tfa-challenge.strategy';
+import { TotpChallengeStrategy } from './strategies/totp-challenge.strategy';
+import { EmailChallengeStrategy } from './strategies/email-challenge.strategy';
+import { SmsChallengeStrategy } from './strategies/sms-challenge.strategy';
+import { MfaFactorService } from './services/mfa-factor.service';
+import { TokenEmailCacheService } from './services/token-email-cache.service';
+import { UserRegisteredEventHandler } from './events/user-registered.event-handler';
+import { EnableMfaUseCase } from './usecases/enable-mfa.usecase';
+import { DisableMfaUseCase } from './usecases/disable-mfa.usecase';
+import { VerifyMfaChallengeUseCase } from './usecases/verify-mfa-challenge.usecase';
+import { MFAChallengeCacheService } from './services/mfa-challenge-cache.service';
 
 /**
  * Feature « authentification » du Bounded Context IAM : tout ce qui prouve
@@ -63,11 +76,13 @@ import { SmsEnrollmentStrategy } from './services/authentication/sms-enrollment.
  * module. Les réunir ici applique CCP (§5) ; la frontière qui compte reste
  * celle du contexte IAM, pas celle du parcours.
  *
- * Les classes de la feature sont réparties par type au sein de la couche —
- * `applications/usecases/authentication/` et
- * `applications/services/authentication/` — et ce module, qui les câble, vit à
- * la racine de `applications/`. Ajouter un use case à l'authentification veut
- * donc dire toucher `usecases/authentication/` puis ce fichier.
+ * Les classes de la couche sont rangées par type et à plat —
+ * `applications/usecases/`, `applications/services/`,
+ * `applications/strategies/` — sans sous-dossier par parcours : le contexte
+ * IAM est déjà la frontière qui compte (§5), et le nom des fichiers dit à quel
+ * parcours ils appartiennent. Les modules qui les câblent, celui-ci et
+ * `users.module.ts`, vivent à la racine d'`applications/`. Ajouter un use case
+ * veut donc dire toucher `usecases/` puis ce fichier.
  *
  * Deux points d'histoire, à ne pas défaire :
  * - `SMS_SERVICE` n'est **pas** relié ici : il vient du `SmsModule` global
@@ -86,7 +101,13 @@ import { SmsEnrollmentStrategy } from './services/authentication/sms-enrollment.
     UsersInfrastructureModule,
     UsersModule,
     ConfigModule,
+    // `TokenEmailCacheService` lit `emailTokenTtl` : la config JWT doit être
+    // enregistrée ici aussi, `IamInfrastructureModule` ne la ré-exportant pas.
+    ConfigModule.forFeature(jwtConfig),
     NotificationsModule,
+    // Bus d'événements : `RegisterUseCase` publie un Domain Event, dont les
+    // abonnés vivent dans `applications/events/` (§8).
+    CqrsModule,
     TypeOrmModule.forFeature([
       TFAMethodEntity,
       TOTPMethodEntity,
@@ -95,11 +116,19 @@ import { SmsEnrollmentStrategy } from './services/authentication/sms-enrollment.
     ]),
   ],
   providers: [
-    // Adapters de sortie (§4 — DIP : le domaine définit le port, l'infra le
-    // remplit ; le câblage vit à la racine de `applications/`).
+    // Adapters de sortie (§4 — DIP : le port est déclaré du côté qui exprime
+    // le besoin, l'infra le remplit ; le câblage vit à la racine
+    // d'`applications/`). Les repositories restent des ports du **domaine** —
+    // ils décrivent l'accès aux agrégats ; les contrats d'outillage (JWT,
+    // mailer, chiffrement, stores à TTL) sont des ports de l'**application**,
+    // dans `applications/ports/`.
     { provide: HASHING_SERVICE, useClass: BcryptService },
     { provide: AUTH_MAILER, useClass: NestAuthMailerAdapter },
     { provide: OTP_STORE, useClass: RedisOtpStoreAdapter },
+
+    // Caches propres à cette feature : identifiants des tokens email, et OTP
+    // en attente de saisie. Le cache de sessions vient d IamInfrastructureModule.
+    TokenEmailCacheService,
     { provide: TOTP_GENERATOR, useClass: OtplibTotpGeneratorAdapter },
     { provide: TOTP_METHOD_REPOSITORY, useClass: TypeOrmTotpMethodRepository },
     // Deux tokens, un seul contrat `ChannelTfaMethodRepository` : les canaux
@@ -158,6 +187,38 @@ import { SmsEnrollmentStrategy } from './services/authentication/sms-enrollment.
     CreateEmailOtpUseCase,
     CreateSmsOtpUseCase,
     EnrollTfaUseCase,
+
+    // Canaux de vérification MFA (§9 — Strategy). Famille distincte de
+    // l'enrôlement : celle-ci éprouve un facteur **déjà actif**, l'autre en
+    // installe un nouveau (ISP, §4).
+    TotpChallengeStrategy,
+    EmailChallengeStrategy,
+    SmsChallengeStrategy,
+    {
+      provide: TFA_CHALLENGE_STRATEGIES,
+      useFactory: (
+        totp: TotpChallengeStrategy,
+        email: EmailChallengeStrategy,
+        sms: SmsChallengeStrategy,
+      ) => [totp, email, sms],
+      inject: [
+        TotpChallengeStrategy,
+        EmailChallengeStrategy,
+        SmsChallengeStrategy,
+      ],
+    },
+    MfaFactorService,
+
+    // Challenges MFA : contexte d'une preuve attendue, à TTL et essais bornés.
+    MFAChallengeCacheService,
+
+    // Use cases — cycle de vie du second facteur.
+    EnableMfaUseCase,
+    DisableMfaUseCase,
+    VerifyMfaChallengeUseCase,
+
+    // Abonnés aux Domain Events de la feature.
+    UserRegisteredEventHandler,
   ],
   controllers: [AuthenticationController],
 })

@@ -1,8 +1,5 @@
 ﻿import { Inject } from '@nestjs/common';
-import {
-  CACHE_MANAGER_SERVICE,
-  type CacheManagerService,
-} from '../../domains/ports/cache-manager.port';
+import { SessionCacheService } from 'src/iam/applications/services/session-cache.service';
 import { JwtService } from '@nestjs/jwt';
 import jwtConfig from '../config/jwt.config';
 import { type ConfigType } from '@nestjs/config';
@@ -14,7 +11,7 @@ import {
   TokenPayload,
   TokenService,
   UnsubscribeTokenPayload,
-} from '../../domains/ports/token.port';
+} from '../../applications/ports/token.port';
 import { randomUUID } from 'crypto';
 import { InvalidAccessTokenError } from 'src/iam/domains/errors';
 
@@ -28,8 +25,7 @@ export const UNSUBSCRIBE_TOKEN_AUDIENCE = 'beown-unsubscribe';
 
 export class JwtTokenAdapter implements TokenService {
   constructor(
-    @Inject(CACHE_MANAGER_SERVICE)
-    private readonly cacheManagerService: CacheManagerService,
+    private readonly sessionCache: SessionCacheService,
 
     private readonly jwtService: JwtService,
 
@@ -54,7 +50,7 @@ export class JwtTokenAdapter implements TokenService {
       }),
     ]);
 
-    await this.cacheManagerService.insertRefreshTokenId(
+    await this.sessionCache.insertRefreshTokenId(
       payload.email,
       refreshTokenId,
     );
@@ -86,13 +82,13 @@ export class JwtTokenAdapter implements TokenService {
         issuer: this.jwtConfiguration.issuer,
       });
 
-    const isValidToken = await this.cacheManagerService.validateRefreshToken(
+    const isValidToken = await this.sessionCache.validateRefreshToken(
       email,
       refreshTokenId,
     );
 
     if (isValidToken) {
-      await this.cacheManagerService.invalidateRefreshTokenId(email);
+      await this.sessionCache.invalidateRefreshTokenId(email);
     } else {
       throw new Error('Refresh token is no longer available!');
     }

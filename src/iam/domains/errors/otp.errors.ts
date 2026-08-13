@@ -76,8 +76,8 @@ export class InvalidOtpCodeError extends IamError {
 
 /**
  * Confirmation demandée alors qu'aucun enrôlement n'a été démarré pour ce
- * canal — il faut rappeler `POST /auth/otp/enroll` avant
- * `POST /auth/otp/enroll/confirm`.
+ * canal — il faut rappeler `POST /auth/mfa/enroll` avant
+ * `POST /auth/mfa/enable`.
  */
 export class TfaEnrollmentNotStartedError extends IamError {
   readonly kind = IamErrorKind.NOT_FOUND;

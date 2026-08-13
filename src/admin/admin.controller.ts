@@ -40,7 +40,7 @@ import { OrdreMarcheEntity } from 'src/secondarymarket/infrastructure/persistenc
 import { OrdreMarcheStatus } from 'src/secondarymarket/domains/ordre-marche';
 import { ProjectStatus } from 'src/projects/domains/enums/project-status.enum';
 import { InvestmentStatus } from 'src/investments/domains/enums/investment-status.enum';
-import { DeleteAccountUseCase } from 'src/iam/applications/usecases/users/delete-account.usecase';
+import { DeleteAccountUseCase } from 'src/iam/applications/usecases/delete-account.usecase';
 import { SkipThrottle } from '@nestjs/throttler';
 
 // ─── Constants ────────────────────────────────────────────────────────────────

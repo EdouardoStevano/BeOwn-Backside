@@ -3,7 +3,7 @@ import {
   EMAIL_SERVICE,
   type EmailService,
 } from 'src/common/email/email.service';
-import { AuthMailer } from 'src/iam/domains/ports/auth-mailer.port';
+import { AuthMailer } from 'src/iam/applications/ports/auth-mailer.port';
 import { emailVerificationHtml } from './templates/email-verification.template';
 
 /**

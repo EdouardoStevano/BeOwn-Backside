@@ -1,7 +1,7 @@
 import { ExecutionContext, Injectable } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import type { Request } from 'express';
-import { Social } from 'src/iam/domains/models/social-provider';
+import { Social } from 'src/iam/applications/models/social-provider';
 import { setOAuthRedirectCookie } from './oauth-redirect-cookie';
 
 @Injectable()

@@ -54,7 +54,7 @@ import type { DocumentRepository } from 'src/documents/applications/ports/reposi
 import { WALLET_REPOSITORY } from 'src/wallets/applications/ports/repositories/wallet.repository';
 import type { WalletRepository } from 'src/wallets/applications/ports/repositories/wallet.repository';
 import { WalletType } from 'src/wallets/domains/enums/wallet.enum';
-import { DeleteAccountUseCase } from 'src/iam/applications/usecases/users/delete-account.usecase';
+import { DeleteAccountUseCase } from 'src/iam/applications/usecases/delete-account.usecase';
 import { SkipThrottle } from '@nestjs/throttler';
 
 /** Rôles détenant `users:read` — back-office consultation d'un profil tiers. */

@@ -2,8 +2,8 @@ import { Injectable } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { Strategy } from 'passport-oauth2';
 import axios from 'axios';
-import { Social } from 'src/iam/domains/models/social-provider';
-import { SocialProfile } from 'src/iam/domains/models/social-profile';
+import { Social } from 'src/iam/applications/models/social-provider';
+import { SocialProfile } from 'src/iam/applications/models/social-profile';
 import { CookieOAuthStateStore } from '../cookie-oauth-state.store';
 
 // LinkedIn deprecated r_liteprofile / r_emailaddress (old API /v2/me).

@@ -1,5 +1,5 @@
 import type { Request } from 'express';
-import type { SocialProfile } from 'src/iam/domains/models/social-profile';
+import type { SocialProfile } from 'src/iam/applications/models/social-profile';
 
 /**
  * Cible de redirection post-login OAuth (application front vs back-office admin),

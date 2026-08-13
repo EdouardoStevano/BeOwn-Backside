@@ -2,9 +2,8 @@ import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import jwtConfig from './config/jwt.config';
 import { ConfigModule } from '@nestjs/config';
-import { CACHE_MANAGER_SERVICE } from '../domains/ports/cache-manager.port';
-import { TOKEN_SERVICE } from '../domains/ports/token.port';
-import { RedisCacheAdapter } from './cache/redis-cache.adapter';
+import { TOKEN_SERVICE } from '../applications/ports/token.port';
+import { SessionCacheService } from '../applications/services/session-cache.service';
 import { JwtTokenAdapter } from './token/jwt-token.adapter';
 
 /**
@@ -21,9 +20,14 @@ import { JwtTokenAdapter } from './token/jwt-token.adapter';
     ConfigModule.forFeature(jwtConfig),
   ],
   providers: [
-    { provide: CACHE_MANAGER_SERVICE, useClass: RedisCacheAdapter },
+    // Classe concrète, injectée par son type : le port `CACHE_MANAGER_SERVICE`
+    // a disparu avec `RedisCacheAdapter`. Seul le cache de **sessions** est
+    // câblé ici, parce que `JwtTokenAdapter` — fourni par ce module et consommé
+    // par une vingtaine d'autres — en dépend. Les caches de tokens email et
+    // d'OTP restent dans `AuthenticationModule`, seul à s'en servir (CRP, §5).
+    SessionCacheService,
     { provide: TOKEN_SERVICE, useClass: JwtTokenAdapter },
   ],
-  exports: [CACHE_MANAGER_SERVICE, TOKEN_SERVICE],
+  exports: [SessionCacheService, TOKEN_SERVICE],
 })
 export class IamInfrastructureModule {}

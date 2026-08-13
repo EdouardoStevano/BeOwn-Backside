@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
-import { Social } from 'src/iam/domains/models/social-provider';
+import { Social } from 'src/iam/applications/models/social-provider';
 import type { AuthenticatedSocialUser } from './oauth-redirect-cookie';
 
 @Injectable()

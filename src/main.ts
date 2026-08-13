@@ -87,9 +87,11 @@ async function bootstrap() {
     .addTag(
       'Authentication',
       'Connexion, inscription, OAuth social, tokens JWT, vérification ' +
-        "d'adresse email (`/auth/email/*`), OTP de connexion et enrôlement 2FA " +
-        '(`/auth/otp/*`) — TOTP, email ou SMS, le canal étant choisi dans le ' +
-        'body de `POST /auth/otp/enroll`',
+        "d'adresse email (`/auth/email/*`), OTP de connexion (`/auth/otp/*`) " +
+        'et double authentification (`/auth/mfa/*`) — TOTP, email ou SMS, le ' +
+        'canal étant choisi dans le body de `POST /auth/mfa/enroll`. Un ' +
+        'compte muni d’un facteur actif termine sa connexion par ' +
+        '`POST /auth/mfa/challenge`.',
     )
     .addTag('Users', 'Gestion des comptes utilisateurs')
     .addTag('Profiles & KYC', 'Profil investisseur (PP/PM) et dossier KYC')

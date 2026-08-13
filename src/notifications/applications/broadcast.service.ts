@@ -17,7 +17,7 @@ import { SMS_SERVICE, type SmsService } from 'src/common/sms/sms.service';
 import {
   TOKEN_SERVICE,
   type TokenService,
-} from 'src/iam/domains/ports/token.port';
+} from 'src/iam/applications/ports/token.port';
 import { ProfilPPEntity } from 'src/profiles/infrastructure/persistences/entities/profil-pp.entity';
 import { ProjectEntity } from 'src/projects/infrastructure/persistences/entities/project.entity';
 import { UserPreferencesEntity } from 'src/iam/infrastructure/persistence/entities/user-preferences.entity';
