@@ -36,8 +36,8 @@ import {
   TransactionType,
 } from 'src/wallets/domains/enums/wallet.enum';
 import { ContractGeneratorService } from './contract-generator.service';
-import { CloudStorageService } from 'src/common/cloud-storage/cloud-storage.service';
-import { formatEur } from 'src/common/money/format-eur';
+import { CloudStorageService } from 'src/shared/cloud-storage/cloud-storage.service';
+import { formatEur } from 'src/shared/money/format-eur';
 import { Document } from 'src/documents/domains/document';
 import { DocumentRelatedTo, DocumentType } from 'src/documents/domains/enums/document-type.enum';
 import { NotificationService } from 'src/notifications/applications/notification.service';

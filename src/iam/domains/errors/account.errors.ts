@@ -7,7 +7,7 @@ import { IamError, IamErrorKind, IamErrorOptions } from './iam.error';
  *
  * Ces codes/messages vivaient dans `common/auth/account-status.errors.ts` ;
  * ils décrivent l'état d'un compte, donc du vocabulaire IAM. Le guard les
- * importe désormais d'ici — il dépend déjà de `iam/domains/ports/token.port`.
+ * importe désormais d'ici — il dépend déjà du contexte IAM pour les tokens.
  */
 
 /**

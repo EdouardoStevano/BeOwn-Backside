@@ -47,7 +47,7 @@ import {
 import { Public } from 'src/common/auth/public.decorator';
 import { RequirePermission } from 'src/common/auth/require-permission.decorator';
 import { hasPermission } from 'src/common/auth/permissions.constants';
-import { formatEur } from 'src/common/money/format-eur';
+import { formatEur } from 'src/shared/money/format-eur';
 import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
 import { UseGuards } from '@nestjs/common';

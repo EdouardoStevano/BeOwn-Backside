@@ -5,10 +5,8 @@ import {
 import { SendEmailVerificationUseCase } from './send-email-verification.usecase';
 import { ConfirmEmailUseCase } from './confirm-email.usecase';
 import type { TokenEmailCacheService } from '../services/token-email-cache.service';
-import type {
-  EmailTokenPayload,
-  TokenService,
-} from 'src/iam/applications/ports/token.port';
+import type { EmailTokenPayload } from 'src/iam/applications/models/auth-token';
+import type { TokenService } from '../services/token.service';
 import type { AuthMailer } from 'src/iam/applications/ports/auth-mailer.port';
 import type { UserRepository } from 'src/iam/domains/ports/user.repository';
 import { User } from 'src/iam/domains/models/user';

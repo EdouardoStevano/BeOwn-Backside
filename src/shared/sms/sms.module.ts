@@ -27,7 +27,9 @@ export function smsServiceFactory(config: ConfigService): SmsService {
 
 /**
  * Global, single source of truth for SMS_SERVICE across the app (signup OTP,
- * 2FA login OTP, dev test endpoint…). @Global() so every feature module gets
+ * 2FA login OTP, dev test endpoint…). Lives in `shared/` because the port is
+ * a pure transport contract — a number, a message — carrying no vocabulary
+ * from the contexts that call it. @Global() so every feature module gets
  * it without re-importing or re-binding the token locally — module-local
  * SMS_SERVICE bindings should NOT be reintroduced elsewhere, they would
  * silently shadow this one for their own injector scope.

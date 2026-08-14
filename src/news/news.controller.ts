@@ -27,7 +27,7 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import { CloudStorageService } from 'src/common/cloud-storage/cloud-storage.service';
+import { CloudStorageService } from 'src/shared/cloud-storage/cloud-storage.service';
 import {
   ArrayMaxSize,
   IsArray,

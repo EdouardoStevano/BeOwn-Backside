@@ -12,7 +12,7 @@ import { PAYMENT_SERVICE } from './applications/ports/payment.service';
 import { WalletsInfrastructureModule } from 'src/wallets/infrastructure/wallets-infrastructure.module';
 import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructure.module';
 import { ProfilesModule } from 'src/profiles/applications/profiles.module';
-import { CloudStorageModule } from 'src/common/cloud-storage/cloud-storage.module';
+import { CloudStorageModule } from 'src/shared/cloud-storage/cloud-storage.module';
 import { NotificationsModule } from 'src/notifications/notifications.module';
 import { KycEntity } from 'src/profiles/infrastructure/persistences/entities/kyc.entity';
 import { KycValidatedGuard } from 'src/common/auth/kyc-validated.guard';

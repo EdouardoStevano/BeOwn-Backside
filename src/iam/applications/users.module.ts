@@ -39,7 +39,7 @@ import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entit
       TransactionEntity,
     ]),
     UsersInfrastructureModule,
-    // Fournit TOKEN_SERVICE au JwtAuthGuard que `UserController` monte via
+    // Fournit `TokenService` au JwtAuthGuard que `UserController` monte via
     // @UseGuards.
     IamInfrastructureModule,
     ProfilesInfrastructureModule,

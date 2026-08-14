@@ -1,7 +1,7 @@
 import { Logger } from '@nestjs/common';
 import { EmailService } from './email.service';
 import { EmailTemplateService } from './email-template.service';
-import { formatEur } from 'src/common/money/format-eur';
+import { formatEur } from 'src/shared/money/format-eur';
 
 /**
  * Socle commun aux transports email : rendu des templates et composition des

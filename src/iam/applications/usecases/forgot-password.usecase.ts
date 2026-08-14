@@ -1,11 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { randomBytes } from 'crypto';
 import { Inject } from '@nestjs/common';
-import {
-  TOKEN_SERVICE,
-  type TokenService,
-  EmailTokenPayload,
-} from 'src/iam/applications/ports/token.port';
+import { EmailTokenPayload } from 'src/iam/applications/models/auth-token';
+import { TokenService } from '../services/token.service';
 import { TokenEmailCacheService } from '../services/token-email-cache.service';
 import {
   USER_REPOSITORY,
@@ -23,7 +20,7 @@ export class ForgotPasswordUseCase {
 
   constructor(
     @Inject(USER_REPOSITORY) private readonly userRepository: UserRepository,
-    @Inject(TOKEN_SERVICE) private readonly tokenService: TokenService,
+    private readonly tokenService: TokenService,
     @Inject(EMAIL_SERVICE) private readonly emailService: EmailService,
     private readonly emailTokenCache: TokenEmailCacheService,
   ) {}

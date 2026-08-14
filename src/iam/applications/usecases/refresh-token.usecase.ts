@@ -2,9 +2,8 @@ import { Inject, Injectable } from '@nestjs/common';
 import {
   type AuthSession,
   type AuthTokens,
-  TOKEN_SERVICE,
-  type TokenService,
-} from 'src/iam/applications/ports/token.port';
+} from 'src/iam/applications/models/auth-token';
+import { TokenService } from '../services/token.service';
 import {
   USER_REPOSITORY,
   type UserRepository,
@@ -21,7 +20,7 @@ import { InvalidRefreshTokenError } from 'src/iam/domains/errors';
 @Injectable()
 export class RefreshTokenUseCase {
   constructor(
-    @Inject(TOKEN_SERVICE) private readonly tokenService: TokenService,
+    private readonly tokenService: TokenService,
     @Inject(USER_REPOSITORY) private readonly userRepository: UserRepository,
   ) {}
 

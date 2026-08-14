@@ -1,4 +1,4 @@
-import { formatEur } from 'src/common/money/format-eur';
+import { formatEur } from 'src/shared/money/format-eur';
 
 /**
  * Données d'exemple par clé de template, pour la prévisualisation et l'envoi

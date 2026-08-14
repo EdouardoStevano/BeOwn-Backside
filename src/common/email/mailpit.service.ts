@@ -22,8 +22,7 @@ export class MailpitEmailService extends TemplatedEmailService {
       config.get('FRONTEND_URL') || 'http://localhost:5173',
       config.get('FRONTEND_URL') || 'http://localhost:5173',
     );
-    const base =
-      config.get<string>('MAILPIT_URL') || 'http://localhost:8025';
+    const base = config.get<string>('MAILPIT_URL') || 'http://localhost:8025';
     this.apiUrl = `${base.replace(/\/+$/, '')}/api/v1/send`;
     this.senderEmail =
       config.get('MAIL_FROM') ||

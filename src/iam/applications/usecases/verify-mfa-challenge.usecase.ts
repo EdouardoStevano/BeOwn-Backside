@@ -13,7 +13,7 @@ import {
   USER_REPOSITORY,
   type UserRepository,
 } from 'src/iam/domains/ports/user.repository';
-import { type AuthSession } from 'src/iam/applications/ports/token.port';
+import { type AuthSession } from 'src/iam/applications/models/auth-token';
 import { MfaFactorService } from '../services/mfa-factor.service';
 import { SignInUsecase } from './sign-in.usecase';
 

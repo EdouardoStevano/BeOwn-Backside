@@ -20,7 +20,7 @@ import { Roles } from 'src/common/auth/roles.decorator';
 import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
 import { UserRole } from 'src/iam/domains/enums/user.enum';
-import { CloudStorageService } from 'src/common/cloud-storage/cloud-storage.service';
+import { CloudStorageService } from 'src/shared/cloud-storage/cloud-storage.service';
 import { AddUniteLouableUseCase } from '../../applications/usecases/add-unite-louable.usecase';
 import { CreateBailUseCase } from '../../applications/usecases/create-bail.usecase';
 import { UpdateBailUseCase } from '../../applications/usecases/update-bail.usecase';

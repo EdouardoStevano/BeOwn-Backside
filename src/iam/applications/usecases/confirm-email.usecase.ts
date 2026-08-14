@@ -1,8 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import {
-  TOKEN_SERVICE,
-  type TokenService,
-} from 'src/iam/applications/ports/token.port';
+import { TokenService } from '../services/token.service';
 import { TokenEmailCacheService } from '../services/token-email-cache.service';
 import {
   USER_REPOSITORY,
@@ -21,7 +18,7 @@ export interface ConfirmEmailResult {
 @Injectable()
 export class ConfirmEmailUseCase {
   constructor(
-    @Inject(TOKEN_SERVICE) private readonly tokenService: TokenService,
+    private readonly tokenService: TokenService,
     @Inject(USER_REPOSITORY) private readonly usersRepository: UserRepository,
     private readonly emailTokenCache: TokenEmailCacheService,
   ) {}

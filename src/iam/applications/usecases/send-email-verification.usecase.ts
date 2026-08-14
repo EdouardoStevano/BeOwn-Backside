@@ -1,9 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { randomUUID } from 'crypto';
-import {
-  TOKEN_SERVICE,
-  type TokenService,
-} from 'src/iam/applications/ports/token.port';
+import { TokenService } from '../services/token.service';
 import { TokenEmailCacheService } from '../services/token-email-cache.service';
 import {
   AUTH_MAILER,
@@ -19,7 +16,7 @@ export class SendEmailVerificationUseCase {
   private readonly logger = new Logger(SendEmailVerificationUseCase.name);
 
   constructor(
-    @Inject(TOKEN_SERVICE) private readonly tokenService: TokenService,
+    private readonly tokenService: TokenService,
     @Inject(USER_REPOSITORY) private readonly usersRepository: UserRepository,
     private readonly emailTokenCache: TokenEmailCacheService,
     @Inject(AUTH_MAILER) private readonly authMailer: AuthMailer,

@@ -1,5 +1,4 @@
 import { PublicUser } from 'src/iam/domains/mappers/user.mapper';
-export const TOKEN_SERVICE = Symbol('TOKEN_SERVICE');
 
 export interface TokenPayload {
   sub: number;
@@ -62,21 +61,10 @@ export interface UnsubscribeTokenPayload {
   type: typeof NOTIF_UNSUBSCRIBE_TYPE;
 }
 
-export interface TokenService {
-  generateTokens(payload: TokenPayload): Promise<AuthTokens>;
-  refreshTokens(token: string): Promise<AuthTokens>;
-  verifyAccessToken(token: string): Promise<TokenPayload>;
-  generateEmailToken(
-    payload: Omit<EmailTokenPayload, 'type'>,
-    purpose: EmailTokenPurpose,
-  ): Promise<string>;
-  verifyEmailToken(token: string): Promise<EmailTokenPayload>;
-  /**
-   * Token longue durée (90 j) porté par le lien « se désinscrire » des
-   * diffusions marketing. Appelé par le service de diffusion pour construire
-   * `${FRONTEND_URL}/desinscription?token=...`.
-   */
-  generateUnsubscribeToken(userId: number): Promise<string>;
-  /** Vérifie signature/émetteur/expiration. Le contrôle du claim `type` est fait par l'appelant. */
-  verifyUnsubscribeToken(token: string): Promise<UnsubscribeTokenPayload>;
-}
+/**
+ * Audience dédiée aux tokens de désinscription. Défense en profondeur : même
+ * si un contrôle de claim `type` était oublié quelque part, un token signé
+ * avec cette audience est structurellement rejeté par toute vérification
+ * utilisant l'audience standard (access, refresh, email).
+ */
+export const UNSUBSCRIBE_TOKEN_AUDIENCE = 'beown-unsubscribe';

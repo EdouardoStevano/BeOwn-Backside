@@ -23,7 +23,7 @@ import { EmailTemplateService } from 'src/common/email/email-template.service';
 import { EMAIL_SERVICE } from 'src/common/email/email.service';
 import type { EmailService } from 'src/common/email/email.service';
 import { hasPermission } from 'src/common/auth/permissions.constants';
-import { formatEur } from 'src/common/money/format-eur';
+import { formatEur } from 'src/shared/money/format-eur';
 import {
   AccountDeletionBlockedError,
   AccountDeletionNotAllowedError,

@@ -1,7 +1,7 @@
 import { InvalidPasswordResetTokenError } from 'src/iam/domains/errors';
 import { ResetPasswordUseCase } from './reset-password.usecase';
 import { buildUser } from 'src/iam/domains/models/user.fixture';
-import type { EmailTokenPayload } from 'src/iam/applications/ports/token.port';
+import type { EmailTokenPayload } from 'src/iam/applications/models/auth-token';
 
 const buildPayload = (
   overrides: Partial<EmailTokenPayload> = {},

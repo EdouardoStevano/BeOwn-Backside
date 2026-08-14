@@ -2,7 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { CACHE_MANAGER, type Cache } from '@nestjs/cache-manager';
 import { type ConfigType } from '@nestjs/config';
 import jwtConfig from 'src/iam/infrastructure/config/jwt.config';
-import { AuthSession } from 'src/iam/applications/ports/token.port';
+import { AuthSession } from 'src/iam/applications/models/auth-token';
 
 /**
  * Le strict minimum d'un store adossé à Redis : de quoi tenter un `GETDEL`

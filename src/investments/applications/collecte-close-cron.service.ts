@@ -9,7 +9,7 @@ import { InvestmentStatus } from 'src/investments/domains/enums/investment-statu
 import { NotificationService } from 'src/notifications/applications/notification.service';
 import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
 import { UserRole } from 'src/iam/domains/enums/user.enum';
-import { formatEur } from 'src/common/money/format-eur';
+import { formatEur } from 'src/shared/money/format-eur';
 import { RefundCollecteService } from './refund-collecte.service';
 
 /**

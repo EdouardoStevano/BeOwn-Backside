@@ -2,7 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { CACHE_MANAGER, type Cache } from '@nestjs/cache-manager';
 import { type ConfigType } from '@nestjs/config';
 import jwtConfig from 'src/iam/infrastructure/config/jwt.config';
-import { EmailTokenPurpose } from 'src/iam/applications/ports/token.port';
+import { EmailTokenPurpose } from 'src/iam/applications/models/auth-token';
 
 /**
  * Identifiants des tokens envoyés par email — vérification d'adresse et

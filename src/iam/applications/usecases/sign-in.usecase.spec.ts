@@ -2,7 +2,7 @@ import { SignInUsecase, type SignInResult } from './sign-in.usecase';
 import { MfaFactorService } from '../services/mfa-factor.service';
 import { TfaMethodType } from 'src/iam/domains/enums/tfa-method.enum';
 import { MfaChallengePurpose } from 'src/iam/applications/models/mfa-challenge';
-import { type AuthSession } from 'src/iam/applications/ports/token.port';
+import { type AuthSession } from 'src/iam/applications/models/auth-token';
 import { User } from 'src/iam/domains/models/user';
 import { buildUser as buildUserFixture } from 'src/iam/domains/models/user.fixture';
 import { UserStatus } from 'src/iam/domains/enums/user.enum';

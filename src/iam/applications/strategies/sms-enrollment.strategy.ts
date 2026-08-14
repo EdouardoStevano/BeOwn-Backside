@@ -1,7 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { TfaMethodType } from 'src/iam/domains/enums/tfa-method.enum';
 import { OTP_STORE, type OtpStore } from 'src/iam/applications/ports/otp-store.port';
-import { SMS_SERVICE, type SmsService } from 'src/common/sms/sms.service';
+import { SMS_SERVICE, type SmsService } from 'src/shared/sms/sms.service';
 import {
   SMS_METHOD_REPOSITORY,
   type ChannelTfaMethodRepository,

@@ -5,10 +5,9 @@ import {
 } from 'src/common/hashing/hashing.service';
 import {
   type AuthSession,
-  TOKEN_SERVICE,
   TokenPayload,
-  type TokenService,
-} from 'src/iam/applications/ports/token.port';
+} from 'src/iam/applications/models/auth-token';
+import { TokenService } from '../services/token.service';
 import {
   USER_REPOSITORY,
   type UserRepository,
@@ -54,7 +53,7 @@ export type SignInResult = AuthSession | MfaChallengeRequired;
 export class SignInUsecase {
   constructor(
     @Inject(HASHING_SERVICE) private readonly hashingService: HashingService,
-    @Inject(TOKEN_SERVICE) private readonly tokenService: TokenService,
+    private readonly tokenService: TokenService,
     @Inject(USER_REPOSITORY) private readonly usersRepository: UserRepository,
     private readonly mfaFactors: MfaFactorService,
     private readonly mfaChallenges: MFAChallengeCacheService,

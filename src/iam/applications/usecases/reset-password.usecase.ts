@@ -1,10 +1,7 @@
 ﻿import { Injectable } from '@nestjs/common';
 import { Inject } from '@nestjs/common';
-import {
-  TOKEN_SERVICE,
-  type TokenService,
-  EmailTokenPayload,
-} from 'src/iam/applications/ports/token.port';
+import { EmailTokenPayload } from 'src/iam/applications/models/auth-token';
+import { TokenService } from '../services/token.service';
 import { TokenEmailCacheService } from '../services/token-email-cache.service';
 import { SessionCacheService } from '../services/session-cache.service';
 import { Password } from 'src/iam/domains/value-objects/password.vo';
@@ -27,7 +24,7 @@ export interface ResetPasswordCommand {
 export class ResetPasswordUseCase {
   constructor(
     @Inject(USER_REPOSITORY) private readonly userRepository: UserRepository,
-    @Inject(TOKEN_SERVICE) private readonly tokenService: TokenService,
+    private readonly tokenService: TokenService,
     @Inject(HASHING_SERVICE) private readonly hashingService: HashingService,
     // Deux magasins parce que la réinitialisation touche aux deux : elle
     // consomme le token reçu par email, puis coupe les sessions en cours.

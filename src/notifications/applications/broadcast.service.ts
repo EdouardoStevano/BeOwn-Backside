@@ -13,11 +13,8 @@ import {
   type EmailService,
 } from 'src/common/email/email.service';
 import { EmailTemplateService } from 'src/common/email/email-template.service';
-import { SMS_SERVICE, type SmsService } from 'src/common/sms/sms.service';
-import {
-  TOKEN_SERVICE,
-  type TokenService,
-} from 'src/iam/applications/ports/token.port';
+import { SMS_SERVICE, type SmsService } from 'src/shared/sms/sms.service';
+import { TokenService } from 'src/iam/applications/services/token.service';
 import { ProfilPPEntity } from 'src/profiles/infrastructure/persistences/entities/profil-pp.entity';
 import { ProjectEntity } from 'src/projects/infrastructure/persistences/entities/project.entity';
 import { UserPreferencesEntity } from 'src/iam/infrastructure/persistence/entities/user-preferences.entity';
@@ -161,7 +158,7 @@ export class BroadcastService {
     private readonly templates: EmailTemplateService,
     @Inject(EMAIL_SERVICE) private readonly emailService: EmailService,
     @Inject(SMS_SERVICE) private readonly smsService: SmsService,
-    @Inject(TOKEN_SERVICE) private readonly tokenService: TokenService,
+    private readonly tokenService: TokenService,
     private readonly notifications: NotificationService,
     private readonly auditLog: AuditLogService,
     private readonly config: ConfigService,

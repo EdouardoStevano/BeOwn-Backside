@@ -1,22 +1,29 @@
 import { InvalidAccessTokenError } from 'src/iam/domains/errors';
 import { JwtService } from '@nestjs/jwt';
-import {
-  JwtTokenAdapter,
-  UNSUBSCRIBE_TOKEN_AUDIENCE,
-} from './jwt-token.adapter';
+import { JwtTokenSignerAdapter } from 'src/shared/token/infrastructure/jwt-token-signer.adapter';
+import { UNSUBSCRIBE_TOKEN_AUDIENCE } from '../models/auth-token';
+import { TokenService } from './token.service';
 
 const SECRET = 'test-secret';
 
-const buildJwtConfig = () => ({
+const buildSignerConfig = () => ({
   secret: SECRET,
   audience: 'localhost:3000',
   issuer: 'localhost:3000',
+});
+
+const buildTtlConfig = () => ({
   accessTokenTtl: 3600,
   refreshTokenTtl: 86400,
   emailTokenTtl: 86400,
   unsubscribeTokenTtl: 7776000,
 });
 
+/**
+ * Signer JWT réel : ces tests portent sur la politique de tokens d'IAM
+ * (claims, audiences, cloisonnement), qui ne se vérifie qu'avec de vrais
+ * tokens signés — pas sur le driver lui-même.
+ */
 const makeService = () => {
   const cacheManagerService = {
     insertRefreshTokenId: jest.fn(),
@@ -26,14 +33,14 @@ const makeService = () => {
     validateEmailToken: jest.fn(),
     invalidateEmailTokenId: jest.fn(),
   };
-  return new JwtTokenAdapter(
+  return new TokenService(
+    new JwtTokenSignerAdapter(new JwtService(), buildSignerConfig() as any),
     cacheManagerService as any,
-    new JwtService(),
-    buildJwtConfig() as any,
+    buildTtlConfig() as any,
   );
 };
 
-describe('JwtTokenAdapter — confusion de tokens typés vs access tokens', () => {
+describe('TokenService — confusion de tokens typés vs access tokens', () => {
   it('accepte toujours un access token légitime (aucun claim type)', async () => {
     const service = makeService();
     const { accessToken } = await service.generateTokens({

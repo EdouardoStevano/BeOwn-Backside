@@ -10,7 +10,7 @@ import {
   TransactionType,
   WalletType,
 } from 'src/wallets/domains/enums/wallet.enum';
-import { formatEur } from 'src/common/money/format-eur';
+import { formatEur } from 'src/shared/money/format-eur';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
 import { CreateRetraitDto } from '../../presenters/dto/payment.dto';
 import {

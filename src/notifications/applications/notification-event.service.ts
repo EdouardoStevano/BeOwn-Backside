@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { NotificationService } from './notification.service';
 import { NotificationType } from '../infrastructure/persistences/entities/notification.entity';
 import { UserRole } from 'src/iam/domains/enums/user.enum';
-import { formatEur } from 'src/common/money/format-eur';
+import { formatEur } from 'src/shared/money/format-eur';
 
 @Injectable()
 export class NotificationEventService {

@@ -1,15 +1,20 @@
 import { UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { JwtTokenAdapter } from 'src/iam/infrastructure/token/jwt-token.adapter';
+import { TokenService } from 'src/iam/applications/services/token.service';
+import { JwtTokenSignerAdapter } from 'src/shared/token/infrastructure/jwt-token-signer.adapter';
 import { NotificationUnsubscribeService } from './notification-unsubscribe.service';
 import { PublicUnsubscribeController } from '../presenters/http/public-unsubscribe.controller';
 
 const SECRET = 'test-secret';
 
-const buildJwtConfig = (overrides: Record<string, unknown> = {}) => ({
+const buildSignerConfig = (overrides: Record<string, unknown> = {}) => ({
   secret: SECRET,
   audience: 'localhost:3000',
   issuer: 'localhost:3000',
+  ...overrides,
+});
+
+const buildTtlConfig = (overrides: Record<string, unknown> = {}) => ({
   accessTokenTtl: 3600,
   refreshTokenTtl: 86400,
   emailTokenTtl: 86400,
@@ -17,7 +22,7 @@ const buildJwtConfig = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 
-/** Vrai JwtTokenAdapter : on veut éprouver signature, expiration et claim `type`. */
+/** Vrai signer JWT : on veut éprouver signature, expiration et claim `type`. */
 const buildTokenService = (overrides: Record<string, unknown> = {}) => {
   const cacheManagerService = {
     insertRefreshTokenId: jest.fn(),
@@ -27,10 +32,14 @@ const buildTokenService = (overrides: Record<string, unknown> = {}) => {
     validateEmailToken: jest.fn(),
     invalidateEmailTokenId: jest.fn(),
   };
-  return new JwtTokenAdapter(
-    cacheManagerService as any,
+  const signer = new JwtTokenSignerAdapter(
     new JwtService(),
-    buildJwtConfig(overrides) as any,
+    buildSignerConfig(overrides) as any,
+  );
+  return new TokenService(
+    signer,
+    cacheManagerService as any,
+    buildTtlConfig(overrides) as any,
   );
 };
 

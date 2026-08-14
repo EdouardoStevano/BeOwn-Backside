@@ -2,8 +2,8 @@ import { Controller, HttpCode, HttpStatus, Inject, Post } from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { EMAIL_SERVICE } from '../email/email.service';
 import type { EmailService } from '../email/email.service';
-import { SMS_SERVICE } from '../sms/sms.service';
-import type { SmsService } from '../sms/sms.service';
+import { SMS_SERVICE } from 'src/shared/sms/sms.service';
+import type { SmsService } from 'src/shared/sms/sms.service';
 import { Public } from '../auth/public.decorator';
 
 @ApiTags('Dev – Notifications Test')

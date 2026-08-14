@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InvalidOAuthCodeError } from 'src/iam/domains/errors';
 import { SessionCacheService } from '../services/session-cache.service';
-import { AuthSession } from 'src/iam/applications/ports/token.port';
+import { AuthSession } from 'src/iam/applications/models/auth-token';
 
 /** Échange le code OAuth à usage unique (30 s) contre les tokens de session. */
 @Injectable()

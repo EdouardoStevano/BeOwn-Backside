@@ -1,6 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { OTP_STORE, type OtpStore } from 'src/iam/applications/ports/otp-store.port';
-import { SMS_SERVICE, type SmsService } from 'src/common/sms/sms.service';
+import { SMS_SERVICE, type SmsService } from 'src/shared/sms/sms.service';
 import {
   InvalidPhoneNumberError,
   OtpAlreadyActiveError,

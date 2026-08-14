@@ -1,10 +1,9 @@
 import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
 import {
   NOTIF_UNSUBSCRIBE_TYPE,
-  TOKEN_SERVICE,
-  type TokenService,
   type UnsubscribeTokenPayload,
-} from 'src/iam/applications/ports/token.port';
+} from 'src/iam/applications/models/auth-token';
+import { TokenService } from 'src/iam/applications/services/token.service';
 import {
   USER_REPOSITORY,
   type UserRepository,
@@ -23,7 +22,7 @@ import {
 @Injectable()
 export class NotificationUnsubscribeService {
   constructor(
-    @Inject(TOKEN_SERVICE) private readonly tokenService: TokenService,
+    private readonly tokenService: TokenService,
     @Inject(USER_REPOSITORY) private readonly userRepository: UserRepository,
   ) {}
 

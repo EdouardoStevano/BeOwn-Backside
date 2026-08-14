@@ -12,7 +12,7 @@ import type { OtpStore } from 'src/iam/applications/ports/otp-store.port';
 import type { SecretCipher } from 'src/iam/applications/ports/secret-cipher.port';
 import type { TotpGenerator } from 'src/iam/applications/ports/totp-generator.port';
 import type { TotpMethodRepository } from 'src/iam/domains/ports/totp-method.repository';
-import type { SmsService } from 'src/common/sms/sms.service';
+import type { SmsService } from 'src/shared/sms/sms.service';
 import { EmailChallengeStrategy } from './email-challenge.strategy';
 import { SmsChallengeStrategy } from './sms-challenge.strategy';
 import { TotpChallengeStrategy } from './totp-challenge.strategy';

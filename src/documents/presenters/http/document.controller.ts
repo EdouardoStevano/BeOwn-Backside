@@ -46,7 +46,7 @@ import {
 import { InvestmentEntity } from 'src/investments/infrastructure/persistences/entities/investment.entity';
 import { ProjectEntity } from 'src/projects/infrastructure/persistences/entities/project.entity';
 import { SetOrdreDto, UploadDocumentDto } from '../dto/document.dto';
-import { CloudStorageService } from 'src/common/cloud-storage/cloud-storage.service';
+import { CloudStorageService } from 'src/shared/cloud-storage/cloud-storage.service';
 
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
 const ALLOWED_MIME = [
