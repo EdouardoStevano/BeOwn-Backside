@@ -1,10 +1,10 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { NoPendingMfaEnrollmentError } from 'src/iam/domains/errors';
-import { TfaMethodType } from 'src/iam/domains/enums/tfa-method.enum';
+import { MfaMethodType } from 'src/iam/domains/enums/mfa-method.enum';
 import {
-  TFA_ENROLLMENT_STRATEGIES,
-  type TfaEnrollmentStrategy,
-} from '../strategies/tfa-enrollment.strategy';
+  MFA_ENROLLMENT_STRATEGIES,
+  type MfaEnrollmentStrategy,
+} from '../strategies/mfa-enrollment.strategy';
 
 /** Entrée du use case — le canal n'y figure pas, il est déduit (§1). */
 export interface EnableMfaCommand {
@@ -28,20 +28,20 @@ export interface EnableMfaCommand {
  */
 @Injectable()
 export class EnableMfaUseCase {
-  private readonly strategies: readonly TfaEnrollmentStrategy[];
+  private readonly strategies: readonly MfaEnrollmentStrategy[];
 
   constructor(
-    @Inject(TFA_ENROLLMENT_STRATEGIES)
-    strategies: readonly TfaEnrollmentStrategy[],
+    @Inject(MFA_ENROLLMENT_STRATEGIES)
+    strategies: readonly MfaEnrollmentStrategy[],
   ) {
     this.strategies = strategies;
   }
 
   /** Renvoie le canal activé, pour que l'appelant sache ce qu'il a confirmé. */
-  async execute(command: EnableMfaCommand): Promise<TfaMethodType> {
+  async execute(command: EnableMfaCommand): Promise<MfaMethodType> {
     const { userId, code } = command;
 
-    const pending: TfaEnrollmentStrategy[] = [];
+    const pending: MfaEnrollmentStrategy[] = [];
     for (const strategy of this.strategies) {
       if (await strategy.hasPending(userId)) pending.push(strategy);
     }

@@ -1,27 +1,26 @@
 import { Logger } from '@nestjs/common';
-import { TfaMethodType } from 'src/iam/domains/enums/tfa-method.enum';
-import { type OtpStore } from 'src/iam/applications/ports/otp-store.port';
-import { type ChannelTfaMethodRepository } from 'src/iam/domains/ports/channel-tfa-method.repository';
+import { MfaMethodType } from 'src/iam/domains/enums/mfa-method.enum';
+import { OtpService } from 'src/iam/applications/services/otp.service';
+import { type MfaMethodRepository } from 'src/iam/domains/ports/mfa-method.repository';
 import {
   InvalidOtpCodeError,
-  OtpAlreadyActiveError,
   OtpDeliveryFailedError,
-  TfaEnrollmentNotStartedError,
-  TfaMethodAlreadyEnrolledError,
+  MfaEnrollmentNotStartedError,
+  MfaMethodAlreadyEnrolledError,
 } from 'src/iam/domains/errors';
 import {
-  TfaEnrollmentChallenge,
-  TfaEnrollmentConfirmation,
-  TfaEnrollmentRequest,
-  TfaEnrollmentStrategy,
-} from './tfa-enrollment.strategy';
+  MfaEnrollmentChallenge,
+  MfaEnrollmentConfirmation,
+  MfaEnrollmentRequest,
+  MfaEnrollmentStrategy,
+} from './mfa-enrollment.strategy';
 
 /**
  * Clé de l'OTP d'enrôlement. Distincte des clés de connexion
  * (`otp:email:<email>`) : un code envoyé pour enrôler un canal ne doit pas
  * pouvoir ouvrir une session, ni l'inverse.
  */
-const enrollmentOtpKey = (method: TfaMethodType, userId: number): string =>
+const enrollmentOtpKey = (method: MfaMethodType, userId: number): string =>
   `otp:enroll:${method}:${userId}`;
 
 /**
@@ -32,89 +31,108 @@ const enrollmentOtpKey = (method: TfaMethodType, userId: number): string =>
  * remise du code changent, d'où les deux méthodes abstraites (Template
  * Method).
  */
-export abstract class ChannelEnrollmentStrategy implements TfaEnrollmentStrategy {
-  abstract readonly method: TfaMethodType;
+export abstract class ChannelEnrollmentStrategy implements MfaEnrollmentStrategy {
+  abstract readonly method: MfaMethodType;
 
   protected readonly logger = new Logger(this.constructor.name);
 
   protected constructor(
-    protected readonly otpStore: OtpStore,
-    protected readonly methodRepository: ChannelTfaMethodRepository,
+    protected readonly otpService: OtpService,
+    protected readonly methodRepository: MfaMethodRepository,
   ) {}
 
-  /** Destination du code, validée : adresse email ou numéro E.164. */
-  protected abstract resolveTarget(
-    request: TfaEnrollmentRequest,
+  /**
+   * Destination du code, validée : adresse email ou numéro E.164. C'est ce que
+   * porte `credential` pour ces canaux — le champ unifié du facteur, qui
+   * contient le secret chiffré côté TOTP.
+   */
+  protected abstract resolveCredential(
+    request: MfaEnrollmentRequest,
   ): Promise<string>;
 
   /** Remise effective du code sur le canal. */
-  protected abstract deliver(target: string, otp: string): Promise<void>;
+  protected abstract deliver(credential: string, otp: string): Promise<void>;
 
   /** Message rendu à l'appelant si la remise échoue. */
   protected abstract deliveryFailureMessage(): string;
 
-  async start(request: TfaEnrollmentRequest): Promise<TfaEnrollmentChallenge> {
-    const target = await this.resolveTarget(request);
+  async start(request: MfaEnrollmentRequest): Promise<MfaEnrollmentChallenge> {
+    const credential = await this.resolveCredential(request);
     const { userId } = request;
 
-    const enrolled = await this.methodRepository.findAllByUserId(userId);
-    if (enrolled.some((m) => m.isActive && m.target === target)) {
+    const enrolled = await this.methodRepository.findAllByUserId(
+      userId,
+      this.method,
+    );
+    if (enrolled.some((factor) => factor.isActiveOn(credential))) {
       // Renvoyer un code sur un canal déjà prouvé relèverait du parcours de
       // connexion, pas de l'enrôlement.
-      throw new TfaMethodAlreadyEnrolledError(this.method);
+      throw new MfaMethodAlreadyEnrolledError(this.method);
     }
 
     const key = enrollmentOtpKey(this.method, userId);
-    if (await this.otpStore.hasActiveOtp(key)) {
-      throw new OtpAlreadyActiveError();
-    }
 
+    // Pas de garde « un code est déjà actif » : rappeler cette route est le
+    // moyen de **redemander un code** quand le premier n'est pas arrivé.
+    // Refuser laissait l'utilisateur à la porte de son propre enrôlement le
+    // temps du TTL, sans recours. Le nombre d'envois est borné là où c'est son
+    // sujet — le quota de requêtes de la route (3/min).
+    //
     // Au plus un enrôlement en attente par canal : les tentatives abandonnées
     // sont purgées, sans quoi la confirmation aurait à deviner laquelle des
     // lignes inactives l'utilisateur est en train de prouver.
-    await this.methodRepository.deletePendingForUser(userId);
-    await this.methodRepository.create(userId, target);
+    await this.methodRepository.deletePendingForUser(userId, this.method);
+    await this.methodRepository.create(userId, this.method, credential);
 
-    const otp = await this.otpStore.generateOtp(key);
+    const otp = await this.otpService.generateOtp(key);
 
     try {
-      await this.deliver(target, otp);
+      await this.deliver(credential, otp);
     } catch (err) {
       // Envoi manqué : on invalide l'OTP pour autoriser un retry immédiat,
       // sinon l'utilisateur reste bloqué tout le TTL sans avoir reçu le code.
-      await this.otpStore.invalidate(key);
+      await this.otpService.invalidate(key);
       this.logger.error(
-        `Échec de l'envoi du code d'enrôlement ${this.method} à ${target} — OTP invalidé pour autoriser un retry.`,
+        `Échec de l'envoi du code d'enrôlement ${this.method} à ${credential} — OTP invalidé pour autoriser un retry.`,
         err instanceof Error ? err.stack : String(err),
       );
       throw new OtpDeliveryFailedError(this.deliveryFailureMessage(), err);
     }
 
-    return { method: this.method, sentTo: target };
+    return { method: this.method, sentTo: credential };
   }
 
   async hasPending(userId: number): Promise<boolean> {
-    const methods = await this.methodRepository.findAllByUserId(userId);
-    return methods.some((method) => !method.isActive);
+    const methods = await this.methodRepository.findAllByUserId(
+      userId,
+      this.method,
+    );
+    return methods.some((factor) => factor.isPending());
   }
 
-  async confirm(confirmation: TfaEnrollmentConfirmation): Promise<void> {
+  async confirm(confirmation: MfaEnrollmentConfirmation): Promise<void> {
     const { userId, otp } = confirmation;
 
-    const methods = await this.methodRepository.findAllByUserId(userId);
-    const pending = methods.find((method) => !method.isActive);
+    const methods = await this.methodRepository.findAllByUserId(
+      userId,
+      this.method,
+    );
+    const pending = methods.find((factor) => factor.isPending());
     if (!pending) {
-      throw new TfaEnrollmentNotStartedError(this.method);
+      throw new MfaEnrollmentNotStartedError(this.method);
     }
 
     const key = enrollmentOtpKey(this.method, userId);
-    if (!(await this.otpStore.verifyOtp(key, otp))) {
+    if (!(await this.otpService.verifyOtp(key, otp))) {
       throw new InvalidOtpCodeError();
     }
 
-    // Comme pour TOTP : la méthode fraîchement confirmée devient l'unique
-    // méthode active de son canal.
-    await this.methodRepository.deactivateAllForUser(userId);
+    // Comme pour TOTP : le facteur fraîchement confirmé devient l'unique
+    // facteur actif du **compte**, et non de son seul canal. Un compte protégé
+    // par TOTP qui enrôle l'email troque donc un facteur contre l'autre — le
+    // laisser cumuler donnerait un second chemin d'entrée, plus faible, dont
+    // l'utilisateur ignorerait qu'il reste ouvert.
+    await this.methodRepository.deactivateAll(userId);
     await this.methodRepository.activate(pending.id);
   }
 }

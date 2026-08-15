@@ -1,10 +1,32 @@
-import { UserEmail } from 'src/iam/domains/value-objects/user-email.vo';
+import { Email } from 'src/iam/domains/value-objects/email.vo';
 import {
   FirstName,
   LastName,
 } from 'src/iam/domains/value-objects/person-name.vo';
 import { UserRole, UserStatus } from 'src/iam/domains/enums/user.enum';
+import { MfaMethodType } from 'src/iam/domains/enums/mfa-method.enum';
 import { User, type UserSnapshot } from 'src/iam/domains/models/user';
+
+/**
+ * État du second facteur, tel qu'on l'expose à son titulaire.
+ *
+ * Le facteur n'appartient pas à l'agrégat `User` — il vit dans sa propre table
+ * et n'est chargé que par les use cases qui en ont besoin. C'est pourquoi il
+ * est **fourni** au mapper plutôt que lu sur l'entité : la projection dit ce
+ * qui sort, elle ne va pas le chercher.
+ */
+export interface PublicUserMfa {
+  /** `true` dès qu'un facteur est armé — la connexion l'opposera. */
+  enabled: boolean;
+  /** Canal du facteur actif, `null` quand `enabled` vaut `false`. */
+  method: MfaMethodType | null;
+}
+
+/** Aucun facteur armé — état d'un compte qui vient d'être créé. */
+export const NO_MFA: PublicUserMfa = Object.freeze({
+  enabled: false,
+  method: null,
+});
 
 /**
  * Représentation exposable du compte : ce que le domaine accepte de publier.
@@ -22,7 +44,31 @@ export interface PublicUser {
   lastLoginAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
-  userEmail: UserEmail | null;
+  /**
+   * Forme d'API inchangée par le passage de l'état de vérification dans
+   * l'agrégat : le front lit toujours `userEmail.isVerified`. Ce qui était la
+   * sérialisation d'un VO est désormais assemblé ici — c'est la place d'une
+   * projection, et ça découple la représentation publiée du modèle interne.
+   */
+  userEmail: {
+    email: string;
+    isVerified: boolean;
+    verifiedDate: Date | null;
+  } | null;
+  /**
+   * État de la double authentification, **absent** quand l'appelant ne l'a pas
+   * chargé.
+   *
+   * Optionnel et non `{ enabled: false }` par défaut : un compte protégé
+   * passerait sinon pour un compte sans MFA sur toute route qui ne consulte pas
+   * le référentiel des facteurs, et le front afficherait « désactivée » sur un
+   * écran de sécurité. Absent veut dire « on n'en sait rien ici », `false` veut
+   * dire « aucun facteur ». Les deux ne se confondent pas.
+   *
+   * Les réponses d'authentification (`AuthSession` : sign-in, sign-in/mfa,
+   * refresh-tokens, exchange) le renseignent toujours.
+   */
+  mfa?: PublicUserMfa;
 }
 
 /**
@@ -63,7 +109,12 @@ export class UserMapper {
       lastLoginAt: snapshot.lastLoginAt,
       createdAt: snapshot.createdAt,
       updatedAt: snapshot.updatedAt,
-      userEmail: snapshot.userEmail,
+      // `restore` et non `of`, comme les noms : une adresse enregistrée avant
+      // que la règle n'existe doit rester lisible, sans quoi le compte devient
+      // inaccessible — y compris pour corriger l'adresse.
+      email: snapshot.email === null ? null : Email.restore(snapshot.email),
+      emailVerified: snapshot.emailVerified,
+      emailVerifiedDate: snapshot.emailVerifiedDate,
     });
   }
 
@@ -89,7 +140,9 @@ export class UserMapper {
       lastLoginAt: user.lastLoginAt,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
-      userEmail: user.userEmail,
+      email: user.emailOrNull,
+      emailVerified: user.isEmailVerified(),
+      emailVerifiedDate: user.emailVerifiedDate,
     };
   }
 
@@ -101,8 +154,12 @@ export class UserMapper {
    * décidé. C'est le bon défaut pour un type dont tout le rôle est de dire ce
    * qui sort du domaine — l'oubli y coûte une fuite, jamais un champ manquant,
    * que le compilateur signale de toute façon.
+   *
+   * `mfa` est le seul champ que l'entité ne porte pas : le facteur vit hors de
+   * l'agrégat, et seul l'appelant qui l'a chargé peut le fournir. Omis, il ne
+   * paraît pas dans la projection — voir {@link PublicUser.mfa}.
    */
-  static toPublic(user: User): PublicUser {
+  static toPublic(user: User, mfa?: PublicUserMfa): PublicUser {
     return {
       userId: user.userId,
       firstname: user.firstname,
@@ -114,7 +171,18 @@ export class UserMapper {
       lastLoginAt: user.lastLoginAt,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
-      userEmail: user.userEmail,
+      userEmail:
+        user.emailOrNull === null
+          ? null
+          : {
+              email: user.emailOrNull,
+              isVerified: user.isEmailVerified(),
+              verifiedDate: user.emailVerifiedDate,
+            },
+      // Étalement conditionnel : la clé n'existe pas quand l'état n'a pas été
+      // chargé, plutôt que d'exister à `undefined`. `JSON.stringify` traite les
+      // deux pareil, mais un `'mfa' in user` côté serveur, lui, les distingue.
+      ...(mfa ? { mfa } : {}),
     };
   }
 }

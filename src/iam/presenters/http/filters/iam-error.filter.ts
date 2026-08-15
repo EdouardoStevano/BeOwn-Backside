@@ -99,12 +99,26 @@ export class IamErrorFilter implements ExceptionFilter<IamError> {
       return withStatusCodeAndCode(error, status);
     }
 
-    // Forme standard, identique à ce que Nest produit pour une HttpException
-    // construite avec un message texte.
+    // Forme standard : le trio que Nest produit pour une HttpException
+    // construite avec un message texte, augmenté du `code` et des `details`
+    // quand l'erreur en porte.
+    //
+    // Ces deux-là étaient jusqu'ici perdus en route — `IamError` les déclare
+    // comme « contrat stable consommé par le front », et seules les entrées de
+    // LEGACY_BODIES les publiaient. `MfaRequiredError` a besoin de faire
+    // voyager son `challengeId` : sans lui, l'appelant apprend qu'un second
+    // facteur manque sans savoir contre quoi le prouver. Ce sont des clés en
+    // plus, jamais en moins — aucun front qui lit `message`/`statusCode` n'en
+    // pâtit.
     return {
       message: error.message,
       error: ERROR_LABEL[status] ?? 'Error',
       statusCode: status,
+      ...(error.code !== undefined && { code: error.code }),
+      // Étalé à la racine, comme `blockers` l'est déjà pour la suppression de
+      // compte. À chaque erreur de choisir des clés qui n'entrent pas en
+      // collision avec le trio ci-dessus.
+      ...error.details,
     };
   }
 }

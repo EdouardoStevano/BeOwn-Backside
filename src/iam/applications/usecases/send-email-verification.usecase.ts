@@ -2,10 +2,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { TokenService } from '../services/token.service';
 import { TokenEmailCacheService } from '../services/token-email-cache.service';
-import {
-  AUTH_MAILER,
-  type AuthMailer,
-} from 'src/iam/applications/ports/auth-mailer.port';
+import { AuthMailerService } from 'src/iam/applications/services/auth-mailer.service';
 import {
   USER_REPOSITORY,
   type UserRepository,
@@ -19,7 +16,7 @@ export class SendEmailVerificationUseCase {
     private readonly tokenService: TokenService,
     @Inject(USER_REPOSITORY) private readonly usersRepository: UserRepository,
     private readonly emailTokenCache: TokenEmailCacheService,
-    @Inject(AUTH_MAILER) private readonly authMailer: AuthMailer,
+    private readonly authMailer: AuthMailerService,
   ) {}
 
   async execute(email: string): Promise<void> {

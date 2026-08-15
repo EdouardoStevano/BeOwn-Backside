@@ -11,7 +11,7 @@ import { AdminRetraitsController } from './admin-retraits.controller';
 import { AdminInvestorsController } from './admin-investors.controller';
 import { AdminPlatformWalletController } from './admin-platform-wallet.controller';
 import { AdminEmailTemplatesController } from './admin-email-templates.controller';
-import { EmailTemplateEntity } from 'src/common/email/entities/email-template.entity';
+import { EmailTemplateEntity } from 'src/shared/email/entities/email-template.entity';
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 import { ProjectEntity } from 'src/projects/infrastructure/persistences/entities/project.entity';
 import { InvestmentEntity } from 'src/investments/infrastructure/persistences/entities/investment.entity';

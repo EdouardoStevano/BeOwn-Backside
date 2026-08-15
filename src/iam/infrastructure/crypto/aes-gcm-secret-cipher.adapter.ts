@@ -62,12 +62,18 @@ export class AesGcmSecretCipherAdapter implements SecretCipher {
 
   private getEncryptionKey(): Buffer {
     const secret =
+      this.configService.get<string>('MFA_SECRET_ENCRYPTION_KEY') ??
+      // Ancien nom, toujours lu : c'est une variable d'environnement, donc un
+      // contrat de déploiement. Un renommage sec ferait basculer la clé sur
+      // `JWT_SECRET` au prochain démarrage et rendrait **illisibles** tous les
+      // secrets TOTP déjà chiffrés. À retirer une fois les environnements
+      // passés à `MFA_SECRET_ENCRYPTION_KEY`.
       this.configService.get<string>('TFA_SECRET_ENCRYPTION_KEY') ??
       this.configService.get<string>('JWT_SECRET');
 
     if (!secret) {
       throw new Error(
-        'TFA_SECRET_ENCRYPTION_KEY or JWT_SECRET must be configured',
+        'MFA_SECRET_ENCRYPTION_KEY or JWT_SECRET must be configured',
       );
     }
 

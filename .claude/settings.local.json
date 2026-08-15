@@ -23,7 +23,24 @@
       "Bash(cp \"C:/Users/Charl/AppData/Local/Temp/claude/E--NvimProjects-BeOwn-beown-backside/67af8fb5-09a9-40f6-b818-37a8349971cf/scratchpad/boot-check.ts\" ./boot-check.tmp.ts)",
       "Bash(npx ts-node *)",
       "Bash(grep -rn \"iam/infrastructure\\\\|from '\\\\.\\\\./\\\\.\\\\./infrastructure\\\\|from 'src/.*infrastructure\" src/iam/applications --include=*.ts)",
-      "Bash(grep -v \"from '\\\\./\\\\|from '\\\\.\\\\./\\\\|domains/\")"
+      "Bash(grep -v \"from '\\\\./\\\\|from '\\\\.\\\\./\\\\|domains/\")",
+      "Bash(mv src/iam/applications/email-verification/usecases/send-email-verification.usecase.ts src/iam/applications/authentication/usecases/)",
+      "Bash(mv src/iam/applications/email-verification/usecases/confirm-email.usecase.ts src/iam/applications/authentication/usecases/)",
+      "Bash(mv src/iam/applications/email-verification/usecases/email-verification.usecases.spec.ts src/iam/applications/authentication/usecases/)",
+      "Bash(mv src/iam/applications/otp/usecases/create-email-otp.usecase.ts src/iam/applications/authentication/usecases/)",
+      "Bash(mv src/iam/applications/otp/usecases/create-sms-otp.usecase.ts src/iam/applications/authentication/usecases/)",
+      "Bash(node *)",
+      "Bash(docker exec *)",
+      "Bash(git commit *)",
+      "Bash(sed -i -e 's#from '\\\\''./usecases/#from '\\\\''./usecases/authentication/#g' -e 's#from '\\\\''./services/#from '\\\\''./services/authentication/#g' src/iam/applications/authentication.module.ts)",
+      "Bash(sed -i -e 's#'\\\\''\\\\.\\\\./services/tfa-enrollment.strategy'\\\\''#'\\\\''../../services/authentication/tfa-enrollment.strategy'\\\\''#' src/iam/applications/usecases/authentication/enroll-tfa.usecase.ts)",
+      "Bash(sed -i -e 's#'\\\\''\\\\.\\\\./usecases/enroll-tfa.usecase'\\\\''#'\\\\''../../usecases/authentication/enroll-tfa.usecase'\\\\''#' src/iam/applications/services/authentication/tfa-enrollment.spec.ts)",
+      "Bash(sed -i -e 's#applications/authentication/usecases/#applications/usecases/authentication/#g' src/iam/presenters/http/authentication.controller.ts)",
+      "Bash(npm run *)",
+      "Bash(git add *)",
+      "Bash(npx prettier *)",
+      "Bash(git checkout *)",
+      "Bash(python -c ' *)"
     ]
   }
 }

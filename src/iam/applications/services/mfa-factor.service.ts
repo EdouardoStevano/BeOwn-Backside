@@ -1,10 +1,10 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { TfaMethodType } from 'src/iam/domains/enums/tfa-method.enum';
-import { UnsupportedTfaMethodError } from 'src/iam/domains/errors';
+import { MfaMethodType } from 'src/iam/domains/enums/mfa-method.enum';
+import { UnsupportedMfaMethodError } from 'src/iam/domains/errors';
 import {
-  TFA_CHALLENGE_STRATEGIES,
-  type TfaChallengeStrategy,
-} from '../strategies/tfa-challenge.strategy';
+  MFA_CHALLENGE_STRATEGIES,
+  type MfaChallengeStrategy,
+} from '../strategies/mfa-challenge.strategy';
 
 /**
  * Ordre dans lequel un facteur est retenu quand le compte en a plusieurs.
@@ -14,10 +14,10 @@ import {
  * l'email parce qu'il suppose la possession d'un appareil, là où une boîte
  * email est justement ce que protège le mot de passe qu'on vient de saisir.
  */
-const PREFERENCE: readonly TfaMethodType[] = [
-  TfaMethodType.TOTP,
-  TfaMethodType.SMS,
-  TfaMethodType.EMAIL,
+const PREFERENCE: readonly MfaMethodType[] = [
+  MfaMethodType.TOTP,
+  MfaMethodType.SMS,
+  MfaMethodType.EMAIL,
 ];
 
 /**
@@ -31,21 +31,21 @@ const PREFERENCE: readonly TfaMethodType[] = [
  */
 @Injectable()
 export class MfaFactorService {
-  private readonly byMethod: ReadonlyMap<TfaMethodType, TfaChallengeStrategy>;
+  private readonly byMethod: ReadonlyMap<MfaMethodType, MfaChallengeStrategy>;
 
   constructor(
-    @Inject(TFA_CHALLENGE_STRATEGIES)
-    strategies: readonly TfaChallengeStrategy[],
+    @Inject(MFA_CHALLENGE_STRATEGIES)
+    strategies: readonly MfaChallengeStrategy[],
   ) {
     this.byMethod = new Map(
       strategies.map((strategy) => [strategy.method, strategy]),
     );
   }
 
-  /** Stratégie du canal, ou `UnsupportedTfaMethodError` s'il est inconnu. */
-  strategyFor(method: TfaMethodType): TfaChallengeStrategy {
+  /** Stratégie du canal, ou `UnsupportedMfaMethodError` s'il est inconnu. */
+  strategyFor(method: MfaMethodType): MfaChallengeStrategy {
     const strategy = this.byMethod.get(method);
-    if (!strategy) throw new UnsupportedTfaMethodError(method);
+    if (!strategy) throw new UnsupportedMfaMethodError(method);
     return strategy;
   }
 
@@ -53,7 +53,7 @@ export class MfaFactorService {
    * Facteur à opposer au compte, `null` s'il n'en a aucun d'actif — auquel cas
    * l'appelant poursuit sans MFA.
    */
-  async findActiveMethod(userId: number): Promise<TfaMethodType | null> {
+  async findActiveMethod(userId: number): Promise<MfaMethodType | null> {
     for (const method of PREFERENCE) {
       const strategy = this.byMethod.get(method);
       if (strategy && (await strategy.isActiveFor(userId))) return method;

@@ -1,21 +1,18 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { TfaMethodType } from 'src/iam/domains/enums/tfa-method.enum';
-import { OTP_STORE, type OtpStore } from 'src/iam/applications/ports/otp-store.port';
+import { MfaMethodType } from 'src/iam/domains/enums/mfa-method.enum';
+import { OtpService } from 'src/iam/applications/services/otp.service';
+import { AuthMailerService } from 'src/iam/applications/services/auth-mailer.service';
 import {
-  AUTH_MAILER,
-  type AuthMailer,
-} from 'src/iam/applications/ports/auth-mailer.port';
-import {
-  EMAIL_METHOD_REPOSITORY,
-  type ChannelTfaMethodRepository,
-} from 'src/iam/domains/ports/channel-tfa-method.repository';
+  MFA_METHOD_REPOSITORY,
+  type MfaMethodRepository,
+} from 'src/iam/domains/ports/mfa-method.repository';
 import {
   USER_REPOSITORY,
   type UserRepository,
 } from 'src/iam/domains/ports/user.repository';
 import { UserNotFoundError } from 'src/iam/domains/errors';
 import { ChannelEnrollmentStrategy } from './channel-enrollment.strategy';
-import { TfaEnrollmentRequest } from './tfa-enrollment.strategy';
+import { MfaEnrollmentRequest } from './mfa-enrollment.strategy';
 
 /**
  * Enrôlement du canal email. La destination n'est **pas** prise dans le body :
@@ -25,28 +22,28 @@ import { TfaEnrollmentRequest } from './tfa-enrollment.strategy';
  */
 @Injectable()
 export class EmailEnrollmentStrategy extends ChannelEnrollmentStrategy {
-  readonly method = TfaMethodType.EMAIL;
+  readonly method = MfaMethodType.EMAIL;
 
   constructor(
-    @Inject(OTP_STORE) otpStore: OtpStore,
-    @Inject(EMAIL_METHOD_REPOSITORY)
-    methodRepository: ChannelTfaMethodRepository,
+    otpService: OtpService,
+    @Inject(MFA_METHOD_REPOSITORY)
+    methodRepository: MfaMethodRepository,
     @Inject(USER_REPOSITORY) private readonly userRepository: UserRepository,
-    @Inject(AUTH_MAILER) private readonly authMailer: AuthMailer,
+    private readonly authMailer: AuthMailerService,
   ) {
-    super(otpStore, methodRepository);
+    super(otpService, methodRepository);
   }
 
-  protected async resolveTarget(
-    request: TfaEnrollmentRequest,
+  protected async resolveCredential(
+    request: MfaEnrollmentRequest,
   ): Promise<string> {
     const user = await this.userRepository.findById(request.userId);
     if (!user) throw new UserNotFoundError();
     return user.email;
   }
 
-  protected deliver(target: string, otp: string): Promise<void> {
-    return this.authMailer.sendLoginOtp(target, otp);
+  protected deliver(credential: string, otp: string): Promise<void> {
+    return this.authMailer.sendLoginOtp(credential, otp);
   }
 
   protected deliveryFailureMessage(): string {

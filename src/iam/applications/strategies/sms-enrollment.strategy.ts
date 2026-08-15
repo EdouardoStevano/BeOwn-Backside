@@ -1,17 +1,17 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { TfaMethodType } from 'src/iam/domains/enums/tfa-method.enum';
-import { OTP_STORE, type OtpStore } from 'src/iam/applications/ports/otp-store.port';
+import { MfaMethodType } from 'src/iam/domains/enums/mfa-method.enum';
+import { OtpService } from 'src/iam/applications/services/otp.service';
 import { SMS_SERVICE, type SmsService } from 'src/shared/sms/sms.service';
 import {
-  SMS_METHOD_REPOSITORY,
-  type ChannelTfaMethodRepository,
-} from 'src/iam/domains/ports/channel-tfa-method.repository';
+  MFA_METHOD_REPOSITORY,
+  type MfaMethodRepository,
+} from 'src/iam/domains/ports/mfa-method.repository';
 import {
   InvalidPhoneNumberError,
   MissingPhoneNumberError,
 } from 'src/iam/domains/errors';
 import { ChannelEnrollmentStrategy } from './channel-enrollment.strategy';
-import { TfaEnrollmentRequest } from './tfa-enrollment.strategy';
+import { MfaEnrollmentRequest } from './mfa-enrollment.strategy';
 
 /** Normalise le numéro en une valeur stable (espaces retirés). */
 const normalize = (phone: string): string => phone.replace(/\s+/g, '').trim();
@@ -25,18 +25,18 @@ const E164 = /^\+[1-9]\d{6,14}$/;
  */
 @Injectable()
 export class SmsEnrollmentStrategy extends ChannelEnrollmentStrategy {
-  readonly method = TfaMethodType.SMS;
+  readonly method = MfaMethodType.SMS;
 
   constructor(
-    @Inject(OTP_STORE) otpStore: OtpStore,
-    @Inject(SMS_METHOD_REPOSITORY)
-    methodRepository: ChannelTfaMethodRepository,
+    otpService: OtpService,
+    @Inject(MFA_METHOD_REPOSITORY)
+    methodRepository: MfaMethodRepository,
     @Inject(SMS_SERVICE) private readonly smsService: SmsService,
   ) {
-    super(otpStore, methodRepository);
+    super(otpService, methodRepository);
   }
 
-  protected resolveTarget(request: TfaEnrollmentRequest): Promise<string> {
+  protected resolveCredential(request: MfaEnrollmentRequest): Promise<string> {
     if (!request.phone) throw new MissingPhoneNumberError();
 
     const phone = normalize(request.phone);
@@ -45,8 +45,8 @@ export class SmsEnrollmentStrategy extends ChannelEnrollmentStrategy {
     return Promise.resolve(phone);
   }
 
-  protected deliver(target: string, otp: string): Promise<void> {
-    return this.smsService.sendOtp(target, otp);
+  protected deliver(credential: string, otp: string): Promise<void> {
+    return this.smsService.sendOtp(credential, otp);
   }
 
   protected deliveryFailureMessage(): string {

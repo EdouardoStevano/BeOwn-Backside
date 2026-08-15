@@ -320,9 +320,12 @@ export class UserController {
     });
   }
 
-  @ApiOperation({ summary: 'Basculer la double authentification' })
-  @Patch('me/preferences/tfa')
-  async toggleTfa(
+  @ApiOperation({ summary: "Basculer l'authentification multifacteur" })
+  // Deux chemins pour un seul handler : `mfa` est le nom retenu, `tfa` reste
+  // servi parce que le front déployé l'appelle. Retirer l'ancien casserait les
+  // clients en production — il partira quand ils auront basculé.
+  @Patch(['me/preferences/mfa', 'me/preferences/tfa'])
+  async toggleMfa(
     @CurrentUser() user: ActiveUser,
     @Body() body: { value: boolean },
   ) {

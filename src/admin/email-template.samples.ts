@@ -5,7 +5,7 @@ import { formatEur } from 'src/shared/money/format-eur';
  * de test de l'API admin (V2-T2). Les noms de variables reproduisent
  * EXACTEMENT les contextes réellement passés à EmailTemplateService.render()
  * par les transports (voir brevo.service.ts / mailpit.service.ts) ET les
- * variables déclarées dans les .hbs (src/common/email/templates). Les montants
+ * variables déclarées dans les .hbs (src/shared/email/templates). Les montants
  * (prix, montant) sont pré-formatés comme en production — le rendu ne les
  * reformate pas, il n'interpole que la chaîne fournie.
  *

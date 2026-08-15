@@ -1,5 +1,5 @@
 import type { Cache } from '@nestjs/cache-manager';
-import { TfaMethodType } from 'src/iam/domains/enums/tfa-method.enum';
+import { MfaMethodType } from 'src/iam/domains/enums/mfa-method.enum';
 import {
   MFA_CHALLENGE_MAX_ATTEMPTS,
   MfaChallengePurpose,
@@ -13,7 +13,7 @@ const CHALLENGE_TTL_MS = 5 * 60 * 1000;
 
 const draft: MfaChallengeDraft = {
   userId: USER_ID,
-  method: TfaMethodType.SMS,
+  method: MfaMethodType.SMS,
   purpose: MfaChallengePurpose.SIGN_IN,
   sentTo: '+33*******78',
 };

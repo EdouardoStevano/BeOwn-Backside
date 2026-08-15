@@ -106,8 +106,8 @@ export class UserEntity {
   })
   userEmail: UserEmailEntity;
 
-  // Les méthodes 2FA appartiennent à IAM (`iam/infrastructure/persistence/
-  // entities/tfa-method.entity.ts`) et pointent vers ce compte par un
-  // `@ManyToOne` unidirectionnel. Le `@OneToMany tfaMethods` qui était ici
+  // Les facteurs MFA appartiennent à IAM (`iam/infrastructure/persistence/
+  // entities/mfa-method.entity.ts`) et pointent vers ce compte par un
+  // `@ManyToOne` unidirectionnel. Le `@OneToMany mfaMethods` qui était ici
   // n'était lu par personne et forçait users à connaître les entités d'IAM.
 }

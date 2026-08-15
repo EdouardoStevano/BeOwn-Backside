@@ -19,9 +19,9 @@ import { NotificationService } from 'src/notifications/applications/notification
 import { NotificationEventService } from 'src/notifications/applications/notification-event.service';
 import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
 import { UserRole } from 'src/iam/domains/enums/user.enum';
-import { EmailTemplateService } from 'src/common/email/email-template.service';
-import { EMAIL_SERVICE } from 'src/common/email/email.service';
-import type { EmailService } from 'src/common/email/email.service';
+import { EmailTemplateService } from 'src/shared/email/email-template.service';
+import { EMAIL_SERVICE } from 'src/shared/email/email.service';
+import type { EmailService } from 'src/shared/email/email.service';
 import { hasPermission } from 'src/common/auth/permissions.constants';
 import { formatEur } from 'src/shared/money/format-eur';
 import {

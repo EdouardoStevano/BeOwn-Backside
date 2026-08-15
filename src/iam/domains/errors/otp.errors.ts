@@ -1,13 +1,5 @@
 import { IamError, IamErrorKind } from './iam.error';
-import { TfaMethodType } from '../enums/tfa-method.enum';
-
-/** Un OTP encore valide existe déjà pour ce canal — il faut attendre le TTL. */
-export class OtpAlreadyActiveError extends IamError {
-  readonly kind = IamErrorKind.INVALID_INPUT;
-  constructor(message = 'Un OTP est déjà actif, veuillez patienter') {
-    super(message);
-  }
-}
+import { MfaMethodType } from '../enums/mfa-method.enum';
 
 /** Numéro hors format E.164. */
 export class InvalidPhoneNumberError extends IamError {
@@ -59,10 +51,28 @@ export class InvalidTotpSecretError extends IamError {
  * La validation du DTO couvre déjà le cas nominal ; cette erreur protège les
  * appels internes (worker, test) qui n'y passent pas.
  */
-export class UnsupportedTfaMethodError extends IamError {
+export class UnsupportedMfaMethodError extends IamError {
   readonly kind = IamErrorKind.INVALID_INPUT;
   constructor(method: string) {
-    super(`Méthode de double authentification non supportée : ${method}`);
+    super(`Méthode de authentification multifacteur non supportée : ${method}`);
+  }
+}
+
+/**
+ * Plafond d'essais atteint sur un OTP : l'entrée est détruite, il faut en
+ * redemander un.
+ *
+ * Auparavant un `throw new Error(...)` nu, levé depuis l'adapter de cache —
+ * donc une 500 pour ce qui est une situation métier parfaitement prévue. La
+ * règle ayant rejoint `OtpService`, elle s'exprime dans le vocabulaire du
+ * domaine et se traduit en réponse propre (§12.1).
+ */
+export class TooManyOtpAttemptsError extends IamError {
+  readonly kind = IamErrorKind.CONFLICT;
+  constructor() {
+    super('Trop de tentatives — demandez un nouveau code.', {
+      code: 'OTP_TOO_MANY_ATTEMPTS',
+    });
   }
 }
 
@@ -79,9 +89,9 @@ export class InvalidOtpCodeError extends IamError {
  * canal — il faut rappeler `POST /auth/mfa/enroll` avant
  * `POST /auth/mfa/enable`.
  */
-export class TfaEnrollmentNotStartedError extends IamError {
+export class MfaEnrollmentNotStartedError extends IamError {
   readonly kind = IamErrorKind.NOT_FOUND;
-  constructor(method: TfaMethodType) {
+  constructor(method: MfaMethodType) {
     super(`Aucun enrôlement ${method} en cours pour ce compte.`);
   }
 }
@@ -91,11 +101,11 @@ export class TfaEnrollmentNotStartedError extends IamError {
  * enrôler. Renvoyer un code ici relèverait du parcours de connexion, pas de
  * l'enrôlement.
  */
-export class TfaMethodAlreadyEnrolledError extends IamError {
+export class MfaMethodAlreadyEnrolledError extends IamError {
   readonly kind = IamErrorKind.CONFLICT;
-  constructor(method: TfaMethodType) {
+  constructor(method: MfaMethodType) {
     super(
-      `La double authentification ${method} est déjà active sur ce compte.`,
+      `La authentification multifacteur ${method} est déjà active sur ce compte.`,
     );
   }
 }

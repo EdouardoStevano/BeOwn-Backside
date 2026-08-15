@@ -9,6 +9,7 @@ import {
   type UserRepository,
 } from 'src/iam/domains/ports/user.repository';
 import { InvalidRefreshTokenError } from 'src/iam/domains/errors';
+import { MfaFactorService } from '../services/mfa-factor.service';
 
 /**
  * Rafraîchissement de session : renouvelle le couple de tokens **et** rend le
@@ -22,6 +23,7 @@ export class RefreshTokenUseCase {
   constructor(
     private readonly tokenService: TokenService,
     @Inject(USER_REPOSITORY) private readonly userRepository: UserRepository,
+    private readonly mfaFactors: MfaFactorService,
   ) {}
 
   async execute(refreshToken: string): Promise<AuthSession> {
@@ -48,8 +50,20 @@ export class RefreshTokenUseCase {
       throw new InvalidRefreshTokenError();
     }
 
+    // Relu à chaque rafraîchissement, au même titre que le statut et le rôle :
+    // un facteur armé ou retiré depuis la connexion doit se voir sur la session
+    // reprise, sans quoi le front garderait l'état du jour où elle a été
+    // ouverte.
+    const activeMfaMethod = await this.mfaFactors.findActiveMethod(sub);
+
     // `toJSON()` est la seule projection publiable — l'empreinte du mot de
     // passe en est exclue par construction (PublicUser).
-    return { user: user.toJSON(), ...tokens };
+    return {
+      user: user.toJSON({
+        enabled: activeMfaMethod !== null,
+        method: activeMfaMethod,
+      }),
+      ...tokens,
+    };
   }
 }

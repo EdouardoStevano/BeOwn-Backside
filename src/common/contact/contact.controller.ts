@@ -15,7 +15,7 @@ import {
   MaxLength,
 } from 'class-validator';
 import { Public } from 'src/common/auth/public.decorator';
-import { EMAIL_SERVICE, type EmailService } from 'src/common/email/email.service';
+import { EMAIL_SERVICE, type EmailService } from 'src/shared/email/email.service';
 import { PlatformSettingsService } from 'src/common/platform-settings/platform-settings.service';
 
 class ContactDto {

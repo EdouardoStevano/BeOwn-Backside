@@ -5,7 +5,7 @@ import {
   MfaChallengePurposeMismatchError,
   NoActiveMfaMethodError,
 } from 'src/iam/domains/errors';
-import { TfaMethodType } from 'src/iam/domains/enums/tfa-method.enum';
+import { MfaMethodType } from 'src/iam/domains/enums/mfa-method.enum';
 import { MfaChallengePurpose } from 'src/iam/applications/models/mfa-challenge';
 import { MFAChallengeCacheService } from '../services/mfa-challenge-cache.service';
 import { MfaFactorService } from '../services/mfa-factor.service';
@@ -14,13 +14,13 @@ import { MfaFactorService } from '../services/mfa-factor.service';
 export interface RequestDisableMfaCommand {
   userId: number;
   /** Canal visé. Par défaut, le facteur actif du compte. */
-  method?: TfaMethodType;
+  method?: MfaMethodType;
 }
 
 /** Défi à relever pour obtenir la désactivation. */
 export interface DisableMfaChallenge {
   challengeId: string;
-  method: TfaMethodType;
+  method: MfaMethodType;
   /** Destination masquée du code, absente pour TOTP. */
   sentTo?: string;
 }
@@ -80,7 +80,7 @@ export class DisableMfaUseCase {
   }
 
   /** Second temps : vérifie le code et retire le facteur. */
-  async confirm(command: ConfirmDisableMfaCommand): Promise<TfaMethodType> {
+  async confirm(command: ConfirmDisableMfaCommand): Promise<MfaMethodType> {
     const challenge = await this.mfaChallenges.find(command.challengeId);
     if (!challenge) throw new MfaChallengeNotFoundError();
 

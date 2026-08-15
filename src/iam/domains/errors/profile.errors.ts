@@ -17,6 +17,19 @@ export class WeakPasswordError extends IamError {
   }
 }
 
+/**
+ * Adresse email vide, trop longue ou mal formée.
+ *
+ * Le message ne reprend jamais la valeur saisie : cet endpoint est public, et
+ * la réponse finit dans les logs comme dans l'historique du navigateur.
+ */
+export class InvalidEmailError extends IamError {
+  readonly kind = IamErrorKind.INVALID_INPUT;
+  constructor(reason: string) {
+    super(`L'adresse email ${reason}`, { code: 'INVALID_EMAIL' });
+  }
+}
+
 /** Prénom ou nom vide, trop court ou trop long. */
 export class InvalidPersonNameError extends IamError {
   readonly kind = IamErrorKind.INVALID_INPUT;

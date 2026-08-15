@@ -11,7 +11,7 @@ import {
 import {
   EMAIL_SERVICE,
   type EmailService,
-} from 'src/common/email/email.service';
+} from 'src/shared/email/email.service';
 import { PasswordResetEmailFailedError } from 'src/iam/domains/errors';
 
 @Injectable()

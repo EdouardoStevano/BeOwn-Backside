@@ -3,8 +3,12 @@ import { InvalidRefreshTokenError } from 'src/iam/domains/errors';
 import { User } from 'src/iam/domains/models/user';
 import { buildUser as buildUserFixture } from 'src/iam/domains/models/user.fixture';
 import { UserStatus } from 'src/iam/domains/enums/user.enum';
+import { MfaMethodType } from 'src/iam/domains/enums/mfa-method.enum';
 
-const makeUsecase = (user: User | null = buildUserFixture()) => {
+const makeUsecase = (
+  user: User | null = buildUserFixture(),
+  activeMfaMethod: MfaMethodType | null = null,
+) => {
   const tokenService = {
     refreshTokens: jest.fn().mockResolvedValue({
       accessToken: 'new-access',
@@ -30,12 +34,17 @@ const makeUsecase = (user: User | null = buildUserFixture()) => {
     savePreferences: jest.fn(),
   };
 
+  const mfaFactors = {
+    findActiveMethod: jest.fn().mockResolvedValue(activeMfaMethod),
+  };
+
   const usecase = new RefreshTokenUseCase(
     tokenService as any,
     userRepository as any,
+    mfaFactors as any,
   );
 
-  return { usecase, tokenService, userRepository, user };
+  return { usecase, tokenService, userRepository, mfaFactors, user };
 };
 
 describe('RefreshTokenUseCase', () => {
@@ -68,6 +77,33 @@ describe('RefreshTokenUseCase', () => {
     const session = await usecase.execute('old-refresh');
 
     expect(session.user.status).toBe(UserStatus.SUSPENDU);
+  });
+
+  it('publie l’état MFA du compte, relu à chaque rafraîchissement', async () => {
+    const { usecase, mfaFactors } = makeUsecase(
+      buildUserFixture({ status: UserStatus.ACTIF }),
+      MfaMethodType.TOTP,
+    );
+
+    const session = await usecase.execute('old-refresh');
+
+    expect(session.user.mfa).toEqual({
+      enabled: true,
+      method: MfaMethodType.TOTP,
+    });
+    // Relu, et non repris du token : un facteur armé depuis la connexion doit
+    // se voir sur la session reprise.
+    expect(mfaFactors.findActiveMethod).toHaveBeenCalledWith(42);
+  });
+
+  it('compte sans facteur : `enabled: false`, et non un champ absent', async () => {
+    const { usecase } = makeUsecase(
+      buildUserFixture({ status: UserStatus.ACTIF }),
+    );
+
+    const session = await usecase.execute('old-refresh');
+
+    expect(session.user.mfa).toEqual({ enabled: false, method: null });
   });
 
   it('refresh token invalide ou révoqué : 401, sans lecture en base', async () => {

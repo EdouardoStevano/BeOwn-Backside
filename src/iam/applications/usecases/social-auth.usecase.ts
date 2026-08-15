@@ -11,6 +11,8 @@ import {
   EmailAlreadyRegisteredError,
   SocialAuthFailedError,
 } from 'src/iam/domains/errors';
+import { NO_MFA } from 'src/iam/domains/mappers/user.mapper';
+import { MfaFactorService } from '../services/mfa-factor.service';
 
 @Injectable()
 export class SocialAuthUseCase {
@@ -18,6 +20,7 @@ export class SocialAuthUseCase {
     private readonly tokenService: TokenService,
     @Inject(USER_REPOSITORY) private readonly usersRepository: UserRepository,
     private readonly userFactory: UserFactory,
+    private readonly mfaFactors: MfaFactorService,
   ) {}
 
   async authenticate(
@@ -40,7 +43,22 @@ export class SocialAuthUseCase {
           role: existing.role,
           refreshTokenId: null,
         });
-        return { ...tokens, user: existing.toJSON(), isNewUser: false };
+
+        // Publié, mais pas opposé : ce parcours ne réclame pas le second
+        // facteur — le fournisseur a déjà authentifié le porteur. Le front lit
+        // donc ici l'état réel du compte, comme sur toute autre session.
+        const activeMfaMethod = await this.mfaFactors.findActiveMethod(
+          existing.userId,
+        );
+
+        return {
+          ...tokens,
+          user: existing.toJSON({
+            enabled: activeMfaMethod !== null,
+            method: activeMfaMethod,
+          }),
+          isNewUser: false,
+        };
       }
 
       const newUser = await this.userFactory.create({
@@ -59,7 +77,13 @@ export class SocialAuthUseCase {
         role: savedUser.role,
         refreshTokenId: null,
       });
-      return { ...tokens, user: savedUser.toJSON(), isNewUser: true };
+      // Compte qui vient de naître : aucun facteur ne peut y être armé, rien à
+      // relire.
+      return {
+        ...tokens,
+        user: savedUser.toJSON(NO_MFA),
+        isNewUser: true,
+      };
     } catch (err) {
       const pgUniqueViolationErrorCode = '23505';
       if (err.code === pgUniqueViolationErrorCode) {

@@ -1,6 +1,6 @@
-import { SignInUsecase, type SignInResult } from './sign-in.usecase';
+import { SignInUsecase } from './sign-in.usecase';
 import { MfaFactorService } from '../services/mfa-factor.service';
-import { TfaMethodType } from 'src/iam/domains/enums/tfa-method.enum';
+import { MfaMethodType } from 'src/iam/domains/enums/mfa-method.enum';
 import { MfaChallengePurpose } from 'src/iam/applications/models/mfa-challenge';
 import { type AuthSession } from 'src/iam/applications/models/auth-token';
 import { User } from 'src/iam/domains/models/user';
@@ -15,6 +15,8 @@ import {
   IamError,
   INVALID_CREDENTIALS_MESSAGE,
   InvalidCredentialsError,
+  MFA_REQUIRED_CODE,
+  MfaRequiredError,
   OTP_REQUIRED_CODE,
 } from 'src/iam/domains/errors';
 
@@ -48,7 +50,7 @@ const makeUsecase = (user: User | null, passwordValid = true) => {
   // Par défaut, aucun facteur MFA actif : la connexion se termine en un temps,
   // comme avant l'introduction de la double authentification.
   const challengeStrategy = {
-    method: TfaMethodType.TOTP,
+    method: MfaMethodType.TOTP,
     isActiveFor: jest.fn().mockResolvedValue(false),
     issue: jest.fn().mockResolvedValue({}),
     verify: jest.fn(),
@@ -85,14 +87,6 @@ const makeUsecase = (user: User | null, passwordValid = true) => {
   };
 };
 
-/** Rétrécit le résultat au cas « session ouverte », sinon échoue le test. */
-const expectSession = (result: SignInResult): AuthSession => {
-  if ('mfaRequired' in result) {
-    throw new Error('Session attendue, défi MFA reçu.');
-  }
-  return result;
-};
-
 /** Capture l'erreur de domaine levée par le use case. */
 const catchError = async (fn: () => Promise<unknown>): Promise<IamError> => {
   try {
@@ -107,12 +101,10 @@ describe('SignInUsecase', () => {
   it('connecte un compte actif et renvoie les tokens AVEC le compte', async () => {
     const { usecase, tokenService } = makeUsecase(buildUser(UserStatus.ACTIF));
 
-    const session = expectSession(
-      await usecase.execute({
-        email: 'user@example.com',
-        password: 'pw',
-      }),
-    );
+    const session: AuthSession = await usecase.execute({
+      email: 'user@example.com',
+      password: 'pw',
+    });
 
     expect(session).toMatchObject({
       accessToken: 'access',
@@ -124,37 +116,59 @@ describe('SignInUsecase', () => {
       status: UserStatus.ACTIF,
     });
     expect(session.user.userEmail?.email).toBe('user@example.com');
+    // Compte sans facteur : le front le lit sur la session, sans enchaîner un
+    // GET /auth/mfa/methods.
+    expect(session.user.mfa).toEqual({ enabled: false, method: null });
     // Le contrat exclut l'empreinte du mot de passe, sous n'importe quelle clé.
     expect(JSON.stringify(session)).not.toMatch(/password/i);
     expect(tokenService.generateTokens).toHaveBeenCalled();
   });
 
+  it('publie le facteur actif quand la session est ouverte par openSession', async () => {
+    const { usecase } = makeUsecase(buildUser(UserStatus.ACTIF));
+
+    const session = await usecase.openSession(
+      buildUser(UserStatus.ACTIF),
+      MfaMethodType.SMS,
+    );
+
+    expect(session.user.mfa).toEqual({
+      enabled: true,
+      method: MfaMethodType.SMS,
+    });
+  });
+
   describe('double authentification', () => {
-    it('renvoie un défi au lieu des tokens quand un facteur est actif', async () => {
+    it('lève MFA_REQUIRED au lieu de rendre des tokens quand un facteur est actif', async () => {
       const { usecase, tokenService, challengeStrategy, mfaChallenges } =
         makeUsecase(buildUser(UserStatus.ACTIF));
       challengeStrategy.isActiveFor.mockResolvedValue(true);
-      challengeStrategy.issue.mockResolvedValue({ sentTo: undefined });
+      challengeStrategy.issue.mockResolvedValue({ sentTo: 'j***n@example.com' });
 
-      const result = await usecase.execute({
-        email: 'user@example.com',
-        password: 'pw',
-      });
+      const caught = await catchError(() =>
+        usecase.execute({ email: 'user@example.com', password: 'pw' }),
+      );
 
-      expect(result).toEqual({
-        mfaRequired: true,
+      // Une erreur et non un résultat : un retour normal de `execute` signifie
+      // désormais « session ouverte », sans exception à chercher dans le corps.
+      expect(caught).toBeInstanceOf(MfaRequiredError);
+      expect(caught.code).toBe(MFA_REQUIRED_CODE);
+      // De quoi relever le défi, et rien de plus.
+      expect(caught.details).toEqual({
         challengeId: 'challenge-1',
-        method: TfaMethodType.TOTP,
-        sentTo: undefined,
+        method: MfaMethodType.TOTP,
+        sentTo: 'j***n@example.com',
       });
       // Ni tokens ni profil : le mot de passe seul ne donne rien à voir du
       // compte tant que le second facteur n'est pas prouvé.
       expect(tokenService.generateTokens).not.toHaveBeenCalled();
-      expect(JSON.stringify(result)).not.toMatch(/accessToken|userEmail/);
+      expect(JSON.stringify(caught.details)).not.toMatch(
+        /accessToken|userEmail/,
+      );
       expect(mfaChallenges.issue).toHaveBeenCalledWith(
         expect.objectContaining({
           userId: 42,
-          method: TfaMethodType.TOTP,
+          method: MfaMethodType.TOTP,
           purpose: MfaChallengePurpose.SIGN_IN,
         }),
       );

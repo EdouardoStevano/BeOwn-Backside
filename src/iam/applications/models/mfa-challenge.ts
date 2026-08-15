@@ -1,4 +1,4 @@
-import { TfaMethodType } from 'src/iam/domains/enums/tfa-method.enum';
+import { MfaMethodType } from 'src/iam/domains/enums/mfa-method.enum';
 
 /**
  * Ce à quoi un challenge donne droit une fois prouvé. Le champ existe pour
@@ -28,7 +28,7 @@ export interface MfaChallenge {
   id: string;
   userId: number;
   /** Canal sur lequel la preuve est attendue. */
-  method: TfaMethodType;
+  method: MfaMethodType;
   purpose: MfaChallengePurpose;
   /**
    * Destination du code lorsqu'il a fallu l'envoyer (email, SMS). Absente pour

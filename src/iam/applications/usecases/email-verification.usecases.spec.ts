@@ -7,7 +7,7 @@ import { ConfirmEmailUseCase } from './confirm-email.usecase';
 import type { TokenEmailCacheService } from '../services/token-email-cache.service';
 import type { EmailTokenPayload } from 'src/iam/applications/models/auth-token';
 import type { TokenService } from '../services/token.service';
-import type { AuthMailer } from 'src/iam/applications/ports/auth-mailer.port';
+import { AuthMailerService } from 'src/iam/applications/services/auth-mailer.service';
 import type { UserRepository } from 'src/iam/domains/ports/user.repository';
 import { User } from 'src/iam/domains/models/user';
 import { buildUser as buildUserFixture } from 'src/iam/domains/models/user.fixture';
@@ -46,7 +46,7 @@ const makeDeps = (user: User | null) => {
     tokenService as unknown as TokenService,
     usersRepository as unknown as UserRepository,
     emailTokenCache as unknown as TokenEmailCacheService,
-    authMailer as unknown as AuthMailer,
+    authMailer as unknown as AuthMailerService,
   );
   const confirmUsecase = new ConfirmEmailUseCase(
     tokenService as unknown as TokenService,

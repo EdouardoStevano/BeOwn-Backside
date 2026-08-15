@@ -1,4 +1,4 @@
-import { UserEmail } from 'src/iam/domains/value-objects/user-email.vo';
+import { Email } from 'src/iam/domains/value-objects/email.vo';
 import {
   FirstName,
   LastName,
@@ -7,7 +7,9 @@ import { UserRole, UserStatus } from 'src/iam/domains/enums/user.enum';
 import {
   UserMapper,
   type PublicUser,
+  type PublicUserMfa,
 } from 'src/iam/domains/mappers/user.mapper';
+import { AggregateRoot } from '@nestjs/cqrs';
 
 /**
  * Compare un mot de passe en clair à son empreinte. Injecté à l'appel plutôt
@@ -32,7 +34,10 @@ export interface UserSnapshot {
   lastLoginAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
-  userEmail: UserEmail | null;
+  /** Primitives, comme le reste du snapshot — le VO ne franchit pas la frontière. */
+  email: string | null;
+  emailVerified: boolean;
+  emailVerifiedDate: Date | null;
 }
 
 /**
@@ -55,7 +60,9 @@ export interface UserState {
   lastLoginAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
-  userEmail: UserEmail | null;
+  email: Email | null;
+  emailVerified: boolean;
+  emailVerifiedDate: Date | null;
 }
 
 export interface RegisterUserProps {
@@ -90,7 +97,7 @@ export interface RegisterUserProps {
  * projection publiable) appartient à `UserMapper` — cette classe ne porte plus
  * que le métier (§4 — SRP).
  */
-export class User {
+export class User extends AggregateRoot {
   private _userId: number;
   private _firstname: FirstName;
   private _lastname: LastName | null;
@@ -102,7 +109,19 @@ export class User {
   private _lastLoginAt: Date | null;
   private _createdAt: Date;
   private _updatedAt: Date;
-  private _userEmail: UserEmail | null;
+  /**
+   * L'adresse et son état de vérification, tenus par la racine.
+   *
+   * Ils formaient un seul VO `UserEmail` mutable, dont `verify()` faisait
+   * avancer une transition métier hors de l'agrégat : `markEmailAsVerified()`
+   * devait déléguer la moitié du travail à l'objet valeur et garder l'autre
+   * (le passage CREE → EMAIL_VERIFIE). La règle « adresse vérifiée » et la
+   * règle « compte activé » étant la même décision, elles vivent au même
+   * endroit. Le VO ne conserve que ce qui définit vraiment une valeur.
+   */
+  private _email: Email | null;
+  private _emailVerified: boolean;
+  private _emailVerifiedDate: Date | null;
 
   /**
    * @internal Réservé à `User.register` et à `UserMapper`.
@@ -114,6 +133,7 @@ export class User {
    * **création** d'un compte : passer par ici, c'est se déclarer mapper.
    */
   constructor(state: UserState) {
+    super();
     this._userId = state.userId;
     this._firstname = state.firstname;
     this._lastname = state.lastname;
@@ -125,13 +145,18 @@ export class User {
     this._lastLoginAt = state.lastLoginAt;
     this._createdAt = state.createdAt;
     this._updatedAt = state.updatedAt;
-    this._userEmail = state.userEmail;
+    this._email = state.email;
+    this._emailVerified = state.emailVerified;
+    this._emailVerifiedDate = state.emailVerifiedDate;
   }
 
   /** Nouveau compte : statut CREE, identifiants non encore vérifiés. */
   static register(props: RegisterUserProps): User {
-    const email = new UserEmail(props.email);
-    if (props.emailVerified) email.verify();
+    // `Email.of` et non une simple normalisation : une adresse malformée est
+    // désormais refusée à la création, quel que soit le point d'entrée. Elle ne
+    // l'était nulle part côté domaine — seul le DTO HTTP contrôlait, donc un
+    // import ou un profil OAuth pouvait faire naître un compte injoignable.
+    const email = Email.of(props.email);
 
     return new User({
       userId: undefined as unknown as number, // attribué par la persistance
@@ -147,7 +172,11 @@ export class User {
       lastLoginAt: null,
       createdAt: undefined as unknown as Date,
       updatedAt: undefined as unknown as Date,
-      userEmail: email,
+      email,
+      // Un compte social arrive avec une adresse déjà éprouvée par le
+      // fournisseur : la date de vérification est celle de l'inscription.
+      emailVerified: props.emailVerified === true,
+      emailVerifiedDate: props.emailVerified === true ? new Date() : null,
     });
   }
 
@@ -184,13 +213,16 @@ export class User {
   get updatedAt(): Date {
     return this._updatedAt;
   }
-  /** VO en lecture seule : `verify()` reste inaccessible sans passer par l'entité. */
-  get userEmail(): UserEmail | null {
-    return this._userEmail;
-  }
   /** Raccourci de lecture — l'adresse est toujours présente en pratique. */
   get email(): string {
-    return this._userEmail?.email ?? '';
+    return this._email?.value ?? '';
+  }
+  /** @internal Réservé à `UserMapper`, qui a besoin de la valeur nullable. */
+  get emailOrNull(): string | null {
+    return this._email?.value ?? null;
+  }
+  get emailVerifiedDate(): Date | null {
+    return this._emailVerifiedDate;
   }
 
   // ── Règles métier ─────────────────────────────────────────────────────────
@@ -214,7 +246,7 @@ export class User {
   }
 
   isEmailVerified(): boolean {
-    return this._userEmail?.isVerified ?? false;
+    return this._emailVerified;
   }
 
   isSuspended(): boolean {
@@ -248,7 +280,11 @@ export class User {
    * sorte qu'aucun appelant ne puisse vérifier l'email en oubliant le statut.
    */
   markEmailAsVerified(): void {
-    this._userEmail?.verify();
+    // Idempotent : re-vérifier une adresse déjà vérifiée ne déplace pas la date.
+    if (!this._emailVerified) {
+      this._emailVerified = true;
+      this._emailVerifiedDate = new Date();
+    }
     if (this._status === UserStatus.CREE) {
       this._status = UserStatus.EMAIL_VERIFIE;
     }
@@ -308,9 +344,14 @@ export class User {
    * sérialisation indirects — un `User` glissé dans une réponse sans passer par
    * un appel explicite. Sans cette méthode, il ressortirait avec ses clés
    * privées `_userId`, `_firstname`… et surtout `_passwordHash`.
+   *
+   * `mfa` est le seul apport extérieur : le second facteur ne fait pas partie
+   * de l'agrégat, l'appelant qui l'a chargé le passe ici. Omis — cas de la
+   * sérialisation automatique par `res.json()` — la clé n'apparaît tout
+   * simplement pas.
    */
-  toJSON(): PublicUser {
-    return UserMapper.toPublic(this);
+  toJSON(mfa?: PublicUserMfa): PublicUser {
+    return UserMapper.toPublic(this, mfa);
   }
 
   get passwordHash(): string | null {

@@ -18,9 +18,12 @@ import {
   InvalidCredentialsError,
   InvalidEmailVerificationTokenError,
   InvalidRefreshTokenError,
+  MFA_REQUIRED_CODE,
+  MfaRequiredError,
   OtpDeliveryFailedError,
   UserNotFoundError,
 } from 'src/iam/domains/errors';
+import { MfaMethodType } from 'src/iam/domains/enums/mfa-method.enum';
 
 /** Capture ce que le filtre écrirait sur la réponse HTTP. */
 const render = (error: IamError) => {
@@ -129,5 +132,41 @@ describe('IamErrorFilter — équivalence avec les exceptions HTTP remplacées',
       new AccountDeletionBlockedError([{ code: 'NO_IBAN' }]),
     );
     expect((body as Record<string, unknown>).message).toBeUndefined();
+  });
+});
+
+describe('IamErrorFilter — forme standard', () => {
+  it('publie le code et les details à la racine du corps', () => {
+    // Sans cela, le front apprendrait qu'un second facteur manque sans savoir
+    // lequel ni contre quel défi le prouver : `MfaRequiredError` serait
+    // indiscernable d'un échec d'identifiants.
+    const { status, body } = render(
+      new MfaRequiredError({
+        challengeId: 'challenge-1',
+        method: MfaMethodType.SMS,
+        sentTo: '+336***78',
+      }),
+    );
+
+    expect(status).toBe(401);
+    expect(body).toEqual({
+      statusCode: 401,
+      error: 'Unauthorized',
+      code: MFA_REQUIRED_CODE,
+      message:
+        'Double authentification requise — terminez la connexion sur POST /auth/sign-in/mfa.',
+      challengeId: 'challenge-1',
+      method: MfaMethodType.SMS,
+      sentTo: '+336***78',
+    });
+  });
+
+  it('omet la clé code quand l’erreur n’en porte pas', () => {
+    // Le trio historique reste intact pour les erreurs sans contrat de code.
+    expect(render(new InvalidCredentialsError()).body).toEqual({
+      statusCode: 401,
+      error: 'Unauthorized',
+      message: 'Adresse email ou mot de passe incorrect',
+    });
   });
 });

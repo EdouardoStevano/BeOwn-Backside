@@ -1,15 +1,17 @@
 import { Logger } from '@nestjs/common';
-import { TfaMethodType } from 'src/iam/domains/enums/tfa-method.enum';
-import { type OtpStore } from 'src/iam/applications/ports/otp-store.port';
-import { type ChannelTfaMethodRepository } from 'src/iam/domains/ports/channel-tfa-method.repository';
+import { MfaMethodType } from 'src/iam/domains/enums/mfa-method.enum';
+import { OtpService } from 'src/iam/applications/services/otp.service';
+import { type MfaMethodRepository } from 'src/iam/domains/ports/mfa-method.repository';
+import { MfaMethod } from 'src/iam/domains/models/mfa-method';
 import {
   NoActiveMfaMethodError,
   OtpDeliveryFailedError,
 } from 'src/iam/domains/errors';
 import {
-  TfaChallengeEmission,
-  TfaChallengeStrategy,
-} from './tfa-challenge.strategy';
+  MfaChallengeEmission,
+  MfaChallengeStrategy,
+  MfaMethodSummary,
+} from './mfa-challenge.strategy';
 
 /**
  * Clé de l'OTP de vérification. Distincte de celle de l'enrôlement
@@ -17,7 +19,7 @@ import {
  * (`otp:email:<email>`) : un code émis pour prouver un facteur déjà actif ne
  * doit ni confirmer un enrôlement, ni l'inverse.
  */
-const challengeOtpKey = (method: TfaMethodType, userId: number): string =>
+const challengeOtpKey = (method: MfaMethodType, userId: number): string =>
   `otp:mfa:${method}:${userId}`;
 
 /**
@@ -29,29 +31,44 @@ const challengeOtpKey = (method: TfaMethodType, userId: number): string =>
  * lit sa destination en base au lieu de la recevoir de l'appelant. Personne ne
  * choisit où part le code d'un facteur déjà enrôlé.
  */
-export abstract class ChannelChallengeStrategy implements TfaChallengeStrategy {
-  abstract readonly method: TfaMethodType;
+export abstract class ChannelChallengeStrategy implements MfaChallengeStrategy {
+  abstract readonly method: MfaMethodType;
 
   protected readonly logger = new Logger(this.constructor.name);
 
   protected constructor(
-    protected readonly otpStore: OtpStore,
-    protected readonly methodRepository: ChannelTfaMethodRepository,
+    protected readonly otpService: OtpService,
+    protected readonly methodRepository: MfaMethodRepository,
   ) {}
 
   /** Remise effective du code sur le canal. */
-  protected abstract deliver(target: string, otp: string): Promise<void>;
+  protected abstract deliver(credential: string, otp: string): Promise<void>;
 
   /** Message rendu à l'appelant si la remise échoue. */
   protected abstract deliveryFailureMessage(): string;
 
   async isActiveFor(userId: number): Promise<boolean> {
-    return (await this.activeTarget(userId)) !== null;
+    return (await this.activeMethod(userId)) !== null;
   }
 
-  async issue(userId: number): Promise<TfaChallengeEmission> {
-    const target = await this.activeTarget(userId);
-    if (!target) throw new NoActiveMfaMethodError();
+  async describeFor(userId: number): Promise<MfaMethodSummary[]> {
+    const methods = await this.methodRepository.findAllByUserId(
+      userId,
+      this.method,
+    );
+
+    return methods.map((entry) => ({
+      method: this.method,
+      isActive: entry.isActive(),
+      // Masquée, comme à l'émission du défi : cette liste sert à reconnaître
+      // ses propres facteurs, pas à relire l'adresse ou le numéro en clair.
+      sentTo: entry.maskedDestination(),
+    }));
+  }
+
+  async issue(userId: number): Promise<MfaChallengeEmission> {
+    const factor = await this.activeMethod(userId);
+    if (!factor) throw new NoActiveMfaMethodError();
 
     const key = challengeOtpKey(this.method, userId);
 
@@ -60,12 +77,12 @@ export abstract class ChannelChallengeStrategy implements TfaChallengeStrategy {
     // quelqu'un qui n'a pas reçu son SMS, et le laisserait à la porte de son
     // propre compte — un enrôlement abandonné, lui, n'empêche pas de se
     // connecter.
-    const otp = await this.otpStore.generateOtp(key);
+    const otp = await this.otpService.generateOtp(key);
 
     try {
-      await this.deliver(target, otp);
+      await this.deliver(factor.destination, otp);
     } catch (err) {
-      await this.otpStore.invalidate(key);
+      await this.otpService.invalidate(key);
       this.logger.error(
         `Échec de l'envoi du code de vérification ${this.method} — OTP invalidé pour autoriser un retry.`,
         err instanceof Error ? err.stack : String(err),
@@ -73,31 +90,34 @@ export abstract class ChannelChallengeStrategy implements TfaChallengeStrategy {
       throw new OtpDeliveryFailedError(this.deliveryFailureMessage(), err);
     }
 
-    return { sentTo: this.mask(target) };
+    return { sentTo: factor.maskedDestination() };
   }
 
   async verify(userId: number, code: string): Promise<boolean> {
     if (!(await this.isActiveFor(userId))) return false;
-    return this.otpStore.verifyOtp(challengeOtpKey(this.method, userId), code);
+    return this.otpService.verifyOtp(
+      challengeOtpKey(this.method, userId),
+      code,
+    );
   }
 
   async deactivate(userId: number): Promise<void> {
-    await this.methodRepository.deactivateAllForUser(userId);
+    // Portée volontairement limitée au canal, contrairement à l'activation :
+    // retirer un facteur ne doit toucher que celui qu'on retire. Comme le
+    // compte n'en a qu'un actif à la fois, cela revient au même aujourd'hui —
+    // mais dire « désactive tout » ici serait exact par accident.
+    await this.methodRepository.deactivateChannel(userId, this.method);
     // Le code en vol devient sans objet : le laisser vivre permettrait de
     // prouver un facteur qui n'existe plus.
-    await this.otpStore.invalidate(challengeOtpKey(this.method, userId));
+    await this.otpService.invalidate(challengeOtpKey(this.method, userId));
   }
 
-  /** Destination du canal si — et seulement si — il est actif. */
-  private async activeTarget(userId: number): Promise<string | null> {
-    const methods = await this.methodRepository.findAllByUserId(userId);
-    return methods.find((method) => method.isActive)?.target ?? null;
+  /** Facteur actif du canal, s'il y en a un. */
+  private async activeMethod(userId: number): Promise<MfaMethod | null> {
+    const methods = await this.methodRepository.findAllByUserId(
+      userId,
+      this.method,
+    );
+    return methods.find((factor) => factor.isActive()) ?? null;
   }
-
-  /**
-   * La destination est renvoyée tronquée : elle doit permettre à son titulaire
-   * de reconnaître où le code est parti, sans révéler l'adresse ou le numéro
-   * complet à qui présente seulement un mot de passe.
-   */
-  protected abstract mask(target: string): string;
 }

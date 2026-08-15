@@ -17,8 +17,9 @@ import {
   AccountSuspendedError,
   EmailNotVerifiedError,
   InvalidCredentialsError,
+  MfaRequiredError,
 } from 'src/iam/domains/errors';
-import { TfaMethodType } from 'src/iam/domains/enums/tfa-method.enum';
+import { MfaMethodType } from 'src/iam/domains/enums/mfa-method.enum';
 import { MfaChallengePurpose } from 'src/iam/applications/models/mfa-challenge';
 import { MFAChallengeCacheService } from '../services/mfa-challenge-cache.service';
 import { User } from 'src/iam/domains/models/user';
@@ -30,25 +31,6 @@ export interface SignInCommand {
   password: string;
 }
 
-/**
- * Connexion interrompue par la double authentification : le mot de passe est
- * bon, il manque le second facteur. Aucun token n'est délivré à ce stade.
- */
-export interface MfaChallengeRequired {
-  mfaRequired: true;
-  challengeId: string;
-  method: TfaMethodType;
-  /** Destination masquée du code, absente pour TOTP. */
-  sentTo?: string;
-}
-
-/**
- * Deux issues possibles à une connexion valide. Le discriminant `mfaRequired`
- * est présent d'un seul côté : le front teste ce champ plutôt que de deviner à
- * l'absence d'`accessToken`.
- */
-export type SignInResult = AuthSession | MfaChallengeRequired;
-
 @Injectable()
 export class SignInUsecase {
   constructor(
@@ -59,7 +41,14 @@ export class SignInUsecase {
     private readonly mfaChallenges: MFAChallengeCacheService,
   ) {}
 
-  async execute(command: SignInCommand): Promise<SignInResult> {
+  /**
+   * Ouvre une session, ou lève `MfaRequiredError` si un second facteur reste à
+   * éprouver. Le type de retour ne dit donc qu'une chose : `AuthSession`. Une
+   * union `AuthSession | MfaChallengeRequired` obligeait chaque appelant à
+   * rétrécir avant de lire un token ; l'issue « il manque une étape » passe
+   * désormais par le canal que tout client traite déjà à part.
+   */
+  async execute(command: SignInCommand): Promise<AuthSession> {
     const user = await this.usersRepository.findByEmail(command.email);
 
     if (!user) {
@@ -120,25 +109,36 @@ export class SignInUsecase {
       });
 
       // Ni tokens ni profil tant que le facteur n'est pas prouvé : le mot de
-      // passe seul ne doit rien donner à voir du compte.
-      return {
-        mfaRequired: true,
+      // passe seul ne doit rien donner à voir du compte. L'erreur ne porte donc
+      // que de quoi relever le défi — id, canal, destination masquée.
+      throw new MfaRequiredError({
         challengeId: challenge.id,
         method,
         sentTo,
-      };
+      });
     }
 
-    return this.openSession(user);
+    // `method` vaut forcément `null` ici : la branche ci-dessus est sortie.
+    return this.openSession(user, method);
   }
 
   /**
    * Délivre les tokens et le profil. Extrait pour que
-   * `VerifyMfaChallengeUseCase` referme exactement la même connexion à l'issue
+   * `CompleteMfaSignInUseCase` referme exactement la même connexion à l'issue
    * du second facteur — deux chemins vers une session, une seule façon de
    * l'ouvrir.
+   *
+   * `activeMfaMethod` est un paramètre et non une relecture : les deux
+   * appelants viennent de l'établir — l'un en cherchant s'il fallait opposer un
+   * facteur, l'autre en en éprouvant un. Le redemander ferait jusqu'à trois
+   * requêtes de plus par connexion pour une réponse déjà connue. Explicite
+   * plutôt qu'optionnel : un appelant qui ne sait pas doit se poser la
+   * question, pas hériter d'un `false` par défaut.
    */
-  async openSession(user: User): Promise<AuthSession> {
+  async openSession(
+    user: User,
+    activeMfaMethod: MfaMethodType | null,
+  ): Promise<AuthSession> {
     const tokens = await this.tokenService.generateTokens({
       sub: user.userId,
       email: user.email,
@@ -148,6 +148,12 @@ export class SignInUsecase {
     // Le compte accompagne les tokens : le front dispose du profil sans
     // enchaîner un GET /users/me juste après la connexion. `toJSON()` est la
     // seule projection publiable — l'empreinte du mot de passe en est exclue.
-    return { user: user.toJSON(), ...tokens };
+    return {
+      user: user.toJSON({
+        enabled: activeMfaMethod !== null,
+        method: activeMfaMethod,
+      }),
+      ...tokens,
+    };
   }
 }

@@ -10,25 +10,14 @@ import { NotificationsModule } from 'src/notifications/notifications.module';
 import { HASHING_SERVICE } from 'src/common/hashing/hashing.service';
 import { BcryptService } from 'src/common/hashing/bcrypt.service';
 import { RecaptchaService } from 'src/common/recaptcha/recaptcha.service';
-import { TFAMethodEntity } from 'src/iam/infrastructure/persistence/entities/tfa-method.entity';
-import { TOTPMethodEntity } from 'src/iam/infrastructure/persistence/entities/totp-method.entity';
-import { EmailMethodEntity } from 'src/iam/infrastructure/persistence/entities/email-method.entity';
-import { SMSMethodEntity } from 'src/iam/infrastructure/persistence/entities/sms-method.entity';
-import { AUTH_MAILER } from 'src/iam/applications/ports/auth-mailer.port';
-import { OTP_STORE } from 'src/iam/applications/ports/otp-store.port';
+import { MfaMethodEntity } from 'src/iam/infrastructure/persistence/entities/mfa-method.entity';
+import { OTP_RECORD_STORE } from 'src/iam/applications/ports/otp-record-store.port';
 import { TOTP_GENERATOR } from 'src/iam/applications/ports/totp-generator.port';
-import { TOTP_METHOD_REPOSITORY } from 'src/iam/domains/ports/totp-method.repository';
-import {
-  EMAIL_METHOD_REPOSITORY,
-  SMS_METHOD_REPOSITORY,
-} from 'src/iam/domains/ports/channel-tfa-method.repository';
+import { MFA_METHOD_REPOSITORY } from 'src/iam/domains/ports/mfa-method.repository';
 import { SECRET_CIPHER } from 'src/iam/applications/ports/secret-cipher.port';
-import { NestAuthMailerAdapter } from 'src/iam/infrastructure/mailer/nest-auth-mailer.adapter';
-import { RedisOtpStoreAdapter } from 'src/iam/infrastructure/otp/redis-otp-store.adapter';
+import { CacheOtpRecordStoreAdapter } from 'src/iam/infrastructure/otp/cache-otp-record-store.adapter';
 import { OtplibTotpGeneratorAdapter } from 'src/iam/infrastructure/otp/otplib-totp-generator.adapter';
-import { TypeOrmTotpMethodRepository } from 'src/iam/infrastructure/persistence/repositories/typeorm-totp-method.repository';
-import { TypeOrmEmailMethodRepository } from 'src/iam/infrastructure/persistence/repositories/typeorm-email-method.repository';
-import { TypeOrmSmsMethodRepository } from 'src/iam/infrastructure/persistence/repositories/typeorm-sms-method.repository';
+import { TypeOrmMfaMethodRepository } from 'src/iam/infrastructure/persistence/repositories/typeorm-mfa-method.repository';
 import { AesGcmSecretCipherAdapter } from 'src/iam/infrastructure/crypto/aes-gcm-secret-cipher.adapter';
 import { GoogleStrategy } from 'src/iam/infrastructure/oauth/strategies/google-auth.strategy';
 import { FacebookAuthStrategy } from 'src/iam/infrastructure/oauth/strategies/facebook-auth.strategy';
@@ -44,14 +33,13 @@ import { ForgotPasswordUseCase } from './usecases/forgot-password.usecase';
 import { ResetPasswordUseCase } from './usecases/reset-password.usecase';
 import { SendEmailVerificationUseCase } from './usecases/send-email-verification.usecase';
 import { ConfirmEmailUseCase } from './usecases/confirm-email.usecase';
-import { CreateEmailOtpUseCase } from './usecases/create-email-otp.usecase';
-import { CreateSmsOtpUseCase } from './usecases/create-sms-otp.usecase';
-import { EnrollTfaUseCase } from './usecases/enroll-tfa.usecase';
-import { TFA_ENROLLMENT_STRATEGIES } from './strategies/tfa-enrollment.strategy';
+import { EnrollMfaUseCase } from './usecases/enroll-mfa.usecase';
+import { ListMfaMethodsUseCase } from './usecases/list-mfa-methods.usecase';
+import { MFA_ENROLLMENT_STRATEGIES } from './strategies/mfa-enrollment.strategy';
 import { TotpEnrollmentStrategy } from './strategies/totp-enrollment.strategy';
 import { EmailEnrollmentStrategy } from './strategies/email-enrollment.strategy';
 import { SmsEnrollmentStrategy } from './strategies/sms-enrollment.strategy';
-import { TFA_CHALLENGE_STRATEGIES } from './strategies/tfa-challenge.strategy';
+import { MFA_CHALLENGE_STRATEGIES } from './strategies/mfa-challenge.strategy';
 import { TotpChallengeStrategy } from './strategies/totp-challenge.strategy';
 import { EmailChallengeStrategy } from './strategies/email-challenge.strategy';
 import { SmsChallengeStrategy } from './strategies/sms-challenge.strategy';
@@ -61,12 +49,17 @@ import { UserRegisteredEventHandler } from './events/user-registered.event-handl
 import { EnableMfaUseCase } from './usecases/enable-mfa.usecase';
 import { DisableMfaUseCase } from './usecases/disable-mfa.usecase';
 import { VerifyMfaChallengeUseCase } from './usecases/verify-mfa-challenge.usecase';
+import { CompleteMfaSignInUseCase } from './usecases/complete-mfa-sign-in.usecase';
+import { ResendMfaChallengeUseCase } from './usecases/resend-mfa-challenge.usecase';
 import { MFAChallengeCacheService } from './services/mfa-challenge-cache.service';
+import { OtpService } from './services/otp.service';
+import { AuthMailerService } from './services/auth-mailer.service';
+import { TotpSecretService } from './services/totp-secret.service';
 
 /**
  * Feature « authentification » du Bounded Context IAM : tout ce qui prouve
  * l'identité d'un porteur de compte — mot de passe, OAuth social, vérification
- * d'adresse email, OTP de connexion et 2FA.
+ * d'adresse email et double authentification.
  *
  * Ces trois sujets vivaient dans trois modules distincts
  * (`AuthenticationModule`, `EmailVerificationModule`, `OtpModule`) alors qu'ils
@@ -89,11 +82,12 @@ import { MFAChallengeCacheService } from './services/mfa-challenge-cache.service
  *   (importé une seule fois par AppModule). Un binding local masquerait ce
  *   provider et ferait revenir le crash au démarrage quand les identifiants
  *   Twilio sont absents.
- * - Toute la hiérarchie STI des méthodes 2FA est déclarée ici, et non dans
- *   `IamInfrastructureModule` : ce dernier reste limité aux tokens et au cache
- *   dont dépendent les ~23 modules à contrôleur authentifié (CRP, §5). La
- *   classe parente `TFAMethodEntity` doit figurer dans les métadonnées pour que
- *   les `@ChildEntity` se résolvent.
+ * - `MfaMethodEntity` est déclarée ici, et non dans `IamInfrastructureModule` :
+ *   ce dernier reste limité aux tokens et au cache dont dépendent les ~23
+ *   modules à contrôleur authentifié (CRP, §5). Il fallait auparavant y
+ *   déclarer les quatre classes de la hiérarchie STI, la parente comprise,
+ *   pour que les `@ChildEntity` se résolvent — l'entité unique supprime ce
+ *   piège au câblage.
  */
 @Module({
   imports: [
@@ -108,12 +102,7 @@ import { MFAChallengeCacheService } from './services/mfa-challenge-cache.service
     // Bus d'événements : `RegisterUseCase` publie un Domain Event, dont les
     // abonnés vivent dans `applications/events/` (§8).
     CqrsModule,
-    TypeOrmModule.forFeature([
-      TFAMethodEntity,
-      TOTPMethodEntity,
-      EmailMethodEntity,
-      SMSMethodEntity,
-    ]),
+    TypeOrmModule.forFeature([MfaMethodEntity]),
   ],
   providers: [
     // Adapters de sortie (§4 — DIP : le port est déclaré du côté qui exprime
@@ -123,22 +112,21 @@ import { MFAChallengeCacheService } from './services/mfa-challenge-cache.service
     // mailer, chiffrement, stores à TTL) sont des ports de l'**application**,
     // dans `applications/ports/`.
     { provide: HASHING_SERVICE, useClass: BcryptService },
-    { provide: AUTH_MAILER, useClass: NestAuthMailerAdapter },
-    { provide: OTP_STORE, useClass: RedisOtpStoreAdapter },
+    { provide: OTP_RECORD_STORE, useClass: CacheOtpRecordStoreAdapter },
 
     // Caches propres à cette feature : identifiants des tokens email, et OTP
     // en attente de saisie. Le cache de sessions vient d IamInfrastructureModule.
     TokenEmailCacheService,
+    // Politique des OTP (tirage, durée, plafond d'essais) : un service, pas un
+    // port — elle ne change pas quand le magasin change.
+    OtpService,
     { provide: TOTP_GENERATOR, useClass: OtplibTotpGeneratorAdapter },
-    { provide: TOTP_METHOD_REPOSITORY, useClass: TypeOrmTotpMethodRepository },
-    // Deux tokens, un seul contrat `ChannelTfaMethodRepository` : les canaux
-    // email et SMS ont le même cycle de vie, seule la colonne de destination
-    // change (§4 — DIP/LSP).
-    {
-      provide: EMAIL_METHOD_REPOSITORY,
-      useClass: TypeOrmEmailMethodRepository,
-    },
-    { provide: SMS_METHOD_REPOSITORY, useClass: TypeOrmSmsMethodRepository },
+    // Un seul token pour les trois canaux. Il y en avait trois
+    // (`TOTP_METHOD_REPOSITORY`, `EMAIL_METHOD_REPOSITORY`,
+    // `SMS_METHOD_REPOSITORY`) pour deux contrats et quatre adapters, dont le
+    // seul rôle était de choisir la table fille à interroger. Le canal étant
+    // devenu une colonne, il est passé en paramètre (§4 — DIP/LSP).
+    { provide: MFA_METHOD_REPOSITORY, useClass: TypeOrmMfaMethodRepository },
     { provide: SECRET_CIPHER, useClass: AesGcmSecretCipherAdapter },
 
     // Stratégies Passport des fournisseurs OAuth.
@@ -151,9 +139,9 @@ import { MFAChallengeCacheService } from './services/mfa-challenge-cache.service
     EmailEnrollmentStrategy,
     SmsEnrollmentStrategy,
     // Registre des canaux enrôlables : c'est le seul endroit à modifier pour
-    // en ajouter un — ni le contrôleur ni `EnrollTfaUseCase` ne bougent.
+    // en ajouter un — ni le contrôleur ni `EnrollMfaUseCase` ne bougent.
     {
-      provide: TFA_ENROLLMENT_STRATEGIES,
+      provide: MFA_ENROLLMENT_STRATEGIES,
       useFactory: (
         totp: TotpEnrollmentStrategy,
         email: EmailEnrollmentStrategy,
@@ -183,10 +171,9 @@ import { MFAChallengeCacheService } from './services/mfa-challenge-cache.service
     SendEmailVerificationUseCase,
     ConfirmEmailUseCase,
 
-    // Use cases — OTP de connexion et enrôlement 2FA.
-    CreateEmailOtpUseCase,
-    CreateSmsOtpUseCase,
-    EnrollTfaUseCase,
+    // Use cases — enrôlement du second facteur.
+    EnrollMfaUseCase,
+    ListMfaMethodsUseCase,
 
     // Canaux de vérification MFA (§9 — Strategy). Famille distincte de
     // l'enrôlement : celle-ci éprouve un facteur **déjà actif**, l'autre en
@@ -195,7 +182,7 @@ import { MFAChallengeCacheService } from './services/mfa-challenge-cache.service
     EmailChallengeStrategy,
     SmsChallengeStrategy,
     {
-      provide: TFA_CHALLENGE_STRATEGIES,
+      provide: MFA_CHALLENGE_STRATEGIES,
       useFactory: (
         totp: TotpChallengeStrategy,
         email: EmailChallengeStrategy,
@@ -212,10 +199,25 @@ import { MFAChallengeCacheService } from './services/mfa-challenge-cache.service
     // Challenges MFA : contexte d'une preuve attendue, à TTL et essais bornés.
     MFAChallengeCacheService,
 
+    // Compositions qui ne dépendent d'aucun driver : ce que dit un email
+    // d'authentification, et sous quel émetteur un secret TOTP s'enrôle. Elles
+    // vivaient dans les adapters, où un second transport ou un second
+    // générateur les aurait recopiées.
+    AuthMailerService,
+    TotpSecretService,
+
     // Use cases — cycle de vie du second facteur.
     EnableMfaUseCase,
     DisableMfaUseCase,
+    // Éprouver un code n'est exposé par aucune route : c'est une brique dont
+    // dépendent les deux use cases qui *agissent* sur la preuve — ouvrir une
+    // session (`POST /auth/sign-in/mfa`) et retirer un facteur
+    // (`POST /auth/mfa/disable`) — pour qu'ils vérifient de la même façon.
     VerifyMfaChallengeUseCase,
+    CompleteMfaSignInUseCase,
+    // Renvoyer un code ne rejoue pas le défi : il reste tel quel, seul l'OTP
+    // du canal est réémis.
+    ResendMfaChallengeUseCase,
 
     // Abonnés aux Domain Events de la feature.
     UserRegisteredEventHandler,

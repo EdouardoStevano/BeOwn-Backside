@@ -11,8 +11,8 @@ import {
 import {
   EMAIL_SERVICE,
   type EmailService,
-} from 'src/common/email/email.service';
-import { EmailTemplateService } from 'src/common/email/email-template.service';
+} from 'src/shared/email/email.service';
+import { EmailTemplateService } from 'src/shared/email/email-template.service';
 import { SMS_SERVICE, type SmsService } from 'src/shared/sms/sms.service';
 import { TokenService } from 'src/iam/applications/services/token.service';
 import { ProfilPPEntity } from 'src/profiles/infrastructure/persistences/entities/profil-pp.entity';

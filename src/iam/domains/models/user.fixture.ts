@@ -1,6 +1,5 @@
 import { User, UserSnapshot } from './user';
 import { UserMapper } from 'src/iam/domains/mappers/user.mapper';
-import { UserEmail } from 'src/iam/domains/value-objects/user-email.vo';
 import { UserRole, UserStatus } from 'src/iam/domains/enums/user.enum';
 
 /**
@@ -34,11 +33,9 @@ export const buildUser = (
     lastLoginAt: null,
     createdAt: new Date('2026-01-01T00:00:00Z'),
     updatedAt: new Date('2026-01-01T00:00:00Z'),
-    userEmail: UserEmail.restore(
-      email,
-      emailVerified,
-      emailVerified ? new Date('2026-01-01T00:00:00Z') : null,
-    ),
+    email,
+    emailVerified,
+    emailVerifiedDate: emailVerified ? new Date('2026-01-01T00:00:00Z') : null,
     ...snapshot,
   });
 };

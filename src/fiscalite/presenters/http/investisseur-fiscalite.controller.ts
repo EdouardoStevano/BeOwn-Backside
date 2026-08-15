@@ -79,7 +79,7 @@ export class InvestisseurFiscaliteController {
         userId: user.userId,
         firstName: userEntity?.firstname ?? null,
         lastName: userEntity?.lastname ?? null,
-        email: userEntity?.userEmail?.email ?? null,
+        email: userEntity?.email ?? null,
       },
       res,
     );

@@ -326,7 +326,7 @@ export class CreateInvestmentUseCase {
     const user = await this.userRepository.findById(userId);
     const firstname = user?.firstname ?? 'Investisseur';
     const lastname = user?.lastname ?? '';
-    const email = user?.userEmail?.email ?? '';
+    const email = user?.email ?? '';
 
     const pdfBuffer = await this.contractGenerator.generateBulletin({
       investment,

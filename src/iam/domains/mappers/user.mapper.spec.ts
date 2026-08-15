@@ -1,6 +1,7 @@
 import { UserRole, UserStatus } from 'src/iam/domains/enums/user.enum';
+import { MfaMethodType } from 'src/iam/domains/enums/mfa-method.enum';
 import { buildUser } from 'src/iam/domains/models/user.fixture';
-import { UserMapper } from './user.mapper';
+import { NO_MFA, UserMapper } from './user.mapper';
 
 const PASSWORD_HASH = '$2b$10$empreinte-secrète';
 
@@ -34,6 +35,33 @@ describe('UserMapper.toPublic', () => {
 
     expect(publicUser).not.toHaveProperty('passwordHash');
     expect(publicUser.socialId).toBe('google-123');
+  });
+
+  describe('état MFA', () => {
+    it('omet la clé quand l’appelant ne l’a pas chargé', () => {
+      // Et non `{ enabled: false }` : un compte protégé passerait pour un
+      // compte sans MFA sur toute route qui ne consulte pas les facteurs.
+      expect(UserMapper.toPublic(buildUser())).not.toHaveProperty('mfa');
+    });
+
+    it('publie le facteur actif quand il est fourni', () => {
+      const publicUser = UserMapper.toPublic(buildUser(), {
+        enabled: true,
+        method: MfaMethodType.TOTP,
+      });
+
+      expect(publicUser.mfa).toEqual({
+        enabled: true,
+        method: MfaMethodType.TOTP,
+      });
+    });
+
+    it('NO_MFA dit « aucun facteur », ce qui n’est pas « on ne sait pas »', () => {
+      expect(UserMapper.toPublic(buildUser(), NO_MFA).mfa).toEqual({
+        enabled: false,
+        method: null,
+      });
+    });
   });
 });
 

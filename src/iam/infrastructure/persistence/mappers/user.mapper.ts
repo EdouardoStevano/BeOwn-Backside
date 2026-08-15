@@ -4,7 +4,6 @@ import { User } from 'src/iam/domains/models/user';
 // délègue l'autre.
 import { UserMapper as UserDomainMapper } from 'src/iam/domains/mappers/user.mapper';
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
-import { UserEmail } from 'src/iam/domains/value-objects/user-email.vo';
 import { UserEmailEntity } from 'src/iam/infrastructure/persistence/entities/user-email.entity';
 
 /**
@@ -27,13 +26,12 @@ export class UserMapper {
       lastLoginAt: entity.lastLoginAt,
       createdAt: entity.createdAt,
       updatedAt: entity.updatedAt,
-      userEmail: entity.userEmail
-        ? UserEmail.restore(
-            entity.userEmail.email,
-            entity.userEmail.isVerified,
-            entity.userEmail.verifiedDate,
-          )
-        : null,
+      // La table `user_emails` reste une ligne à part — le découpage de
+      // stockage ne suit pas celui du domaine, et c'est le rôle de ce mapper
+      // (§12.7). Côté domaine, ces trois colonnes sont des champs de l'agrégat.
+      email: entity.userEmail?.email ?? null,
+      emailVerified: entity.userEmail?.isVerified ?? false,
+      emailVerifiedDate: entity.userEmail?.verifiedDate ?? null,
     });
   }
 
@@ -51,11 +49,11 @@ export class UserMapper {
     // save(). Undefined reste ignoré par TypeORM (insert → défaut CREE).
     if (snapshot.status) entity.status = snapshot.status;
 
-    if (snapshot.userEmail) {
+    if (snapshot.email !== null) {
       const emailEntity = new UserEmailEntity();
-      emailEntity.email = snapshot.userEmail.email;
-      emailEntity.isVerified = snapshot.userEmail.isVerified;
-      emailEntity.verifiedDate = snapshot.userEmail.verifiedDate;
+      emailEntity.email = snapshot.email;
+      emailEntity.isVerified = snapshot.emailVerified;
+      emailEntity.verifiedDate = snapshot.emailVerifiedDate;
       emailEntity.user = entity;
 
       if (snapshot.userId) {

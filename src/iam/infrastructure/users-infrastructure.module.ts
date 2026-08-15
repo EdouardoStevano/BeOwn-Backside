@@ -6,8 +6,8 @@ import { UserPreferencesEntity } from 'src/iam/infrastructure/persistence/entiti
 import { USER_REPOSITORY } from 'src/iam/domains/ports/user.repository';
 import { UserTypeOrmRepository } from 'src/iam/infrastructure/persistence/repositories/user.repository';
 
-// Les entités TFA (tfa/sms/email/totp) étaient enregistrées ici ; elles
-// appartiennent à IAM et sont désormais déclarées par IamInfrastructureModule.
+// Les entités MFA étaient enregistrées ici ; elles appartiennent à IAM et sont
+// désormais déclarées par AuthenticationModule, en une seule classe.
 @Module({
   imports: [
     TypeOrmModule.forFeature([

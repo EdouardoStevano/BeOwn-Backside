@@ -3,12 +3,21 @@ import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import * as express from 'express';
+import { join } from 'path';
 import helmet from 'helmet';
 import { IoAdapter } from '@nestjs/platform-socket.io';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { rawBody: true });
   app.useWebSocketAdapter(new IoAdapter(app));
+
+  // Ressources publiques servies telles quelles : le logo que les applications
+  // authenticator vont chercher via le paramètre `image` de l'URI otpauth
+  // (cf. `TotpSecretService`). Elles téléchargent cette URL depuis le
+  // téléphone de l'utilisateur, sans en-tête d'authentification — le dossier
+  // doit donc rester joignable publiquement, et ne contenir que des fichiers
+  // destinés à l'être.
+  app.use('/images', express.static(join(process.cwd(), 'images')));
 
   app.use(
     helmet({
@@ -87,11 +96,12 @@ async function bootstrap() {
     .addTag(
       'Authentication',
       'Connexion, inscription, OAuth social, tokens JWT, vérification ' +
-        "d'adresse email (`/auth/email/*`), OTP de connexion (`/auth/otp/*`) " +
+        "d'adresse email (`/auth/email/*`) " +
         'et double authentification (`/auth/mfa/*`) — TOTP, email ou SMS, le ' +
         'canal étant choisi dans le body de `POST /auth/mfa/enroll`. Un ' +
-        'compte muni d’un facteur actif termine sa connexion par ' +
-        '`POST /auth/mfa/challenge`.',
+        'compte muni d’un facteur actif reçoit un 401 `MFA_REQUIRED` sur ' +
+        '`POST /auth/sign-in`, puis termine sa connexion par ' +
+        '`POST /auth/sign-in/mfa`.',
     )
     .addTag('Users', 'Gestion des comptes utilisateurs')
     .addTag('Profiles & KYC', 'Profil investisseur (PP/PM) et dossier KYC')

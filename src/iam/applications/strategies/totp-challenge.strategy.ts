@@ -1,21 +1,22 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { TfaMethodType } from 'src/iam/domains/enums/tfa-method.enum';
+import { MfaMethodType } from 'src/iam/domains/enums/mfa-method.enum';
 import {
   TOTP_GENERATOR,
   type TotpGenerator,
 } from 'src/iam/applications/ports/totp-generator.port';
 import {
-  TOTP_METHOD_REPOSITORY,
-  type TotpMethodRepository,
-} from 'src/iam/domains/ports/totp-method.repository';
+  MFA_METHOD_REPOSITORY,
+  type MfaMethodRepository,
+} from 'src/iam/domains/ports/mfa-method.repository';
 import {
   SECRET_CIPHER,
   type SecretCipher,
 } from 'src/iam/applications/ports/secret-cipher.port';
 import {
-  TfaChallengeEmission,
-  TfaChallengeStrategy,
-} from './tfa-challenge.strategy';
+  MfaChallengeEmission,
+  MfaChallengeStrategy,
+  MfaMethodSummary,
+} from './mfa-challenge.strategy';
 
 /**
  * Vérification du facteur TOTP.
@@ -26,34 +27,55 @@ import {
  * les use cases aient à connaître la particularité (§4 — LSP).
  */
 @Injectable()
-export class TotpChallengeStrategy implements TfaChallengeStrategy {
-  readonly method = TfaMethodType.TOTP;
+export class TotpChallengeStrategy implements MfaChallengeStrategy {
+  readonly method = MfaMethodType.TOTP;
 
   constructor(
     @Inject(TOTP_GENERATOR) private readonly totpGenerator: TotpGenerator,
-    @Inject(TOTP_METHOD_REPOSITORY)
-    private readonly totpMethodRepository: TotpMethodRepository,
+    @Inject(MFA_METHOD_REPOSITORY)
+    private readonly mfaMethodRepository: MfaMethodRepository,
     @Inject(SECRET_CIPHER) private readonly secretCipher: SecretCipher,
   ) {}
 
   async isActiveFor(userId: number): Promise<boolean> {
-    const methods = await this.totpMethodRepository.findAllByUserId(userId);
-    return methods.some((method) => method.isActive);
+    const methods = await this.mfaMethodRepository.findAllByUserId(
+      userId,
+      this.method,
+    );
+    return methods.some((factor) => factor.isActive());
   }
 
   /** Rien à transmettre : le code vit dans l'application de l'utilisateur. */
-  issue(): Promise<TfaChallengeEmission> {
+  issue(): Promise<MfaChallengeEmission> {
     return Promise.resolve({});
   }
 
+  async describeFor(userId: number): Promise<MfaMethodSummary[]> {
+    const methods = await this.mfaMethodRepository.findAllByUserId(
+      userId,
+      this.method,
+    );
+
+    // Aucun `sentTo` : il n'y a pas de destination à montrer, et surtout le
+    // `credential` de ce canal est le secret partagé — même chiffré, même
+    // tronqué, il n'a rien à faire dans une réponse HTTP.
+    return methods.map((entry) => ({
+      method: this.method,
+      isActive: entry.isActive(),
+    }));
+  }
+
   async verify(userId: number, code: string): Promise<boolean> {
-    const methods = await this.totpMethodRepository.findAllByUserId(userId);
+    const methods = await this.mfaMethodRepository.findAllByUserId(
+      userId,
+      this.method,
+    );
 
     // Seules les méthodes actives sont éprouvées : un secret enrôlé mais jamais
     // confirmé ne doit pas pouvoir ouvrir de session, sans quoi afficher un QR
     // code suffirait à contourner le facteur en place.
-    for (const method of methods.filter((m) => m.isActive)) {
-      const secret = this.secretCipher.decrypt(method.encryptedSecret);
+    for (const factor of methods.filter((m) => m.isActive())) {
+      const secret = this.secretCipher.decrypt(factor.encryptedSecret);
       if (await this.totpGenerator.verify(code, secret)) return true;
     }
 
@@ -61,6 +83,6 @@ export class TotpChallengeStrategy implements TfaChallengeStrategy {
   }
 
   async deactivate(userId: number): Promise<void> {
-    await this.totpMethodRepository.deactivateAllForUser(userId);
+    await this.mfaMethodRepository.deactivateChannel(userId, this.method);
   }
 }
