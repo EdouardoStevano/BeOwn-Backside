@@ -30,7 +30,7 @@ import {
   WalletType,
 } from 'src/wallets/domains/enums/wallet.enum';
 import { AuditLogService } from 'src/notifications/applications/audit-log.service';
-import { UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
+import { UserRole } from 'src/iam/domains/enums/user.enum';
 import { AmlMonitorService } from 'src/common/aml/aml-monitor.service';
 
 const round2 = (n: number) => Math.round(n * 100) / 100;

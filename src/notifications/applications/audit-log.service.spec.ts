@@ -2,7 +2,7 @@ import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { AuditLogService } from './audit-log.service';
 import { AuditLogEntity } from '../infrastructure/persistences/entities/audit-log.entity';
-import { UserEntity } from 'src/users/infrastructure/persistences/entities/user.entity';
+import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 
 describe('AuditLogService.findFiltered', () => {
   const qb = {
@@ -46,7 +46,7 @@ describe('AuditLogService.findFiltered', () => {
     expect(qb.andWhere).toHaveBeenCalledTimes(5);
   });
 
-  it('enrichit chaque item avec nom/email d\'acteur et description', async () => {
+  it("enrichit chaque item avec nom/email d'acteur et description", async () => {
     qb.getManyAndCount.mockResolvedValueOnce([
       [
         {

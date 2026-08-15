@@ -14,7 +14,7 @@ import {
 } from 'src/wallets/domains/enums/wallet.enum';
 import { NotificationService } from 'src/notifications/applications/notification.service';
 import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
-import { formatEur } from 'src/common/money/format-eur';
+import { formatEur } from 'src/shared/money/format-eur';
 
 /** Investissements remboursables (fonds engagés, ni rétractés ni déjà annulés). */
 const REFUNDABLE_INVESTMENT_STATUSES = [

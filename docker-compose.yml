@@ -17,6 +17,24 @@ services:
     ports:
       - '6379:6379'
 
+  # Boîte mail de développement : capture TOUS les emails, n'en envoie aucun.
+  # Interface web + API HTTP sur 8025 (l'app poste sur /api/v1/send), SMTP sur
+  # 1025 laissé exposé pour un éventuel client tiers.
+  mailpit:
+    image: axllent/mailpit:latest
+    restart: unless-stopped
+    ports:
+      - '${MAILPIT_HTTP_PORT:-8025}:8025'
+      - '${MAILPIT_SMTP_PORT:-1025}:1025'
+    environment:
+      MP_MAX_MESSAGES: 500
+      MP_DATABASE: /data/mailpit.db
+      MP_SMTP_AUTH_ACCEPT_ANY: 1
+      MP_SMTP_AUTH_ALLOW_INSECURE: 1
+    volumes:
+      - mailpit_data_dev:/data
+
 volumes:
   postgres_data_dev:
   redis_data_dev:
+  mailpit_data_dev:

@@ -9,7 +9,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { InvestorKpiService } from 'src/kpi/applications/investor-kpi.service';
-import { UserEntity } from 'src/users/infrastructure/persistences/entities/user.entity';
+import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 import { UpdateRegimeFiscalDto } from './dto/update-regime-fiscal.dto';
 
 @Controller('me')

@@ -47,7 +47,7 @@ import {
 import { Public } from 'src/common/auth/public.decorator';
 import { RequirePermission } from 'src/common/auth/require-permission.decorator';
 import { hasPermission } from 'src/common/auth/permissions.constants';
-import { formatEur } from 'src/common/money/format-eur';
+import { formatEur } from 'src/shared/money/format-eur';
 import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
 import { UseGuards } from '@nestjs/common';
@@ -60,7 +60,7 @@ import { Kyc } from 'src/profiles/domains/kyc';
 import { SkipThrottle } from '@nestjs/throttler';
 import { NotificationService } from 'src/notifications/applications/notification.service';
 import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
-import { UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
+import { UserRole } from 'src/iam/domains/enums/user.enum';
 import { AuditLogService } from 'src/notifications/applications/audit-log.service';
 
 @ApiTags('Payments & KYC')

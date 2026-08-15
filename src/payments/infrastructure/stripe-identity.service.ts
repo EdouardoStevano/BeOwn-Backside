@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Stripe from 'stripe';
-import { CloudStorageService } from 'src/common/cloud-storage/cloud-storage.service';
+import { CloudStorageService } from 'src/shared/cloud-storage/cloud-storage.service';
 
 export const STRIPE_IDENTITY_SERVICE = Symbol('STRIPE_IDENTITY_SERVICE');
 

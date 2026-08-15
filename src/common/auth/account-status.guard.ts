@@ -7,34 +7,26 @@ import {
 import { Reflector } from '@nestjs/core';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import {
-  UserEntity,
-  UserStatus,
-} from 'src/users/infrastructure/persistences/entities/user.entity';
+import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
+import { UserStatus } from 'src/iam/domains/enums/user.enum';
 import { IS_PUBLIC_KEY } from './public.decorator';
 import type { ActiveUser } from './current-user.decorator';
 
-/**
- * Code d'erreur stable consommé par le front — email pas encore vérifié à la
- * connexion, l'utilisateur doit saisir/redemander son OTP d'inscription.
- * Remplace EMAIL_NOT_VERIFIED (V2-T1) : le message reste inchangé pour que le
- * front existant, qui matche encore sur le texte du message, continue de
- * fonctionner tel quel jusqu'à sa mise à jour (V2-T5) pour matcher sur `code`.
- */
-export const OTP_REQUIRED_CODE = 'OTP_REQUIRED';
-export const OTP_REQUIRED_MESSAGE =
-  'Veuillez vérifier votre adresse email avant de vous connecter.';
+import {
+  ACCOUNT_CLOSED_CODE,
+  ACCOUNT_CLOSED_MESSAGE,
+  ACCOUNT_SUSPENDED_CODE,
+  ACCOUNT_SUSPENDED_MESSAGE,
+} from 'src/iam/domains/errors';
 
-/** Code d'erreur stable consommé par le front — compte suspendu par un administrateur. */
-export const ACCOUNT_SUSPENDED_CODE = 'ACCOUNT_SUSPENDED';
-/** Message affiché au front — contrat fixe, ne pas varier selon la cause du refus. */
-export const ACCOUNT_SUSPENDED_MESSAGE =
-  'Compte suspendu — contactez le support.';
-
-/** Code d'erreur stable consommé par le front — compte clôturé ou supprimé. */
-export const ACCOUNT_CLOSED_CODE = 'ACCOUNT_CLOSED';
-export const ACCOUNT_CLOSED_MESSAGE =
-  'Compte clôturé — contactez le support.';
+// Les codes/messages décrivent l'état d'un compte : ils vivent avec les
+// erreurs de domaine IAM (`iam/domains/errors/account.errors.ts`), aux côtés
+// des classes `AccountSuspendedError` / `AccountClosedError` que lèvent les
+// use cases. Ce guard produit le même contrat, mais par requête.
+//
+// Il continue de lever une `UnauthorizedException` plutôt qu'une erreur de
+// domaine : un guard EST de la présentation, il n'a personne à qui déléguer
+// la traduction.
 
 /**
  * Runs after JwtAuthGuard on every request. JwtAuthGuard only verifies the

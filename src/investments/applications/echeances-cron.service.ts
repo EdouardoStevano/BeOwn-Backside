@@ -8,7 +8,7 @@ import { NotificationEventService } from 'src/notifications/applications/notific
 import { PayEcheanceUseCase } from './usecases/pay-echeance.usecase';
 import { NotificationService } from 'src/notifications/applications/notification.service';
 import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
-import { UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
+import { UserRole } from 'src/iam/domains/enums/user.enum';
 
 @Injectable()
 export class EcheancesCronService {

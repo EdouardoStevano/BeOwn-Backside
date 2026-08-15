@@ -43,7 +43,7 @@ import { KycValidatedGuard } from 'src/common/auth/kyc-validated.guard';
 import { Roles } from 'src/common/auth/roles.decorator';
 import { RequirePermission } from 'src/common/auth/require-permission.decorator';
 import { hasPermission } from 'src/common/auth/permissions.constants';
-import { UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
+import { UserRole } from 'src/iam/domains/enums/user.enum';
 import { SkipThrottle } from '@nestjs/throttler';
 import { EcheanceEntity } from 'src/investments/infrastructure/persistences/entities/echeance.entity';
 import { EcheanceStatus } from 'src/investments/domains/enums/investment-status.enum';

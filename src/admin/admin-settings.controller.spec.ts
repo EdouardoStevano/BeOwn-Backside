@@ -1,6 +1,6 @@
 import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { AdminSettingsController } from './admin-settings.controller';
-import { UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
+import { UserRole } from 'src/iam/domains/enums/user.enum';
 
 describe('AdminSettingsController.update — validation commissions', () => {
   const admin = { userId: 1 } as any;

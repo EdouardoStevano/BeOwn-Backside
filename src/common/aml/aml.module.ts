@@ -4,7 +4,7 @@ import { AmlMonitorService } from './aml-monitor.service';
 import { AdminComplianceController } from './admin-compliance.controller';
 import { NotificationsModule } from 'src/notifications/notifications.module';
 import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructure.module';
-import { UserEntity } from 'src/users/infrastructure/persistences/entities/user.entity';
+import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 
 @Module({
   imports: [

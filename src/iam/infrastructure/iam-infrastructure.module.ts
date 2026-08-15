@@ -1,21 +1,35 @@
-﻿import { Module } from '@nestjs/common';
-import { JwtModule } from '@nestjs/jwt';
-import jwtConfig from './config/jwt.config';
+import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { CACHE_MANAGER_SERVICE } from '../domains/ports/cahe-manager.service';
-import { TOKEN_SERVICE } from '../domains/ports/token.service';
-import { RedisCacheService } from './redis-cache.service';
-import { JwtTokenService } from './jwt-token.service';
+import jwtConfig from './config/jwt.config';
+import { TokenSignerModule } from 'src/shared/token/token-signer.module';
+import { SessionCacheService } from '../applications/services/session-cache.service';
+import { TokenService } from '../applications/services/token/token.service';
 
+/**
+ * Noyau d'infrastructure IAM partagé par tous les autres Bounded Contexts
+ * (émission/vérification de tokens et cache de sessions). Volontairement
+ * limité à ces deux services : les adapters propres à une feature IAM (OTP,
+ * TOTP, notifications, OAuth) sont câblés dans le module de leur feature,
+ * pour ne pas imposer ces dépendances aux ~20 modules qui n'ont besoin que
+ * de `TokenService` (CRP, §5).
+ *
+ * Le driver de signature vient de `TokenSignerModule` (shared) : c'est lui
+ * qui décide comment un token est signé. Ce module-ci ne câble plus que la
+ * politique IAM posée par-dessus.
+ */
 @Module({
-  imports: [
-    JwtModule.registerAsync(jwtConfig.asProvider()),
-    ConfigModule.forFeature(jwtConfig),
-  ],
+  imports: [TokenSignerModule, ConfigModule.forFeature(jwtConfig)],
   providers: [
-    { provide: CACHE_MANAGER_SERVICE, useClass: RedisCacheService },
-    { provide: TOKEN_SERVICE, useClass: JwtTokenService },
+    // Classes concrètes, injectées par leur type : ce sont des services
+    // **applicatifs**, pas des ports. `TOKEN_SERVICE` a disparu avec
+    // `JwtTokenAdapter` — le seul point d'extension restant est `TOKEN_SIGNER`,
+    // dans `shared/`. Seul le cache de **sessions** est câblé ici, parce que
+    // `TokenService` — fourni par ce module et consommé par une vingtaine
+    // d'autres — en dépend. Les caches de tokens email et d'OTP restent dans
+    // `AuthenticationModule`, seul à s'en servir (CRP, §5).
+    SessionCacheService,
+    TokenService,
   ],
-  exports: [CACHE_MANAGER_SERVICE, TOKEN_SERVICE],
+  exports: [SessionCacheService, TokenService],
 })
 export class IamInfrastructureModule {}

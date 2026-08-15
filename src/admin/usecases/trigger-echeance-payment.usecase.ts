@@ -6,8 +6,8 @@ import {
 import { InjectRepository, InjectDataSource } from '@nestjs/typeorm';
 import { DataSource, In, Repository } from 'typeorm';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
-import { formatEur } from 'src/common/money/format-eur';
-import { UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
+import { formatEur } from 'src/shared/money/format-eur';
+import { UserRole } from 'src/iam/domains/enums/user.enum';
 import { EcheanceEntity } from 'src/investments/infrastructure/persistences/entities/echeance.entity';
 import { InvestmentEntity } from 'src/investments/infrastructure/persistences/entities/investment.entity';
 import {

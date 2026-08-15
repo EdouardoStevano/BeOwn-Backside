@@ -1,6 +1,6 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { AdminInvestorsController } from './admin-investors.controller';
-import { UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
+import { UserRole } from 'src/iam/domains/enums/user.enum';
 
 describe('AdminInvestorsController.changeRole', () => {
   const admin = { userId: 1 } as any;
