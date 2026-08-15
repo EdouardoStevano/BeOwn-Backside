@@ -211,8 +211,9 @@ describe('EmailTemplateService', () => {
       );
 
       // Le chemin d'envoi refuse toujours un template désactivé…
-      await expect(service.render('activation', { prenom: 'Awa' })).resolves
-        .toBeNull();
+      await expect(
+        service.render('activation', { prenom: 'Awa' }),
+      ).resolves.toBeNull();
 
       // …mais l'admin doit pouvoir le prévisualiser malgré tout.
       const result = await service.renderForPreview('activation', {

@@ -9,8 +9,9 @@ import { emailServiceProvider } from './email-driver.provider';
  * Module global de l'email : templates ET transport.
  *
  * `EMAIL_SERVICE` est désormais fourni ici, une seule fois, par
- * `emailServiceProvider` (Mailpit en dev, Brevo en prod — cf.
- * email-driver.provider.ts). Les six modules qui liaient chacun
+ * `emailServiceProvider` (Mailpit en local, SMTP/nodemailer sur les
+ * environnements déployés — cf. email-driver.provider.ts). Les six modules
+ * qui liaient chacun
  * `useClass: BrevoEmailService` en local n'ont plus à le faire : le driver
  * se choisit à un seul endroit.
  *
