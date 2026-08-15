@@ -14,7 +14,7 @@ import {
 } from 'src/iam/domains/errors';
 import { buildUser as buildUserFixture } from 'src/iam/domains/models/user.fixture';
 import { UserStatus } from 'src/iam/domains/enums/user.enum';
-import { MfaFactorService } from '../services/mfa-factor.service';
+import { MfaFactorService } from '../services/mfa/mfa-factor.service';
 import { EnableMfaUseCase } from './enable-mfa.usecase';
 import { DisableMfaUseCase } from './disable-mfa.usecase';
 import { VerifyMfaChallengeUseCase } from './verify-mfa-challenge.usecase';

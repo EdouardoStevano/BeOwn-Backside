@@ -35,26 +35,26 @@ import { SendEmailVerificationUseCase } from './usecases/send-email-verification
 import { ConfirmEmailUseCase } from './usecases/confirm-email.usecase';
 import { EnrollMfaUseCase } from './usecases/enroll-mfa.usecase';
 import { ListMfaMethodsUseCase } from './usecases/list-mfa-methods.usecase';
-import { MFA_ENROLLMENT_STRATEGIES } from './strategies/mfa-enrollment.strategy';
-import { TotpEnrollmentStrategy } from './strategies/totp-enrollment.strategy';
-import { EmailEnrollmentStrategy } from './strategies/email-enrollment.strategy';
-import { SmsEnrollmentStrategy } from './strategies/sms-enrollment.strategy';
-import { MFA_CHALLENGE_STRATEGIES } from './strategies/mfa-challenge.strategy';
-import { TotpChallengeStrategy } from './strategies/totp-challenge.strategy';
-import { EmailChallengeStrategy } from './strategies/email-challenge.strategy';
-import { SmsChallengeStrategy } from './strategies/sms-challenge.strategy';
-import { MfaFactorService } from './services/mfa-factor.service';
-import { TokenEmailCacheService } from './services/token-email-cache.service';
+import { MFA_ENROLLMENT_STRATEGIES } from './strategies/mfa/mfa-enrollment.strategy';
+import { TotpEnrollmentStrategy } from './strategies/totp/totp-enrollment.strategy';
+import { EmailEnrollmentStrategy } from './strategies/email/email-enrollment.strategy';
+import { SmsEnrollmentStrategy } from './strategies/sms/sms-enrollment.strategy';
+import { MFA_CHALLENGE_STRATEGIES } from './strategies/mfa/mfa-challenge.strategy';
+import { TotpChallengeStrategy } from './strategies/totp/totp-challenge.strategy';
+import { EmailChallengeStrategy } from './strategies/email/email-challenge.strategy';
+import { SmsChallengeStrategy } from './strategies/sms/sms-challenge.strategy';
+import { MfaFactorService } from './services/mfa/mfa-factor.service';
+import { TokenEmailCacheService } from './services/token/token-email-cache.service';
 import { UserRegisteredEventHandler } from './events/user-registered.event-handler';
 import { EnableMfaUseCase } from './usecases/enable-mfa.usecase';
 import { DisableMfaUseCase } from './usecases/disable-mfa.usecase';
 import { VerifyMfaChallengeUseCase } from './usecases/verify-mfa-challenge.usecase';
 import { CompleteMfaSignInUseCase } from './usecases/complete-mfa-sign-in.usecase';
 import { ResendMfaChallengeUseCase } from './usecases/resend-mfa-challenge.usecase';
-import { MFAChallengeCacheService } from './services/mfa-challenge-cache.service';
-import { OtpService } from './services/otp.service';
+import { MFAChallengeCacheService } from './services/mfa/mfa-challenge-cache.service';
+import { OtpService } from './services/otp/otp.service';
 import { AuthMailerService } from './services/auth-mailer.service';
-import { TotpSecretService } from './services/totp-secret.service';
+import { TotpSecretService } from './services/totp/totp-secret.service';
 
 /**
  * Feature « authentification » du Bounded Context IAM : tout ce qui prouve
@@ -69,13 +69,14 @@ import { TotpSecretService } from './services/totp-secret.service';
  * module. Les réunir ici applique CCP (§5) ; la frontière qui compte reste
  * celle du contexte IAM, pas celle du parcours.
  *
- * Les classes de la couche sont rangées par type et à plat —
- * `applications/usecases/`, `applications/services/`,
- * `applications/strategies/` — sans sous-dossier par parcours : le contexte
- * IAM est déjà la frontière qui compte (§5), et le nom des fichiers dit à quel
- * parcours ils appartiennent. Les modules qui les câblent, celui-ci et
- * `users.module.ts`, vivent à la racine d'`applications/`. Ajouter un use case
- * veut donc dire toucher `usecases/` puis ce fichier.
+ * Les classes de la couche sont rangées par type — `applications/usecases/`,
+ * `applications/services/`, `applications/strategies/`, `applications/ports/`
+ * — puis, dans les deux dossiers qui le méritaient, par sujet :
+ * `services/{mfa,otp,totp,token}/` et `strategies/{mfa,channel,email,sms,totp}/`.
+ * Les use cases restent à plat, leur nom suffisant à dire de quel parcours ils
+ * relèvent. Les modules qui câblent le tout, celui-ci et `users.module.ts`,
+ * vivent à la racine d'`applications/` : ajouter un use case veut donc dire
+ * toucher `usecases/` puis ce fichier.
  *
  * Deux points d'histoire, à ne pas défaire :
  * - `SMS_SERVICE` n'est **pas** relié ici : il vient du `SmsModule` global

@@ -1,6 +1,6 @@
 import { Logger } from '@nestjs/common';
 import { MfaMethodType } from 'src/iam/domains/enums/mfa-method.enum';
-import { OtpService } from 'src/iam/applications/services/otp.service';
+import { OtpService } from 'src/iam/applications/services/otp/otp.service';
 import { type MfaMethodRepository } from 'src/iam/domains/ports/mfa-method.repository';
 import {
   InvalidOtpCodeError,
@@ -13,7 +13,7 @@ import {
   MfaEnrollmentConfirmation,
   MfaEnrollmentRequest,
   MfaEnrollmentStrategy,
-} from './mfa-enrollment.strategy';
+} from '../mfa/mfa-enrollment.strategy';
 
 /**
  * Clé de l'OTP d'enrôlement. Distincte des clés de connexion

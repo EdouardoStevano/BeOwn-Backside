@@ -17,19 +17,19 @@ import {
 
 import { AuthMailerService } from 'src/iam/applications/services/auth-mailer.service';
 import type { MfaMethodRepository } from 'src/iam/domains/ports/mfa-method.repository';
-import { OtpService } from 'src/iam/applications/services/otp.service';
+import { OtpService } from 'src/iam/applications/services/otp/otp.service';
 import type { SecretCipher } from 'src/iam/applications/ports/secret-cipher.port';
 import type { TotpGenerator } from 'src/iam/applications/ports/totp-generator.port';
-import type { TotpSecretService } from 'src/iam/applications/services/totp-secret.service';
+import type { TotpSecretService } from 'src/iam/applications/services/totp/totp-secret.service';
 import type { ConfigService } from '@nestjs/config';
 
 import type { UserRepository } from 'src/iam/domains/ports/user.repository';
 import type { SmsService } from 'src/shared/sms/sms.service';
 import { buildUser } from 'src/iam/domains/models/user.fixture';
-import { EmailEnrollmentStrategy } from './email-enrollment.strategy';
-import { SmsEnrollmentStrategy } from './sms-enrollment.strategy';
-import { TotpEnrollmentStrategy } from './totp-enrollment.strategy';
-import { EnrollMfaUseCase } from '../usecases/enroll-mfa.usecase';
+import { EmailEnrollmentStrategy } from '../email/email-enrollment.strategy';
+import { SmsEnrollmentStrategy } from '../sms/sms-enrollment.strategy';
+import { TotpEnrollmentStrategy } from '../totp/totp-enrollment.strategy';
+import { EnrollMfaUseCase } from '../../usecases/enroll-mfa.usecase';
 import type {
   MfaEnrollmentRequest,
   MfaEnrollmentStrategy,

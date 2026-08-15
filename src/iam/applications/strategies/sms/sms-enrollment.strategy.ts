@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { MfaMethodType } from 'src/iam/domains/enums/mfa-method.enum';
-import { OtpService } from 'src/iam/applications/services/otp.service';
+import { OtpService } from 'src/iam/applications/services/otp/otp.service';
 import { SMS_SERVICE, type SmsService } from 'src/shared/sms/sms.service';
 import {
   MFA_METHOD_REPOSITORY,
@@ -10,8 +10,8 @@ import {
   InvalidPhoneNumberError,
   MissingPhoneNumberError,
 } from 'src/iam/domains/errors';
-import { ChannelEnrollmentStrategy } from './channel-enrollment.strategy';
-import { MfaEnrollmentRequest } from './mfa-enrollment.strategy';
+import { ChannelEnrollmentStrategy } from '../channel/channel-enrollment.strategy';
+import { MfaEnrollmentRequest } from '../mfa/mfa-enrollment.strategy';
 
 /** Normalise le numéro en une valeur stable (espaces retirés). */
 const normalize = (phone: string): string => phone.replace(/\s+/g, '').trim();

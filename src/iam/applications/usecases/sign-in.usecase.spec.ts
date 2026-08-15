@@ -1,5 +1,5 @@
 import { SignInUsecase } from './sign-in.usecase';
-import { MfaFactorService } from '../services/mfa-factor.service';
+import { MfaFactorService } from '../services/mfa/mfa-factor.service';
 import { MfaMethodType } from 'src/iam/domains/enums/mfa-method.enum';
 import { MfaChallengePurpose } from 'src/iam/applications/models/mfa-challenge';
 import { type AuthSession } from 'src/iam/applications/models/auth-token';

@@ -15,8 +15,8 @@ import {
   TokenPayload,
   UNSUBSCRIBE_TOKEN_AUDIENCE,
   UnsubscribeTokenPayload,
-} from '../models/auth-token';
-import { SessionCacheService } from './session-cache.service';
+} from '../../models/auth-token';
+import { SessionCacheService } from '../session-cache.service';
 
 /**
  * Tous les tokens du contexte IAM : session (accès/rafraîchissement), lien

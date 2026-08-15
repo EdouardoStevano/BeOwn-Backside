@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { MfaMethodType } from 'src/iam/domains/enums/mfa-method.enum';
-import { OtpService } from 'src/iam/applications/services/otp.service';
+import { OtpService } from 'src/iam/applications/services/otp/otp.service';
 import { AuthMailerService } from 'src/iam/applications/services/auth-mailer.service';
 import {
   MFA_METHOD_REPOSITORY,
@@ -11,8 +11,8 @@ import {
   type UserRepository,
 } from 'src/iam/domains/ports/user.repository';
 import { UserNotFoundError } from 'src/iam/domains/errors';
-import { ChannelEnrollmentStrategy } from './channel-enrollment.strategy';
-import { MfaEnrollmentRequest } from './mfa-enrollment.strategy';
+import { ChannelEnrollmentStrategy } from '../channel/channel-enrollment.strategy';
+import { MfaEnrollmentRequest } from '../mfa/mfa-enrollment.strategy';
 
 /**
  * Enrôlement du canal email. La destination n'est **pas** prise dans le body :

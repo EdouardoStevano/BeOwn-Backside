@@ -3,13 +3,13 @@ import {
   type AuthSession,
   type AuthTokens,
 } from 'src/iam/applications/models/auth-token';
-import { TokenService } from '../services/token.service';
+import { TokenService } from '../services/token/token.service';
 import {
   USER_REPOSITORY,
   type UserRepository,
 } from 'src/iam/domains/ports/user.repository';
 import { InvalidRefreshTokenError } from 'src/iam/domains/errors';
-import { MfaFactorService } from '../services/mfa-factor.service';
+import { MfaFactorService } from '../services/mfa/mfa-factor.service';
 
 /**
  * Rafraîchissement de session : renouvelle le couple de tokens **et** rend le

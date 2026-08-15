@@ -3,7 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import jwtConfig from './config/jwt.config';
 import { TokenSignerModule } from 'src/shared/token/token-signer.module';
 import { SessionCacheService } from '../applications/services/session-cache.service';
-import { TokenService } from '../applications/services/token.service';
+import { TokenService } from '../applications/services/token/token.service';
 
 /**
  * Noyau d'infrastructure IAM partagé par tous les autres Bounded Contexts

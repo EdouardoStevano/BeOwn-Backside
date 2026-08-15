@@ -1,6 +1,6 @@
 import { Logger } from '@nestjs/common';
 import { MfaMethodType } from 'src/iam/domains/enums/mfa-method.enum';
-import { OtpService } from 'src/iam/applications/services/otp.service';
+import { OtpService } from 'src/iam/applications/services/otp/otp.service';
 import { type MfaMethodRepository } from 'src/iam/domains/ports/mfa-method.repository';
 import { MfaMethod } from 'src/iam/domains/models/mfa-method';
 import {
@@ -11,7 +11,7 @@ import {
   MfaChallengeEmission,
   MfaChallengeStrategy,
   MfaMethodSummary,
-} from './mfa-challenge.strategy';
+} from '../mfa/mfa-challenge.strategy';
 
 /**
  * Clé de l'OTP de vérification. Distincte de celle de l'enrôlement

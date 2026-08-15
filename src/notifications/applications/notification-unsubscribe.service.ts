@@ -3,7 +3,7 @@ import {
   NOTIF_UNSUBSCRIBE_TYPE,
   type UnsubscribeTokenPayload,
 } from 'src/iam/applications/models/auth-token';
-import { TokenService } from 'src/iam/applications/services/token.service';
+import { TokenService } from 'src/iam/applications/services/token/token.service';
 import {
   USER_REPOSITORY,
   type UserRepository,

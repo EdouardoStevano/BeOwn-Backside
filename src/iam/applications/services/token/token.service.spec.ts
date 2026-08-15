@@ -1,7 +1,7 @@
 import { InvalidAccessTokenError } from 'src/iam/domains/errors';
 import { JwtService } from '@nestjs/jwt';
 import { JwtTokenSignerAdapter } from 'src/shared/token/infrastructure/jwt-token-signer.adapter';
-import { UNSUBSCRIBE_TOKEN_AUDIENCE } from '../models/auth-token';
+import { UNSUBSCRIBE_TOKEN_AUDIENCE } from '../../models/auth-token';
 import { TokenService } from './token.service';
 
 const SECRET = 'test-secret';

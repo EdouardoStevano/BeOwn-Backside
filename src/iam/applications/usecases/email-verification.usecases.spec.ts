@@ -4,9 +4,9 @@ import {
 } from 'src/iam/domains/errors';
 import { SendEmailVerificationUseCase } from './send-email-verification.usecase';
 import { ConfirmEmailUseCase } from './confirm-email.usecase';
-import type { TokenEmailCacheService } from '../services/token-email-cache.service';
+import type { TokenEmailCacheService } from '../services/token/token-email-cache.service';
 import type { EmailTokenPayload } from 'src/iam/applications/models/auth-token';
-import type { TokenService } from '../services/token.service';
+import type { TokenService } from '../services/token/token.service';
 import { AuthMailerService } from 'src/iam/applications/services/auth-mailer.service';
 import type { UserRepository } from 'src/iam/domains/ports/user.repository';
 import { User } from 'src/iam/domains/models/user';

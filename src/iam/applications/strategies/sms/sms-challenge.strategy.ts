@@ -1,12 +1,12 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { MfaMethodType } from 'src/iam/domains/enums/mfa-method.enum';
-import { OtpService } from 'src/iam/applications/services/otp.service';
+import { OtpService } from 'src/iam/applications/services/otp/otp.service';
 import { SMS_SERVICE, type SmsService } from 'src/shared/sms/sms.service';
 import {
   MFA_METHOD_REPOSITORY,
   type MfaMethodRepository,
 } from 'src/iam/domains/ports/mfa-method.repository';
-import { ChannelChallengeStrategy } from './channel-challenge.strategy';
+import { ChannelChallengeStrategy } from '../channel/channel-challenge.strategy';
 
 /** Vérification du facteur SMS : le code repart au numéro enrôlé. */
 @Injectable()

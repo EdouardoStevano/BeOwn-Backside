@@ -7,7 +7,7 @@ import {
   type MfaEnrollmentConfirmation,
   type MfaEnrollmentRequest,
   type MfaEnrollmentStrategy,
-} from '../strategies/mfa-enrollment.strategy';
+} from '../strategies/mfa/mfa-enrollment.strategy';
 
 /**
  * Point d'entrée unique de l'enrôlement 2FA, quel que soit le canal.

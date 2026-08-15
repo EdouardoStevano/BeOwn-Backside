@@ -10,7 +10,7 @@ import {
   type UserRepository,
 } from 'src/iam/domains/ports/user.repository';
 import { type AuthSession } from 'src/iam/applications/models/auth-token';
-import { MFAChallengeCacheService } from '../services/mfa-challenge-cache.service';
+import { MFAChallengeCacheService } from '../services/mfa/mfa-challenge-cache.service';
 import { SignInUsecase } from './sign-in.usecase';
 import { VerifyMfaChallengeUseCase } from './verify-mfa-challenge.usecase';
 

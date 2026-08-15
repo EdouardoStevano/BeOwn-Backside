@@ -16,7 +16,7 @@ import {
   MfaChallengeEmission,
   MfaChallengeStrategy,
   MfaMethodSummary,
-} from './mfa-challenge.strategy';
+} from '../mfa/mfa-challenge.strategy';
 
 /**
  * Vérification du facteur TOTP.

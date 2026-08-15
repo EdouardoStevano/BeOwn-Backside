@@ -8,16 +8,16 @@ import { MfaMethod } from 'src/iam/domains/models/mfa-method';
 
 import { AuthMailerService } from 'src/iam/applications/services/auth-mailer.service';
 import type { MfaMethodRepository } from 'src/iam/domains/ports/mfa-method.repository';
-import { OtpService } from 'src/iam/applications/services/otp.service';
+import { OtpService } from 'src/iam/applications/services/otp/otp.service';
 import type { SecretCipher } from 'src/iam/applications/ports/secret-cipher.port';
 import type { TotpGenerator } from 'src/iam/applications/ports/totp-generator.port';
 
 import type { SmsService } from 'src/shared/sms/sms.service';
-import { EmailChallengeStrategy } from './email-challenge.strategy';
-import { SmsChallengeStrategy } from './sms-challenge.strategy';
-import { TotpChallengeStrategy } from './totp-challenge.strategy';
-import { MfaFactorService } from '../services/mfa-factor.service';
-import type { MfaChallengeStrategy } from './mfa-challenge.strategy';
+import { EmailChallengeStrategy } from '../email/email-challenge.strategy';
+import { SmsChallengeStrategy } from '../sms/sms-challenge.strategy';
+import { TotpChallengeStrategy } from '../totp/totp-challenge.strategy';
+import { MfaFactorService } from '../../services/mfa/mfa-factor.service';
+import type { MfaChallengeStrategy } from '../mfa/mfa-challenge.strategy';
 
 const USER_ID = 42;
 const ACCOUNT_EMAIL = 'jean.dupont@example.com';

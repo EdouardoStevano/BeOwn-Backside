@@ -4,7 +4,7 @@ import { UnsupportedMfaMethodError } from 'src/iam/domains/errors';
 import {
   MFA_CHALLENGE_STRATEGIES,
   type MfaChallengeStrategy,
-} from '../strategies/mfa-challenge.strategy';
+} from '../../strategies/mfa/mfa-challenge.strategy';
 
 /**
  * Ordre dans lequel un facteur est retenu quand le compte en a plusieurs.

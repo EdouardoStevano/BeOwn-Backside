@@ -22,14 +22,14 @@ import {
   TotpNotConfiguredError,
   UserNotFoundError,
 } from 'src/iam/domains/errors';
-import { TotpSecretService } from '../services/totp-secret.service';
-import { AuthMailerService } from '../services/auth-mailer.service';
+import { TotpSecretService } from '../../services/totp/totp-secret.service';
+import { AuthMailerService } from '../../services/auth-mailer.service';
 import {
   MfaEnrollmentChallenge,
   MfaEnrollmentConfirmation,
   MfaEnrollmentRequest,
   MfaEnrollmentStrategy,
-} from './mfa-enrollment.strategy';
+} from '../mfa/mfa-enrollment.strategy';
 
 /**
  * Enrôlement TOTP (Google Authenticator & co).

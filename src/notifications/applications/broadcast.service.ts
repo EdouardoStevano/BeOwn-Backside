@@ -14,7 +14,7 @@ import {
 } from 'src/shared/email/email.service';
 import { EmailTemplateService } from 'src/shared/email/email-template.service';
 import { SMS_SERVICE, type SmsService } from 'src/shared/sms/sms.service';
-import { TokenService } from 'src/iam/applications/services/token.service';
+import { TokenService } from 'src/iam/applications/services/token/token.service';
 import { ProfilPPEntity } from 'src/profiles/infrastructure/persistences/entities/profil-pp.entity';
 import { ProjectEntity } from 'src/projects/infrastructure/persistences/entities/project.entity';
 import { UserPreferencesEntity } from 'src/iam/infrastructure/persistence/entities/user-preferences.entity';

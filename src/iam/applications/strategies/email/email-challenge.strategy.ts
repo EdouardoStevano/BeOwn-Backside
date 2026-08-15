@@ -1,12 +1,12 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { MfaMethodType } from 'src/iam/domains/enums/mfa-method.enum';
-import { OtpService } from 'src/iam/applications/services/otp.service';
+import { OtpService } from 'src/iam/applications/services/otp/otp.service';
 import { AuthMailerService } from 'src/iam/applications/services/auth-mailer.service';
 import {
   MFA_METHOD_REPOSITORY,
   type MfaMethodRepository,
 } from 'src/iam/domains/ports/mfa-method.repository';
-import { ChannelChallengeStrategy } from './channel-challenge.strategy';
+import { ChannelChallengeStrategy } from '../channel/channel-challenge.strategy';
 
 /** Vérification du facteur email : le code repart à l'adresse enrôlée. */
 @Injectable()

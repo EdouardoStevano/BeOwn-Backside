@@ -7,7 +7,7 @@ import {
   type AuthSession,
   TokenPayload,
 } from 'src/iam/applications/models/auth-token';
-import { TokenService } from '../services/token.service';
+import { TokenService } from '../services/token/token.service';
 import {
   USER_REPOSITORY,
   type UserRepository,
@@ -21,9 +21,9 @@ import {
 } from 'src/iam/domains/errors';
 import { MfaMethodType } from 'src/iam/domains/enums/mfa-method.enum';
 import { MfaChallengePurpose } from 'src/iam/applications/models/mfa-challenge';
-import { MFAChallengeCacheService } from '../services/mfa-challenge-cache.service';
+import { MFAChallengeCacheService } from '../services/mfa/mfa-challenge-cache.service';
 import { User } from 'src/iam/domains/models/user';
-import { MfaFactorService } from '../services/mfa-factor.service';
+import { MfaFactorService } from '../services/mfa/mfa-factor.service';
 
 /** Entrée du use case — indépendante du DTO HTTP (§1). */
 export interface SignInCommand {

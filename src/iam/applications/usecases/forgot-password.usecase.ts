@@ -2,8 +2,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import { randomBytes } from 'crypto';
 import { Inject } from '@nestjs/common';
 import { EmailTokenPayload } from 'src/iam/applications/models/auth-token';
-import { TokenService } from '../services/token.service';
-import { TokenEmailCacheService } from '../services/token-email-cache.service';
+import { TokenService } from '../services/token/token.service';
+import { TokenEmailCacheService } from '../services/token/token-email-cache.service';
 import {
   USER_REPOSITORY,
   type UserRepository,

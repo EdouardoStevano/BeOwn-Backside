@@ -6,8 +6,8 @@ import {
   MfaChallengePurposeMismatchError,
 } from 'src/iam/domains/errors';
 import { MfaChallengePurpose } from 'src/iam/applications/models/mfa-challenge';
-import { MFAChallengeCacheService } from '../services/mfa-challenge-cache.service';
-import { MfaFactorService } from '../services/mfa-factor.service';
+import { MFAChallengeCacheService } from '../services/mfa/mfa-challenge-cache.service';
+import { MfaFactorService } from '../services/mfa/mfa-factor.service';
 
 /** Entrée du use case — indépendante du DTO HTTP (§1). */
 export interface ResendMfaChallengeCommand {

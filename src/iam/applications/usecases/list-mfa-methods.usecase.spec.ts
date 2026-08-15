@@ -1,13 +1,13 @@
 import { MfaMethodType } from 'src/iam/domains/enums/mfa-method.enum';
 import { MfaMethod } from 'src/iam/domains/models/mfa-method';
 import type { MfaMethodRepository } from 'src/iam/domains/ports/mfa-method.repository';
-import { OtpService } from 'src/iam/applications/services/otp.service';
+import { OtpService } from 'src/iam/applications/services/otp/otp.service';
 import { AuthMailerService } from 'src/iam/applications/services/auth-mailer.service';
 import type { SecretCipher } from 'src/iam/applications/ports/secret-cipher.port';
 import type { TotpGenerator } from 'src/iam/applications/ports/totp-generator.port';
-import { EmailChallengeStrategy } from '../strategies/email-challenge.strategy';
-import { TotpChallengeStrategy } from '../strategies/totp-challenge.strategy';
-import type { MfaChallengeStrategy } from '../strategies/mfa-challenge.strategy';
+import { EmailChallengeStrategy } from '../strategies/email/email-challenge.strategy';
+import { TotpChallengeStrategy } from '../strategies/totp/totp-challenge.strategy';
+import type { MfaChallengeStrategy } from '../strategies/mfa/mfa-challenge.strategy';
 import { ListMfaMethodsUseCase } from './list-mfa-methods.usecase';
 
 const USER_ID = 42;
