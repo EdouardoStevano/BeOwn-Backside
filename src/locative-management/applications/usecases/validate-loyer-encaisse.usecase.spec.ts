@@ -1,6 +1,6 @@
 import { ValidateLoyerEncaisseUseCase } from './validate-loyer-encaisse.usecase';
 import { StatutDeclaration } from '../../domains/enums/statut-declaration.enum';
-import { UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
+import { UserRole } from 'src/iam/domains/enums/user.enum';
 
 describe('ValidateLoyerEncaisseUseCase', () => {
   let useCase: ValidateLoyerEncaisseUseCase;

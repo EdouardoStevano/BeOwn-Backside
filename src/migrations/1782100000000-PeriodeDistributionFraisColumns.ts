@@ -14,6 +14,13 @@ export class PeriodeDistributionFraisColumns1782100000000
   implements MigrationInterface
 {
   public async up(queryRunner: QueryRunner): Promise<void> {
+    // `periode_distribution` n'est créée qu'en 1782891038377, donc APRÈS cette
+    // migration. Sur une base existante la table est déjà là et les colonnes
+    // s'ajoutent ici ; sur une base neuve il n'y a rien à modifier, et c'est
+    // 1782891038377 qui les pose en créant la table. Sans cette garde, un
+    // rejeu depuis zéro casse ici.
+    if (!(await queryRunner.hasTable('periode_distribution'))) return;
+
     await queryRunner.query(
       `ALTER TABLE "periode_distribution" ADD COLUMN IF NOT EXISTS "fraisPlateformeAnnuel" decimal(18,2) NOT NULL DEFAULT 0`,
     );

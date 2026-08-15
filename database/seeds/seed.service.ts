@@ -3,13 +3,9 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
-import {
-  UserEntity,
-  UserRole,
-  UserStatus,
-  UserType,
-} from 'src/users/infrastructure/persistences/entities/user.entity';
-import { UserEmailEntity } from 'src/users/infrastructure/persistences/entities/user-email.entity';
+import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
+import { UserRole, UserStatus, UserType } from 'src/iam/domains/enums/user.enum';
+import { UserEmailEntity } from 'src/iam/infrastructure/persistence/entities/user-email.entity';
 import { SpvEntity } from 'src/projects/infrastructure/persistences/entities/spv.entity';
 import { ProjectEntity } from 'src/projects/infrastructure/persistences/entities/project.entity';
 import {

@@ -4,19 +4,16 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import { AccountStatusGuard } from './account-status.guard';
 import {
-  AccountStatusGuard,
   ACCOUNT_CLOSED_CODE,
   ACCOUNT_CLOSED_MESSAGE,
   ACCOUNT_SUSPENDED_CODE,
   ACCOUNT_SUSPENDED_MESSAGE,
-} from './account-status.guard';
-import { UserStatus } from 'src/users/infrastructure/persistences/entities/user.entity';
+} from 'src/iam/domains/errors';
+import { UserStatus } from 'src/iam/domains/enums/user.enum';
 
-const ctx = (
-  userId: number | undefined,
-  isPublic = false,
-): ExecutionContext =>
+const ctx = (userId: number | undefined, isPublic = false): ExecutionContext =>
   ({
     getHandler: () => ({ __isPublic: isPublic }),
     getClass: () => ({}),

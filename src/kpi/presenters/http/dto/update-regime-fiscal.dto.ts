@@ -1,5 +1,5 @@
 import { IsEnum, IsNumber, IsOptional, Max, Min, ValidateIf } from 'class-validator';
-import { RegimeFiscal } from 'src/users/infrastructure/persistences/entities/user.entity';
+import { RegimeFiscal } from 'src/iam/domains/enums/user.enum';
 
 export class UpdateRegimeFiscalDto {
   @IsEnum(RegimeFiscal)

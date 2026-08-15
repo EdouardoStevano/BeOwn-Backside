@@ -4,9 +4,9 @@ import { InvestmentsInfrastructureModule } from '../infrastructure/investments-i
 import { ProjectsInfrastructureModule } from 'src/projects/infrastructure/projects-infrastructure.module';
 import { WalletsInfrastructureModule } from 'src/wallets/infrastructure/wallets-infrastructure.module';
 import { DocumentsInfrastructureModule } from 'src/documents/infrastructure/documents-infrastructure.module';
-import { UsersInfrastructureModule } from 'src/users/infrastructure/users-infrastructure.module';
+import { UsersInfrastructureModule } from 'src/iam/infrastructure/users-infrastructure.module';
 import { ProfilesInfrastructureModule } from 'src/profiles/infrastructure/profiles-infrastructure.module';
-import { CloudStorageModule } from 'src/common/cloud-storage/cloud-storage.module';
+import { CloudStorageModule } from 'src/shared/cloud-storage/cloud-storage.module';
 import { YouSignModule } from 'src/common/yousign/yousign.module';
 import { CreateInvestmentUseCase } from './usecases/create-investment.usecase';
 import { ContractGeneratorService } from './usecases/contract-generator.service';
@@ -21,8 +21,8 @@ import { InvestmentEntity } from 'src/investments/infrastructure/persistences/en
 import { DocumentEntity } from 'src/documents/infrastructure/persistences/entities/document.entity';
 import { SignatureEntity } from 'src/signatures/infrastructure/persistences/entities/signature.entity';
 import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/wallet.entity';
-import { UserEntity } from 'src/users/infrastructure/persistences/entities/user.entity';
-import { UserEmailEntity } from 'src/users/infrastructure/persistences/entities/user-email.entity';
+import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
+import { UserEmailEntity } from 'src/iam/infrastructure/persistence/entities/user-email.entity';
 import { KycEntity } from 'src/profiles/infrastructure/persistences/entities/kyc.entity';
 import { KycValidatedGuard } from 'src/common/auth/kyc-validated.guard';
 import { EcheanceEntity } from 'src/investments/infrastructure/persistences/entities/echeance.entity';

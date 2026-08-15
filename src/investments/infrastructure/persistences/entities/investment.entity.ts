@@ -11,7 +11,7 @@ import {
 } from 'typeorm';
 import { SignatureEntity } from 'src/signatures/infrastructure/persistences/entities/signature.entity';
 import { ProjectEntity } from 'src/projects/infrastructure/persistences/entities/project.entity';
-import { UserEntity } from 'src/users/infrastructure/persistences/entities/user.entity';
+import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 import { InvestmentStatus } from 'src/investments/domains/enums/investment-status.enum';
 import { EcheanceEntity } from './echeance.entity';
 

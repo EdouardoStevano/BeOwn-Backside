@@ -20,7 +20,28 @@ export class RecaptchaService {
 
   constructor(config: ConfigService) {
     this.secret = config.get<string>('RECAPTCHA_SECRET_KEY') ?? '';
-    this.enabled = !!this.secret && config.get('NODE_ENV') !== 'test';
+    const isProduction = config.get('NODE_ENV') === 'production';
+    // Échappatoire de développement : `RECAPTCHA_ENABLED=false` court-circuite
+    // la vérification, pour travailler en local sans jeton côté front.
+    const optedOut = config.get<string>('RECAPTCHA_ENABLED') === 'false';
+
+    if (optedOut && isProduction) {
+      // Un flag égaré ne doit jamais ouvrir le sign-up en production : on
+      // l'ignore, bruyamment, plutôt que de désactiver la protection.
+      this.logger.error(
+        'RECAPTCHA_ENABLED=false ignoré : la désactivation du CAPTCHA est réservée au développement.',
+      );
+    }
+
+    const disabledForDev = optedOut && !isProduction;
+    if (disabledForDev) {
+      this.logger.warn(
+        'CAPTCHA désactivé (RECAPTCHA_ENABLED=false) — développement uniquement.',
+      );
+    }
+
+    this.enabled =
+      !!this.secret && config.get('NODE_ENV') !== 'test' && !disabledForDev;
   }
 
   async verify(token: string | undefined): Promise<void> {

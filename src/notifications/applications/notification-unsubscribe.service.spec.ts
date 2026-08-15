@@ -1,15 +1,20 @@
 import { UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { JwtTokenService } from 'src/iam/infrastructure/jwt-token.service';
+import { TokenService } from 'src/iam/applications/services/token/token.service';
+import { JwtTokenSignerAdapter } from 'src/shared/token/infrastructure/jwt-token-signer.adapter';
 import { NotificationUnsubscribeService } from './notification-unsubscribe.service';
 import { PublicUnsubscribeController } from '../presenters/http/public-unsubscribe.controller';
 
 const SECRET = 'test-secret';
 
-const buildJwtConfig = (overrides: Record<string, unknown> = {}) => ({
+const buildSignerConfig = (overrides: Record<string, unknown> = {}) => ({
   secret: SECRET,
   audience: 'localhost:3000',
   issuer: 'localhost:3000',
+  ...overrides,
+});
+
+const buildTtlConfig = (overrides: Record<string, unknown> = {}) => ({
   accessTokenTtl: 3600,
   refreshTokenTtl: 86400,
   emailTokenTtl: 86400,
@@ -17,7 +22,7 @@ const buildJwtConfig = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 
-/** Vrai JwtTokenService : on veut éprouver signature, expiration et claim `type`. */
+/** Vrai signer JWT : on veut éprouver signature, expiration et claim `type`. */
 const buildTokenService = (overrides: Record<string, unknown> = {}) => {
   const cacheManagerService = {
     insertRefreshTokenId: jest.fn(),
@@ -27,10 +32,14 @@ const buildTokenService = (overrides: Record<string, unknown> = {}) => {
     validateEmailToken: jest.fn(),
     invalidateEmailTokenId: jest.fn(),
   };
-  return new JwtTokenService(
-    cacheManagerService as any,
+  const signer = new JwtTokenSignerAdapter(
     new JwtService(),
-    buildJwtConfig(overrides) as any,
+    buildSignerConfig(overrides) as any,
+  );
+  return new TokenService(
+    signer,
+    cacheManagerService as any,
+    buildTtlConfig(overrides) as any,
   );
 };
 
@@ -81,13 +90,17 @@ describe('NotificationUnsubscribeService', () => {
     const { service, tokenService, userRepository } = makeSut();
     const token = await tokenService.generateUnsubscribeToken(42);
 
-    await expect(service.unsubscribe(token)).resolves.toEqual({ success: true });
-    await expect(service.unsubscribe(token)).resolves.toEqual({ success: true });
+    await expect(service.unsubscribe(token)).resolves.toEqual({
+      success: true,
+    });
+    await expect(service.unsubscribe(token)).resolves.toEqual({
+      success: true,
+    });
 
     expect(userRepository.savePreferences).toHaveBeenCalledTimes(2);
   });
 
-  it('rejette (401) un token de vérification d\'email — confusion de token', async () => {
+  it("rejette (401) un token de vérification d'email — confusion de token", async () => {
     const { service, tokenService, userRepository } = makeSut();
     const emailToken = await tokenService.generateEmailToken(
       { sub: 42, email: 'user@example.com', emailTokenId: 'token-id' },
@@ -122,7 +135,7 @@ describe('NotificationUnsubscribeService', () => {
     expect(userRepository.savePreferences).not.toHaveBeenCalled();
   });
 
-  it('rejette (401) un token dont l\'utilisateur n\'existe plus', async () => {
+  it("rejette (401) un token dont l'utilisateur n'existe plus", async () => {
     const { service, tokenService, userRepository } = makeSut();
     userRepository.findById.mockResolvedValue(null);
     const token = await tokenService.generateUnsubscribeToken(42);
@@ -157,8 +170,8 @@ describe('PublicUnsubscribeController', () => {
   it('propage un 401 pour un token invalide', async () => {
     const { controller } = makeSut();
 
-    await expect(controller.unsubscribe({ token: 'not-a-jwt' })).rejects.toThrow(
-      UnauthorizedException,
-    );
+    await expect(
+      controller.unsubscribe({ token: 'not-a-jwt' }),
+    ).rejects.toThrow(UnauthorizedException);
   });
 });

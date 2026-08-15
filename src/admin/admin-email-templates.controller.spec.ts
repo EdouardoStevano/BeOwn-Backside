@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common';
 import { AdminEmailTemplatesController } from './admin-email-templates.controller';
 import { EMAIL_TEMPLATE_SAMPLES } from './email-template.samples';
-import { UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
+import { UserRole } from 'src/iam/domains/enums/user.enum';
 
 const admin = { userId: 1, email: 'admin@beown.fr' } as any;
 
