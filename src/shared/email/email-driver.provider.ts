@@ -9,15 +9,24 @@ import { PlatformSettingsService } from 'src/common/platform-settings/platform-s
 export type MailDriver = 'brevo' | 'mailpit';
 
 /**
+ * Environnements déployés qui envoient de vrais emails via Brevo. Le poste de
+ * dev local ne définit pas `NODE_ENV` (voir `.env`) et retombe donc sur
+ * Mailpit ; `test` en fait autant, une suite de tests n'ayant aucune raison de
+ * consommer du quota Brevo.
+ */
+const BREVO_ENVIRONMENTS = ['development', 'staging', 'production'];
+
+/**
  * Choix du transport, dans cet ordre :
  *   1. `MAIL_DRIVER` s'il est renseigné (brevo | mailpit) — permet de tester
  *      Brevo en local, ou d'imposer Mailpit sur un environnement partagé ;
- *   2. sinon : Mailpit hors production, Brevo en production.
+ *   2. sinon : Brevo sur les environnements déployés (development, staging,
+ *      production), Mailpit partout ailleurs.
  *
- * Le défaut est volontairement « Mailpit sauf en production » plutôt que
- * « Mailpit si localhost » : un poste de dev, un CI et une preview branch
- * n'ont aucune raison d'envoyer de vrais emails, et `NODE_ENV` est la seule
- * information fiable dont on dispose au démarrage.
+ * Le défaut retenu est « Mailpit sauf environnement déployé connu » : la liste
+ * est une whitelist, donc un `NODE_ENV` absent ou inattendu ne peut jamais
+ * faire sortir d'email réel par accident. `NODE_ENV` est la seule information
+ * fiable dont on dispose au démarrage.
  */
 export function resolveMailDriver(config: ConfigService): MailDriver {
   const explicit = config.get<string>('MAIL_DRIVER')?.trim().toLowerCase();
@@ -28,7 +37,8 @@ export function resolveMailDriver(config: ConfigService): MailDriver {
       `MAIL_DRIVER="${explicit}" inconnu (attendu: brevo | mailpit) — bascule sur la règle par défaut.`,
     );
   }
-  return config.get('NODE_ENV') === 'production' ? 'brevo' : 'mailpit';
+  const env = config.get<string>('NODE_ENV')?.trim().toLowerCase();
+  return env && BREVO_ENVIRONMENTS.includes(env) ? 'brevo' : 'mailpit';
 }
 
 /**
