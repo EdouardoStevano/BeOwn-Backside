@@ -17,8 +17,10 @@ import type { DocumentRepository } from 'src/documents/applications/ports/reposi
 import { DOCUMENT_REPOSITORY } from 'src/documents/applications/ports/repositories/document.repository';
 import type { UserRepository } from 'src/iam/domains/ports/user.repository';
 import { USER_REPOSITORY } from 'src/iam/domains/ports/user.repository';
-import type { ProfilRepository } from 'src/profiles/applications/ports/repositories/profil.repository';
-import { PROFIL_REPOSITORY } from 'src/profiles/applications/ports/repositories/profil.repository';
+import {
+  PROFIL_PP_REPOSITORY,
+  type ProfilPPRepository,
+} from 'src/profiles/domains/ports/profil-pp.repository';
 import { PLANCHER_PLAFOND_NON_AVERTI } from 'src/profiles/domains/value-objects/evaluation-investisseur.vo';
 import { Investment } from 'src/investments/domains/investment';
 import { Echeance } from 'src/investments/domains/echeance';
@@ -70,8 +72,8 @@ export class CreateInvestmentUseCase {
     private readonly documentRepository: DocumentRepository,
     @Inject(USER_REPOSITORY)
     private readonly userRepository: UserRepository,
-    @Inject(PROFIL_REPOSITORY)
-    private readonly profilRepository: ProfilRepository,
+    @Inject(PROFIL_PP_REPOSITORY)
+    private readonly profilPPRepository: ProfilPPRepository,
     private readonly contractGenerator: ContractGeneratorService,
     private readonly cloudStorage: CloudStorageService,
     private readonly notificationService: NotificationService,
@@ -97,7 +99,7 @@ export class CreateInvestmentUseCase {
     if (!project) throw new NotFoundException('Projet introuvable.');
 
     // Get investor profile to check PSFP category
-    const profilPP = await this.profilRepository.findProfilPPByUserId(userId);
+    const profilPP = await this.profilPPRepository.findByUserId(userId);
     const isNonAverti = profilPP?.estNonAverti() ?? false;
 
     if (project.statut !== ProjectStatus.EN_COLLECTE) {

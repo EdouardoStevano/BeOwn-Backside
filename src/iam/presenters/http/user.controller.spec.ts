@@ -29,7 +29,9 @@ describe('UserController.deleteMe', () => {
 
     controller = new UserController(
       userRepository,
-      {} as any, // profilRepository
+      {} as any, // profilPPRepository
+      {} as any, // profilPMRepository
+      {} as any, // kycRepository
       {} as any, // documentRepository
       {} as any, // walletRepository
       hashingService,

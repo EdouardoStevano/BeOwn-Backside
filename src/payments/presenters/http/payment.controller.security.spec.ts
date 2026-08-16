@@ -82,7 +82,7 @@ describe('PaymentController — sécurité des flux monétaires (H-1 / H-2)', ()
       notificationService,
       /* auditLog */ {} as any,
       /* config */ { get: jest.fn() } as any,
-      /* profilRepository */ {} as any,
+      /* kycRepository */ {} as any,
       walletRepo,
       txRepo,
       dataSource,

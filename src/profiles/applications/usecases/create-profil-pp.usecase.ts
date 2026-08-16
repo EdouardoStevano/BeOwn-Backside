@@ -1,8 +1,10 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { PROFIL_REPOSITORY } from '../ports/repositories/profil.repository';
-import type { ProfilRepository } from '../ports/repositories/profil.repository';
+import {
+  PROFIL_PP_REPOSITORY,
+  type ProfilPPRepository,
+} from 'src/profiles/domains/ports/profil-pp.repository';
 import { CreateProfilPPDto } from 'src/profiles/presenters/dto/profil.dto';
 import { ProfilPP } from 'src/profiles/domains/profil-pp';
 import { ProfilPPFactory } from 'src/profiles/domains/factories/profil-pp.factory';
@@ -22,14 +24,14 @@ import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.ent
 @Injectable()
 export class CreateProfilPPUseCase {
   constructor(
-    @Inject(PROFIL_REPOSITORY)
-    private readonly profilRepository: ProfilRepository,
+    @Inject(PROFIL_PP_REPOSITORY)
+    private readonly profilPPRepository: ProfilPPRepository,
     @InjectRepository(UserEntity)
     private readonly userRepo: Repository<UserEntity>,
   ) {}
 
   async execute(userId: number, dto: CreateProfilPPDto): Promise<ProfilPP> {
-    const existing = await this.profilRepository.findProfilPPByUserId(userId);
+    const existing = await this.profilPPRepository.findByUserId(userId);
     if (existing) throw new ProfilPPDejaExistantError();
 
     // prenom / nom sont NOT NULL et ne sont pas redemandés par le formulaire de
@@ -43,6 +45,6 @@ export class CreateProfilPPUseCase {
       ...champsDeclaresDepuisDto(dto),
     });
 
-    return this.profilRepository.saveProfilPP(profil);
+    return this.profilPPRepository.save(profil);
   }
 }

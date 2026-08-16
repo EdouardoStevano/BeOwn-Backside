@@ -1,5 +1,5 @@
 import { CreateProfilPPUseCase } from './create-profil-pp.usecase';
-import type { ProfilRepository } from '../ports/repositories/profil.repository';
+import type { ProfilPPRepository } from 'src/profiles/domains/ports/profil-pp.repository';
 import { ProfilPP } from 'src/profiles/domains/profil-pp';
 import { ProfilPPFactory } from 'src/profiles/domains/factories/profil-pp.factory';
 import {
@@ -9,38 +9,39 @@ import {
 import { CategoriePsfp } from 'src/profiles/domains/enums/kyc-status.enum';
 import { CreateProfilPPDto } from 'src/profiles/presenters/dto/profil.dto';
 
-/** Le use case n'a besoin que de trois méthodes du port — mocker le reste serait du bruit. */
-type PortPartiel = Pick<
-  ProfilRepository,
-  'findProfilPPByUserId' | 'saveProfilPP'
->;
+/**
+ * Le port ne porte plus que le profil PP : le mock tient en deux méthodes, là
+ * où l'ancien `ProfilRepository` en imposait onze — dont la sauvegarde d'un
+ * profil moral et six opérations KYC, sans rapport avec ce use case (§4 — ISP).
+ */
+type PortPartiel = Pick<ProfilPPRepository, 'findByUserId' | 'save'>;
 
 function monter(options: {
   existant?: ProfilPP | null;
   compte?: { firstname?: string; lastname?: string | null } | null;
 }) {
-  const profilRepository: PortPartiel = {
-    findProfilPPByUserId: jest.fn().mockResolvedValue(options.existant ?? null),
+  const profilPPRepository: PortPartiel = {
+    findByUserId: jest.fn().mockResolvedValue(options.existant ?? null),
     // Le repository rend ce qu'il a reçu : la persistance n'est pas le sujet.
-    saveProfilPP: jest.fn((profil: ProfilPP) => Promise.resolve(profil)),
+    save: jest.fn((profil: ProfilPP) => Promise.resolve(profil)),
   };
   const userRepo = {
     findOne: jest.fn().mockResolvedValue(options.compte ?? null),
   };
 
   const useCase = new CreateProfilPPUseCase(
-    profilRepository as ProfilRepository,
+    profilPPRepository as ProfilPPRepository,
     userRepo as never,
   );
 
-  return { useCase, profilRepository, userRepo };
+  return { useCase, profilPPRepository, userRepo };
 }
 
 const DTO_VIDE = {} as CreateProfilPPDto;
 
 describe('CreateProfilPPUseCase', () => {
   it('refuse un second profil pour le même compte', async () => {
-    const { useCase, profilRepository } = monter({
+    const { useCase, profilPPRepository } = monter({
       existant: ProfilPPFactory.creer({
         utilisateurId: 42,
         prenom: 'Awa',
@@ -51,7 +52,7 @@ describe('CreateProfilPPUseCase', () => {
     await expect(useCase.execute(42, DTO_VIDE)).rejects.toBeInstanceOf(
       ProfilPPDejaExistantError,
     );
-    expect(profilRepository.saveProfilPP).not.toHaveBeenCalled();
+    expect(profilPPRepository.save).not.toHaveBeenCalled();
   });
 
   it("reprend l'identité du compte, que le formulaire ne redemande pas", async () => {
@@ -95,18 +96,18 @@ describe('CreateProfilPPUseCase', () => {
   });
 
   it('ne persiste rien quand une donnée déclarée est refusée', async () => {
-    const { useCase, profilRepository } = monter({
+    const { useCase, profilPPRepository } = monter({
       compte: { firstname: 'Awa' },
     });
 
     await expect(
       useCase.execute(42, { nationalite: 'ZZ' } as CreateProfilPPDto),
     ).rejects.toBeInstanceOf(ChampProfilInvalideError);
-    expect(profilRepository.saveProfilPP).not.toHaveBeenCalled();
+    expect(profilPPRepository.save).not.toHaveBeenCalled();
   });
 
   it('transmet au port un profil déjà éprouvé', async () => {
-    const { useCase, profilRepository } = monter({
+    const { useCase, profilPPRepository } = monter({
       compte: { firstname: 'Awa', lastname: 'Koné' },
     });
 
@@ -119,7 +120,7 @@ describe('CreateProfilPPUseCase', () => {
       nif: '12 34 56 78 90',
     } as CreateProfilPPDto);
 
-    const profil = jest.mocked(profilRepository.saveProfilPP).mock.calls[0][0];
+    const profil = jest.mocked(profilPPRepository.save).mock.calls[0][0];
     expect(profil.utilisateurId).toBe(42);
     expect(profil.identite.civilite).toBe('Mme');
     expect(profil.coordonnees.telephone).toBe('+33612345678');

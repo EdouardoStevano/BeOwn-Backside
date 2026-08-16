@@ -1,18 +1,18 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Inject } from '@nestjs/common';
 import {
-  PROFIL_REPOSITORY,
-  type ProfilRepository,
-} from '../ports/repositories/profil.repository';
+  KYC_REPOSITORY,
+  type KycRepository,
+} from 'src/profiles/domains/ports/kyc.repository';
 
 @Injectable()
 export class GetKycUseCase {
   constructor(
-    @Inject(PROFIL_REPOSITORY) private readonly profilRepository: ProfilRepository,
+    @Inject(KYC_REPOSITORY) private readonly kycRepository: KycRepository,
   ) {}
 
   async execute(userId: number) {
-    const kyc = await this.profilRepository.findKycByUserId(userId);
+    const kyc = await this.kycRepository.findByUserId(userId);
     if (!kyc) {
       throw new NotFoundException('KYC non trouvé');
     }
@@ -20,6 +20,6 @@ export class GetKycUseCase {
   }
 
   async executeAll(params?: { page?: number; limit?: number }) {
-    return this.profilRepository.findAllKyc(params);
+    return this.kycRepository.findAll(params);
   }
 }

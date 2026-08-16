@@ -1,20 +1,21 @@
 import { Injectable } from '@nestjs/common';
 import { Inject } from '@nestjs/common';
 import {
-  PROFIL_REPOSITORY,
-  type ProfilRepository,
-} from '../ports/repositories/profil.repository';
+  PROFIL_PM_REPOSITORY,
+  type ProfilPMRepository,
+} from 'src/profiles/domains/ports/profil-pm.repository';
 import { ProfilPM } from 'src/profiles/domains/profil-pm';
 import { CreateProfilPMDto } from '../../presenters/dto/profil.dto';
 
 @Injectable()
 export class CreateProfilPMUseCase {
   constructor(
-    @Inject(PROFIL_REPOSITORY) private readonly profilRepository: ProfilRepository,
+    @Inject(PROFIL_PM_REPOSITORY)
+    private readonly profilPMRepository: ProfilPMRepository,
   ) {}
 
   async execute(userId: number, dto: CreateProfilPMDto): Promise<ProfilPM> {
-    const existing = await this.profilRepository.findProfilPMByUserId(userId);
+    const existing = await this.profilPMRepository.findByUserId(userId);
     if (existing) {
       return existing;
     }
@@ -22,6 +23,6 @@ export class CreateProfilPMUseCase {
     const profil = new ProfilPM();
     profil.utilisateurId = userId;
     Object.assign(profil, dto);
-    return this.profilRepository.saveProfilPM(profil);
+    return this.profilPMRepository.save(profil);
   }
 }

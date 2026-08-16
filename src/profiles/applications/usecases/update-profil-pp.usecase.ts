@@ -1,9 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { Inject } from '@nestjs/common';
 import {
-  PROFIL_REPOSITORY,
-  type ProfilRepository,
-} from '../ports/repositories/profil.repository';
+  PROFIL_PP_REPOSITORY,
+  type ProfilPPRepository,
+} from 'src/profiles/domains/ports/profil-pp.repository';
 import { ProfilPP } from 'src/profiles/domains/profil-pp';
 import { ProfilPPIntrouvableError } from 'src/profiles/domains/errors';
 import { CreateProfilPPDto } from '../../presenters/dto/profil.dto';
@@ -21,20 +21,20 @@ import { champsDeclaresDepuisDto } from '../mappers/profil-pp-champs.mapper';
 @Injectable()
 export class UpdateProfilPPUseCase {
   constructor(
-    @Inject(PROFIL_REPOSITORY)
-    private readonly profilRepository: ProfilRepository,
+    @Inject(PROFIL_PP_REPOSITORY)
+    private readonly profilPPRepository: ProfilPPRepository,
   ) {}
 
   async execute(
     userId: number,
     dto: Partial<CreateProfilPPDto>,
   ): Promise<ProfilPP> {
-    const profil = await this.profilRepository.findProfilPPByUserId(userId);
+    const profil = await this.profilPPRepository.findByUserId(userId);
     if (!profil) {
       throw new ProfilPPIntrouvableError();
     }
 
     profil.mettreAJour(champsDeclaresDepuisDto(dto));
-    return this.profilRepository.updateProfilPP(profil);
+    return this.profilPPRepository.update(profil);
   }
 }
