@@ -5,11 +5,14 @@ import { ProfilPP } from 'src/profiles/domains/profil-pp';
 import { ProfilPPMapper as ProfilPPDomainMapper } from 'src/profiles/domains/mappers/profil-pp.mapper';
 import { ProfilPMMapper as ProfilPMDomainMapper } from 'src/profiles/domains/mappers/profil-pm.mapper';
 import { KycMapper as KycDomainMapper } from 'src/profiles/domains/mappers/kyc.mapper';
+import { QuestionnaireAdequationMapper as QuestionnaireAdequationDomainMapper } from 'src/profiles/domains/mappers/questionnaire-adequation.mapper';
+import { QuestionnaireAdequation } from 'src/profiles/domains/questionnaire-adequation';
 import { ProfilPM } from 'src/profiles/domains/profil-pm';
 import { Kyc } from 'src/profiles/domains/kyc';
 import { ProfilPPEntity } from '../entities/profil-pp.entity';
 import { ProfilPMEntity } from '../entities/profil-pm.entity';
 import { KycEntity } from '../entities/kyc.entity';
+import { QuestionnaireAdequationEntity } from '../entities/questionnaire-adequation.entity';
 
 export class ProfilMapper {
   /**
@@ -123,6 +126,67 @@ export class ProfilMapper {
     entity.siegeAdresse = snapshot.siegeAdresse;
     entity.representantId = snapshot.representantId;
     entity.secteurActivite = snapshot.secteurActivite;
+    return entity;
+  }
+
+  static questionnaireToDomain(
+    entity: QuestionnaireAdequationEntity,
+  ): QuestionnaireAdequation {
+    return QuestionnaireAdequationDomainMapper.restore({
+      id: entity.id,
+      utilisateurId: entity.utilisateurId,
+      workInFinancialSector: entity.workInFinancialSector,
+      moreThan10TransactionsPerQuarter: entity.moreThan10TransactionsPerQuarter,
+      portfolioOver500k: entity.portfolioOver500k,
+      previousUnlistedInvestments: entity.previousUnlistedInvestments,
+      investmentExperienceOver5Years: entity.investmentExperienceOver5Years,
+      financialPatrimonyOver500k: entity.financialPatrimonyOver500k,
+      understandsTotalLossRisk: entity.understandsTotalLossRisk,
+      financialSectorBackground: entity.financialSectorBackground,
+      patrimoineNet: entity.patrimoineNet,
+      revenuAnnuel: entity.revenuAnnuel,
+      budgetAnnuelInvestissement: entity.budgetAnnuelInvestissement,
+      acceptsSimulatedLoss: entity.acceptsSimulatedLoss,
+      resultCategorie: entity.resultCategorie,
+      resultMontantMaxConseille: entity.resultMontantMaxConseille,
+      createdAt: entity.createdAt,
+      updatedAt: entity.updatedAt,
+    });
+  }
+
+  /**
+   * Sens écriture : tout l'état du questionnaire, classement compris.
+   *
+   * Contrairement au profil, l'agrégat est ici **propriétaire de toutes ses
+   * colonnes** — y compris `resultCategorie` et `resultMontantMaxConseille`,
+   * que personne d'autre n'écrit : ils sont déduits des réponses par
+   * `ResultatAdequation.calculer`. C'est le questionnaire qui les reporte
+   * ensuite sur le profil, via `enregistrerClassementPsfp`.
+   */
+  static questionnaireToEntity(
+    domain: QuestionnaireAdequation,
+  ): QuestionnaireAdequationEntity {
+    const snapshot = QuestionnaireAdequationDomainMapper.toSnapshot(domain);
+    const entity = new QuestionnaireAdequationEntity();
+    // Absent d'un premier passage : l'uuid est généré en base.
+    if (snapshot.id) entity.id = snapshot.id;
+    entity.utilisateurId = snapshot.utilisateurId;
+    entity.workInFinancialSector = snapshot.workInFinancialSector;
+    entity.moreThan10TransactionsPerQuarter =
+      snapshot.moreThan10TransactionsPerQuarter;
+    entity.portfolioOver500k = snapshot.portfolioOver500k;
+    entity.previousUnlistedInvestments = snapshot.previousUnlistedInvestments;
+    entity.investmentExperienceOver5Years =
+      snapshot.investmentExperienceOver5Years;
+    entity.financialPatrimonyOver500k = snapshot.financialPatrimonyOver500k;
+    entity.understandsTotalLossRisk = snapshot.understandsTotalLossRisk;
+    entity.financialSectorBackground = snapshot.financialSectorBackground;
+    entity.patrimoineNet = snapshot.patrimoineNet;
+    entity.revenuAnnuel = snapshot.revenuAnnuel;
+    entity.budgetAnnuelInvestissement = snapshot.budgetAnnuelInvestissement;
+    entity.acceptsSimulatedLoss = snapshot.acceptsSimulatedLoss;
+    entity.resultCategorie = snapshot.resultCategorie;
+    entity.resultMontantMaxConseille = snapshot.resultMontantMaxConseille;
     return entity;
   }
 

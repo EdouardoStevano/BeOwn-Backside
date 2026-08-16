@@ -1,13 +1,5 @@
 import { CategoriePsfp } from 'src/profiles/domains/enums/kyc-status.enum';
-
-/**
- * Plancher du plafond conseillé aux investisseurs non avertis : le règlement
- * PSFP autorise 1 000 € même quand 5 % du patrimoine déclaré est inférieur.
- */
-export const PLANCHER_PLAFOND_NON_AVERTI = 1_000;
-
-/** Part du patrimoine déclaré au-delà de laquelle l'investissement est déconseillé. */
-const PART_PATRIMOINE_CONSEILLEE = 0.05;
+import { plafondConseillePour } from 'src/profiles/domains/services/plafond-psfp.domain-service';
 
 export interface EvaluationInvestisseurSnapshot {
   categoriePsfp: CategoriePsfp;
@@ -105,14 +97,13 @@ export class EvaluationInvestisseur {
    * Ce calcul vivait dans `create-investment.usecase`, à côté du contrôle de
    * disponibilité des fractions et de la création de l'investissement. C'est
    * une règle du profil, pas de la souscription : elle ne dépend que de la
-   * catégorie et du patrimoine.
+   * catégorie et du patrimoine. Le calcul lui-même est délégué à
+   * `plafondConseillePour` — le questionnaire d'adéquation applique la même
+   * règle pour fixer le montant qu'il stocke.
    */
   plafondConseille(): number | null {
     if (!this.estNonAverti()) return null;
-    return Math.max(
-      PLANCHER_PLAFOND_NON_AVERTI,
-      (this.etat.patrimoineDeclare ?? 0) * PART_PATRIMOINE_CONSEILLEE,
-    );
+    return plafondConseillePour(this.etat.patrimoineDeclare);
   }
 
   get categoriePsfp(): CategoriePsfp {

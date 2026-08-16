@@ -1,7 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { ProfilPPRepository } from 'src/profiles/domains/ports/profil-pp.repository';
+import { IsNull, LessThan, Repository } from 'typeorm';
+import { NiveauRisque } from 'src/profiles/domains/enums/niveau-risque.enum';
+import {
+  ClassementPsfp,
+  ProfilPPRepository,
+  SuiviRisque,
+} from 'src/profiles/domains/ports/profil-pp.repository';
 import { ProfilPP } from 'src/profiles/domains/profil-pp';
 import { ProfilPPEntity } from '../entities/profil-pp.entity';
 import { ProfilMapper } from '../mappers/profil.mapper';
@@ -35,5 +40,49 @@ export class ProfilPPTypeOrmRepository implements ProfilPPRepository {
    */
   update(profil: ProfilPP): Promise<ProfilPP> {
     return this.save(profil);
+  }
+
+  /**
+   * `update` et non `save` : une mise à jour ciblée ne touche que ces colonnes,
+   * là où `save` réécrirait toute la ligne — y compris ce qu'un autre chemin
+   * aurait modifié entre-temps. Sans effet si la ligne n'existe pas, ce que le
+   * port annonce.
+   */
+  async enregistrerClassementPsfp(
+    utilisateurId: number,
+    classement: ClassementPsfp,
+  ): Promise<void> {
+    await this.ppRepo.update(
+      { utilisateurId },
+      {
+        categoriePsfp: classement.categoriePsfp,
+        patrimoineDeclare: classement.patrimoineDeclare,
+        montantMaxConseille: classement.montantMaxConseille,
+      },
+    );
+  }
+
+  async enregistrerSuiviRisque(
+    utilisateurId: number,
+    suivi: SuiviRisque,
+  ): Promise<void> {
+    await this.ppRepo.update(
+      { utilisateurId },
+      {
+        niveauRisque: suivi.niveauRisque,
+        prochainContactDu: suivi.prochainContactDu,
+      },
+    );
+  }
+
+  async listerContactsDus(limite: number): Promise<ProfilPP[]> {
+    const entities = await this.ppRepo.find({
+      where: [
+        { prochainContactDu: LessThan(new Date()) },
+        { prochainContactDu: IsNull(), niveauRisque: NiveauRisque.VULNERABLE },
+      ],
+      take: limite,
+    });
+    return entities.map((entity) => ProfilMapper.ppToDomain(entity));
   }
 }

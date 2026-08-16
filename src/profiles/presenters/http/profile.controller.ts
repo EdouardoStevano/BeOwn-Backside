@@ -31,7 +31,7 @@ import { GetProfilPMUseCase } from 'src/profiles/applications/usecases/get-profi
 import { UpdateProfilPMUseCase } from 'src/profiles/applications/usecases/update-profil-pm.usecase';
 import { GetKycUseCase } from 'src/profiles/applications/usecases/get-kyc.usecase';
 import { SaveQuestionnaireUseCase } from 'src/profiles/applications/usecases/save-questionnaire.usecase';
-import { QuestionnaireAdequationEntity } from 'src/profiles/infrastructure/persistences/entities/questionnaire-adequation.entity';
+import { GetQuestionnaireUseCase } from 'src/profiles/applications/usecases/get-questionnaire.usecase';
 import {
   CreateProfilPPDto,
   UpdateKycStatusDto,
@@ -66,8 +66,7 @@ export class ProfileController {
     private readonly updateProfilPM: UpdateProfilPMUseCase,
     private readonly getKyc: GetKycUseCase,
     private readonly saveQuestionnaireUseCase: SaveQuestionnaireUseCase,
-    @InjectRepository(QuestionnaireAdequationEntity)
-    private readonly questionnaireRepo: Repository<QuestionnaireAdequationEntity>,
+    private readonly getQuestionnaire: GetQuestionnaireUseCase,
     @InjectRepository(UserEntity)
     private readonly userRepo: Repository<UserEntity>,
   ) {}
@@ -244,8 +243,6 @@ export class ProfileController {
   @ApiResponse({ status: 200, description: 'Questionnaire retourné' })
   @Get('questionnaire/me')
   getMyQuestionnaire(@CurrentUser() user: ActiveUser) {
-    return this.questionnaireRepo.findOne({
-      where: { utilisateurId: user.userId },
-    });
+    return this.getQuestionnaire.execute(user.userId);
   }
 }

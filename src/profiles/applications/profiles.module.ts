@@ -19,8 +19,7 @@ import { GetProfilPMUseCase } from './usecases/get-profil-pm.usecase';
 import { UpdateProfilPMUseCase } from './usecases/update-profil-pm.usecase';
 import { GetKycUseCase } from './usecases/get-kyc.usecase';
 import { SaveQuestionnaireUseCase } from './usecases/save-questionnaire.usecase';
-import { QuestionnaireAdequationEntity } from '../infrastructure/persistences/entities/questionnaire-adequation.entity';
-import { ProfilPPEntity } from '../infrastructure/persistences/entities/profil-pp.entity';
+import { GetQuestionnaireUseCase } from './usecases/get-questionnaire.usecase';
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructure.module';
 import { NotificationsModule } from 'src/notifications/notifications.module';
@@ -39,9 +38,11 @@ import { ProfilesErrorFilter } from '../presenters/http/filters/profiles-error.f
     ProfilesInfrastructureModule,
     IamInfrastructureModule,
     NotificationsModule,
+    // Ce qui reste ici est ce que la présentation lit encore en direct : le
+    // compte (contrôle de rôle) et les bénéficiaires effectifs. Le
+    // questionnaire et le profil PP en sont sortis — ils passent désormais par
+    // leurs ports (§12.3, §12.9).
     TypeOrmModule.forFeature([
-      QuestionnaireAdequationEntity,
-      ProfilPPEntity,
       UserEntity,
       BeneficiaireEffectifEntity,
       ProfilPMEntity,
@@ -60,6 +61,7 @@ import { ProfilesErrorFilter } from '../presenters/http/filters/profiles-error.f
     UpdateProfilPMUseCase,
     GetKycUseCase,
     SaveQuestionnaireUseCase,
+    GetQuestionnaireUseCase,
     RiskScoringService,
     KycRevueManuelleDemandeeEventHandler,
     KycValideEventHandler,
