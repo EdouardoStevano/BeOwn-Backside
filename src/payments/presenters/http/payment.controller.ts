@@ -54,7 +54,8 @@ import { UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
 import { KycValidatedGuard } from 'src/common/auth/kyc-validated.guard';
 import { UpdateKycStatusUseCase } from 'src/profiles/applications/usecases/update-kyc-status.usecase';
-import { KycStatus, KycNiveau } from 'src/profiles/domains/enums/kyc-status.enum';
+import { CreateKycUseCase } from 'src/profiles/applications/usecases/create-kyc.usecase';
+import { KycStatus } from 'src/profiles/domains/enums/kyc-status.enum';
 import {
   KYC_REPOSITORY,
   type KycRepository,
@@ -78,6 +79,7 @@ export class PaymentController {
     private readonly identityService: StripeIdentityServiceImpl,
     private readonly stripeConnect: StripeConnectService,
     private readonly updateKycStatus: UpdateKycStatusUseCase,
+    private readonly createKyc: CreateKycUseCase,
     private readonly notificationService: NotificationService,
     private readonly auditLog: AuditLogService,
     private readonly config: ConfigService,
@@ -318,20 +320,12 @@ export class PaymentController {
   @ApiResponse({ status: 201, description: 'Session KYC créée — rediriger vers url' })
   @Post('kyc/start')
   async startKyc(@CurrentUser() user: ActiveUser) {
-    // Find or create KYC record
-    let kyc = await this.kycRepository.findByUserId(user.userId);
-    if (!kyc) {
-      const newKyc = new Kyc();
-      newKyc.utilisateurId = user.userId;
-      newKyc.statut = KycStatus.NON_DEMARRE;
-      newKyc.niveau = KycNiveau.STANDARD;
-      newKyc.fournisseur = 'stripeIdentity';
-      newKyc.scoreRisque = null;
-      newKyc.fournisseurRef = null;
-      newKyc.valideJusquAu = null;
-      newKyc.motifRefus = null;
-      kyc = await this.kycRepository.save(newKyc);
-    }
+    // Find or create — le même chemin que POST /profiles/kyc/me. Le dossier
+    // était fabriqué ici à la main, huit affectations recopiées de
+    // `CreateKycUseCase` : ouvrir un dossier est un cas d'usage du contexte
+    // Profiles, pas l'affaire d'un contrôleur Payments (§12.5). Le use case est
+    // idempotent, d'où l'absence de test d'existence.
+    const kyc = await this.createKyc.execute(user.userId);
 
     // Create Stripe Identity session
     const session = await this.identityService.createVerificationSession(

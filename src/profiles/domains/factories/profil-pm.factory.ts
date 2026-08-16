@@ -1,4 +1,3 @@
-import { ChampProfilInvalideError } from 'src/profiles/domains/errors';
 import {
   ChampsDeclaresProfilPM,
   ProfilPM,
@@ -7,6 +6,7 @@ import {
   eprouverSiegeAdresse,
 } from 'src/profiles/domains/profil-pm';
 import { CapitalSocial } from 'src/profiles/domains/value-objects/capital-social.vo';
+import { eprouverUtilisateurId } from 'src/profiles/domains/value-objects/identifiant-utilisateur';
 import { IdentiteLegale } from 'src/profiles/domains/value-objects/identite-legale.vo';
 
 /** Ce qu'il faut pour faire naître un profil moral, en plus des déclarations. */
@@ -42,20 +42,4 @@ export class ProfilPMFactory {
       representantId: eprouverRepresentantId(props.representantId),
     });
   }
-}
-
-/**
- * Le profil est en relation 1–1 avec le compte, et `utilisateurId` en est la
- * clé primaire : une valeur absente ou négative produirait une ligne
- * orpheline, ou écraserait celle d'un autre.
- */
-function eprouverUtilisateurId(raw: number): number {
-  if (!Number.isInteger(raw) || raw <= 0) {
-    throw new ChampProfilInvalideError(
-      "L'identifiant utilisateur",
-      'doit être un entier positif.',
-      'utilisateurId',
-    );
-  }
-  return raw;
 }

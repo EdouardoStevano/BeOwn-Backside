@@ -1,10 +1,16 @@
 import { Module } from '@nestjs/common';
 import { APP_FILTER } from '@nestjs/core';
+import { CqrsModule } from '@nestjs/cqrs';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ProfilesInfrastructureModule } from '../infrastructure/profiles-infrastructure.module';
 import { CreateProfilPPUseCase } from './usecases/create-profil-pp.usecase';
 import { CreateKycUseCase } from './usecases/create-kyc.usecase';
 import { UpdateKycStatusUseCase } from './usecases/update-kyc-status.usecase';
+import { RequestKycManualReviewUseCase } from './usecases/request-kyc-manual-review.usecase';
+import { DecideKycManualReviewUseCase } from './usecases/decide-kyc-manual-review.usecase';
+import { KycRevueManuelleDemandeeEventHandler } from './events/kyc-revue-manuelle-demandee.event-handler';
+import { KycValideEventHandler } from './events/kyc-valide.event-handler';
+import { KycRefuseEventHandler } from './events/kyc-refuse.event-handler';
 import { ProfileController } from '../presenters/http/profile.controller';
 import { GetProfilPPUseCase } from './usecases/get-profil-pp.usecase';
 import { UpdateProfilPPUseCase } from './usecases/update-profil-pp.usecase';
@@ -26,6 +32,10 @@ import { ProfilesErrorFilter } from '../presenters/http/filters/profiles-error.f
 
 @Module({
   imports: [
+    // Bus d'événements du contexte : les use cases KYC y publient les faits
+    // métier (revue demandée, dossier validé, dossier refusé), les handlers de
+    // `applications/events/` s'y abonnent (§8).
+    CqrsModule,
     ProfilesInfrastructureModule,
     IamInfrastructureModule,
     NotificationsModule,
@@ -41,6 +51,8 @@ import { ProfilesErrorFilter } from '../presenters/http/filters/profiles-error.f
     CreateProfilPPUseCase,
     CreateKycUseCase,
     UpdateKycStatusUseCase,
+    RequestKycManualReviewUseCase,
+    DecideKycManualReviewUseCase,
     GetProfilPPUseCase,
     UpdateProfilPPUseCase,
     CreateProfilPMUseCase,
@@ -49,6 +61,9 @@ import { ProfilesErrorFilter } from '../presenters/http/filters/profiles-error.f
     GetKycUseCase,
     SaveQuestionnaireUseCase,
     RiskScoringService,
+    KycRevueManuelleDemandeeEventHandler,
+    KycValideEventHandler,
+    KycRefuseEventHandler,
     // Traduit les erreurs métier du contexte en réponses HTTP : le domaine ne
     // connaît aucun statut (§12.1), la présentation s'en charge.
     { provide: APP_FILTER, useClass: ProfilesErrorFilter },

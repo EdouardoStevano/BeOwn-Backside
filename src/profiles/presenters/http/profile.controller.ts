@@ -1,6 +1,5 @@
 import {
   Body,
-  ConflictException,
   Controller,
   ForbiddenException,
   Param,
@@ -11,7 +10,6 @@ import {
   HttpStatus,
   Get,
   Query,
-  Inject,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -22,10 +20,10 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
-import { UserRole } from 'src/iam/domains/enums/user.enum';
 import { CreateProfilPPUseCase } from 'src/profiles/applications/usecases/create-profil-pp.usecase';
 import { CreateKycUseCase } from 'src/profiles/applications/usecases/create-kyc.usecase';
-import { UpdateKycStatusUseCase } from 'src/profiles/applications/usecases/update-kyc-status.usecase';
+import { RequestKycManualReviewUseCase } from 'src/profiles/applications/usecases/request-kyc-manual-review.usecase';
+import { DecideKycManualReviewUseCase } from 'src/profiles/applications/usecases/decide-kyc-manual-review.usecase';
 import { GetProfilPPUseCase } from 'src/profiles/applications/usecases/get-profil-pp.usecase';
 import { UpdateProfilPPUseCase } from 'src/profiles/applications/usecases/update-profil-pp.usecase';
 import { CreateProfilPMUseCase } from 'src/profiles/applications/usecases/create-profil-pm.usecase';
@@ -47,25 +45,9 @@ import { UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
 import { RequirePermission } from 'src/common/auth/require-permission.decorator';
 import { rolesWithPermission } from 'src/common/auth/permissions.constants';
-import { NotificationService } from 'src/notifications/applications/notification.service';
-import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
-import { NotificationEventService } from 'src/notifications/applications/notification-event.service';
-import { KycStatus } from 'src/profiles/domains/enums/kyc-status.enum';
 
 /** Rôles détenant `kyc:validate` — Compliance (+ super_admin via wildcard). */
 const KYC_REVIEWER_ROLES: string[] = rolesWithPermission('kyc:validate');
-
-/**
- * Le KYC est validé AUTOMATIQUEMENT par Stripe Identity (voir webhook
- * `identity.verification_session.verified` dans PaymentController). L'admin
- * n'intervient QUE lorsque Stripe n'a pas pu vérifier automatiquement — le
- * dossier passe alors en revue manuelle (EN_REVUE) et l'utilisateur est invité
- * à renvoyer ses documents. Cette route est donc réservée aux dossiers
- * EN_REVUE : un dossier déjà auto-validé (ou pas encore soumis) est en
- * lecture seule pour l'admin.
- */
-const KYC_MANUAL_REVIEW_REQUIRED_MESSAGE =
-  "Ce dossier n'est pas en revue manuelle : il a été validé automatiquement par Stripe Identity, ou n'a pas encore été soumis pour vérification. Seuls les dossiers en revue manuelle peuvent faire l'objet d'une décision manuelle.";
 
 @ApiTags('Profiles & KYC')
 @ApiBearerAuth()
@@ -75,7 +57,8 @@ export class ProfileController {
   constructor(
     private readonly createProfilPP: CreateProfilPPUseCase,
     private readonly createKyc: CreateKycUseCase,
-    private readonly updateKycStatus: UpdateKycStatusUseCase,
+    private readonly requestKycManualReview: RequestKycManualReviewUseCase,
+    private readonly decideKycManualReview: DecideKycManualReviewUseCase,
     private readonly getProfilPP: GetProfilPPUseCase,
     private readonly updateProfilPP: UpdateProfilPPUseCase,
     private readonly createProfilPM: CreateProfilPMUseCase,
@@ -87,8 +70,6 @@ export class ProfileController {
     private readonly questionnaireRepo: Repository<QuestionnaireAdequationEntity>,
     @InjectRepository(UserEntity)
     private readonly userRepo: Repository<UserEntity>,
-    private readonly notifications: NotificationService,
-    private readonly notificationEvents: NotificationEventService,
   ) {}
 
   /** Défense en profondeur : mutation KYC réservée à `kyc:validate` (Compliance + super_admin). */
@@ -128,23 +109,11 @@ export class ProfileController {
   @ApiResponse({ status: 200, description: 'Dossier passé en revue manuelle' })
   @HttpCode(HttpStatus.OK)
   @Post('kyc/me/manual-review')
-  async requestManualReview(@CurrentUser() user: ActiveUser) {
-    const userId = user.userId;
-    const updated = await this.updateKycStatus.execute(
-      userId,
-      KycStatus.EN_REVUE,
-      'Dépôt manuel de documents — revue requise',
-    );
-    this.notifications
-      .pushToAdmins({
-        type: NotificationType.KYC_REVUE_MANUELLE,
-        titre: 'KYC en revue manuelle',
-        message: `Un utilisateur (#${userId}) a déposé ses documents manuellement — dossier à valider.`,
-        roles: [UserRole.COMPLIANCE, UserRole.SUPER_ADMIN],
-        metadata: { userId },
-      })
-      .catch(() => {});
-    return updated;
+  requestManualReview(@CurrentUser() user: ActiveUser) {
+    // L'alerte de la compliance a suivi le dossier : elle est déclenchée par
+    // `KycRevueManuelleDemandeeEventHandler`, abonné au fait métier levé par le
+    // use case. Le contrôleur ne sait plus quels rôles prévenir (§12.5).
+    return this.requestKycManualReview.execute(user.userId);
   }
 
   @ApiOperation({
@@ -173,54 +142,18 @@ export class ProfileController {
     @Body() dto: UpdateKycStatusDto,
     @CurrentUser() currentUser: ActiveUser,
   ) {
+    // La seule chose que la présentation garde de cette route : vérifier qui
+    // appelle. Le reste — dossier réservé aux revues manuelles, écriture du
+    // statut, annonce au titulaire et trace d'audit — appartient au use case et
+    // à ses abonnés (§12.5).
     await this.assertKycReviewer(currentUser);
 
-    // Fallback manuel réservé aux dossiers en revue manuelle : la validation
-    // auto (Stripe Identity) rend un dossier déjà VALIDE en lecture seule, et
-    // un dossier pas encore soumis n'a rien à décider.
-    const current = await this.getKyc.execute(userId);
-    if (current.statut !== KycStatus.EN_REVUE) {
-      throw new ConflictException(KYC_MANUAL_REVIEW_REQUIRED_MESSAGE);
-    }
-
-    const updated = await this.updateKycStatus.execute(
-      userId,
-      dto.status,
-      dto.motifRefus,
-    );
-
-    if (dto.status === KycStatus.VALIDE) {
-      this.notifications
-        .push({
-          utilisateurId: userId,
-          type: NotificationType.KYC_VALIDE,
-          titre: 'KYC validé',
-          message:
-            'Votre KYC a été validé. Vous pouvez désormais investir sur BeOwn.',
-          metadata: { decidedAt: new Date().toISOString() },
-        })
-        .catch(() => {});
-      this.notificationEvents.kycValidatedByAdmin(userId, currentUser.userId);
-    } else if (dto.status === KycStatus.REFUSE) {
-      this.notifications
-        .push({
-          utilisateurId: userId,
-          type: NotificationType.KYC_REJETE,
-          titre: 'KYC refusé',
-          message: dto.motifRefus
-            ? `Votre KYC a été refusé : ${dto.motifRefus}`
-            : 'Votre KYC a été refusé. Merci de mettre à jour votre dossier.',
-          metadata: { motifRefus: dto.motifRefus ?? null },
-        })
-        .catch(() => {});
-      this.notificationEvents.kycRejectedByAdmin(
-        userId,
-        dto.motifRefus ?? '—',
-        currentUser.userId,
-      );
-    }
-
-    return updated;
+    return this.decideKycManualReview.execute({
+      utilisateurId: userId,
+      decision: dto.status,
+      motifRefus: dto.motifRefus,
+      decidePar: currentUser.userId,
+    });
   }
 
   @ApiOperation({ summary: 'Obtenir mon profil PP' })

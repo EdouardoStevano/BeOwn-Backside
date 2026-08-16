@@ -27,6 +27,7 @@ describe('PaymentController — webhook Stripe Identity (KYC auto + fallback rev
   let identityService: any;
   let stripeConnect: any;
   let updateKycStatus: any;
+  let createKyc: any;
   let notificationService: any;
   let auditLog: any;
   let config: any;
@@ -51,6 +52,7 @@ describe('PaymentController — webhook Stripe Identity (KYC auto + fallback rev
       downloadAndUploadToCloudinary: jest.fn(),
     };
     updateKycStatus = { execute: jest.fn().mockResolvedValue(undefined) };
+    createKyc = { execute: jest.fn() };
     notificationService = {
       push: jest.fn().mockResolvedValue(undefined),
       pushToAdmins: jest.fn().mockResolvedValue(undefined),
@@ -79,6 +81,7 @@ describe('PaymentController — webhook Stripe Identity (KYC auto + fallback rev
       identityService,
       stripeConnect,
       updateKycStatus,
+      createKyc,
       notificationService,
       auditLog,
       config,

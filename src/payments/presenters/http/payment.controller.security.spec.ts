@@ -79,6 +79,7 @@ describe('PaymentController — sécurité des flux monétaires (H-1 / H-2)', ()
       /* identityService */ {} as any,
       stripeConnect,
       /* updateKycStatus */ {} as any,
+      /* createKyc */ {} as any,
       notificationService,
       /* auditLog */ {} as any,
       /* config */ { get: jest.fn() } as any,
