@@ -17,7 +17,7 @@ import { SMS_SERVICE, type SmsService } from 'src/shared/sms/sms.service';
 import { TokenService } from 'src/iam/applications/services/token/token.service';
 import { ProfilPPEntity } from 'src/profiles/infrastructure/persistences/entities/profil-pp.entity';
 import { ProjectEntity } from 'src/projects/infrastructure/persistences/entities/project.entity';
-import { UserPreferencesEntity } from 'src/iam/infrastructure/persistence/entities/user-preferences.entity';
+import { UserPreferencesEntity } from 'src/preferences/infrastructure/persistences/entities/user-preferences.entity';
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 import { UserStatus } from 'src/iam/domains/enums/user.enum';
 import { NotificationType } from '../infrastructure/persistences/entities/notification.entity';

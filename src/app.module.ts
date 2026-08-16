@@ -22,6 +22,7 @@ import { WalletsModule } from './wallets/applications/wallets.module';
 import { PaymentsModule } from './payments/payments.module';
 import { SecondaryMarketModule } from './secondarymarket/applications/secondary-market.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { PreferencesModule } from 'src/preferences/applications/preferences.module';
 import { DocumentsModule } from './documents/applications/documents.module';
 import { NotificationTestModule } from './common/test/notification-test.module';
 import { AdminModule } from './admin/admin.module';
@@ -100,6 +101,7 @@ function requireEnv(name: string): string {
     PaymentsModule,
     SecondaryMarketModule,
     NotificationsModule,
+    PreferencesModule,
     DocumentsModule,
     AvisModule,
     NewsModule,
