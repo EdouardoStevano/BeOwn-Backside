@@ -43,10 +43,7 @@ import type { ActiveUser } from 'src/common/auth/current-user.decorator';
 import { UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
 import { RequirePermission } from 'src/common/auth/require-permission.decorator';
-import {
-  hasPermission,
-  rolesWithPermission,
-} from 'src/common/auth/permissions.constants';
+import { rolesWithPermission } from 'src/common/auth/permissions.constants';
 import { NotificationService } from 'src/notifications/applications/notification.service';
 import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
 import { NotificationEventService } from 'src/notifications/applications/notification-event.service';
@@ -99,55 +96,35 @@ export class ProfileController {
     }
   }
 
-  /** Auto-accès (son propre dossier) ou permission kyc:validate. */
-  private assertSelfOrKycReviewer(user: ActiveUser, targetUserId: number): void {
-    if (String(user.userId) === String(targetUserId)) return;
-    if (!hasPermission(user.role, 'kyc:validate')) {
-      throw new ForbiddenException('Accès réservé.');
-    }
-  }
-
-  @ApiOperation({ summary: 'Créer le profil personne physique' })
+  @ApiOperation({ summary: 'Créer mon profil personne physique' })
   @ApiResponse({ status: 201, description: 'Profil PP créé' })
   @ApiResponse({ status: 409, description: 'Profil déjà existant' })
-  @Post(':userId/pp')
-  createPP(
-    @Param('userId', ParseIntPipe) userId: number,
-    @Body() dto: CreateProfilPPDto,
-    @CurrentUser() user: ActiveUser,
-  ) {
-    this.assertSelfOrKycReviewer(user, userId);
-    return this.createProfilPP.execute(userId, dto);
+  @Post('pp/me')
+  createPP(@CurrentUser() user: ActiveUser, @Body() dto: CreateProfilPPDto) {
+    return this.createProfilPP.execute(user.userId, dto);
   }
 
-  @ApiOperation({ summary: 'Initialiser le dossier KYC' })
+  @ApiOperation({ summary: 'Initialiser mon dossier KYC' })
   @ApiResponse({ status: 201, description: 'KYC créé' })
-  @Post(':userId/kyc')
-  initKyc(
-    @Param('userId', ParseIntPipe) userId: number,
-    @CurrentUser() user: ActiveUser,
-  ) {
-    this.assertSelfOrKycReviewer(user, userId);
-    return this.createKyc.execute(userId);
+  @Post('kyc/me')
+  initKyc(@CurrentUser() user: ActiveUser) {
+    return this.createKyc.execute(user.userId);
   }
 
   @ApiOperation({
-    summary: 'Demander une revue manuelle du KYC (dépôt manuel de documents)',
+    summary: 'Passer mon KYC en revue manuelle (dépôt manuel de documents)',
     description:
       "Fallback quand la vérification automatique Stripe Identity n'aboutit " +
-      "pas (pas de réponse webhook, statut bloqué). Après téléversement manuel " +
+      'pas (pas de réponse webhook, statut bloqué). Après téléversement manuel ' +
       "de la pièce d'identité + selfie, l'utilisateur passe son dossier en " +
       'revue manuelle (EN_REVUE) ; la compliance est notifiée pour décision ' +
       'via la route de décision manuelle existante.',
   })
   @ApiResponse({ status: 200, description: 'Dossier passé en revue manuelle' })
   @HttpCode(HttpStatus.OK)
-  @Post(':userId/kyc/manual-review')
-  async requestManualReview(
-    @Param('userId', ParseIntPipe) userId: number,
-    @CurrentUser() user: ActiveUser,
-  ) {
-    this.assertSelfOrKycReviewer(user, userId);
+  @Post('kyc/me/manual-review')
+  async requestManualReview(@CurrentUser() user: ActiveUser) {
+    const userId = user.userId;
     const updated = await this.updateKycStatus.execute(
       userId,
       KycStatus.EN_REVUE,

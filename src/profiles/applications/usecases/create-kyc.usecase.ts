@@ -1,6 +1,8 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { PROFIL_REPOSITORY } from '../ports/repositories/profil.repository';
-import type { ProfilRepository } from '../ports/repositories/profil.repository';
+import {
+  KYC_REPOSITORY,
+  type KycRepository,
+} from 'src/profiles/domains/ports/kyc.repository';
 import { Kyc } from 'src/profiles/domains/kyc';
 import {
   KycNiveau,
@@ -10,12 +12,12 @@ import {
 @Injectable()
 export class CreateKycUseCase {
   constructor(
-    @Inject(PROFIL_REPOSITORY)
-    private readonly profilRepository: ProfilRepository,
+    @Inject(KYC_REPOSITORY)
+    private readonly kycRepository: KycRepository,
   ) {}
 
   async execute(userId: number): Promise<Kyc> {
-    const existing = await this.profilRepository.findKycByUserId(userId);
+    const existing = await this.kycRepository.findByUserId(userId);
     if (existing) return existing;
 
     const kyc = new Kyc();
@@ -28,6 +30,6 @@ export class CreateKycUseCase {
     kyc.valideJusquAu = null;
     kyc.motifRefus = null;
 
-    return this.profilRepository.saveKyc(kyc);
+    return this.kycRepository.save(kyc);
   }
 }

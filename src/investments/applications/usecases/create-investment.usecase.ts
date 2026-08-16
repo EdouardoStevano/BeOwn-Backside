@@ -17,8 +17,11 @@ import type { DocumentRepository } from 'src/documents/applications/ports/reposi
 import { DOCUMENT_REPOSITORY } from 'src/documents/applications/ports/repositories/document.repository';
 import type { UserRepository } from 'src/iam/domains/ports/user.repository';
 import { USER_REPOSITORY } from 'src/iam/domains/ports/user.repository';
-import type { ProfilRepository } from 'src/profiles/applications/ports/repositories/profil.repository';
-import { PROFIL_REPOSITORY } from 'src/profiles/applications/ports/repositories/profil.repository';
+import {
+  PROFIL_PP_REPOSITORY,
+  type ProfilPPRepository,
+} from 'src/profiles/domains/ports/profil-pp.repository';
+import { PLANCHER_PLAFOND_NON_AVERTI } from 'src/profiles/domains/value-objects/evaluation-investisseur.vo';
 import { Investment } from 'src/investments/domains/investment';
 import { Echeance } from 'src/investments/domains/echeance';
 import {
@@ -39,7 +42,10 @@ import { ContractGeneratorService } from './contract-generator.service';
 import { CloudStorageService } from 'src/shared/cloud-storage/cloud-storage.service';
 import { formatEur } from 'src/shared/money/format-eur';
 import { Document } from 'src/documents/domains/document';
-import { DocumentRelatedTo, DocumentType } from 'src/documents/domains/enums/document-type.enum';
+import {
+  DocumentRelatedTo,
+  DocumentType,
+} from 'src/documents/domains/enums/document-type.enum';
 import { NotificationService } from 'src/notifications/applications/notification.service';
 import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
 import { NotificationEventService } from 'src/notifications/applications/notification-event.service';
@@ -66,8 +72,8 @@ export class CreateInvestmentUseCase {
     private readonly documentRepository: DocumentRepository,
     @Inject(USER_REPOSITORY)
     private readonly userRepository: UserRepository,
-    @Inject(PROFIL_REPOSITORY)
-    private readonly profilRepository: ProfilRepository,
+    @Inject(PROFIL_PP_REPOSITORY)
+    private readonly profilPPRepository: ProfilPPRepository,
     private readonly contractGenerator: ContractGeneratorService,
     private readonly cloudStorage: CloudStorageService,
     private readonly notificationService: NotificationService,
@@ -78,9 +84,10 @@ export class CreateInvestmentUseCase {
 
   async execute(userId: number, dto: CreateInvestmentDto): Promise<Investment> {
     if (dto.idempotencyKey) {
-      const previous = await this.walletRepository.findTransactionByIdempotencyKey(
-        `invest-request:${userId}:${dto.idempotencyKey}`,
-      );
+      const previous =
+        await this.walletRepository.findTransactionByIdempotencyKey(
+          `invest-request:${userId}:${dto.idempotencyKey}`,
+        );
       if (previous?.investissementId) {
         const existing = await this.investmentRepository.findInvestmentById(
           previous.investissementId,
@@ -92,8 +99,8 @@ export class CreateInvestmentUseCase {
     if (!project) throw new NotFoundException('Projet introuvable.');
 
     // Get investor profile to check PSFP category
-    const profilPP = await this.profilRepository.findProfilPPByUserId(userId);
-    const isNonAverti = profilPP?.categoriePsfp === 'non_averti';
+    const profilPP = await this.profilPPRepository.findByUserId(userId);
+    const isNonAverti = profilPP?.estNonAverti() ?? false;
 
     if (project.statut !== ProjectStatus.EN_COLLECTE) {
       throw new BadRequestException(
@@ -108,10 +115,12 @@ export class CreateInvestmentUseCase {
 
     // Nombre total de fractions du projet (calculé si non renseigné explicitement)
     const nbFractionsTotal =
-      project.nbFractions ?? Math.floor(Number(project.capitalCible) / prixFraction);
+      project.nbFractions ??
+      Math.floor(Number(project.capitalCible) / prixFraction);
 
     // Fractions déjà vendues (investissements actifs hors rétractés/annulés)
-    const fractionsVendues = await this.investmentRepository.countFractionsVendues(dto.projetId);
+    const fractionsVendues =
+      await this.investmentRepository.countFractionsVendues(dto.projetId);
     const fractionsDisponibles = nbFractionsTotal - fractionsVendues;
 
     if (fractionsDisponibles <= 0) {
@@ -141,7 +150,7 @@ export class CreateInvestmentUseCase {
     );
     if (!wallet) {
       throw new BadRequestException(
-        'Wallet introuvable. Veuillez alimenter votre compte avant d\'investir.',
+        "Wallet introuvable. Veuillez alimenter votre compte avant d'investir.",
       );
     }
     if (Number(wallet.solde) < montant) {
@@ -151,15 +160,17 @@ export class CreateInvestmentUseCase {
     }
 
     // ── PSFP limit check for non-averti investors ─────────────────────────────
-    if (isNonAverti) {
+    // Le plafond se calcule depuis le profil : il ne dépend que de la catégorie
+    // et du patrimoine déclaré, pas de la souscription en cours. `null` = le
+    // statut de l'investisseur ne recommande aucun plafond.
+    const recommendedCap = profilPP?.plafondConseille() ?? null;
+    if (recommendedCap !== null) {
       const patrimoine = Number(profilPP?.patrimoineDeclare ?? 0);
-      const limit5Percent = patrimoine * 0.05;
-      const recommendedCap = Math.max(1000, limit5Percent);
       if (montant > recommendedCap && !dto.consentementDepassementLimite) {
         throw new BadRequestException(
           `Votre statut "non averti" recommande de ne pas dépasser ${formatEur(recommendedCap)} par investissement ` +
-          `(max entre ${formatEur(1000)} et 5% de votre patrimoine déclaré de ${formatEur(patrimoine)}). ` +
-          `Pour passer outre, cochez la case de consentement explicite "consentementDepassementLimite": true.`,
+            `(max entre ${formatEur(PLANCHER_PLAFOND_NON_AVERTI)} et 5% de votre patrimoine déclaré de ${formatEur(patrimoine)}). ` +
+            `Pour passer outre, cochez la case de consentement explicite "consentementDepassementLimite": true.`,
         );
       }
     }
@@ -306,7 +317,9 @@ export class CreateInvestmentUseCase {
 
     // ── Generate & upload bulletin de souscription ────────────────────────────
     this.generateAndStoreBulletin(saved, project, userId).catch((err) =>
-      this.logger.error(`Bulletin generation failed for investment ${saved.id}: ${err?.message}`),
+      this.logger.error(
+        `Bulletin generation failed for investment ${saved.id}: ${err?.message}`,
+      ),
     );
 
     // Notify via facade (handles both user + admin)
@@ -320,7 +333,13 @@ export class CreateInvestmentUseCase {
 
   private async generateAndStoreBulletin(
     investment: Investment,
-    project: { titre: string; ville: string | null; pays: string; triCible: number | null; dureeMois: number },
+    project: {
+      titre: string;
+      ville: string | null;
+      pays: string;
+      triCible: number | null;
+      dureeMois: number;
+    },
     userId: number,
   ): Promise<void> {
     const user = await this.userRepository.findById(userId);
@@ -365,9 +384,14 @@ export class CreateInvestmentUseCase {
     doc.estPrincipale = false;
 
     const savedDoc = await this.documentRepository.save(doc);
-    await this.investmentRepository.updateBulletinDocId(investment.id, savedDoc.id);
+    await this.investmentRepository.updateBulletinDocId(
+      investment.id,
+      savedDoc.id,
+    );
 
-    this.logger.log(`Bulletin généré: investmentId=${investment.id} docId=${savedDoc.id} url=${publicUrl}`);
+    this.logger.log(
+      `Bulletin généré: investmentId=${investment.id} docId=${savedDoc.id} url=${publicUrl}`,
+    );
   }
 
   private generateEcheances(

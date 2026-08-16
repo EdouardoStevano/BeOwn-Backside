@@ -30,7 +30,7 @@ describe('PaymentController — webhook Stripe Identity (KYC auto + fallback rev
   let notificationService: any;
   let auditLog: any;
   let config: any;
-  let profilRepository: any;
+  let kycRepository: any;
   let walletRepo: any;
   let txRepo: any;
   let dataSource: any;
@@ -65,9 +65,9 @@ describe('PaymentController — webhook Stripe Identity (KYC auto + fallback rev
       reverseTransfer: jest.fn(),
     };
     config = { get: jest.fn() };
-    profilRepository = {
-      findKycByUserId: jest.fn(),
-      updateKycReportData: jest.fn().mockResolvedValue(undefined),
+    kycRepository = {
+      findByUserId: jest.fn(),
+      updateReportData: jest.fn().mockResolvedValue(undefined),
     };
     walletRepo = {};
     txRepo = { findOne: jest.fn() };
@@ -82,7 +82,7 @@ describe('PaymentController — webhook Stripe Identity (KYC auto + fallback rev
       notificationService,
       auditLog,
       config,
-      profilRepository,
+      kycRepository,
       walletRepo,
       txRepo,
       dataSource,
@@ -95,7 +95,7 @@ describe('PaymentController — webhook Stripe Identity (KYC auto + fallback rev
       const session = { id: 'vs_1', metadata: { userId: '42' } };
       const event = stripeEvent('identity.verification_session.verified', session);
       stripeService.constructWebhookEvent.mockReturnValue(event);
-      profilRepository.findKycByUserId.mockResolvedValue({
+      kycRepository.findByUserId.mockResolvedValue({
         id: 'kyc-1',
         statut: KycStatus.EN_COURS,
         fournisseurRef: 'vs_1',
@@ -128,7 +128,7 @@ describe('PaymentController — webhook Stripe Identity (KYC auto + fallback rev
       const session = { id: 'vs_1', metadata: { userId: '42' } };
       const event = stripeEvent('identity.verification_session.verified', session);
       stripeService.constructWebhookEvent.mockReturnValue(event);
-      profilRepository.findKycByUserId.mockResolvedValue({
+      kycRepository.findByUserId.mockResolvedValue({
         id: 'kyc-1',
         statut: KycStatus.VALIDE,
         fournisseurRef: 'vs_1', // même session déjà traitée
@@ -145,7 +145,7 @@ describe('PaymentController — webhook Stripe Identity (KYC auto + fallback rev
       const session = { id: 'vs_orphan', metadata: { userId: '999' } };
       const event = stripeEvent('identity.verification_session.verified', session);
       stripeService.constructWebhookEvent.mockReturnValue(event);
-      profilRepository.findKycByUserId.mockResolvedValue(null);
+      kycRepository.findByUserId.mockResolvedValue(null);
 
       const result = await controller.handleStripeWebhook('sig', req(session));
 
@@ -160,7 +160,7 @@ describe('PaymentController — webhook Stripe Identity (KYC auto + fallback rev
 
       await controller.handleStripeWebhook('sig', req(session));
 
-      expect(profilRepository.findKycByUserId).not.toHaveBeenCalled();
+      expect(kycRepository.findByUserId).not.toHaveBeenCalled();
       expect(updateKycStatus.execute).not.toHaveBeenCalled();
     });
 
@@ -168,7 +168,7 @@ describe('PaymentController — webhook Stripe Identity (KYC auto + fallback rev
       const session = { id: 'vs_late', metadata: { userId: '42' } };
       const event = stripeEvent('identity.verification_session.verified', session, 'evt_late_verified');
       stripeService.constructWebhookEvent.mockReturnValue(event);
-      profilRepository.findKycByUserId.mockResolvedValue({
+      kycRepository.findByUserId.mockResolvedValue({
         id: 'kyc-1',
         statut: KycStatus.REFUSE,
         fournisseurRef: 'vs_old', // event redélivré d'une session antérieure
@@ -189,7 +189,7 @@ describe('PaymentController — webhook Stripe Identity (KYC auto + fallback rev
       const session = { id: 'vs_new_session', metadata: { userId: '42' } };
       const event = stripeEvent('identity.verification_session.verified', session);
       stripeService.constructWebhookEvent.mockReturnValue(event);
-      profilRepository.findKycByUserId.mockResolvedValue({
+      kycRepository.findByUserId.mockResolvedValue({
         id: 'kyc-1',
         statut: KycStatus.VALIDE,
         fournisseurRef: 'vs_old', // session différente de celle de l'event
@@ -205,7 +205,7 @@ describe('PaymentController — webhook Stripe Identity (KYC auto + fallback rev
       const session = { id: 'vs_3', metadata: { userId: '55' } };
       const event = stripeEvent('identity.verification_session.verified', session);
       stripeService.constructWebhookEvent.mockReturnValue(event);
-      profilRepository.findKycByUserId.mockResolvedValue({
+      kycRepository.findByUserId.mockResolvedValue({
         id: 'kyc-55',
         statut: KycStatus.EN_REVUE,
         fournisseurRef: 'vs_2', // ancienne session en échec, celle-ci a réussi
@@ -225,7 +225,7 @@ describe('PaymentController — webhook Stripe Identity (KYC auto + fallback rev
         const session = { id: 'vs_renew', metadata: { userId: '9' } };
         const event = stripeEvent('identity.verification_session.verified', session);
         stripeService.constructWebhookEvent.mockReturnValue(event);
-        profilRepository.findKycByUserId.mockResolvedValue({
+        kycRepository.findByUserId.mockResolvedValue({
           id: 'kyc-9',
           statut,
           fournisseurRef: 'vs_prev',
@@ -247,7 +247,7 @@ describe('PaymentController — webhook Stripe Identity (KYC auto + fallback rev
       };
       const event = stripeEvent('identity.verification_session.requires_input', session);
       stripeService.constructWebhookEvent.mockReturnValue(event);
-      profilRepository.findKycByUserId.mockResolvedValue({
+      kycRepository.findByUserId.mockResolvedValue({
         id: 'kyc-7',
         statut: KycStatus.EN_COURS,
         fournisseurRef: 'vs_2',
@@ -280,7 +280,7 @@ describe('PaymentController — webhook Stripe Identity (KYC auto + fallback rev
       const session = { id: 'vs_2', metadata: { userId: '7' }, last_error: { reason: 'x' } };
       const event = stripeEvent('identity.verification_session.requires_input', session);
       stripeService.constructWebhookEvent.mockReturnValue(event);
-      profilRepository.findKycByUserId.mockResolvedValue({
+      kycRepository.findByUserId.mockResolvedValue({
         id: 'kyc-7',
         statut: KycStatus.EN_REVUE,
         fournisseurRef: 'vs_2',
@@ -301,7 +301,7 @@ describe('PaymentController — webhook Stripe Identity (KYC auto + fallback rev
       };
       const event = stripeEvent('identity.verification_session.requires_input', session, 'evt_late_ri_valide');
       stripeService.constructWebhookEvent.mockReturnValue(event);
-      profilRepository.findKycByUserId.mockResolvedValue({
+      kycRepository.findByUserId.mockResolvedValue({
         id: 'kyc-7',
         statut: KycStatus.VALIDE,
         fournisseurRef: 'vs_old',
@@ -327,7 +327,7 @@ describe('PaymentController — webhook Stripe Identity (KYC auto + fallback rev
       };
       const event = stripeEvent('identity.verification_session.requires_input', session);
       stripeService.constructWebhookEvent.mockReturnValue(event);
-      profilRepository.findKycByUserId.mockResolvedValue({
+      kycRepository.findByUserId.mockResolvedValue({
         id: 'kyc-7',
         statut: KycStatus.REFUSE,
         fournisseurRef: 'vs_old',
@@ -350,7 +350,7 @@ describe('PaymentController — webhook Stripe Identity (KYC auto + fallback rev
         };
         const event = stripeEvent('identity.verification_session.requires_input', session);
         stripeService.constructWebhookEvent.mockReturnValue(event);
-        profilRepository.findKycByUserId.mockResolvedValue({
+        kycRepository.findByUserId.mockResolvedValue({
           id: 'kyc-9',
           statut,
           fournisseurRef: 'vs_prev',
@@ -368,7 +368,7 @@ describe('PaymentController — webhook Stripe Identity (KYC auto + fallback rev
       const session = { id: 'vs_4', metadata: { userId: '3' } };
       const event = stripeEvent('identity.verification_session.processing', session);
       stripeService.constructWebhookEvent.mockReturnValue(event);
-      profilRepository.findKycByUserId.mockResolvedValue({
+      kycRepository.findByUserId.mockResolvedValue({
         id: 'kyc-3',
         statut: KycStatus.NON_DEMARRE,
         fournisseurRef: null,
@@ -383,7 +383,7 @@ describe('PaymentController — webhook Stripe Identity (KYC auto + fallback rev
       const session = { id: 'vs_4', metadata: { userId: '3' } };
       const event = stripeEvent('identity.verification_session.processing', session);
       stripeService.constructWebhookEvent.mockReturnValue(event);
-      profilRepository.findKycByUserId.mockResolvedValue({
+      kycRepository.findByUserId.mockResolvedValue({
         id: 'kyc-3',
         statut: KycStatus.EN_COURS,
         fournisseurRef: 'vs_4',
@@ -398,7 +398,7 @@ describe('PaymentController — webhook Stripe Identity (KYC auto + fallback rev
       const session = { id: 'vs_late4', metadata: { userId: '3' } };
       const event = stripeEvent('identity.verification_session.processing', session, 'evt_late_processing');
       stripeService.constructWebhookEvent.mockReturnValue(event);
-      profilRepository.findKycByUserId.mockResolvedValue({
+      kycRepository.findByUserId.mockResolvedValue({
         id: 'kyc-3',
         statut: KycStatus.VALIDE,
         fournisseurRef: 'vs_old',
@@ -419,7 +419,7 @@ describe('PaymentController — webhook Stripe Identity (KYC auto + fallback rev
         const session = { id: 'vs_late5', metadata: { userId: '3' } };
         const event = stripeEvent('identity.verification_session.processing', session);
         stripeService.constructWebhookEvent.mockReturnValue(event);
-        profilRepository.findKycByUserId.mockResolvedValue({
+        kycRepository.findByUserId.mockResolvedValue({
           id: 'kyc-3',
           statut,
           fournisseurRef: 'vs_old',
@@ -437,7 +437,7 @@ describe('PaymentController — webhook Stripe Identity (KYC auto + fallback rev
         const session = { id: 'vs_renew3', metadata: { userId: '9' } };
         const event = stripeEvent('identity.verification_session.processing', session);
         stripeService.constructWebhookEvent.mockReturnValue(event);
-        profilRepository.findKycByUserId.mockResolvedValue({
+        kycRepository.findByUserId.mockResolvedValue({
           id: 'kyc-9',
           statut,
           fournisseurRef: 'vs_prev',

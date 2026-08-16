@@ -1,4 +1,8 @@
 import { ProfilPP } from 'src/profiles/domains/profil-pp';
+// Aliasé : le domaine a lui aussi un mapper de profil, qui traduit entre
+// l'agrégat et son snapshot. Celui-ci ne fait que la moitié ORM du chemin et
+// délègue l'autre.
+import { ProfilPPMapper as ProfilPPDomainMapper } from 'src/profiles/domains/mappers/profil-pp.mapper';
 import { ProfilPM } from 'src/profiles/domains/profil-pm';
 import { Kyc } from 'src/profiles/domains/kyc';
 import { ProfilPPEntity } from '../entities/profil-pp.entity';
@@ -6,55 +10,86 @@ import { ProfilPMEntity } from '../entities/profil-pm.entity';
 import { KycEntity } from '../entities/kyc.entity';
 
 export class ProfilMapper {
+  /**
+   * `paysNaissance`, `patrimoineDeclare`, `montantMaxConseille`,
+   * `niveauRisque` et les dates de contact étaient absents de cette
+   * traduction : la colonne existait, l'agrégat aussi, mais la valeur se
+   * perdait entre les deux. La conséquence la plus visible touchait le plafond
+   * PSFP — `create-investment.usecase` lisait `profilPP.patrimoineDeclare`,
+   * toujours `undefined`, et retombait donc systématiquement sur le plancher
+   * de 1 000 € au lieu des 5 % du patrimoine déclaré.
+   */
   static ppToDomain(entity: ProfilPPEntity): ProfilPP {
-    const domain = new ProfilPP();
-    domain.utilisateurId = entity.utilisateurId;
-    domain.prenom = entity.prenom;
-    domain.nom = entity.nom;
-    domain.nomNaissance = entity.nomNaissance;
-    domain.civilite = entity.civilite;
-    domain.dateNaissance = entity.dateNaissance;
-    domain.lieuNaissance = entity.lieuNaissance;
-    domain.nationalite = entity.nationalite;
-    domain.adresseLigne1 = entity.adresseLigne1;
-    domain.adresseLigne2 = entity.adresseLigne2;
-    domain.codePostal = entity.codePostal;
-    domain.ville = entity.ville;
-    domain.pays = entity.pays;
-    domain.telephone = entity.telephone;
-    domain.profession = entity.profession;
-    domain.secteurActivite = entity.secteurActivite;
-    domain.pep = entity.pep;
-    domain.residenceFiscale = entity.residenceFiscale;
-    domain.nif = entity.nif;
-    domain.categoriePsfp = entity.categoriePsfp;
-    domain.createdAt = entity.createdAt;
-    domain.updatedAt = entity.updatedAt;
-    return domain;
+    return ProfilPPDomainMapper.restore({
+      utilisateurId: entity.utilisateurId,
+      prenom: entity.prenom,
+      nom: entity.nom,
+      nomNaissance: entity.nomNaissance,
+      civilite: entity.civilite,
+      dateNaissance: entity.dateNaissance,
+      lieuNaissance: entity.lieuNaissance,
+      paysNaissance: entity.paysNaissance,
+      nationalite: entity.nationalite,
+      adresseLigne1: entity.adresseLigne1,
+      adresseLigne2: entity.adresseLigne2,
+      codePostal: entity.codePostal,
+      ville: entity.ville,
+      pays: entity.pays,
+      telephone: entity.telephone,
+      profession: entity.profession,
+      secteurActivite: entity.secteurActivite,
+      pep: entity.pep,
+      residenceFiscale: entity.residenceFiscale,
+      nif: entity.nif,
+      categoriePsfp: entity.categoriePsfp,
+      patrimoineDeclare: entity.patrimoineDeclare,
+      montantMaxConseille: entity.montantMaxConseille,
+      niveauRisque: entity.niveauRisque,
+      dernierContactAdmin: entity.dernierContactAdmin,
+      prochainContactDu: entity.prochainContactDu,
+      createdAt: entity.createdAt,
+      updatedAt: entity.updatedAt,
+    });
   }
 
+  /**
+   * Sens écriture : **seuls les champs dont l'agrégat est propriétaire**.
+   *
+   * `patrimoineDeclare`, `montantMaxConseille`, `niveauRisque` et les dates de
+   * contact sont relus par `ppToDomain` mais délibérément absents ici. Ils
+   * appartiennent à `SaveQuestionnaireUseCase` et `RiskScoringService`, qui
+   * écrivent directement sur l'entité ; les recopier depuis le profil ferait
+   * qu'une mise à jour d'adresse partie d'un profil chargé avant le
+   * questionnaire écraserait le classement calculé entre-temps. Les laisser
+   * `undefined` dit à TypeORM de ne pas toucher à la colonne.
+   */
   static ppToEntity(domain: ProfilPP): ProfilPPEntity {
+    const snapshot = ProfilPPDomainMapper.toSnapshot(domain);
     const entity = new ProfilPPEntity();
-    entity.utilisateurId = domain.utilisateurId;
-    entity.prenom = domain.prenom;
-    entity.nom = domain.nom;
-    entity.nomNaissance = domain.nomNaissance;
-    entity.civilite = domain.civilite;
-    entity.dateNaissance = domain.dateNaissance;
-    entity.lieuNaissance = domain.lieuNaissance;
-    entity.nationalite = domain.nationalite;
-    entity.adresseLigne1 = domain.adresseLigne1;
-    entity.adresseLigne2 = domain.adresseLigne2;
-    entity.codePostal = domain.codePostal;
-    entity.ville = domain.ville;
-    entity.pays = domain.pays;
-    entity.telephone = domain.telephone;
-    entity.profession = domain.profession;
-    entity.secteurActivite = domain.secteurActivite;
-    entity.pep = domain.pep;
-    entity.residenceFiscale = domain.residenceFiscale;
-    entity.nif = domain.nif;
-    entity.categoriePsfp = domain.categoriePsfp;
+    entity.utilisateurId = snapshot.utilisateurId;
+    entity.prenom = snapshot.prenom;
+    entity.nom = snapshot.nom;
+    entity.nomNaissance = snapshot.nomNaissance;
+    entity.civilite = snapshot.civilite;
+    // Une colonne Postgres `date` se renseigne aussi bien avec la chaîne
+    // civile `AAAA-MM-JJ` qu'avec un `Date` — et c'est cette chaîne que le
+    // driver rend à la lecture, malgré le type déclaré sur l'entité.
+    entity.dateNaissance = snapshot.dateNaissance as unknown as Date | null;
+    entity.lieuNaissance = snapshot.lieuNaissance;
+    entity.paysNaissance = snapshot.paysNaissance;
+    entity.nationalite = snapshot.nationalite;
+    entity.adresseLigne1 = snapshot.adresseLigne1;
+    entity.adresseLigne2 = snapshot.adresseLigne2;
+    entity.codePostal = snapshot.codePostal;
+    entity.ville = snapshot.ville;
+    entity.pays = snapshot.pays;
+    entity.telephone = snapshot.telephone;
+    entity.profession = snapshot.profession;
+    entity.secteurActivite = snapshot.secteurActivite;
+    entity.pep = snapshot.pep;
+    entity.residenceFiscale = snapshot.residenceFiscale;
+    entity.nif = snapshot.nif;
+    entity.categoriePsfp = snapshot.categoriePsfp;
     return entity;
   }
 

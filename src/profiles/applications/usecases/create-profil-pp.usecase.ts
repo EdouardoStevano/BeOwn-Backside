@@ -1,51 +1,50 @@
-import { ConflictException, Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { PROFIL_REPOSITORY } from '../ports/repositories/profil.repository';
-import type { ProfilRepository } from '../ports/repositories/profil.repository';
+import {
+  PROFIL_PP_REPOSITORY,
+  type ProfilPPRepository,
+} from 'src/profiles/domains/ports/profil-pp.repository';
 import { CreateProfilPPDto } from 'src/profiles/presenters/dto/profil.dto';
 import { ProfilPP } from 'src/profiles/domains/profil-pp';
-import { CategoriePsfp } from 'src/profiles/domains/enums/kyc-status.enum';
+import { ProfilPPFactory } from 'src/profiles/domains/factories/profil-pp.factory';
+import { ProfilPPDejaExistantError } from 'src/profiles/domains/errors';
+import { champsDeclaresDepuisDto } from '../mappers/profil-pp-champs.mapper';
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 
+/**
+ * Complétion du profil investisseur — personne physique.
+ *
+ * Ce use case n'orchestre plus que des accès (§6 — Application Service) :
+ * vérifier l'unicité, récupérer l'identité du compte, faire naître l'agrégat,
+ * le persister. La validité des données déclarées, le repli sur l'identité du
+ * compte et le classement PSFP initial sont désormais dans `ProfilPPFactory.creer` —
+ * ils y valent pour tout point d'entrée, pas seulement pour cette route HTTP.
+ */
 @Injectable()
 export class CreateProfilPPUseCase {
   constructor(
-    @Inject(PROFIL_REPOSITORY)
-    private readonly profilRepository: ProfilRepository,
+    @Inject(PROFIL_PP_REPOSITORY)
+    private readonly profilPPRepository: ProfilPPRepository,
     @InjectRepository(UserEntity)
     private readonly userRepo: Repository<UserEntity>,
   ) {}
 
   async execute(userId: number, dto: CreateProfilPPDto): Promise<ProfilPP> {
-    const existing = await this.profilRepository.findProfilPPByUserId(userId);
-    if (existing) throw new ConflictException('Profil PP déjà existant.');
+    const existing = await this.profilPPRepository.findByUserId(userId);
+    if (existing) throw new ProfilPPDejaExistantError();
 
     // prenom / nom sont NOT NULL et ne sont pas redemandés par le formulaire de
     // complétion : on les reprend de l'identité fournie à l'inscription.
     const user = await this.userRepo.findOne({ where: { userId } });
 
-    const profil = new ProfilPP();
-    profil.utilisateurId = userId;
-    profil.prenom = user?.firstname?.trim() || '—';
-    profil.nom = user?.lastname?.trim() || '—';
-    profil.civilite = dto.civilite ?? null;
-    profil.dateNaissance = dto.dateNaissance ? new Date(dto.dateNaissance) : null;
-    profil.lieuNaissance = dto.lieuNaissance ?? null;
-    profil.nationalite = dto.nationalite ?? null;
-    profil.adresseLigne1 = dto.adresseLigne1 ?? null;
-    profil.adresseLigne2 = dto.adresseLigne2 ?? null;
-    profil.codePostal = dto.codePostal ?? null;
-    profil.ville = dto.ville ?? null;
-    profil.pays = dto.pays ?? null;
-    profil.telephone = dto.telephone ?? null;
-    profil.profession = dto.profession ?? null;
-    profil.secteurActivite = dto.secteurActivite ?? null;
-    profil.pep = dto.pep ?? false;
-    profil.residenceFiscale = dto.residenceFiscale ?? null;
-    profil.nif = dto.nif ?? null;
-    profil.categoriePsfp = CategoriePsfp.NON_AVERTI;
+    const profil = ProfilPPFactory.creer({
+      utilisateurId: userId,
+      prenom: user?.firstname,
+      nom: user?.lastname,
+      ...champsDeclaresDepuisDto(dto),
+    });
 
-    return this.profilRepository.saveProfilPP(profil);
+    return this.profilPPRepository.save(profil);
   }
 }

@@ -47,8 +47,18 @@ import type { ActiveUser } from 'src/common/auth/current-user.decorator';
 import { NotificationEventService } from 'src/notifications/applications/notification-event.service';
 import { USER_REPOSITORY } from 'src/iam/domains/ports/user.repository';
 import type { UserRepository } from 'src/iam/domains/ports/user.repository';
-import { PROFIL_REPOSITORY } from 'src/profiles/applications/ports/repositories/profil.repository';
-import type { ProfilRepository } from 'src/profiles/applications/ports/repositories/profil.repository';
+import {
+  PROFIL_PP_REPOSITORY,
+  type ProfilPPRepository,
+} from 'src/profiles/domains/ports/profil-pp.repository';
+import {
+  PROFIL_PM_REPOSITORY,
+  type ProfilPMRepository,
+} from 'src/profiles/domains/ports/profil-pm.repository';
+import {
+  KYC_REPOSITORY,
+  type KycRepository,
+} from 'src/profiles/domains/ports/kyc.repository';
 import { DOCUMENT_REPOSITORY } from 'src/documents/applications/ports/repositories/document.repository';
 import type { DocumentRepository } from 'src/documents/applications/ports/repositories/document.repository';
 import { WALLET_REPOSITORY } from 'src/wallets/applications/ports/repositories/wallet.repository';
@@ -70,8 +80,12 @@ const MANAGE_ROLES: string[] = rolesWithPermission('users:manage');
 export class UserController {
   constructor(
     @Inject(USER_REPOSITORY) private readonly userRepository: UserRepository,
-    @Inject(PROFIL_REPOSITORY)
-    private readonly profilRepository: ProfilRepository,
+    @Inject(PROFIL_PP_REPOSITORY)
+    private readonly profilPPRepository: ProfilPPRepository,
+    @Inject(PROFIL_PM_REPOSITORY)
+    private readonly profilPMRepository: ProfilPMRepository,
+    @Inject(KYC_REPOSITORY)
+    private readonly kycRepository: KycRepository,
     @Inject(DOCUMENT_REPOSITORY)
     private readonly documentRepository: DocumentRepository,
     @Inject(WALLET_REPOSITORY)
@@ -103,9 +117,9 @@ export class UserController {
     if (!found) throw new NotFoundException('Utilisateur introuvable.');
 
     const [profilPP, profilPM, kyc, documents, wallet] = await Promise.all([
-      this.profilRepository.findProfilPPByUserId(user.userId).catch(() => null),
-      this.profilRepository.findProfilPMByUserId(user.userId).catch(() => null),
-      this.profilRepository.findKycByUserId(user.userId).catch(() => null),
+      this.profilPPRepository.findByUserId(user.userId).catch(() => null),
+      this.profilPMRepository.findByUserId(user.userId).catch(() => null),
+      this.kycRepository.findByUserId(user.userId).catch(() => null),
       this.documentRepository.findByUserId(user.userId).catch(() => []),
       this.walletRepository
         .findWalletByUser(user.userId, WalletType.INVESTISSEUR)
@@ -127,11 +141,11 @@ export class UserController {
         : null;
 
     const hasUserType = !!inferredType;
+    // « A-t-il commencé à se déclarer ? » est une question métier : elle vit
+    // dans l'agrégat, pas ici (§12.5). Le contrôleur ne fait que combiner les
+    // deux formes de profil.
     const hasProfilData = !!(
-      profilPP?.nationalite ||
-      profilPP?.dateNaissance ||
-      profilPP?.adresseLigne1 ||
-      profilPM?.raisonSociale
+      profilPP?.aRenseigneSonProfil() || profilPM?.raisonSociale
     );
     const questionnaireCompleted = !!(profilPP?.categoriePsfp || profilPM);
     const kycStatus = kycStatut as string;
@@ -375,7 +389,7 @@ export class UserController {
     if (!found) throw new NotFoundException('Utilisateur introuvable.');
 
     const [kyc, wallet] = await Promise.all([
-      this.profilRepository.findKycByUserId(id).catch(() => null),
+      this.kycRepository.findByUserId(id).catch(() => null),
       this.walletRepository
         .findWalletByUser(id, WalletType.INVESTISSEUR)
         .catch(() => null),
