@@ -1,8 +1,6 @@
-import {
-  EvaluationInvestisseur,
-  PLANCHER_PLAFOND_NON_AVERTI,
-} from './evaluation-investisseur.vo';
+import { EvaluationInvestisseur } from './evaluation-investisseur.vo';
 import { CategoriePsfp } from 'src/profiles/domains/enums/kyc-status.enum';
+import { PLANCHER_PLAFOND_NON_AVERTI } from 'src/profiles/domains/services/plafond-psfp.domain-service';
 
 const LIGNE = {
   categoriePsfp: CategoriePsfp.NON_AVERTI,

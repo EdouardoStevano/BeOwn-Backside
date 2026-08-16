@@ -1,6 +1,21 @@
+import { CategoriePsfp } from 'src/profiles/domains/enums/kyc-status.enum';
+import { NiveauRisque } from 'src/profiles/domains/enums/niveau-risque.enum';
 import { ProfilPP } from 'src/profiles/domains/profil-pp';
 
 export const PROFIL_PP_REPOSITORY = Symbol('PROFIL_PP_REPOSITORY');
+
+/** Ce que le questionnaire d'adéquation reporte sur le profil. */
+export interface ClassementPsfp {
+  categoriePsfp: CategoriePsfp;
+  patrimoineDeclare: number | null;
+  montantMaxConseille: number | null;
+}
+
+/** Ce que le calcul de risque reporte sur le profil. */
+export interface SuiviRisque {
+  niveauRisque: NiveauRisque;
+  prochainContactDu: Date;
+}
 
 /**
  * Accès en persistance au profil personne physique.
@@ -24,4 +39,36 @@ export interface ProfilPPRepository {
   save(profil: ProfilPP): Promise<ProfilPP>;
   findByUserId(userId: number): Promise<ProfilPP | null>;
   update(profil: ProfilPP): Promise<ProfilPP>;
+
+  /**
+   * Reporte sur le profil le classement issu du questionnaire d'adéquation.
+   *
+   * Écriture ciblée, et non `save(profil)`, pour la raison exposée par
+   * `EvaluationInvestisseur` : ces trois colonnes ne sont pas déclarables
+   * depuis l'agrégat, qui les expose en lecture seule. Charger le profil pour
+   * les y écrire rouvrirait justement la porte qu'on a fermée — et écraserait
+   * au passage tout ce qui aurait changé sur le profil entre le chargement et
+   * la sauvegarde.
+   *
+   * Sans effet si le compte n'a pas de profil PP : répondre au questionnaire
+   * avant d'avoir complété son profil reste permis.
+   */
+  enregistrerClassementPsfp(
+    utilisateurId: number,
+    classement: ClassementPsfp,
+  ): Promise<void>;
+
+  /** Reporte le niveau de risque et la date du prochain contact. Mêmes raisons. */
+  enregistrerSuiviRisque(
+    utilisateurId: number,
+    suivi: SuiviRisque,
+  ): Promise<void>;
+
+  /**
+   * Profils dont la prise de contact périodique est due — surveillance PSFP.
+   *
+   * Y figurent aussi les profils vulnérables jamais contactés, dont la date de
+   * prochain contact est encore vide.
+   */
+  listerContactsDus(limite: number): Promise<ProfilPP[]>;
 }

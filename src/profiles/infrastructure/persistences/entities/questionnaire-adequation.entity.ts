@@ -1,3 +1,4 @@
+import { CategoriePsfp } from 'src/profiles/domains/enums/kyc-status.enum';
 import {
   Column,
   CreateDateColumn,
@@ -57,7 +58,7 @@ export class QuestionnaireAdequationEntity {
 
   // ── Résultat calculé ───────────────────────────────────────────────────
   @Column({ type: 'varchar', nullable: true })
-  resultCategorie: string | null; // 'professionnel' | 'averti' | 'non_averti'
+  resultCategorie: CategoriePsfp | null;
 
   @Column({ type: 'decimal', precision: 14, scale: 2, nullable: true })
   resultMontantMaxConseille: number | null;
