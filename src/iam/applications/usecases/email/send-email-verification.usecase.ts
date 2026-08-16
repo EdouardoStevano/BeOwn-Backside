@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { randomUUID } from 'crypto';
-import { TokenService } from '../services/token/token.service';
-import { TokenEmailCacheService } from '../services/token/token-email-cache.service';
+import { TokenService } from '../../services/token/token.service';
+import { TokenEmailCacheService } from '../../services/token/token-email-cache.service';
 import { AuthMailerService } from 'src/iam/applications/services/auth-mailer.service';
 import {
   USER_REPOSITORY,

@@ -2,7 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { UsersInfrastructureModule } from 'src/iam/infrastructure/users-infrastructure.module';
 import { UserController } from 'src/iam/presenters/http/user.controller';
-import { DeleteAccountUseCase } from 'src/iam/applications/usecases/delete-account.usecase';
+import { DeleteAccountUseCase } from 'src/iam/applications/usecases/account/delete-account.usecase';
 import { UserFactory } from '../domains/factories/user.factory';
 import { HASHING_SERVICE } from 'src/common/hashing/hashing.service';
 import { BcryptService } from 'src/common/hashing/bcrypt.service';

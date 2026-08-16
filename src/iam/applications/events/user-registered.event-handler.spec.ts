@@ -2,7 +2,7 @@ import type { UserRepository } from 'src/iam/domains/ports/user.repository';
 import type { NotificationEventService } from 'src/notifications/applications/notification-event.service';
 import { UserRegisteredDomainEvent } from 'src/iam/domains/events/user-registered.domain-event';
 import { buildUser } from 'src/iam/domains/models/user.fixture';
-import type { SendEmailVerificationUseCase } from '../usecases/send-email-verification.usecase';
+import type { SendEmailVerificationUseCase } from '../usecases/email/send-email-verification.usecase';
 import { UserRegisteredEventHandler } from './user-registered.event-handler';
 
 const USER_ID = 42;

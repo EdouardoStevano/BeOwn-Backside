@@ -29,7 +29,7 @@ import { buildUser } from 'src/iam/domains/models/user.fixture';
 import { EmailEnrollmentStrategy } from '../email/email-enrollment.strategy';
 import { SmsEnrollmentStrategy } from '../sms/sms-enrollment.strategy';
 import { TotpEnrollmentStrategy } from '../totp/totp-enrollment.strategy';
-import { EnrollMfaUseCase } from '../../usecases/enroll-mfa.usecase';
+import { EnrollMfaUseCase } from '../../usecases/mfa/enroll-mfa.usecase';
 import type {
   MfaEnrollmentRequest,
   MfaEnrollmentStrategy,

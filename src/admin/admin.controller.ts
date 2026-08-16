@@ -40,7 +40,7 @@ import { OrdreMarcheEntity } from 'src/secondarymarket/infrastructure/persistenc
 import { OrdreMarcheStatus } from 'src/secondarymarket/domains/ordre-marche';
 import { ProjectStatus } from 'src/projects/domains/enums/project-status.enum';
 import { InvestmentStatus } from 'src/investments/domains/enums/investment-status.enum';
-import { DeleteAccountUseCase } from 'src/iam/applications/usecases/delete-account.usecase';
+import { DeleteAccountUseCase } from 'src/iam/applications/usecases/account/delete-account.usecase';
 import { SkipThrottle } from '@nestjs/throttler';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -56,8 +56,18 @@ const ACTIVE_INVESTMENT_STATUSES = [
 ];
 
 const MONTH_LABELS: Record<number, string> = {
-  1: 'Jan', 2: 'Fév', 3: 'Mar', 4: 'Avr', 5: 'Mai', 6: 'Jun',
-  7: 'Jul', 8: 'Aoû', 9: 'Sep', 10: 'Oct', 11: 'Nov', 12: 'Déc',
+  1: 'Jan',
+  2: 'Fév',
+  3: 'Mar',
+  4: 'Avr',
+  5: 'Mai',
+  6: 'Jun',
+  7: 'Jul',
+  8: 'Aoû',
+  9: 'Sep',
+  10: 'Oct',
+  11: 'Nov',
+  12: 'Déc',
 };
 
 // ─── Controller ───────────────────────────────────────────────────────────────
@@ -97,15 +107,20 @@ export class AdminController {
   }
 
   private displayName(u: UserEntity): string {
-    return [u.firstname, u.lastname].filter(Boolean).join(' ') ||
+    return (
+      [u.firstname, u.lastname].filter(Boolean).join(' ') ||
       u.userEmail?.email ||
-      `Utilisateur #${u.userId}`;
+      `Utilisateur #${u.userId}`
+    );
   }
 
   // ─── Users list ────────────────────────────────────────────────────────────
 
   @ApiOperation({ summary: 'Liste paginée de tous les utilisateurs (admin)' })
-  @ApiResponse({ status: 200, description: 'Utilisateurs avec statut KYC et compte' })
+  @ApiResponse({
+    status: 200,
+    description: 'Utilisateurs avec statut KYC et compte',
+  })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiQuery({ name: 'search', required: false, type: String })
@@ -121,7 +136,10 @@ export class AdminController {
     await this.assertAdmin(currentUser.userId);
 
     const page = Math.max(1, parseInt(pageParam ?? '1', 10) || 1);
-    const limit = Math.min(100, Math.max(1, parseInt(limitParam ?? '20', 10) || 20));
+    const limit = Math.min(
+      100,
+      Math.max(1, parseInt(limitParam ?? '20', 10) || 20),
+    );
 
     const [users, total] = await this.userRepo.findAndCount({
       relations: ['userEmail'],
@@ -142,7 +160,9 @@ export class AdminController {
             .select('i.utilisateurId', 'userId')
             .addSelect('COALESCE(SUM(i.montant), 0)', 'total')
             .where('i.utilisateurId IN (:...ids)', { ids: userIds })
-            .andWhere('i.statut IN (:...statuts)', { statuts: ACTIVE_INVESTMENT_STATUSES })
+            .andWhere('i.statut IN (:...statuts)', {
+              statuts: ACTIVE_INVESTMENT_STATUSES,
+            })
             .groupBy('i.utilisateurId')
             .getRawMany<{ userId: number; total: string }>()
         : Promise.resolve([] as Array<{ userId: number; total: string }>),
@@ -191,7 +211,14 @@ export class AdminController {
 
   @ApiOperation({ summary: 'Suspendre ou réactiver un compte utilisateur' })
   @ApiParam({ name: 'id', type: Number })
-  @ApiBody({ schema: { properties: { status: { type: 'string', enum: ['actif', 'suspendu', 'clos'] }, motif: { type: 'string' } } } })
+  @ApiBody({
+    schema: {
+      properties: {
+        status: { type: 'string', enum: ['actif', 'suspendu', 'clos'] },
+        motif: { type: 'string' },
+      },
+    },
+  })
   @ApiResponse({ status: 200, description: 'Statut mis à jour' })
   @RequirePermission('users:manage')
   @Patch('users/:id/status')
@@ -204,25 +231,53 @@ export class AdminController {
     const user = await this.userRepo.findOne({ where: { userId: id } });
     if (!user) throw new NotFoundException('Utilisateur introuvable.');
     const previousStatus = user.status;
-    await this.userRepo.update({ userId: id }, { status: body.status as UserStatus });
-    if (body.status === UserStatus.SUSPENDU && previousStatus !== UserStatus.SUSPENDU) {
-      this.notificationEvents.accountSuspended(id, body.motif ?? null, currentUser.userId);
-    } else if (body.status === UserStatus.ACTIF && previousStatus === UserStatus.SUSPENDU) {
+    await this.userRepo.update(
+      { userId: id },
+      { status: body.status as UserStatus },
+    );
+    if (
+      body.status === UserStatus.SUSPENDU &&
+      previousStatus !== UserStatus.SUSPENDU
+    ) {
+      this.notificationEvents.accountSuspended(
+        id,
+        body.motif ?? null,
+        currentUser.userId,
+      );
+    } else if (
+      body.status === UserStatus.ACTIF &&
+      previousStatus === UserStatus.SUSPENDU
+    ) {
       this.notificationEvents.accountReactivated(id, currentUser.userId);
-    } else if (body.status === UserStatus.CLOS && previousStatus !== UserStatus.CLOS) {
-      this.notificationEvents.accountClosed(id, body.motif ?? null, currentUser.userId);
+    } else if (
+      body.status === UserStatus.CLOS &&
+      previousStatus !== UserStatus.CLOS
+    ) {
+      this.notificationEvents.accountClosed(
+        id,
+        body.motif ?? null,
+        currentUser.userId,
+      );
     }
     return { userId: id, status: body.status };
   }
 
   // ─── Suppression de compte (back-office) ────────────────────────────────────
 
-  @ApiOperation({ summary: 'Supprimer le compte d\'un utilisateur (super_admin)' })
+  @ApiOperation({
+    summary: "Supprimer le compte d'un utilisateur (super_admin)",
+  })
   @ApiParam({ name: 'id', type: Number })
   @ApiResponse({ status: 204, description: 'Compte supprimé' })
-  @ApiResponse({ status: 400, description: 'Un admin ne peut pas se supprimer lui-même' })
+  @ApiResponse({
+    status: 400,
+    description: 'Un admin ne peut pas se supprimer lui-même',
+  })
   @ApiResponse({ status: 404, description: 'Utilisateur introuvable' })
-  @ApiResponse({ status: 409, description: 'Suppression bloquée (ACCOUNT_DELETION_BLOCKED)' })
+  @ApiResponse({
+    status: 409,
+    description: 'Suppression bloquée (ACCOUNT_DELETION_BLOCKED)',
+  })
   @RequirePermission('users:delete')
   @HttpCode(HttpStatus.NO_CONTENT)
   @Delete('users/:id')
@@ -255,7 +310,10 @@ export class AdminController {
     await this.assertAdmin(currentUser.userId);
 
     const page = Math.max(1, parseInt(pageParam ?? '1', 10) || 1);
-    const limit = Math.min(100, Math.max(1, parseInt(limitParam ?? '20', 10) || 20));
+    const limit = Math.min(
+      100,
+      Math.max(1, parseInt(limitParam ?? '20', 10) || 20),
+    );
 
     const [investments, total] = await this.investRepo.findAndCount({
       where: { utilisateurId: id },
@@ -289,7 +347,9 @@ export class AdminController {
 
   // ─── Investors of a project ────────────────────────────────────────────────
 
-  @ApiOperation({ summary: 'Liste des investisseurs d\'un projet avec leurs fractions' })
+  @ApiOperation({
+    summary: "Liste des investisseurs d'un projet avec leurs fractions",
+  })
   @ApiParam({ name: 'id', description: 'UUID du projet' })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
@@ -304,7 +364,10 @@ export class AdminController {
     await this.assertAdmin(currentUser.userId);
 
     const page = Math.max(1, parseInt(pageParam ?? '1', 10) || 1);
-    const limit = Math.min(200, Math.max(1, parseInt(limitParam ?? '50', 10) || 50));
+    const limit = Math.min(
+      200,
+      Math.max(1, parseInt(limitParam ?? '50', 10) || 50),
+    );
 
     const [investments, total] = await this.investRepo.findAndCount({
       where: { projetId, statut: In(ACTIVE_INVESTMENT_STATUSES) },
@@ -314,8 +377,14 @@ export class AdminController {
       take: limit,
     });
 
-    const montantTotal = investments.reduce((sum, i) => sum + Number(i.montant), 0);
-    const fractionsTotal = investments.reduce((sum, i) => sum + (i.nbTitres ?? 0), 0);
+    const montantTotal = investments.reduce(
+      (sum, i) => sum + Number(i.montant),
+      0,
+    );
+    const fractionsTotal = investments.reduce(
+      (sum, i) => sum + (i.nbTitres ?? 0),
+      0,
+    );
 
     return {
       items: investments.map((i) => {
@@ -328,9 +397,12 @@ export class AdminController {
           montant: Number(i.montant),
           nbTitres: i.nbTitres ?? 0,
           valeurTitre: i.valeurTitre != null ? Number(i.valeurTitre) : null,
-          pourcentage: montantTotal > 0
-            ? parseFloat(((Number(i.montant) / montantTotal) * 100).toFixed(2))
-            : 0,
+          pourcentage:
+            montantTotal > 0
+              ? parseFloat(
+                  ((Number(i.montant) / montantTotal) * 100).toFixed(2),
+                )
+              : 0,
           statut: i.statut,
           instrument: i.instrument,
           createdAt: i.createdAt,
@@ -354,32 +426,46 @@ export class AdminController {
     const firstDayThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
     const [
-      activeInvestors, activeInvestorsLastMonth,
-      projectsEnCollecte, projectsLastMonth,
-      totalCollectedRow, totalCollectedLastMonthRow,
+      activeInvestors,
+      activeInvestorsLastMonth,
+      projectsEnCollecte,
+      projectsLastMonth,
+      totalCollectedRow,
+      totalCollectedLastMonthRow,
       triRows,
     ] = await Promise.all([
-      this.userRepo.count({ where: { role: UserRole.INVESTISSEUR, status: UserStatus.ACTIF } }),
-      this.userRepo.createQueryBuilder('u')
+      this.userRepo.count({
+        where: { role: UserRole.INVESTISSEUR, status: UserStatus.ACTIF },
+      }),
+      this.userRepo
+        .createQueryBuilder('u')
         .where('u.role = :role', { role: UserRole.INVESTISSEUR })
         .andWhere('u.status = :status', { status: UserStatus.ACTIF })
         .andWhere('u.createdAt < :date', { date: firstDayThisMonth })
         .getCount(),
       this.projectRepo.count({ where: { statut: ProjectStatus.EN_COLLECTE } }),
-      this.projectRepo.createQueryBuilder('p')
+      this.projectRepo
+        .createQueryBuilder('p')
         .where('p.statut = :s', { s: ProjectStatus.EN_COLLECTE })
         .andWhere('p.createdAt < :date', { date: firstDayThisMonth })
         .getCount(),
-      this.investRepo.createQueryBuilder('i')
+      this.investRepo
+        .createQueryBuilder('i')
         .select('COALESCE(SUM(i.montant), 0)', 'total')
-        .where('i.statut IN (:...statuts)', { statuts: ACTIVE_INVESTMENT_STATUSES })
+        .where('i.statut IN (:...statuts)', {
+          statuts: ACTIVE_INVESTMENT_STATUSES,
+        })
         .getRawOne<{ total: string }>(),
-      this.investRepo.createQueryBuilder('i')
+      this.investRepo
+        .createQueryBuilder('i')
         .select('COALESCE(SUM(i.montant), 0)', 'total')
-        .where('i.statut IN (:...statuts)', { statuts: ACTIVE_INVESTMENT_STATUSES })
+        .where('i.statut IN (:...statuts)', {
+          statuts: ACTIVE_INVESTMENT_STATUSES,
+        })
         .andWhere('i.createdAt < :date', { date: firstDayThisMonth })
         .getRawOne<{ total: string }>(),
-      this.projectRepo.createQueryBuilder('p')
+      this.projectRepo
+        .createQueryBuilder('p')
         .select('AVG(p.triCible)', 'avg')
         .where('p.statut = :s', { s: ProjectStatus.EN_COLLECTE })
         .andWhere('p.triCible IS NOT NULL')
@@ -388,9 +474,10 @@ export class AdminController {
 
     const totalNow = parseFloat(totalCollectedRow?.total ?? '0');
     const totalLast = parseFloat(totalCollectedLastMonthRow?.total ?? '0');
-    const collectedChange = totalLast > 0
-      ? parseFloat(((totalNow - totalLast) / totalLast * 100).toFixed(1))
-      : 0;
+    const collectedChange =
+      totalLast > 0
+        ? parseFloat((((totalNow - totalLast) / totalLast) * 100).toFixed(1))
+        : 0;
 
     return {
       activeInvestors,
@@ -415,13 +502,17 @@ export class AdminController {
       .createQueryBuilder('i')
       .select('EXTRACT(MONTH FROM i.createdAt)::int', 'month')
       .addSelect('ROUND(SUM(i.montant) / 1000000, 1)', 'collecte')
-      .where('i.statut IN (:...statuts)', { statuts: ACTIVE_INVESTMENT_STATUSES })
+      .where('i.statut IN (:...statuts)', {
+        statuts: ACTIVE_INVESTMENT_STATUSES,
+      })
       .andWhere('EXTRACT(YEAR FROM i.createdAt) = :year', { year })
       .groupBy('EXTRACT(MONTH FROM i.createdAt)')
       .orderBy('month', 'ASC')
       .getRawMany<{ month: number; collecte: string }>();
 
-    const map = new Map(rows.map((r) => [Number(r.month), parseFloat(r.collecte)]));
+    const map = new Map(
+      rows.map((r) => [Number(r.month), parseFloat(r.collecte)]),
+    );
     return Array.from({ length: 12 }, (_, i) => ({
       month: MONTH_LABELS[i + 1],
       collecte: map.get(i + 1) ?? 0,
@@ -439,7 +530,9 @@ export class AdminController {
       .innerJoin('i.projet', 'p')
       .select('p.ville', 'city')
       .addSelect('ROUND(SUM(i.montant) / 1000000, 1)', 'montant')
-      .where('i.statut IN (:...statuts)', { statuts: ACTIVE_INVESTMENT_STATUSES })
+      .where('i.statut IN (:...statuts)', {
+        statuts: ACTIVE_INVESTMENT_STATUSES,
+      })
       .andWhere('p.ville IS NOT NULL')
       .groupBy('p.ville')
       .orderBy('montant', 'DESC')
@@ -451,9 +544,15 @@ export class AdminController {
 
   // ─── Activité globale de la plateforme ────────────────────────────────────
 
-  @ApiOperation({ summary: 'Journal complet d\'activité de la plateforme (qui a fait quoi)' })
+  @ApiOperation({
+    summary: "Journal complet d'activité de la plateforme (qui a fait quoi)",
+  })
   @ApiQuery({ name: 'limit', required: false, type: Number })
-  @ApiQuery({ name: 'type', required: false, enum: ['all', 'kyc', 'investment', 'registration', 'market'] })
+  @ApiQuery({
+    name: 'type',
+    required: false,
+    enum: ['all', 'kyc', 'investment', 'registration', 'market'],
+  })
   @Get('activity')
   async getActivity(
     @CurrentUser() currentUser: ActiveUser,
@@ -512,7 +611,9 @@ export class AdminController {
               email: i.utilisateur?.userEmail?.email ?? '',
               action: `Investissement — ${(i as any).projet?.titre ?? i.projetId}`,
               detail: `${formatEur(Number(i.montant))} · ${i.nbTitres ?? 0} titre(s)`,
-              status: ACTIVE_INVESTMENT_STATUSES.includes(i.statut) ? 'success' : 'pending',
+              status: ACTIVE_INVESTMENT_STATUSES.includes(i.statut)
+                ? 'success'
+                : 'pending',
               date: i.createdAt,
               time: this.relativeTime(i.createdAt),
             })),
@@ -563,7 +664,12 @@ export class AdminController {
               email: o.vendeur?.userEmail?.email ?? '',
               action: `Ordre marché secondaire — ${o.sens}`,
               detail: `${Number(o.nbFractions).toLocaleString('fr-FR')} titres · ${formatEur(Number(o.prixUnitaire))}/u`,
-              status: o.statut === OrdreMarcheStatus.EXECUTE ? 'success' : o.statut === OrdreMarcheStatus.ANNULE ? 'error' : 'pending',
+              status:
+                o.statut === OrdreMarcheStatus.EXECUTE
+                  ? 'success'
+                  : o.statut === OrdreMarcheStatus.ANNULE
+                    ? 'error'
+                    : 'pending',
               date: o.createdAt,
               time: this.relativeTime(o.createdAt),
             })),

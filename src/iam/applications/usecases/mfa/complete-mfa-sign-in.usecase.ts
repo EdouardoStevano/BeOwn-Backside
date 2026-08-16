@@ -10,8 +10,8 @@ import {
   type UserRepository,
 } from 'src/iam/domains/ports/user.repository';
 import { type AuthSession } from 'src/iam/applications/models/auth-token';
-import { MFAChallengeCacheService } from '../services/mfa/mfa-challenge-cache.service';
-import { SignInUsecase } from './sign-in.usecase';
+import { MFAChallengeCacheService } from '../../services/mfa/mfa-challenge-cache.service';
+import { SignInUsecase } from '../sign/sign-in.usecase';
 import { VerifyMfaChallengeUseCase } from './verify-mfa-challenge.usecase';
 
 /** Entrée du use case — indépendante du DTO HTTP (§1). */

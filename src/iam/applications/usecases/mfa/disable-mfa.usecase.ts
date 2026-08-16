@@ -7,8 +7,8 @@ import {
 } from 'src/iam/domains/errors';
 import { MfaMethodType } from 'src/iam/domains/enums/mfa-method.enum';
 import { MfaChallengePurpose } from 'src/iam/applications/models/mfa-challenge';
-import { MFAChallengeCacheService } from '../services/mfa/mfa-challenge-cache.service';
-import { MfaFactorService } from '../services/mfa/mfa-factor.service';
+import { MFAChallengeCacheService } from '../../services/mfa/mfa-challenge-cache.service';
+import { MfaFactorService } from '../../services/mfa/mfa-factor.service';
 
 /** Demande de désactivation : émet le défi à relever. */
 export interface RequestDisableMfaCommand {

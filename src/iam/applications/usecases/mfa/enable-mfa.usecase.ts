@@ -4,7 +4,7 @@ import { MfaMethodType } from 'src/iam/domains/enums/mfa-method.enum';
 import {
   MFA_ENROLLMENT_STRATEGIES,
   type MfaEnrollmentStrategy,
-} from '../strategies/mfa/mfa-enrollment.strategy';
+} from '../../strategies/mfa/mfa-enrollment.strategy';
 
 /** Entrée du use case — le canal n'y figure pas, il est déduit (§1). */
 export interface EnableMfaCommand {

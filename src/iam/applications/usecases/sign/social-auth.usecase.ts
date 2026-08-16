@@ -1,18 +1,18 @@
 ﻿import { Inject, Injectable } from '@nestjs/common';
 import { type AuthSession } from 'src/iam/applications/models/auth-token';
-import { TokenService } from '../services/token/token.service';
+import { TokenService } from '../../services/token/token.service';
 import {
   USER_REPOSITORY,
   type UserRepository,
 } from 'src/iam/domains/ports/user.repository';
 import { SocialProfile } from 'src/iam/applications/models/social-profile';
-import { UserFactory } from '../../domains/factories/user.factory';
+import { UserFactory } from '../../../domains/factories/user.factory';
 import {
   EmailAlreadyRegisteredError,
   SocialAuthFailedError,
 } from 'src/iam/domains/errors';
 import { NO_MFA } from 'src/iam/domains/mappers/user.mapper';
-import { MfaFactorService } from '../services/mfa/mfa-factor.service';
+import { MfaFactorService } from '../../services/mfa/mfa-factor.service';
 
 @Injectable()
 export class SocialAuthUseCase {

@@ -5,9 +5,9 @@ import { OtpService } from 'src/iam/applications/services/otp/otp.service';
 import { AuthMailerService } from 'src/iam/applications/services/auth-mailer.service';
 import type { SecretCipher } from 'src/iam/applications/ports/secret-cipher.port';
 import type { TotpGenerator } from 'src/iam/applications/ports/totp-generator.port';
-import { EmailChallengeStrategy } from '../strategies/email/email-challenge.strategy';
-import { TotpChallengeStrategy } from '../strategies/totp/totp-challenge.strategy';
-import type { MfaChallengeStrategy } from '../strategies/mfa/mfa-challenge.strategy';
+import { EmailChallengeStrategy } from '../../strategies/email/email-challenge.strategy';
+import { TotpChallengeStrategy } from '../../strategies/totp/totp-challenge.strategy';
+import type { MfaChallengeStrategy } from '../../strategies/mfa/mfa-challenge.strategy';
 import { ListMfaMethodsUseCase } from './list-mfa-methods.usecase';
 
 const USER_ID = 42;

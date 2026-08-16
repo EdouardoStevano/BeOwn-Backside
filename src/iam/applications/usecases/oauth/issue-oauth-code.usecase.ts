@@ -1,8 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { randomUUID } from 'crypto';
-import { SessionCacheService } from '../services/session-cache.service';
+import { SessionCacheService } from '../../services/session-cache.service';
 import { SocialProfile } from 'src/iam/applications/models/social-profile';
-import { SocialAuthUseCase } from './social-auth.usecase';
+import { SocialAuthUseCase } from '../sign/social-auth.usecase';
 
 export interface IssuedOAuthCode {
   /** Code à usage unique (TTL 30 s) échangé ensuite contre les tokens. */

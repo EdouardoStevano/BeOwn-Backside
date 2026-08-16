@@ -1,7 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { EventBus } from '@nestjs/cqrs';
 import { EmailAlreadyRegisteredError } from 'src/iam/domains/errors';
-import { UserFactory } from '../../domains/factories/user.factory';
+import { UserFactory } from '../../../domains/factories/user.factory';
 import {
   USER_REPOSITORY,
   type UserRepository,

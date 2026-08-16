@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { TokenService } from '../services/token/token.service';
-import { TokenEmailCacheService } from '../services/token/token-email-cache.service';
+import { TokenService } from '../../services/token/token.service';
+import { TokenEmailCacheService } from '../../services/token/token-email-cache.service';
 import {
   USER_REPOSITORY,
   type UserRepository,

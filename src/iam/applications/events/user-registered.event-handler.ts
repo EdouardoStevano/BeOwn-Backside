@@ -6,7 +6,7 @@ import {
   type UserRepository,
 } from 'src/iam/domains/ports/user.repository';
 import { NotificationEventService } from 'src/notifications/applications/notification-event.service';
-import { SendEmailVerificationUseCase } from '../usecases/send-email-verification.usecase';
+import { SendEmailVerificationUseCase } from '../usecases/email/send-email-verification.usecase';
 
 /**
  * Tout ce qui suit une inscription sans la conditionner : le lien de

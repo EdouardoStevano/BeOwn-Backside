@@ -3,7 +3,7 @@ import {
   MFA_CHALLENGE_STRATEGIES,
   type MfaChallengeStrategy,
   type MfaMethodSummary,
-} from '../strategies/mfa/mfa-challenge.strategy';
+} from '../../strategies/mfa/mfa-challenge.strategy';
 
 /**
  * Facteurs enrôlés par un compte, tous canaux confondus.
