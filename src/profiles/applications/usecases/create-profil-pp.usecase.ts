@@ -1,6 +1,8 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import {
+  USER_REPOSITORY,
+  type UserRepository,
+} from 'src/iam/domains/ports/user.repository';
 import {
   PROFIL_PP_REPOSITORY,
   type ProfilPPRepository,
@@ -10,7 +12,6 @@ import { ProfilPP } from 'src/profiles/domains/profil-pp';
 import { ProfilPPFactory } from 'src/profiles/domains/factories/profil-pp.factory';
 import { ProfilPPDejaExistantError } from 'src/profiles/domains/errors';
 import { champsDeclaresDepuisDto } from '../mappers/profil-pp-champs.mapper';
-import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 
 /**
  * Complétion du profil investisseur — personne physique.
@@ -26,8 +27,12 @@ export class CreateProfilPPUseCase {
   constructor(
     @Inject(PROFIL_PP_REPOSITORY)
     private readonly profilPPRepository: ProfilPPRepository,
-    @InjectRepository(UserEntity)
-    private readonly userRepo: Repository<UserEntity>,
+    // Port du contexte IAM, et non son entité ORM : le profil a besoin de
+    // l'identité du compte, pas de savoir dans quelle table elle est rangée
+    // (§12.3). C'est aussi ce que fait déjà `notifications`, `investments` ou
+    // `fiscalite` — `UsersInfrastructureModule` n'expose que ce port.
+    @Inject(USER_REPOSITORY)
+    private readonly userRepository: UserRepository,
   ) {}
 
   async execute(userId: number, dto: CreateProfilPPDto): Promise<ProfilPP> {
@@ -36,12 +41,12 @@ export class CreateProfilPPUseCase {
 
     // prenom / nom sont NOT NULL et ne sont pas redemandés par le formulaire de
     // complétion : on les reprend de l'identité fournie à l'inscription.
-    const user = await this.userRepo.findOne({ where: { userId } });
+    const compte = await this.userRepository.findById(userId);
 
     const profil = ProfilPPFactory.creer({
       utilisateurId: userId,
-      prenom: user?.firstname,
-      nom: user?.lastname,
+      prenom: compte?.firstname,
+      nom: compte?.lastname,
       ...champsDeclaresDepuisDto(dto),
     });
 

@@ -19,7 +19,7 @@ import { UserRole } from 'src/iam/domains/enums/user.enum';
 describe('ProfileController.patchKycStatus', () => {
   let controller: ProfileController;
   let decideKycManualReview: { execute: jest.Mock };
-  let userRepo: { findOne: jest.Mock };
+  let userRepository: { findById: jest.Mock };
 
   const admin = { userId: 99, role: UserRole.COMPLIANCE } as never;
 
@@ -38,8 +38,9 @@ describe('ProfileController.patchKycStatus', () => {
     decideKycManualReview = {
       execute: jest.fn().mockResolvedValue(dossierValide()),
     };
-    userRepo = {
-      findOne: jest
+    // Le contrôleur relit le rôle par le port d'IAM.
+    userRepository = {
+      findById: jest
         .fn()
         .mockResolvedValue({ userId: 99, role: UserRole.COMPLIANCE }),
     };
@@ -57,7 +58,7 @@ describe('ProfileController.patchKycStatus', () => {
       undefined as never, // getKyc
       undefined as never, // saveQuestionnaireUseCase
       undefined as never, // questionnaireRepo
-      userRepo as never,
+      userRepository as never,
     );
   });
 
@@ -83,7 +84,7 @@ describe('ProfileController.patchKycStatus', () => {
     // Défense en profondeur : `@RequirePermission('kyc:validate')` filtre déjà,
     // ce contrôle relit le rôle en base au cas où le token porterait un rôle
     // périmé.
-    userRepo.findOne.mockResolvedValue({
+    userRepository.findById.mockResolvedValue({
       userId: 5,
       role: UserRole.INVESTISSEUR,
     });

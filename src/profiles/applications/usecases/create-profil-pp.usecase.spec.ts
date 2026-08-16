@@ -1,4 +1,5 @@
 import { CreateProfilPPUseCase } from './create-profil-pp.usecase';
+import type { UserRepository } from 'src/iam/domains/ports/user.repository';
 import type { ProfilPPRepository } from 'src/profiles/domains/ports/profil-pp.repository';
 import { ProfilPP } from 'src/profiles/domains/profil-pp';
 import { ProfilPPFactory } from 'src/profiles/domains/factories/profil-pp.factory';
@@ -25,16 +26,18 @@ function monter(options: {
     // Le repository rend ce qu'il a reçu : la persistance n'est pas le sujet.
     save: jest.fn((profil: ProfilPP) => Promise.resolve(profil)),
   };
-  const userRepo = {
-    findOne: jest.fn().mockResolvedValue(options.compte ?? null),
+  // Le port d'IAM, pas son entité ORM : le faux ne rend que ce que le use case
+  // lit du compte — son prénom et son nom.
+  const userRepository = {
+    findById: jest.fn().mockResolvedValue(options.compte ?? null),
   };
 
   const useCase = new CreateProfilPPUseCase(
     profilPPRepository as ProfilPPRepository,
-    userRepo as never,
+    userRepository as unknown as UserRepository,
   );
 
-  return { useCase, profilPPRepository, userRepo };
+  return { useCase, profilPPRepository, userRepository };
 }
 
 const DTO_VIDE = {} as CreateProfilPPDto;

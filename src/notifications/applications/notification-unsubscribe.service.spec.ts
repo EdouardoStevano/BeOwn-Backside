@@ -50,44 +50,49 @@ const makeSut = (tokenService = buildTokenService()) => {
     save: jest.fn(),
     update: jest.fn(),
     findOneBySocialId: jest.fn(),
-    findPreferences: jest.fn(),
-    savePreferences: jest.fn().mockResolvedValue({ notifMarketing: false }),
+  };
+
+  // Le service passe désormais par le use case du contexte Preferences : la
+  // désinscription règle une préférence, elle ne touche pas au compte.
+  const updatePreferences = {
+    execute: jest.fn().mockResolvedValue({ notifMarketing: false }),
   };
 
   const service = new NotificationUnsubscribeService(
     tokenService as any,
     userRepository as any,
+    updatePreferences as any,
   );
   const controller = new PublicUnsubscribeController(service);
 
-  return { service, controller, tokenService, userRepository };
+  return { service, controller, tokenService, userRepository, updatePreferences };
 };
 
 describe('NotificationUnsubscribeService', () => {
   it('désinscrit le destinataire en passant notifMarketing à false', async () => {
-    const { service, tokenService, userRepository } = makeSut();
+    const { service, tokenService, updatePreferences } = makeSut();
     const token = await tokenService.generateUnsubscribeToken(42);
 
     const result = await service.unsubscribe(token);
 
     expect(result).toEqual({ success: true });
-    expect(userRepository.savePreferences).toHaveBeenCalledWith(42, {
+    expect(updatePreferences.execute).toHaveBeenCalledWith(42, {
       notifMarketing: false,
     });
   });
 
   it("n'affecte que notifMarketing (les canaux transactionnels restent intacts)", async () => {
-    const { service, tokenService, userRepository } = makeSut();
+    const { service, tokenService, updatePreferences } = makeSut();
     const token = await tokenService.generateUnsubscribeToken(42);
 
     await service.unsubscribe(token);
 
-    const [, patch] = userRepository.savePreferences.mock.calls[0];
+    const [, patch] = updatePreferences.execute.mock.calls[0];
     expect(Object.keys(patch)).toEqual(['notifMarketing']);
   });
 
   it('est idempotent : rejouer le même lien renvoie 200', async () => {
-    const { service, tokenService, userRepository } = makeSut();
+    const { service, tokenService, updatePreferences } = makeSut();
     const token = await tokenService.generateUnsubscribeToken(42);
 
     await expect(service.unsubscribe(token)).resolves.toEqual({
@@ -97,11 +102,11 @@ describe('NotificationUnsubscribeService', () => {
       success: true,
     });
 
-    expect(userRepository.savePreferences).toHaveBeenCalledTimes(2);
+    expect(updatePreferences.execute).toHaveBeenCalledTimes(2);
   });
 
   it("rejette (401) un token de vérification d'email — confusion de token", async () => {
-    const { service, tokenService, userRepository } = makeSut();
+    const { service, tokenService, updatePreferences } = makeSut();
     const emailToken = await tokenService.generateEmailToken(
       { sub: 42, email: 'user@example.com', emailTokenId: 'token-id' },
       'email_verify',
@@ -110,40 +115,41 @@ describe('NotificationUnsubscribeService', () => {
     await expect(service.unsubscribe(emailToken)).rejects.toThrow(
       UnauthorizedException,
     );
-    expect(userRepository.savePreferences).not.toHaveBeenCalled();
+    expect(updatePreferences.execute).not.toHaveBeenCalled();
   });
 
   it('rejette (401) un token expiré', async () => {
     const expiredTokenService = buildTokenService({ unsubscribeTokenTtl: -1 });
-    const { service, userRepository } = makeSut(expiredTokenService);
+    const { service, updatePreferences } = makeSut(expiredTokenService);
     const token = await expiredTokenService.generateUnsubscribeToken(42);
 
     await expect(service.unsubscribe(token)).rejects.toThrow(
       UnauthorizedException,
     );
-    expect(userRepository.savePreferences).not.toHaveBeenCalled();
+    expect(updatePreferences.execute).not.toHaveBeenCalled();
   });
 
   it('rejette (401) un token signé avec une autre clé', async () => {
     const foreignTokenService = buildTokenService({ secret: 'another-secret' });
     const forgedToken = await foreignTokenService.generateUnsubscribeToken(42);
-    const { service, userRepository } = makeSut();
+    const { service, updatePreferences } = makeSut();
 
     await expect(service.unsubscribe(forgedToken)).rejects.toThrow(
       UnauthorizedException,
     );
-    expect(userRepository.savePreferences).not.toHaveBeenCalled();
+    expect(updatePreferences.execute).not.toHaveBeenCalled();
   });
 
   it("rejette (401) un token dont l'utilisateur n'existe plus", async () => {
-    const { service, tokenService, userRepository } = makeSut();
+    const { service, tokenService, updatePreferences, userRepository } =
+      makeSut();
     userRepository.findById.mockResolvedValue(null);
     const token = await tokenService.generateUnsubscribeToken(42);
 
     await expect(service.unsubscribe(token)).rejects.toThrow(
       UnauthorizedException,
     );
-    expect(userRepository.savePreferences).not.toHaveBeenCalled();
+    expect(updatePreferences.execute).not.toHaveBeenCalled();
   });
 
   it('émet un token portant sub et type notif_unsubscribe', async () => {

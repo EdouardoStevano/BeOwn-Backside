@@ -1,11 +1,14 @@
 import {
   IsBoolean,
+  IsEnum,
   IsIn,
   IsOptional,
   IsString,
   MinLength,
 } from 'class-validator';
-import { ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { UserStatus, UserType } from 'src/iam/domains/enums/user.enum';
+import { STATUTS_ADMINISTRABLES } from 'src/iam/domains/errors';
 
 // `RegisterDto` a été supprimé avec `POST /users` : le DTO d'inscription est
 // désormais `SignUpDto` (iam/presenters/http/dto/password.dto.ts), seul point
@@ -25,42 +28,11 @@ export class UpdateUserDto {
   lastname?: string;
 }
 
-export class UpdatePreferencesDto {
-  @ApiPropertyOptional({ example: 'fr', enum: ['fr', 'en', 'ar'] })
-  @IsOptional()
-  @IsString()
-  @IsIn(['fr', 'en', 'ar'])
-  langue?: string;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsBoolean()
-  masquerMontants?: boolean;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsBoolean()
-  notifEmail?: boolean;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsBoolean()
-  notifSms?: boolean;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsBoolean()
-  notifMarketing?: boolean;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsBoolean()
-  twoFactorEnabled?: boolean;
-
-  @ApiPropertyOptional({ example: 'EUR' })
-  @IsOptional()
-  @IsString()
-  preferredCurrency?: string;
+/** Type d'investisseur annoncé par le titulaire à l'ouverture de son compte. */
+export class SetUserTypeDto {
+  @ApiProperty({ enum: UserType, example: UserType.PP })
+  @IsEnum(UserType)
+  userType: UserType;
 }
 
 export class UpdateUserAdminDto {
@@ -76,11 +48,16 @@ export class UpdateUserAdminDto {
   @MinLength(2)
   lastname?: string;
 
+  /**
+   * Le champ était un `string` libre : rien ne le confrontait à l'énumération,
+   * et une valeur quelconque serait entrée dans la colonne. `@IsEnum` la
+   * refuse ici, `User.changerStatut` la refuse partout ailleurs.
+   */
   @ApiPropertyOptional({
     example: 'actif',
-    enum: ['actif', 'suspendu', 'clos'],
+    enum: STATUTS_ADMINISTRABLES,
   })
   @IsOptional()
-  @IsString()
-  status?: string;
+  @IsEnum(UserStatus)
+  status?: UserStatus;
 }
