@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Inject,
   ForbiddenException,
   Param,
   ParseIntPipe,
@@ -17,9 +18,10 @@ import {
   ApiResponse,
   ApiBearerAuth,
 } from '@nestjs/swagger';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
+import {
+  USER_REPOSITORY,
+  type UserRepository,
+} from 'src/iam/domains/ports/user.repository';
 import { CreateProfilPPUseCase } from 'src/profiles/applications/usecases/create-profil-pp.usecase';
 import { CreateKycUseCase } from 'src/profiles/applications/usecases/create-kyc.usecase';
 import { RequestKycManualReviewUseCase } from 'src/profiles/applications/usecases/request-kyc-manual-review.usecase';
@@ -67,14 +69,16 @@ export class ProfileController {
     private readonly getKyc: GetKycUseCase,
     private readonly saveQuestionnaireUseCase: SaveQuestionnaireUseCase,
     private readonly getQuestionnaire: GetQuestionnaireUseCase,
-    @InjectRepository(UserEntity)
-    private readonly userRepo: Repository<UserEntity>,
+    // Port du contexte IAM : le contrôleur relit le rôle du compte, il n'a pas
+    // à connaître la table qui le porte (§12.9).
+    @Inject(USER_REPOSITORY)
+    private readonly userRepository: UserRepository,
   ) {}
 
   /** Défense en profondeur : mutation KYC réservée à `kyc:validate` (Compliance + super_admin). */
   private async assertKycReviewer(user: ActiveUser): Promise<void> {
-    const u = await this.userRepo.findOne({ where: { userId: user.userId } });
-    if (!u || !KYC_REVIEWER_ROLES.includes(u.role)) {
+    const compte = await this.userRepository.findById(user.userId);
+    if (!compte || !KYC_REVIEWER_ROLES.includes(compte.role)) {
       throw new ForbiddenException(
         'Action réservée aux équipes admin / compliance.',
       );

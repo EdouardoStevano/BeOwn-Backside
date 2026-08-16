@@ -3,7 +3,16 @@ import {
   FirstName,
   LastName,
 } from 'src/iam/domains/value-objects/person-name.vo';
-import { UserRole, UserStatus } from 'src/iam/domains/enums/user.enum';
+import {
+  UserRole,
+  UserStatus,
+  UserType,
+} from 'src/iam/domains/enums/user.enum';
+import {
+  InvalidUserStatusError,
+  InvalidUserTypeError,
+  STATUTS_ADMINISTRABLES,
+} from 'src/iam/domains/errors/user-administration.errors';
 import {
   UserMapper,
   type PublicUser,
@@ -30,6 +39,8 @@ export interface UserSnapshot {
   passwordHash: string | null;
   role: UserRole;
   status: UserStatus;
+  /** Type d'investisseur annoncé à l'ouverture du compte — PP ou PM. */
+  userType: UserType | null;
   cguAccepteesLe: Date | null;
   lastLoginAt: Date | null;
   createdAt: Date;
@@ -56,6 +67,7 @@ export interface UserState {
   passwordHash: string | null;
   role: UserRole;
   status: UserStatus;
+  userType: UserType | null;
   cguAccepteesLe: Date | null;
   lastLoginAt: Date | null;
   createdAt: Date;
@@ -105,6 +117,13 @@ export class User extends AggregateRoot {
   private _passwordHash: string | null;
   private _role: UserRole;
   private _status: UserStatus;
+  /**
+   * Type d'investisseur **annoncé**, distinct du type **effectif** que le
+   * contexte Profiles déduit du dossier réellement créé. Il est posé à la
+   * première étape du parcours, avant qu'aucun profil n'existe — c'est
+   * précisément ce qu'aucune déduction ne peut exprimer.
+   */
+  private _userType: UserType | null;
   private _cguAccepteesLe: Date | null;
   private _lastLoginAt: Date | null;
   private _createdAt: Date;
@@ -141,6 +160,7 @@ export class User extends AggregateRoot {
     this._passwordHash = state.passwordHash;
     this._role = state.role;
     this._status = state.status;
+    this._userType = state.userType;
     this._cguAccepteesLe = state.cguAccepteesLe;
     this._lastLoginAt = state.lastLoginAt;
     this._createdAt = state.createdAt;
@@ -168,6 +188,9 @@ export class User extends AggregateRoot {
       passwordHash: props.passwordHash,
       role: UserRole.INVESTISSEUR,
       status: UserStatus.CREE,
+      // Rien n'est annoncé à l'inscription : le titulaire choisit son type à
+      // la première étape du parcours d'onboarding.
+      userType: null,
       cguAccepteesLe: null,
       lastLoginAt: null,
       createdAt: undefined as unknown as Date,
@@ -197,6 +220,10 @@ export class User extends AggregateRoot {
   }
   get role(): UserRole {
     return this._role;
+  }
+  /** Type annoncé, `null` tant que le titulaire n'a pas choisi. */
+  get userType(): UserType | null {
+    return this._userType;
   }
   get status(): UserStatus {
     return this._status;
@@ -273,6 +300,53 @@ export class User extends AggregateRoot {
   }
 
   // ── Transitions ───────────────────────────────────────────────────────────
+
+  /**
+   * Le titulaire annonce s'il ouvre un compte de personne physique ou morale.
+   *
+   * Écrit jusqu'ici par `(user as any).userType = …` depuis le contrôleur : la
+   * propriété atterrissait sur l'objet, le mapper l'ignorait, et la route
+   * rendait 200 sans rien persister. La colonne existe pourtant, et
+   * `cgp.controller` l'affiche — elle était donc vide pour tout le monde.
+   *
+   * @returns `true` si l'annonce a changé — utile à l'appelant qui veut éviter
+   *   une écriture inutile ou tracer la modification.
+   */
+  declarerType(userType: UserType): boolean {
+    if (!Object.values(UserType).includes(userType)) {
+      throw new InvalidUserTypeError(userType);
+    }
+    if (this._userType === userType) return false;
+
+    this._userType = userType;
+    return true;
+  }
+
+  /**
+   * Change le statut du compte — sanction ou remise en service, décidées par
+   * l'administration.
+   *
+   * Le contrôleur d'administration écrivait `(user as any).status = dto.status`
+   * sur un accesseur en lecture seule : en mode strict, l'affectation **lève
+   * une TypeError**, et la route rendait 500 dès qu'un statut était fourni.
+   * Rien ne vérifiait non plus que la valeur reçue appartenait à
+   * l'énumération, si bien qu'une chaîne quelconque serait entrée en base.
+   *
+   * Les statuts du cycle de vie interne — CREE, EMAIL_VERIFIE — ne sont pas
+   * administrables : ils sont posés par la vérification d'adresse, et les
+   * repositionner à la main désynchroniserait le compte de son email.
+   *
+   * @returns `true` si le statut a changé.
+   */
+  changerStatut(statut: UserStatus): boolean {
+    if (!STATUTS_ADMINISTRABLES.includes(statut)) {
+      throw new InvalidUserStatusError(statut);
+    }
+    if (this._status === statut) return false;
+
+    this._status = statut;
+    return true;
+  }
 
   /**
    * Vérifie l'adresse et fait avancer le cycle de vie du compte. Le passage

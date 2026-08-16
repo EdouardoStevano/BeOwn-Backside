@@ -8,6 +8,7 @@ import {
   USER_REPOSITORY,
   type UserRepository,
 } from 'src/iam/domains/ports/user.repository';
+import { UpdatePreferencesUseCase } from 'src/preferences/applications/usecases/update-preferences.usecase';
 
 /**
  * Désinscription des communications marketing depuis le lien présent dans les
@@ -24,6 +25,7 @@ export class NotificationUnsubscribeService {
   constructor(
     private readonly tokenService: TokenService,
     @Inject(USER_REPOSITORY) private readonly userRepository: UserRepository,
+    private readonly updatePreferences: UpdatePreferencesUseCase,
   ) {}
 
   async unsubscribe(token: string): Promise<{ success: true }> {
@@ -49,9 +51,9 @@ export class NotificationUnsubscribeService {
       throw new UnauthorizedException('Token invalide ou expiré');
     }
 
-    // Idempotent : `savePreferences` fait un upsert, rejouer le lien
-    // repositionne simplement le flag à false et renvoie 200.
-    await this.userRepository.savePreferences(payload.sub, {
+    // Idempotent : rejouer le lien laisse le réglage à false et renvoie 200 —
+    // le use case n'écrit même pas si rien ne change.
+    await this.updatePreferences.execute(payload.sub, {
       notifMarketing: false,
     });
 

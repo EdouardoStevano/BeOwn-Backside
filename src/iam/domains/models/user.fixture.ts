@@ -29,6 +29,7 @@ export const buildUser = (
     passwordHash: 'hashed-password',
     role: UserRole.INVESTISSEUR,
     status: UserStatus.ACTIF,
+    userType: null,
     cguAccepteesLe: null,
     lastLoginAt: null,
     createdAt: new Date('2026-01-01T00:00:00Z'),

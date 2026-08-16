@@ -5,7 +5,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { NotificationEntity } from './infrastructure/persistences/entities/notification.entity';
 import { AuditLogEntity } from './infrastructure/persistences/entities/audit-log.entity';
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
-import { UserPreferencesEntity } from 'src/iam/infrastructure/persistence/entities/user-preferences.entity';
+import { UserPreferencesEntity } from 'src/preferences/infrastructure/persistences/entities/user-preferences.entity';
 import { ProjectEntity } from 'src/projects/infrastructure/persistences/entities/project.entity';
 import { ProfilPPEntity } from 'src/profiles/infrastructure/persistences/entities/profil-pp.entity';
 import { AdminSettingsEntity } from 'src/admin/entities/admin-settings.entity';
@@ -20,6 +20,7 @@ import { BroadcastService } from './applications/broadcast.service';
 import { PublicUnsubscribeController } from './presenters/http/public-unsubscribe.controller';
 import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructure.module';
 import { UsersInfrastructureModule } from 'src/iam/infrastructure/users-infrastructure.module';
+import { PreferencesModule } from 'src/preferences/applications/preferences.module';
 
 @Module({
   imports: [
@@ -36,6 +37,9 @@ import { UsersInfrastructureModule } from 'src/iam/infrastructure/users-infrastr
     ]),
     IamInfrastructureModule,
     UsersInfrastructureModule,
+    // `NotificationUnsubscribeService` règle une préférence : il passe par le
+    // use case du contexte Preferences, plus par le port du compte.
+    PreferencesModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: (config: ConfigService) => ({

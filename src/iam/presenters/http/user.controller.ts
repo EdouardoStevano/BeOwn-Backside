@@ -2,76 +2,65 @@ import {
   Body,
   Controller,
   Delete,
-  ForbiddenException,
   Get,
   HttpCode,
   HttpStatus,
-  NotFoundException,
   Param,
   ParseIntPipe,
   Patch,
-  UnauthorizedException,
   UseGuards,
-  Inject,
-  BadRequestException,
 } from '@nestjs/common';
-import { IsEnum } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
-import { UserType } from 'src/iam/domains/enums/user.enum';
-import { HASHING_SERVICE } from 'src/common/hashing/hashing.service';
-import type { HashingService } from 'src/common/hashing/hashing.service';
-import { IsString, IsNotEmpty } from 'class-validator';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiParam,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
+import { IsNotEmpty, IsString } from 'class-validator';
+import { SkipThrottle } from '@nestjs/throttler';
+import { CurrentUser } from 'src/common/auth/current-user.decorator';
+import type { ActiveUser } from 'src/common/auth/current-user.decorator';
+import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
+import { RequirePermission } from 'src/common/auth/require-permission.decorator';
+import { DeleteMyAccountUseCase } from 'src/iam/applications/usecases/account/delete-my-account.usecase';
+import { GetMyAccountUseCase } from 'src/iam/applications/usecases/account/get-my-account.usecase';
+import { GetUserAccountUseCase } from 'src/iam/applications/usecases/account/get-user-account.usecase';
+import {
+  DeclareUserTypeUseCase,
+  UpdateMyAccountUseCase,
+} from 'src/iam/applications/usecases/account/update-my-account.usecase';
+import { UpdateUserByAdminUseCase } from 'src/iam/applications/usecases/account/update-user-by-admin.usecase';
+import {
+  SetUserTypeDto,
+  UpdateUserAdminDto,
+  UpdateUserDto,
+} from 'src/iam/presenters/http/dto/user.dto';
 
 export class DeleteAccountDto {
   @IsString()
   @IsNotEmpty()
   password: string;
 }
-import {
-  ApiTags,
-  ApiOperation,
-  ApiParam,
-  ApiResponse,
-  ApiBearerAuth,
-} from '@nestjs/swagger';
-import {
-  UpdateUserDto,
-  UpdateUserAdminDto,
-  UpdatePreferencesDto,
-} from 'src/iam/presenters/http/dto/user.dto';
-import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
-import { RequirePermission } from 'src/common/auth/require-permission.decorator';
-import { rolesWithPermission } from 'src/common/auth/permissions.constants';
-import { CurrentUser } from 'src/common/auth/current-user.decorator';
-import type { ActiveUser } from 'src/common/auth/current-user.decorator';
-import { NotificationEventService } from 'src/notifications/applications/notification-event.service';
-import { USER_REPOSITORY } from 'src/iam/domains/ports/user.repository';
-import type { UserRepository } from 'src/iam/domains/ports/user.repository';
-import {
-  PROFIL_PP_REPOSITORY,
-  type ProfilPPRepository,
-} from 'src/profiles/domains/ports/profil-pp.repository';
-import {
-  PROFIL_PM_REPOSITORY,
-  type ProfilPMRepository,
-} from 'src/profiles/domains/ports/profil-pm.repository';
-import {
-  KYC_REPOSITORY,
-  type KycRepository,
-} from 'src/profiles/domains/ports/kyc.repository';
-import { DOCUMENT_REPOSITORY } from 'src/documents/applications/ports/repositories/document.repository';
-import type { DocumentRepository } from 'src/documents/applications/ports/repositories/document.repository';
-import { WALLET_REPOSITORY } from 'src/wallets/applications/ports/repositories/wallet.repository';
-import type { WalletRepository } from 'src/wallets/applications/ports/repositories/wallet.repository';
-import { WalletType } from 'src/wallets/domains/enums/wallet.enum';
-import { DeleteAccountUseCase } from 'src/iam/applications/usecases/account/delete-account.usecase';
-import { SkipThrottle } from '@nestjs/throttler';
 
-/** Rôles détenant `users:read` — back-office consultation d'un profil tiers. */
-const READ_ROLES: string[] = rolesWithPermission('users:read');
-/** Rôles détenant `users:manage` — back-office mutation d'un profil tiers. */
-const MANAGE_ROLES: string[] = rolesWithPermission('users:manage');
-
+/**
+ * Le compte, vu par son titulaire et par l'administration.
+ *
+ * **Ce contrôleur ne connaît plus que des use cases.** Il se faisait injecter
+ * six repositories — dont ceux des contextes Profiles, Documents et Wallets —
+ * plus le service de hachage et celui des notifications : la présentation
+ * dialoguait directement avec des adapters de sortie appartenant à d'autres
+ * modules, alors que ces deux couches sont parallèles et ne communiquent que
+ * par `application/` (§2, §12.9). Les règles qui vivaient ici — qui a le droit
+ * de lire quel compte, ce qu'est un profil complet, comment on confirme une
+ * suppression — sont parties avec.
+ *
+ * Ce qui reste est le métier d'un contrôleur : valider le DTO, appeler le use
+ * case, rendre la réponse (§12.5).
+ *
+ * Les préférences ont quitté ce fichier pour le contexte Preferences ; leurs
+ * routes, elles, n'ont pas changé d'URL.
+ */
 @SkipThrottle()
 @ApiTags('Users')
 @ApiBearerAuth()
@@ -79,31 +68,13 @@ const MANAGE_ROLES: string[] = rolesWithPermission('users:manage');
 @UseGuards(JwtAuthGuard)
 export class UserController {
   constructor(
-    @Inject(USER_REPOSITORY) private readonly userRepository: UserRepository,
-    @Inject(PROFIL_PP_REPOSITORY)
-    private readonly profilPPRepository: ProfilPPRepository,
-    @Inject(PROFIL_PM_REPOSITORY)
-    private readonly profilPMRepository: ProfilPMRepository,
-    @Inject(KYC_REPOSITORY)
-    private readonly kycRepository: KycRepository,
-    @Inject(DOCUMENT_REPOSITORY)
-    private readonly documentRepository: DocumentRepository,
-    @Inject(WALLET_REPOSITORY)
-    private readonly walletRepository: WalletRepository,
-    @Inject(HASHING_SERVICE)
-    private readonly hashingService: HashingService,
-    private readonly notificationEvents: NotificationEventService,
-    private readonly deleteAccountUseCase: DeleteAccountUseCase,
+    private readonly getMyAccount: GetMyAccountUseCase,
+    private readonly getUserAccount: GetUserAccountUseCase,
+    private readonly updateMyAccount: UpdateMyAccountUseCase,
+    private readonly declareUserType: DeclareUserTypeUseCase,
+    private readonly updateUserByAdmin: UpdateUserByAdminUseCase,
+    private readonly deleteMyAccount: DeleteMyAccountUseCase,
   ) {}
-
-  // ─── Helper ───────────────────────────────────────────────────────────────
-
-  private async hasRole(userId: number, roles: string[]): Promise<boolean> {
-    const user = await this.userRepository.findById(userId);
-    return roles.includes((user as any)?.role ?? '');
-  }
-
-  // ─── Endpoints ────────────────────────────────────────────────────────────
 
   // L'inscription vit dans IAM : `POST /auth/sign-up` (reCAPTCHA + throttle
   // 10/15 min). Le `POST /users` qui existait ici appelait le même usecase mais
@@ -112,240 +83,16 @@ export class UserController {
   @ApiOperation({ summary: 'Mon profil complet' })
   @ApiResponse({ status: 200, description: 'Profil complet retourné' })
   @Get('me')
-  async getMe(@CurrentUser() user: ActiveUser) {
-    const found = await this.userRepository.findById(user.userId);
-    if (!found) throw new NotFoundException('Utilisateur introuvable.');
-
-    const [profilPP, profilPM, kyc, documents, wallet] = await Promise.all([
-      this.profilPPRepository.findByUserId(user.userId).catch(() => null),
-      this.profilPMRepository.findByUserId(user.userId).catch(() => null),
-      this.kycRepository.findByUserId(user.userId).catch(() => null),
-      this.documentRepository.findByUserId(user.userId).catch(() => []),
-      this.walletRepository
-        .findWalletByUser(user.userId, WalletType.INVESTISSEUR)
-        .catch(() => null),
-    ]);
-
-    const userSafe = found.toJSON();
-    const kycStatut = kyc?.statut ?? 'non_demarre';
-
-    // ── Granular completion steps ──────────────────────────────────────────
-    // Déduit du profil existant. Le terme `userSafe.userType` qui figurait ici
-    // était toujours `undefined` — `userType` est une colonne de l'entité ORM,
-    // jamais portée par le modèle de domaine que renvoie le repository ; le
-    // `as any` d'alors le masquait.
-    const inferredType: 'PP' | 'PM' | null = profilPP
-      ? 'PP'
-      : profilPM
-        ? 'PM'
-        : null;
-
-    const hasUserType = !!inferredType;
-    // « A-t-il commencé à se déclarer ? » est une question métier : elle vit
-    // dans l'agrégat, pas ici (§12.5). Le contrôleur ne fait que combiner les
-    // deux formes de profil.
-    const hasProfilData = !!(
-      profilPP?.aRenseigneSonProfil() || profilPM?.identiteLegale.raisonSociale
-    );
-    const questionnaireCompleted = !!(profilPP?.categoriePsfp || profilPM);
-    const kycStatus = kycStatut as string;
-    const kycCompleted = kycStatus === 'valide';
-    const kycPending = ['en_cours', 'en_revue'].includes(kycStatus);
-    const kycRefused = kycStatus === 'refuse';
-
-    type StepStatus = 'completed' | 'pending' | 'not_started' | 'error';
-    const completionSteps: Array<{
-      id: string;
-      label: string;
-      status: StepStatus;
-      detail?: string;
-    }> = [
-      {
-        id: 'user_type',
-        label:
-          inferredType === 'PP'
-            ? 'Type de compte — Personne physique'
-            : inferredType === 'PM'
-              ? 'Type de compte — Personne morale'
-              : 'Type de compte (PP / PM)',
-        status: hasUserType ? 'completed' : 'not_started',
-        detail: !hasUserType
-          ? 'Choisissez votre type de compte pour commencer'
-          : undefined,
-      },
-      {
-        id: 'profil_investisseur',
-        label: 'Profil investisseur',
-        status: hasProfilData
-          ? 'completed'
-          : hasUserType
-            ? 'pending'
-            : 'not_started',
-        detail:
-          hasUserType && !hasProfilData
-            ? 'Complétez vos informations personnelles ou entreprise'
-            : undefined,
-      },
-      {
-        id: 'kyc',
-        label: "Vérification d'identité (KYC)",
-        status: kycCompleted
-          ? 'completed'
-          : kycRefused
-            ? 'error'
-            : kycPending
-              ? 'pending'
-              : 'not_started',
-        detail: kycRefused
-          ? (kyc?.motifRefus ?? 'KYC refusé — resoumettez vos documents')
-          : kycPending
-            ? 'Vérification en cours par notre équipe'
-            : !kycCompleted
-              ? "Soumettez vos documents d'identité"
-              : undefined,
-      },
-      {
-        id: 'questionnaire',
-        label: "Questionnaire d'adéquation",
-        status: questionnaireCompleted
-          ? 'completed'
-          : hasProfilData
-            ? 'pending'
-            : 'not_started',
-        detail:
-          !questionnaireCompleted && hasProfilData
-            ? 'Répondez au questionnaire pour finaliser votre profil réglementaire'
-            : undefined,
-      },
-    ];
-
-    const completedCount = completionSteps.filter(
-      (s) => s.status === 'completed',
-    ).length;
-    let completionStep = 0;
-    if (hasUserType) completionStep = 1;
-    if (hasProfilData) completionStep = 2;
-    if (kycPending || kycCompleted) completionStep = 3;
-    if (kycCompleted) completionStep = 4;
-
-    return {
-      ...userSafe,
-      // Expose the inferred type so frontend always knows PP or PM
-      // `userType` n'existe que sur l'entité ORM, jamais sur le modèle de
-      // domaine : la déduction depuis le profil est la seule source ici.
-      userType: inferredType,
-      profilPP: profilPP ?? null,
-      profilPM: profilPM ?? null,
-      kyc: kyc ?? null,
-      wallet: wallet ?? null,
-      documents,
-      completionStep,
-      completionSteps,
-      completionProgress: Math.round(
-        (completedCount / completionSteps.length) * 100,
-      ),
-      isProfileComplete: kycCompleted && questionnaireCompleted,
-      preferences: await this.userRepository
-        .findPreferences(user.userId)
-        .catch(() => null),
-    };
+  getMe(@CurrentUser() user: ActiveUser) {
+    return this.getMyAccount.execute(user.userId);
   }
 
   @ApiOperation({ summary: 'Mettre à jour mon profil' })
   @ApiResponse({ status: 200, description: 'Profil mis à jour' })
   @Patch('me')
   async updateMe(@CurrentUser() user: ActiveUser, @Body() dto: UpdateUserDto) {
-    const found = await this.userRepository.findById(user.userId);
-    if (!found) throw new NotFoundException('Utilisateur introuvable.');
-    found.rename(dto.firstname || undefined, dto.lastname);
-    const updated = await this.userRepository.update(found);
-    return updated.toJSON();
-  }
-
-  @ApiOperation({ summary: 'Lire mes préférences' })
-  @ApiResponse({ status: 200, description: 'Préférences utilisateur' })
-  @Get('me/preferences')
-  async getMyPreferences(@CurrentUser() user: ActiveUser) {
-    return this.userRepository.findPreferences(user.userId);
-  }
-
-  @ApiOperation({ summary: 'Mettre à jour mes préférences (bulk)' })
-  @ApiResponse({ status: 200, description: 'Préférences mises à jour' })
-  @Patch('me/preferences')
-  async updateMyPreferences(
-    @CurrentUser() user: ActiveUser,
-    @Body() dto: UpdatePreferencesDto,
-  ) {
-    return this.userRepository.savePreferences(user.userId, dto);
-  }
-
-  @ApiOperation({ summary: 'Changer la langue' })
-  @Patch('me/preferences/langue')
-  async updateLangue(
-    @CurrentUser() user: ActiveUser,
-    @Body() body: { value: string },
-  ) {
-    return this.userRepository.savePreferences(user.userId, {
-      langue: body.value,
-    });
-  }
-
-  @ApiOperation({ summary: 'Basculer le masquage des montants sensibles' })
-  @Patch('me/preferences/masquer-montants')
-  async toggleMasquerMontants(
-    @CurrentUser() user: ActiveUser,
-    @Body() body: { value: boolean },
-  ) {
-    return this.userRepository.savePreferences(user.userId, {
-      masquerMontants: body.value,
-    });
-  }
-
-  @ApiOperation({ summary: 'Basculer les notifications email' })
-  @Patch('me/preferences/notif-email')
-  async toggleNotifEmail(
-    @CurrentUser() user: ActiveUser,
-    @Body() body: { value: boolean },
-  ) {
-    return this.userRepository.savePreferences(user.userId, {
-      notifEmail: body.value,
-    });
-  }
-
-  @ApiOperation({ summary: 'Basculer les notifications SMS' })
-  @Patch('me/preferences/notif-sms')
-  async toggleNotifSms(
-    @CurrentUser() user: ActiveUser,
-    @Body() body: { value: boolean },
-  ) {
-    return this.userRepository.savePreferences(user.userId, {
-      notifSms: body.value,
-    });
-  }
-
-  @ApiOperation({ summary: 'Basculer les emails marketing' })
-  @Patch('me/preferences/notif-marketing')
-  async toggleNotifMarketing(
-    @CurrentUser() user: ActiveUser,
-    @Body() body: { value: boolean },
-  ) {
-    return this.userRepository.savePreferences(user.userId, {
-      notifMarketing: body.value,
-    });
-  }
-
-  @ApiOperation({ summary: "Basculer l'authentification multifacteur" })
-  // Deux chemins pour un seul handler : `mfa` est le nom retenu, `tfa` reste
-  // servi parce que le front déployé l'appelle. Retirer l'ancien casserait les
-  // clients en production — il partira quand ils auront basculé.
-  @Patch(['me/preferences/mfa', 'me/preferences/tfa'])
-  async toggleMfa(
-    @CurrentUser() user: ActiveUser,
-    @Body() body: { value: boolean },
-  ) {
-    return this.userRepository.savePreferences(user.userId, {
-      twoFactorEnabled: body.value,
-    });
+    const compte = await this.updateMyAccount.execute(user.userId, dto);
+    return compte.toJSON();
   }
 
   @ApiOperation({ summary: "Définir le type d'investisseur (PP ou PM)" })
@@ -353,16 +100,13 @@ export class UserController {
   @Patch('me/type')
   async setUserType(
     @CurrentUser() user: ActiveUser,
-    @Body() body: { userType: UserType },
+    @Body() dto: SetUserTypeDto,
   ) {
-    if (!Object.values(UserType).includes(body.userType)) {
-      throw new BadRequestException('Type invalide : PP ou PM attendu.');
-    }
-    const found = await this.userRepository.findById(user.userId);
-    if (!found) throw new NotFoundException('Utilisateur introuvable.');
-    (found as any).userType = body.userType;
-    const updated = await this.userRepository.update(found);
-    return updated.toJSON();
+    const compte = await this.declareUserType.execute(
+      user.userId,
+      dto.userType,
+    );
+    return compte.toJSON();
   }
 
   @ApiOperation({
@@ -376,26 +120,11 @@ export class UserController {
   @ApiResponse({ status: 403, description: 'Accès refusé' })
   @ApiResponse({ status: 404, description: 'Utilisateur introuvable' })
   @Get(':id')
-  async findOne(
+  findOne(
     @Param('id', ParseIntPipe) id: number,
     @CurrentUser() currentUser: ActiveUser,
   ) {
-    const isSelf = currentUser.userId === id;
-    const canRead =
-      isSelf || (await this.hasRole(currentUser.userId, READ_ROLES));
-    if (!canRead) throw new ForbiddenException('Accès refusé.');
-
-    const found = await this.userRepository.findById(id);
-    if (!found) throw new NotFoundException('Utilisateur introuvable.');
-
-    const [kyc, wallet] = await Promise.all([
-      this.kycRepository.findByUserId(id).catch(() => null),
-      this.walletRepository
-        .findWalletByUser(id, WalletType.INVESTISSEUR)
-        .catch(() => null),
-    ]);
-
-    return { ...found.toJSON(), kyc: kyc ?? null, wallet: wallet ?? null };
+    return this.getUserAccount.execute(id, currentUser.userId);
   }
 
   @ApiOperation({ summary: 'Mettre à jour un utilisateur (admin seulement)' })
@@ -410,35 +139,12 @@ export class UserController {
     @CurrentUser() currentUser: ActiveUser,
     @Body() dto: UpdateUserAdminDto,
   ) {
-    if (!(await this.hasRole(currentUser.userId, MANAGE_ROLES))) {
-      throw new ForbiddenException('Accès réservé aux administrateurs.');
-    }
-    const found = await this.userRepository.findById(id);
-    if (!found) throw new NotFoundException('Utilisateur introuvable.');
-
-    const changed: string[] = [];
-    // `rename` compare avant d'écrire et signale si quelque chose a bougé :
-    // l'audit reste précis sans que le contrôleur relise les attributs.
-    if (dto.firstname !== undefined && found.rename(dto.firstname)) {
-      changed.push('firstname');
-    }
-    if (dto.lastname !== undefined && found.rename(undefined, dto.lastname)) {
-      changed.push('lastname');
-    }
-    if (dto.status !== undefined && dto.status !== (found as any).status) {
-      (found as any).status = dto.status;
-      changed.push('status');
-    }
-
-    const updated = await this.userRepository.update(found);
-    if (changed.length > 0 && id !== currentUser.userId) {
-      this.notificationEvents.profileUpdatedByAdmin(
-        id,
-        changed,
-        currentUser.userId,
-      );
-    }
-    return updated.toJSON();
+    const compte = await this.updateUserByAdmin.execute(
+      id,
+      dto,
+      currentUser.userId,
+    );
+    return compte.toJSON();
   }
 
   @ApiOperation({
@@ -460,29 +166,6 @@ export class UserController {
     @CurrentUser() user: ActiveUser,
     @Body() dto: DeleteAccountDto,
   ) {
-    // findByIdWithPassword : findById laisse la colonne password (select:false)
-    // à undefined, ce qui casserait la vérification pour TOUS les comptes.
-    const found = await this.userRepository.findByIdWithPassword(user.userId);
-    if (!found) throw new NotFoundException('Utilisateur introuvable.');
-
-    const passwordHash = (found as any).password;
-    if (!passwordHash)
-      throw new UnauthorizedException('Confirmation impossible.');
-
-    const valid = await this.hashingService.compare(dto.password, passwordHash);
-    if (!valid) {
-      // Code structuré : le Frontside branche un intercepteur dessus. Sans ce
-      // code, son intercepteur croit à une session expirée, rafraîchit le
-      // token et rejoue le DELETE.
-      throw new UnauthorizedException({
-        message: 'Mot de passe incorrect.',
-        code: 'INVALID_PASSWORD',
-      });
-    }
-
-    await this.deleteAccountUseCase.execute(user.userId, {
-      userId: user.userId,
-      role: (found as any).role ?? user.role ?? '',
-    });
+    await this.deleteMyAccount.execute(user.userId, dto.password);
   }
 }

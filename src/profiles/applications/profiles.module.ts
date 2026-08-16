@@ -20,8 +20,9 @@ import { UpdateProfilPMUseCase } from './usecases/update-profil-pm.usecase';
 import { GetKycUseCase } from './usecases/get-kyc.usecase';
 import { SaveQuestionnaireUseCase } from './usecases/save-questionnaire.usecase';
 import { GetQuestionnaireUseCase } from './usecases/get-questionnaire.usecase';
-import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
+import { GetOnboardingStatusUseCase } from './usecases/get-onboarding-status.usecase';
 import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructure.module';
+import { UsersInfrastructureModule } from 'src/iam/infrastructure/users-infrastructure.module';
 import { NotificationsModule } from 'src/notifications/notifications.module';
 import { RiskScoringService } from './risk-scoring.service';
 import { BeneficiaireEffectifEntity } from '../infrastructure/persistences/entities/beneficiaire-effectif.entity';
@@ -36,17 +37,20 @@ import { ProfilesErrorFilter } from '../presenters/http/filters/profiles-error.f
     // `applications/events/` s'y abonnent (§8).
     CqrsModule,
     ProfilesInfrastructureModule,
+    // `IamInfrastructureModule` pour `TokenService` (JwtAuthGuard),
+    // `UsersInfrastructureModule` pour le seul `USER_REPOSITORY` : le contexte
+    // Profiles lit l'identité du compte par le port d'IAM, plus par son entité
+    // ORM. Deux modules plutôt qu'un, parce qu'IAM les sépare exprès — les ~20
+    // modules qui n'ont besoin que du token ne tirent pas la persistance des
+    // comptes avec (CRP, §5).
     IamInfrastructureModule,
+    UsersInfrastructureModule,
     NotificationsModule,
-    // Ce qui reste ici est ce que la présentation lit encore en direct : le
-    // compte (contrôle de rôle) et les bénéficiaires effectifs. Le
-    // questionnaire et le profil PP en sont sortis — ils passent désormais par
-    // leurs ports (§12.3, §12.9).
-    TypeOrmModule.forFeature([
-      UserEntity,
-      BeneficiaireEffectifEntity,
-      ProfilPMEntity,
-    ]),
+    // Ce qui reste ici est la seule table que la présentation lit encore en
+    // direct : les bénéficiaires effectifs, et le profil moral auquel ils se
+    // rattachent. Le questionnaire, le profil PP et le compte en sont sortis —
+    // ils passent par leurs ports (§12.3, §12.9).
+    TypeOrmModule.forFeature([BeneficiaireEffectifEntity, ProfilPMEntity]),
   ],
   providers: [
     CreateProfilPPUseCase,
@@ -62,6 +66,7 @@ import { ProfilesErrorFilter } from '../presenters/http/filters/profiles-error.f
     GetKycUseCase,
     SaveQuestionnaireUseCase,
     GetQuestionnaireUseCase,
+    GetOnboardingStatusUseCase,
     RiskScoringService,
     KycRevueManuelleDemandeeEventHandler,
     KycValideEventHandler,
@@ -72,6 +77,9 @@ import { ProfilesErrorFilter } from '../presenters/http/filters/profiles-error.f
   ],
   controllers: [ProfileController, BeneficiaireEffectifController],
   exports: [
+    // Consommé par `UserController` (IAM) : `GET /users/me` compose le compte
+    // avec l'avancement du dossier, que seul ce contexte sait calculer.
+    GetOnboardingStatusUseCase,
     CreateKycUseCase,
     UpdateKycStatusUseCase,
     ProfilesInfrastructureModule,
