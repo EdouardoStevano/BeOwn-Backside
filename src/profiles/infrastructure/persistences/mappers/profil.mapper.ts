@@ -3,6 +3,7 @@ import { ProfilPP } from 'src/profiles/domains/profil-pp';
 // l'agrégat et son snapshot. Celui-ci ne fait que la moitié ORM du chemin et
 // délègue l'autre.
 import { ProfilPPMapper as ProfilPPDomainMapper } from 'src/profiles/domains/mappers/profil-pp.mapper';
+import { ProfilPMMapper as ProfilPMDomainMapper } from 'src/profiles/domains/mappers/profil-pm.mapper';
 import { ProfilPM } from 'src/profiles/domains/profil-pm';
 import { Kyc } from 'src/profiles/domains/kyc';
 import { ProfilPPEntity } from '../entities/profil-pp.entity';
@@ -94,32 +95,33 @@ export class ProfilMapper {
   }
 
   static pmToDomain(entity: ProfilPMEntity): ProfilPM {
-    const domain = new ProfilPM();
-    domain.utilisateurId = entity.utilisateurId;
-    domain.raisonSociale = entity.raisonSociale;
-    domain.formeJuridique = entity.formeJuridique;
-    domain.siren = entity.siren;
-    domain.rcsVille = entity.rcsVille;
-    domain.capitalSocial = entity.capitalSocial;
-    domain.siegeAdresse = entity.siegeAdresse;
-    domain.representantId = entity.representantId;
-    domain.secteurActivite = entity.secteurActivite;
-    domain.createdAt = entity.createdAt;
-    domain.updatedAt = entity.updatedAt;
-    return domain;
+    return ProfilPMDomainMapper.restore({
+      utilisateurId: entity.utilisateurId,
+      raisonSociale: entity.raisonSociale,
+      formeJuridique: entity.formeJuridique,
+      siren: entity.siren,
+      rcsVille: entity.rcsVille,
+      capitalSocial: entity.capitalSocial,
+      siegeAdresse: entity.siegeAdresse,
+      representantId: entity.representantId,
+      secteurActivite: entity.secteurActivite,
+      createdAt: entity.createdAt,
+      updatedAt: entity.updatedAt,
+    });
   }
 
   static pmToEntity(domain: ProfilPM): ProfilPMEntity {
+    const snapshot = ProfilPMDomainMapper.toSnapshot(domain);
     const entity = new ProfilPMEntity();
-    entity.utilisateurId = domain.utilisateurId;
-    entity.raisonSociale = domain.raisonSociale;
-    entity.formeJuridique = domain.formeJuridique;
-    entity.siren = domain.siren;
-    entity.rcsVille = domain.rcsVille;
-    entity.capitalSocial = domain.capitalSocial;
-    entity.siegeAdresse = domain.siegeAdresse;
-    entity.representantId = domain.representantId;
-    entity.secteurActivite = domain.secteurActivite;
+    entity.utilisateurId = snapshot.utilisateurId;
+    entity.raisonSociale = snapshot.raisonSociale;
+    entity.formeJuridique = snapshot.formeJuridique;
+    entity.siren = snapshot.siren;
+    entity.rcsVille = snapshot.rcsVille;
+    entity.capitalSocial = snapshot.capitalSocial;
+    entity.siegeAdresse = snapshot.siegeAdresse;
+    entity.representantId = snapshot.representantId;
+    entity.secteurActivite = snapshot.secteurActivite;
     return entity;
   }
 
