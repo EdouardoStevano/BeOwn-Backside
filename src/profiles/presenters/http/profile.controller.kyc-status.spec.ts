@@ -23,7 +23,9 @@ describe('ProfileController.patchKycStatus — gating revue manuelle', () => {
     getKyc = { execute: jest.fn(), executeAll: jest.fn() };
     updateKycStatus = { execute: jest.fn() };
     userRepo = {
-      findOne: jest.fn().mockResolvedValue({ userId: 99, role: UserRole.COMPLIANCE }),
+      findOne: jest
+        .fn()
+        .mockResolvedValue({ userId: 99, role: UserRole.COMPLIANCE }),
     };
     notifications = { push: jest.fn().mockResolvedValue(undefined) };
     notificationEvents = {
@@ -38,6 +40,8 @@ describe('ProfileController.patchKycStatus — gating revue manuelle', () => {
       undefined as any, // getProfilPP
       undefined as any, // updateProfilPP
       undefined as any, // createProfilPM
+      undefined as any, // getProfilPM
+      undefined as any, // updateProfilPM
       getKyc,
       undefined as any, // saveQuestionnaireUseCase
       undefined as any, // questionnaireRepo
@@ -70,8 +74,14 @@ describe('ProfileController.patchKycStatus — gating revue manuelle', () => {
   );
 
   it('autorise la décision admin quand le dossier est en revue manuelle (EN_REVUE)', async () => {
-    getKyc.execute.mockResolvedValue({ id: 'kyc-1', statut: KycStatus.EN_REVUE });
-    updateKycStatus.execute.mockResolvedValue({ id: 'kyc-1', statut: KycStatus.VALIDE });
+    getKyc.execute.mockResolvedValue({
+      id: 'kyc-1',
+      statut: KycStatus.EN_REVUE,
+    });
+    updateKycStatus.execute.mockResolvedValue({
+      id: 'kyc-1',
+      statut: KycStatus.VALIDE,
+    });
 
     const result = await controller.patchKycStatus(
       42,
@@ -79,14 +89,24 @@ describe('ProfileController.patchKycStatus — gating revue manuelle', () => {
       admin,
     );
 
-    expect(updateKycStatus.execute).toHaveBeenCalledWith(42, KycStatus.VALIDE, undefined);
+    expect(updateKycStatus.execute).toHaveBeenCalledWith(
+      42,
+      KycStatus.VALIDE,
+      undefined,
+    );
     expect(result).toEqual({ id: 'kyc-1', statut: KycStatus.VALIDE });
     expect(notificationEvents.kycValidatedByAdmin).toHaveBeenCalledWith(42, 99);
   });
 
   it('autorise aussi le refus admin quand le dossier est en revue manuelle', async () => {
-    getKyc.execute.mockResolvedValue({ id: 'kyc-1', statut: KycStatus.EN_REVUE });
-    updateKycStatus.execute.mockResolvedValue({ id: 'kyc-1', statut: KycStatus.REFUSE });
+    getKyc.execute.mockResolvedValue({
+      id: 'kyc-1',
+      statut: KycStatus.EN_REVUE,
+    });
+    updateKycStatus.execute.mockResolvedValue({
+      id: 'kyc-1',
+      statut: KycStatus.REFUSE,
+    });
 
     await controller.patchKycStatus(
       42,
@@ -94,19 +114,37 @@ describe('ProfileController.patchKycStatus — gating revue manuelle', () => {
       admin,
     );
 
-    expect(updateKycStatus.execute).toHaveBeenCalledWith(42, KycStatus.REFUSE, 'Document illisible');
-    expect(notificationEvents.kycRejectedByAdmin).toHaveBeenCalledWith(42, 'Document illisible', 99);
+    expect(updateKycStatus.execute).toHaveBeenCalledWith(
+      42,
+      KycStatus.REFUSE,
+      'Document illisible',
+    );
+    expect(notificationEvents.kycRejectedByAdmin).toHaveBeenCalledWith(
+      42,
+      'Document illisible',
+      99,
+    );
   });
 
   it('rejette avant tout accès à updateKycStatus si utilisateur non-reviewer (403 prioritaire)', async () => {
-    userRepo.findOne.mockResolvedValue({ userId: 5, role: UserRole.INVESTISSEUR });
-    getKyc.execute.mockResolvedValue({ id: 'kyc-1', statut: KycStatus.EN_REVUE });
+    userRepo.findOne.mockResolvedValue({
+      userId: 5,
+      role: UserRole.INVESTISSEUR,
+    });
+    getKyc.execute.mockResolvedValue({
+      id: 'kyc-1',
+      statut: KycStatus.EN_REVUE,
+    });
 
     await expect(
-      controller.patchKycStatus(42, { status: KycStatus.VALIDE } as any, {
-        userId: 5,
-        role: UserRole.INVESTISSEUR,
-      } as any),
+      controller.patchKycStatus(
+        42,
+        { status: KycStatus.VALIDE } as any,
+        {
+          userId: 5,
+          role: UserRole.INVESTISSEUR,
+        } as any,
+      ),
     ).rejects.toBeInstanceOf(ForbiddenException);
 
     expect(updateKycStatus.execute).not.toHaveBeenCalled();

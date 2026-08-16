@@ -9,6 +9,8 @@ import { ProfileController } from '../presenters/http/profile.controller';
 import { GetProfilPPUseCase } from './usecases/get-profil-pp.usecase';
 import { UpdateProfilPPUseCase } from './usecases/update-profil-pp.usecase';
 import { CreateProfilPMUseCase } from './usecases/create-profil-pm.usecase';
+import { GetProfilPMUseCase } from './usecases/get-profil-pm.usecase';
+import { UpdateProfilPMUseCase } from './usecases/update-profil-pm.usecase';
 import { GetKycUseCase } from './usecases/get-kyc.usecase';
 import { SaveQuestionnaireUseCase } from './usecases/save-questionnaire.usecase';
 import { QuestionnaireAdequationEntity } from '../infrastructure/persistences/entities/questionnaire-adequation.entity';
@@ -27,7 +29,13 @@ import { ProfilesErrorFilter } from '../presenters/http/filters/profiles-error.f
     ProfilesInfrastructureModule,
     IamInfrastructureModule,
     NotificationsModule,
-    TypeOrmModule.forFeature([QuestionnaireAdequationEntity, ProfilPPEntity, UserEntity, BeneficiaireEffectifEntity, ProfilPMEntity]),
+    TypeOrmModule.forFeature([
+      QuestionnaireAdequationEntity,
+      ProfilPPEntity,
+      UserEntity,
+      BeneficiaireEffectifEntity,
+      ProfilPMEntity,
+    ]),
   ],
   providers: [
     CreateProfilPPUseCase,
@@ -36,6 +44,8 @@ import { ProfilesErrorFilter } from '../presenters/http/filters/profiles-error.f
     GetProfilPPUseCase,
     UpdateProfilPPUseCase,
     CreateProfilPMUseCase,
+    GetProfilPMUseCase,
+    UpdateProfilPMUseCase,
     GetKycUseCase,
     SaveQuestionnaireUseCase,
     RiskScoringService,
@@ -44,6 +54,11 @@ import { ProfilesErrorFilter } from '../presenters/http/filters/profiles-error.f
     { provide: APP_FILTER, useClass: ProfilesErrorFilter },
   ],
   controllers: [ProfileController, BeneficiaireEffectifController],
-  exports: [CreateKycUseCase, UpdateKycStatusUseCase, ProfilesInfrastructureModule, RiskScoringService],
+  exports: [
+    CreateKycUseCase,
+    UpdateKycStatusUseCase,
+    ProfilesInfrastructureModule,
+    RiskScoringService,
+  ],
 })
 export class ProfilesModule {}
