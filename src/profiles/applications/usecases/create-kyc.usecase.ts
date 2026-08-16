@@ -1,14 +1,28 @@
 import { Inject, Injectable } from '@nestjs/common';
+import { KycFactory } from 'src/profiles/domains/factories/kyc.factory';
+import { Kyc } from 'src/profiles/domains/kyc';
 import {
   KYC_REPOSITORY,
   type KycRepository,
 } from 'src/profiles/domains/ports/kyc.repository';
-import { Kyc } from 'src/profiles/domains/kyc';
-import {
-  KycNiveau,
-  KycStatus,
-} from 'src/profiles/domains/enums/kyc-status.enum';
 
+/**
+ * Initialisation du dossier de vérification d'identité.
+ *
+ * Ce use case n'orchestre plus que des accès (§6 — Application Service) :
+ * regarder si le dossier existe, le faire naître sinon, le persister. L'état de
+ * départ — statut, niveau de diligence, fournisseur, absence de score et de
+ * session — est passé dans `KycFactory.creer` : il vaut pour tout point
+ * d'entrée, et non pour la seule route HTTP qui l'écrivait à la main.
+ *
+ * **Idempotent**, contrairement à ses voisins `CreateProfilPP/PM` qui refusent
+ * un doublon. Ce n'est pas un oubli : ouvrir un dossier n'apporte aucune donnée
+ * de l'appelant, donc un second appel ne peut rien écraser, et deux chemins
+ * comptent dessus — le front rappelle `POST /profiles/kyc/me` à chaque reprise
+ * du parcours, et `PaymentController.startKyc` ouvre le dossier au démarrage
+ * d'une session Stripe Identity sans savoir s'il existe déjà. Rendre un 409 y
+ * obligerait chaque appelant à rattraper l'erreur pour relire le dossier.
+ */
 @Injectable()
 export class CreateKycUseCase {
   constructor(
@@ -17,19 +31,9 @@ export class CreateKycUseCase {
   ) {}
 
   async execute(userId: number): Promise<Kyc> {
-    const existing = await this.kycRepository.findByUserId(userId);
-    if (existing) return existing;
+    const existant = await this.kycRepository.findByUserId(userId);
+    if (existant) return existant;
 
-    const kyc = new Kyc();
-    kyc.utilisateurId = userId;
-    kyc.statut = KycStatus.NON_DEMARRE;
-    kyc.niveau = KycNiveau.STANDARD;
-    kyc.fournisseur = 'stripeIdentity';
-    kyc.scoreRisque = null;
-    kyc.fournisseurRef = null;
-    kyc.valideJusquAu = null;
-    kyc.motifRefus = null;
-
-    return this.kycRepository.save(kyc);
+    return this.kycRepository.save(KycFactory.creer({ utilisateurId: userId }));
   }
 }

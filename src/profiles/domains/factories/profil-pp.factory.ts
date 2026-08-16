@@ -1,10 +1,10 @@
-import { ChampProfilInvalideError } from 'src/profiles/domains/errors';
 import {
   ChampsDeclaresProfilPP,
   ProfilPP,
 } from 'src/profiles/domains/profil-pp';
 import { Coordonnees } from 'src/profiles/domains/value-objects/coordonnees.vo';
 import { EvaluationInvestisseur } from 'src/profiles/domains/value-objects/evaluation-investisseur.vo';
+import { eprouverUtilisateurId } from 'src/profiles/domains/value-objects/identifiant-utilisateur';
 import { Identite } from 'src/profiles/domains/value-objects/identite.vo';
 import { SituationFiscale } from 'src/profiles/domains/value-objects/situation-fiscale.vo';
 import { SituationProfessionnelle } from 'src/profiles/domains/value-objects/situation-professionnelle.vo';
@@ -69,20 +69,4 @@ export class ProfilPPFactory {
       evaluation: EvaluationInvestisseur.initiale(),
     });
   }
-}
-
-/**
- * Le profil est en relation 1–1 avec le compte, et `utilisateurId` en est la
- * clé primaire : une valeur absente ou négative produirait une ligne orpheline,
- * ou écraserait celle d'un autre.
- */
-function eprouverUtilisateurId(raw: number): number {
-  if (!Number.isInteger(raw) || raw <= 0) {
-    throw new ChampProfilInvalideError(
-      "L'identifiant utilisateur",
-      'doit être un entier positif.',
-      'utilisateurId',
-    );
-  }
-  return raw;
 }
