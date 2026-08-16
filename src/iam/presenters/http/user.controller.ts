@@ -145,7 +145,7 @@ export class UserController {
     // dans l'agrégat, pas ici (§12.5). Le contrôleur ne fait que combiner les
     // deux formes de profil.
     const hasProfilData = !!(
-      profilPP?.aRenseigneSonProfil() || profilPM?.raisonSociale
+      profilPP?.aRenseigneSonProfil() || profilPM?.identiteLegale.raisonSociale
     );
     const questionnaireCompleted = !!(profilPP?.categoriePsfp || profilPM);
     const kycStatus = kycStatut as string;

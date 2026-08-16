@@ -8,7 +8,7 @@ import {
   IsString,
   Length,
 } from 'class-validator';
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { KycStatus } from 'src/profiles/domains/enums/kyc-status.enum';
 
 export class CreateProfilPPDto {
@@ -27,7 +27,10 @@ export class CreateProfilPPDto {
   @IsString()
   lieuNaissance?: string;
 
-  @ApiPropertyOptional({ example: 'CI', description: 'Code ISO 2 pays de nationalité' })
+  @ApiPropertyOptional({
+    example: 'CI',
+    description: 'Code ISO 2 pays de nationalité',
+  })
   @IsOptional()
   @IsString()
   @Length(2, 2)
@@ -90,12 +93,20 @@ export class CreateProfilPPDto {
   @IsString()
   nif?: string;
 
-  @ApiPropertyOptional({ example: 500000, description: 'Patrimoine net déclaré (€) — pour calcul limite 5% non-averti' })
+  @ApiPropertyOptional({
+    example: 500000,
+    description:
+      'Patrimoine net déclaré (€) — pour calcul limite 5% non-averti',
+  })
   @IsOptional()
   @IsNumber()
   patrimoineDeclare?: number;
 
-  @ApiPropertyOptional({ example: 25000, description: 'Montant max conseillé par investissement (€) — déduit du questionnaire' })
+  @ApiPropertyOptional({
+    example: 25000,
+    description:
+      'Montant max conseillé par investissement (€) — déduit du questionnaire',
+  })
   @IsOptional()
   @IsNumber()
   montantMaxConseille?: number;
@@ -124,6 +135,7 @@ export class CreateProfilPMDto {
 
   @ApiPropertyOptional({ example: 50000 })
   @IsOptional()
+  @IsNumber()
   capitalSocial?: number;
 
   @ApiPropertyOptional({ example: '12 rue de la Paix, 75001 Paris' })
@@ -137,6 +149,22 @@ export class CreateProfilPMDto {
   secteurActivite?: string;
 }
 
+/**
+ * Mise à jour partielle du profil moral.
+ *
+ * Une **classe** dérivée par `PartialType`, et non un simple
+ * `Partial<CreateProfilPMDto>` : le `ValidationPipe` de Nest se fie au type
+ * réfléchi du paramètre, et un type utilitaire TypeScript s'efface à la
+ * compilation — le pipe ne verrait qu'`Object` et ne validerait rien du tout.
+ * `PartialType` conserve les décorateurs en les rendant tous optionnels, donc
+ * un SIREN mal formé est refusé ici comme il l'est à la création.
+ *
+ * Le domaine reste le filet : `ProfilPM.mettreAJour` éprouve à nouveau chaque
+ * champ, quel que soit le point d'entrée. Ce DTO est le portier — c'est lui qui
+ * produit un 400 lisible et documente Swagger.
+ */
+export class UpdateProfilPMDto extends PartialType(CreateProfilPMDto) {}
+
 export class UpdateKycStatusDto {
   @ApiProperty({ enum: KycStatus })
   @IsEnum(KycStatus)
@@ -147,4 +175,3 @@ export class UpdateKycStatusDto {
   @IsString()
   motifRefus?: string;
 }
-

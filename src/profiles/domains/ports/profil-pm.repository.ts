@@ -5,14 +5,13 @@ export const PROFIL_PM_REPOSITORY = Symbol('PROFIL_PM_REPOSITORY');
 /**
  * Accès en persistance au profil personne morale.
  *
- * Pas de `update` : le profil PM n'a aujourd'hui aucun flux de modification —
- * `save` sur une clé primaire existante ferait un UPDATE, mais aucun use case
- * ne l'emprunte. Le port décrit ce dont le domaine a besoin, pas ce que
- * TypeORM sait faire ; la méthode viendra avec le use case qui la réclame.
- *
- * Voir {@link ProfilPPRepository} pour le pourquoi du découpage par agrégat.
+ * Voir `ProfilPPRepository` pour le pourquoi du découpage par agrégat, et pour
+ * la raison d'être de `update` à côté de `save` : l'implémentation est la même
+ * — `utilisateurId` est la clé primaire — mais l'intention de l'appelant
+ * diffère, et c'est le use case qui la porte.
  */
 export interface ProfilPMRepository {
   save(profil: ProfilPM): Promise<ProfilPM>;
   findByUserId(userId: number): Promise<ProfilPM | null>;
+  update(profil: ProfilPM): Promise<ProfilPM>;
 }

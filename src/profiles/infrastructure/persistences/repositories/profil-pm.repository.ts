@@ -25,4 +25,13 @@ export class ProfilPMTypeOrmRepository implements ProfilPMRepository {
     });
     return entity ? ProfilMapper.pmToDomain(entity) : null;
   }
+
+  /**
+   * Identique à {@link save} — `utilisateurId` étant la clé primaire, TypeORM
+   * fait un UPDATE dès que la ligne existe. Les deux méthodes restent
+   * distinctes au port parce que l'intention de l'appelant, elle, diffère.
+   */
+  update(profil: ProfilPM): Promise<ProfilPM> {
+    return this.save(profil);
+  }
 }

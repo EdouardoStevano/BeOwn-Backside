@@ -29,6 +29,8 @@ import { UpdateKycStatusUseCase } from 'src/profiles/applications/usecases/updat
 import { GetProfilPPUseCase } from 'src/profiles/applications/usecases/get-profil-pp.usecase';
 import { UpdateProfilPPUseCase } from 'src/profiles/applications/usecases/update-profil-pp.usecase';
 import { CreateProfilPMUseCase } from 'src/profiles/applications/usecases/create-profil-pm.usecase';
+import { GetProfilPMUseCase } from 'src/profiles/applications/usecases/get-profil-pm.usecase';
+import { UpdateProfilPMUseCase } from 'src/profiles/applications/usecases/update-profil-pm.usecase';
 import { GetKycUseCase } from 'src/profiles/applications/usecases/get-kyc.usecase';
 import { SaveQuestionnaireUseCase } from 'src/profiles/applications/usecases/save-questionnaire.usecase';
 import { QuestionnaireAdequationEntity } from 'src/profiles/infrastructure/persistences/entities/questionnaire-adequation.entity';
@@ -36,6 +38,7 @@ import {
   CreateProfilPPDto,
   UpdateKycStatusDto,
   CreateProfilPMDto,
+  UpdateProfilPMDto,
 } from '../dto/profil.dto';
 import { SaveQuestionnaireDto } from '../dto/questionnaire.dto';
 import { CurrentUser } from 'src/common/auth/current-user.decorator';
@@ -76,6 +79,8 @@ export class ProfileController {
     private readonly getProfilPP: GetProfilPPUseCase,
     private readonly updateProfilPP: UpdateProfilPPUseCase,
     private readonly createProfilPM: CreateProfilPMUseCase,
+    private readonly getProfilPM: GetProfilPMUseCase,
+    private readonly updateProfilPM: UpdateProfilPMUseCase,
     private readonly getKyc: GetKycUseCase,
     private readonly saveQuestionnaireUseCase: SaveQuestionnaireUseCase,
     @InjectRepository(QuestionnaireAdequationEntity)
@@ -91,7 +96,7 @@ export class ProfileController {
     const u = await this.userRepo.findOne({ where: { userId: user.userId } });
     if (!u || !KYC_REVIEWER_ROLES.includes(u.role)) {
       throw new ForbiddenException(
-        "Action réservée aux équipes admin / compliance.",
+        'Action réservée aux équipes admin / compliance.',
       );
     }
   }
@@ -147,13 +152,19 @@ export class ProfileController {
     description:
       'Le KYC est validé automatiquement par Stripe Identity. Cette route ' +
       "n'agit que sur les dossiers passés en revue manuelle (EN_REVUE) suite " +
-      "à un échec de la vérification automatique — un dossier auto-validé " +
-      'ou pas encore soumis est en lecture seule pour l\'admin (409).',
+      'à un échec de la vérification automatique — un dossier auto-validé ' +
+      "ou pas encore soumis est en lecture seule pour l'admin (409).",
   })
   @ApiResponse({ status: 200, description: 'Statut KYC mis à jour' })
-  @ApiResponse({ status: 403, description: 'Réservé aux équipes admin / compliance' })
+  @ApiResponse({
+    status: 403,
+    description: 'Réservé aux équipes admin / compliance',
+  })
   @ApiResponse({ status: 404, description: 'KYC introuvable' })
-  @ApiResponse({ status: 409, description: "Dossier pas en revue manuelle — décision manuelle impossible" })
+  @ApiResponse({
+    status: 409,
+    description: 'Dossier pas en revue manuelle — décision manuelle impossible',
+  })
   @HttpCode(HttpStatus.OK)
   @RequirePermission('kyc:validate')
   @Patch(':userId/kyc/status')
@@ -172,7 +183,11 @@ export class ProfileController {
       throw new ConflictException(KYC_MANUAL_REVIEW_REQUIRED_MESSAGE);
     }
 
-    const updated = await this.updateKycStatus.execute(userId, dto.status, dto.motifRefus);
+    const updated = await this.updateKycStatus.execute(
+      userId,
+      dto.status,
+      dto.motifRefus,
+    );
 
     if (dto.status === KycStatus.VALIDE) {
       this.notifications
@@ -198,7 +213,11 @@ export class ProfileController {
           metadata: { motifRefus: dto.motifRefus ?? null },
         })
         .catch(() => {});
-      this.notificationEvents.kycRejectedByAdmin(userId, dto.motifRefus ?? '—', currentUser.userId);
+      this.notificationEvents.kycRejectedByAdmin(
+        userId,
+        dto.motifRefus ?? '—',
+        currentUser.userId,
+      );
     }
 
     return updated;
@@ -221,11 +240,37 @@ export class ProfileController {
     return this.updateProfilPP.execute(user.userId, dto);
   }
 
-  @ApiOperation({ summary: 'Créer le profil personne morale' })
+  @ApiOperation({ summary: 'Créer mon profil personne morale' })
   @ApiResponse({ status: 201, description: 'Profil PM créé' })
   @Post('pm/me')
   createPM(@CurrentUser() user: ActiveUser, @Body() dto: CreateProfilPMDto) {
     return this.createProfilPM.execute(user.userId, dto);
+  }
+
+  @ApiOperation({ summary: 'Obtenir le détail de mon profil personne morale' })
+  @ApiResponse({ status: 200, description: 'Profil PM retourné' })
+  @ApiResponse({ status: 404, description: 'Aucun profil PM pour ce compte' })
+  @Get('pm/me')
+  getMyProfilePM(@CurrentUser() user: ActiveUser) {
+    return this.getProfilPM.execute(user.userId);
+  }
+
+  @ApiOperation({
+    summary: 'Mettre à jour mon profil personne morale',
+    description:
+      'Mise à jour partielle : seuls les champs présents dans le corps sont ' +
+      'modifiés, `null` efface la valeur. La raison sociale ne peut pas être ' +
+      'effacée — une société sans dénomination ne désigne personne.',
+  })
+  @ApiResponse({ status: 200, description: 'Profil PM mis à jour' })
+  @ApiResponse({ status: 400, description: 'Donnée déclarée invalide' })
+  @ApiResponse({ status: 404, description: 'Aucun profil PM pour ce compte' })
+  @Patch('pm/me')
+  updateMyProfilePM(
+    @CurrentUser() user: ActiveUser,
+    @Body() dto: UpdateProfilPMDto,
+  ) {
+    return this.updateProfilPM.execute(user.userId, dto);
   }
 
   @ApiOperation({ summary: 'Obtenir mon KYC' })
@@ -236,13 +281,13 @@ export class ProfileController {
   }
 
   @ApiOperation({ summary: 'Lister tous les KYC (admin)' })
-  @ApiResponse({ status: 200, description: 'Liste paginée des KYC avec données utilisateur' })
+  @ApiResponse({
+    status: 200,
+    description: 'Liste paginée des KYC avec données utilisateur',
+  })
   @RequirePermission('kyc:validate')
   @Get('kyc/all')
-  listAllKyc(
-    @Query('page') page?: string,
-    @Query('limit') limit?: string,
-  ) {
+  listAllKyc(@Query('page') page?: string, @Query('limit') limit?: string) {
     return this.getKyc.executeAll({
       page: page ? parseInt(page, 10) : 1,
       limit: limit ? parseInt(limit, 10) : 20,
@@ -250,7 +295,10 @@ export class ProfileController {
   }
 
   @ApiOperation({ summary: "Sauvegarder le questionnaire d'adéquation PSFP" })
-  @ApiResponse({ status: 201, description: 'Questionnaire enregistré, catégorie et plafond calculés' })
+  @ApiResponse({
+    status: 201,
+    description: 'Questionnaire enregistré, catégorie et plafond calculés',
+  })
   @Post('questionnaire')
   saveQuestionnaire(
     @CurrentUser() user: ActiveUser,
@@ -263,6 +311,8 @@ export class ProfileController {
   @ApiResponse({ status: 200, description: 'Questionnaire retourné' })
   @Get('questionnaire/me')
   getMyQuestionnaire(@CurrentUser() user: ActiveUser) {
-    return this.questionnaireRepo.findOne({ where: { utilisateurId: user.userId } });
+    return this.questionnaireRepo.findOne({
+      where: { utilisateurId: user.userId },
+    });
   }
 }
