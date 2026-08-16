@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { APP_FILTER } from '@nestjs/core';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ProfilesInfrastructureModule } from '../infrastructure/profiles-infrastructure.module';
 import { CreateProfilPPUseCase } from './usecases/create-profil-pp.usecase';
@@ -19,6 +20,7 @@ import { RiskScoringService } from './risk-scoring.service';
 import { BeneficiaireEffectifEntity } from '../infrastructure/persistences/entities/beneficiaire-effectif.entity';
 import { ProfilPMEntity } from '../infrastructure/persistences/entities/profil-pm.entity';
 import { BeneficiaireEffectifController } from '../presenters/http/beneficiaire-effectif.controller';
+import { ProfilesErrorFilter } from '../presenters/http/filters/profiles-error.filter';
 
 @Module({
   imports: [
@@ -37,6 +39,9 @@ import { BeneficiaireEffectifController } from '../presenters/http/beneficiaire-
     GetKycUseCase,
     SaveQuestionnaireUseCase,
     RiskScoringService,
+    // Traduit les erreurs métier du contexte en réponses HTTP : le domaine ne
+    // connaît aucun statut (§12.1), la présentation s'en charge.
+    { provide: APP_FILTER, useClass: ProfilesErrorFilter },
   ],
   controllers: [ProfileController, BeneficiaireEffectifController],
   exports: [CreateKycUseCase, UpdateKycStatusUseCase, ProfilesInfrastructureModule, RiskScoringService],

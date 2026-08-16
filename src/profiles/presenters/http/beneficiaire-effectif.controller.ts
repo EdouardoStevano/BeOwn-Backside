@@ -1,5 +1,5 @@
 import {
-  Body, Controller, Delete, Get, Param, ParseIntPipe, Post, UseGuards, NotFoundException, ForbiddenException,
+  Body, Controller, Delete, Get, Param, Post, UseGuards, NotFoundException,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -13,7 +13,7 @@ import { CreateBeneficiaireEffectifDto } from '../dto/beneficiaire-effectif.dto'
 
 @ApiTags('Profiles — Bénéficiaires Effectifs (DBE-S1)')
 @ApiBearerAuth()
-@Controller('profiles/pm/:utilisateurId/beneficiaires')
+@Controller('profiles/pm/me/beneficiaires')
 @UseGuards(JwtAuthGuard)
 export class BeneficiaireEffectifController {
   constructor(
@@ -23,50 +23,58 @@ export class BeneficiaireEffectifController {
     private readonly profilPMRepo: Repository<ProfilPMEntity>,
   ) {}
 
-  private async assertOwnership(profilPMId: number, userId: number): Promise<ProfilPMEntity> {
-    const profilPM = await this.profilPMRepo.findOne({ where: { utilisateurId: profilPMId } });
+  /**
+   * Le profil PM visé est celui du porteur du token, jamais un autre.
+   *
+   * Son identifiant transitait dans l'URL, et la seule chose qu'en faisait
+   * cette méthode était de vérifier qu'il valait bien celui du token : un
+   * paramètre qui ne pouvait prendre qu'une valeur, et un 403 pour toutes les
+   * autres. Le lire depuis le token supprime le paramètre et le contrôle avec
+   * lui — il ne reste que le cas où l'utilisateur n'a pas encore de profil PM.
+   */
+  private async profilPMDe(user: ActiveUser): Promise<ProfilPMEntity> {
+    const profilPM = await this.profilPMRepo.findOne({
+      where: { utilisateurId: user.userId },
+    });
     if (!profilPM) throw new NotFoundException('Profil PM introuvable');
-    if (profilPM.utilisateurId !== userId) {
-      throw new ForbiddenException('Ce profil PM ne vous appartient pas');
-    }
     return profilPM;
   }
 
-  @ApiOperation({ summary: 'Lister les bénéficiaires effectifs (>25%) du profil PM' })
-  @ApiParam({ name: 'utilisateurId', description: 'ID utilisateur du profil PM' })
+  @ApiOperation({ summary: 'Lister les bénéficiaires effectifs (>25%) de mon profil PM' })
   @Get()
-  async list(@Param('utilisateurId', ParseIntPipe) utilisateurId: number, @CurrentUser() user: ActiveUser) {
-    await this.assertOwnership(utilisateurId, user.userId);
-    return this.beneficiaireRepo.find({ where: { profilPMId: utilisateurId } });
+  async list(@CurrentUser() user: ActiveUser) {
+    const profilPM = await this.profilPMDe(user);
+    return this.beneficiaireRepo.find({
+      where: { profilPMId: profilPM.utilisateurId },
+    });
   }
 
-  @ApiOperation({ summary: 'Ajouter un bénéficiaire effectif' })
-  @ApiParam({ name: 'utilisateurId', description: 'ID utilisateur du profil PM' })
+  @ApiOperation({ summary: 'Ajouter un bénéficiaire effectif à mon profil PM' })
   @Post()
   async create(
-    @Param('utilisateurId', ParseIntPipe) utilisateurId: number,
     @CurrentUser() user: ActiveUser,
     @Body() dto: CreateBeneficiaireEffectifDto,
   ) {
-    await this.assertOwnership(utilisateurId, user.userId);
+    const profilPM = await this.profilPMDe(user);
     const entity = this.beneficiaireRepo.create({
       ...dto,
-      profilPMId: utilisateurId,
+      profilPMId: profilPM.utilisateurId,
       dateNaissance: dto.dateNaissance ? new Date(dto.dateNaissance) : null,
     });
     return this.beneficiaireRepo.save(entity);
   }
 
-  @ApiOperation({ summary: 'Supprimer un bénéficiaire effectif' })
+  @ApiOperation({ summary: 'Supprimer un bénéficiaire effectif de mon profil PM' })
   @ApiParam({ name: 'id', description: 'UUID du bénéficiaire' })
   @Delete(':id')
-  async remove(
-    @Param('utilisateurId', ParseIntPipe) utilisateurId: number,
-    @Param('id') id: string,
-    @CurrentUser() user: ActiveUser,
-  ) {
-    await this.assertOwnership(utilisateurId, user.userId);
-    await this.beneficiaireRepo.delete({ id, profilPMId: utilisateurId });
+  async remove(@Param('id') id: string, @CurrentUser() user: ActiveUser) {
+    const profilPM = await this.profilPMDe(user);
+    // `profilPMId` reste dans le critère de suppression : sans lui, l'UUID d'un
+    // bénéficiaire appartenant à quelqu'un d'autre suffirait à l'effacer.
+    await this.beneficiaireRepo.delete({
+      id,
+      profilPMId: profilPM.utilisateurId,
+    });
     return { deleted: true };
   }
 }

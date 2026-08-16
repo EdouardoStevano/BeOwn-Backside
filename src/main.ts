@@ -72,7 +72,7 @@ async function bootstrap() {
         `1. \`POST /auth/sign-up\` — Créer un compte\n` +
         `2. \`POST /auth/email/send-verification\` + \`GET /auth/email/verify?token=...\` — Vérifier l'email\n` +
         `3. \`POST /auth/sign-in\` — Obtenir les tokens\n` +
-        `4. \`POST /profiles/:userId/pp\` + \`POST /profiles/:userId/kyc\` — Compléter le profil KYC\n` +
+        `4. \`POST /profiles/pp/me\` + \`POST /profiles/kyc/me\` — Compléter le profil KYC\n` +
         `5. \`GET /projects\` — Parcourir les projets\n` +
         `6. \`POST /payments/depot/intent\` — Déposer des fonds\n` +
         `7. \`POST /investments\` — Investir dans un projet`,
