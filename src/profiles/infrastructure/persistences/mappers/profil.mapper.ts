@@ -205,21 +205,6 @@ export class ProfilMapper {
       identiteExtrait: entity.identiteExtrait,
       createdAt: entity.createdAt,
       updatedAt: entity.updatedAt,
-      // Chargé par le seul `findAll` du repository (liste admin) — voir
-      // `TitulaireKyc`.
-      utilisateur: entity.utilisateur
-        ? {
-            userId: entity.utilisateur.userId,
-            firstname: entity.utilisateur.firstname ?? undefined,
-            lastname: entity.utilisateur.lastname ?? undefined,
-            role: entity.utilisateur.role,
-            status: entity.utilisateur.status,
-            createdAt: entity.utilisateur.createdAt,
-            userEmail: entity.utilisateur.userEmail
-              ? { email: entity.utilisateur.userEmail.email }
-              : undefined,
-          }
-        : undefined,
     });
   }
 

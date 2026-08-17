@@ -41,7 +41,6 @@ export class KycMapper {
       identiteExtrait: snapshot.identiteExtrait
         ? { ...snapshot.identiteExtrait }
         : null,
-      utilisateur: snapshot.utilisateur,
     });
   }
 
@@ -49,8 +48,9 @@ export class KycMapper {
    * État complet, en primitives et à plat — destiné aux mappers de persistance
    * et à la sérialisation HTTP.
    *
-   * `utilisateur` n'est posé que s'il a été chargé : la clé était absente du
-   * JSON hors liste admin, elle le reste.
+   * Ne contient que ce dont le dossier est propriétaire. Le titulaire, que la
+   * liste d'administration affiche à côté, est ajouté par-dessus au moment de
+   * répondre (`GetKycUseCase.executeAll`) — il appartient à IAM.
    */
   static toSnapshot(kyc: Kyc): KycSnapshot {
     return {
@@ -65,7 +65,6 @@ export class KycMapper {
       createdAt: kyc.createdAt,
       updatedAt: kyc.updatedAt,
       ...kyc.decision.toSnapshot(),
-      ...(kyc.utilisateur ? { utilisateur: kyc.utilisateur } : {}),
     };
   }
 }

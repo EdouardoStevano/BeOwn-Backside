@@ -20,23 +20,15 @@ export interface KycIdentiteExtrait {
   selfieFileId?: string;
 }
 
-/**
- * Le titulaire du dossier, tel que la liste d'administration l'affiche.
- *
- * Une **projection en lecture seule**, renseignée par le seul `findAll` du
- * repository, qui charge la relation. Elle ne fait pas partie de l'état du
- * dossier : rien ici n'est écrit, et l'agrégat ne s'en sert pour aucune règle.
- * Elle est conservée parce que la liste admin la publie déjà.
- */
-export interface TitulaireKyc {
-  userId: number;
-  firstname?: string;
-  lastname?: string;
-  role: string;
-  status: string;
-  createdAt?: Date;
-  userEmail?: { email: string };
-}
+// Le titulaire du dossier ne vit plus ici. `TitulaireKyc` était une projection
+// d'un **autre** Bounded Context (IAM) portée par cet agrégat, remplie par une
+// jointure ORM vers `UserEntity` — donc par une dépendance de Profiles sur
+// l'infrastructure d'IAM (§12.7). Elle ne servait aucune règle : seule la liste
+// d'administration la publiait.
+//
+// Elle est reconstituée là où elle est affichée, par le port `USER_REPOSITORY`
+// et à partir du seul `utilisateurId` : voir `GetKycUseCase.executeAll`. Le
+// JSON rendu par `GET /profiles/kyc/all` est inchangé.
 
 /** Ce que le dossier ajoute à son bloc : sa clé, le compte rattaché, ses dates. */
 export interface EnteteKyc {
@@ -61,8 +53,6 @@ export interface KycSnapshot extends EnteteKyc, DecisionKycSnapshot {
   fournisseurRef: string | null;
   stripeReportId: string | null;
   identiteExtrait: KycIdentiteExtrait | null;
-  /** Absent tant que le dossier n'a pas été chargé avec sa relation. */
-  utilisateur?: TitulaireKyc;
 }
 
 /**
@@ -124,7 +114,6 @@ export class Kyc {
   private readonly _fournisseurRef: string | null;
   private readonly _stripeReportId: string | null;
   private readonly _identiteExtrait: KycIdentiteExtrait | null;
-  private readonly _utilisateur?: TitulaireKyc;
   private readonly _createdAt: Date;
   private readonly _updatedAt: Date;
 
@@ -146,7 +135,6 @@ export class Kyc {
     fournisseurRef: string | null;
     stripeReportId: string | null;
     identiteExtrait: KycIdentiteExtrait | null;
-    utilisateur?: TitulaireKyc;
   }) {
     this._id = etat.entete.id;
     this._utilisateurId = etat.entete.utilisateurId;
@@ -159,7 +147,6 @@ export class Kyc {
     this._fournisseurRef = etat.fournisseurRef;
     this._stripeReportId = etat.stripeReportId;
     this._identiteExtrait = etat.identiteExtrait;
-    this._utilisateur = etat.utilisateur;
   }
 
   // ── Règles propres au dossier ─────────────────────────────────────────────
@@ -198,10 +185,6 @@ export class Kyc {
   }
   get identiteExtrait(): KycIdentiteExtrait | null {
     return this._identiteExtrait;
-  }
-  /** @see TitulaireKyc — renseigné par la seule liste admin. */
-  get utilisateur(): TitulaireKyc | undefined {
-    return this._utilisateur;
   }
   get createdAt(): Date {
     return this._createdAt;

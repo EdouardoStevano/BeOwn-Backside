@@ -30,6 +30,11 @@ const ROLES_LECTURE: string[] = rolesWithPermission('users:read');
  * s'applique sans attendre l'expiration de la session. C'est une décision
  * métier sur un compte, pas un filtrage de requête HTTP — un job ou une autre
  * façade doivent y être soumis pareillement.
+ *
+ * Comme `GetMyAccountUseCase`, il vit dans ce module de composition et non dans
+ * IAM : il assemble le compte avec le dossier KYC (Profiles) et le portefeuille
+ * (Wallets), deux contextes qui dépendent déjà d'IAM. L'y laisser refermait le
+ * cycle.
  */
 @Injectable()
 export class GetUserAccountUseCase {

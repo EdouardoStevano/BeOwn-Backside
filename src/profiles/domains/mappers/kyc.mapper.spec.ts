@@ -72,23 +72,15 @@ describe('KycMapper', () => {
     expect(kyc.valideJusquAu).toBeNull();
   });
 
-  it("ne publie pas la clé `utilisateur` hors de la liste d'administration", () => {
+  it('ne porte jamais le titulaire du dossier', () => {
+    // Le dossier ne publie que ce dont il est propriétaire. Le titulaire
+    // appartient à IAM : il est composé par-dessus, dans
+    // `GetKycUseCase.executeAll`, à partir du seul `utilisateurId`. Le jour où
+    // cette clé réapparaîtrait ici, c'est qu'une jointure vers `users` serait
+    // revenue dans le contexte Profiles.
     const kyc = KycMapper.restore(LIGNE);
 
     expect('utilisateur' in kyc.toJSON()).toBe(false);
-  });
-
-  it('publie le titulaire quand la relation a été chargée', () => {
-    const titulaire = {
-      userId: 42,
-      role: 'investisseur',
-      status: 'actif',
-      userEmail: { email: 'marie@example.test' },
-    };
-
-    const kyc = KycMapper.restore({ ...LIGNE, utilisateur: titulaire });
-
-    expect(kyc.toJSON().utilisateur).toEqual(titulaire);
   });
 
   it("ne partage pas le jsonb rendu par l'ORM", () => {

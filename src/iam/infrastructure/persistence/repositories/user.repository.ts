@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { UserRepository } from 'src/iam/domains/ports/user.repository';
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { User } from 'src/iam/domains/models/user';
 import { UserMapper } from 'src/iam/infrastructure/persistence/mappers/user.mapper';
 
@@ -31,6 +31,18 @@ export class UserTypeOrmRepository implements UserRepository {
     });
 
     return entity ? UserMapper.toDomain(entity) : null;
+  }
+
+  async findManyByIds(userIds: number[]): Promise<User[]> {
+    // `In([])` produit un `IN ()` que Postgres rejette : on court-circuite.
+    if (userIds.length === 0) return [];
+
+    const entities = await this.usersRepository.find({
+      where: { userId: In([...new Set(userIds)]) },
+      relations: ['userEmail'],
+    });
+
+    return entities.map((entity) => UserMapper.toDomain(entity));
   }
 
   async findByIdWithPassword(userId: number): Promise<User | null> {

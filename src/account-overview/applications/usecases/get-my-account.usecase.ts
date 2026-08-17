@@ -26,11 +26,18 @@ import {
  * leurs ports respectifs. Ce use case les demande de front et assemble ; il ne
  * décide de rien.
  *
- * Cette composition vivait dans `UserController.getMe`, qui se faisait injecter
- * cinq repositories appartenant à quatre autres contextes. La présentation
- * parlait donc directement à des adapters de sortie qui ne la regardaient pas
- * (§2 : `presentation` et `infrastructure` sont parallèles, tout passe par
- * `application`). Le contrôleur ne connaît plus qu'un use case.
+ * **Pourquoi ce module et pas IAM.** La composition a d'abord quitté
+ * `UserController.getMe`, qui se faisait injecter cinq repositories appartenant
+ * à quatre autres contextes (§2, §12.9). Elle a ensuite quitté IAM lui-même :
+ * y rester obligeait le contexte le plus **amont** de l'application — celui
+ * dont une vingtaine de modules dépendent pour l'identité — à dépendre en
+ * retour de Profiles, Preferences, Documents et Wallets. Le cycle de paquets
+ * `iam ↔ profiles` venait de là, et de là seulement pour la lecture.
+ *
+ * `account-overview` est en **aval de tout le monde** et n'est importé par
+ * personne : la dépendance ne peut plus revenir. C'est aussi le côté Query de
+ * §7 — une lecture dénormalisée n'a pas à traverser le domaine riche de cinq
+ * contextes.
  *
  * Chaque lecture est **tolérante** : un portefeuille indisponible ne doit pas
  * empêcher le titulaire de voir son compte. C'était déjà le cas, et c'est

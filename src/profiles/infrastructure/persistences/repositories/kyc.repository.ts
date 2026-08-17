@@ -33,8 +33,10 @@ export class KycTypeOrmRepository implements KycRepository {
   }): Promise<{ items: Kyc[]; total: number }> {
     const page = Math.max(1, params?.page ?? 1);
     const limit = Math.min(100, Math.max(1, params?.limit ?? 20));
+    // Aucune jointure vers `users` : le dossier ne rend que ce dont il est
+    // propriétaire. Le titulaire est ajouté par `GetKycUseCase.executeAll`, via
+    // le port d'IAM.
     const [entities, total] = await this.kycRepo.findAndCount({
-      relations: ['utilisateur', 'utilisateur.userEmail'],
       order: { createdAt: 'DESC' },
       skip: (page - 1) * limit,
       take: limit,

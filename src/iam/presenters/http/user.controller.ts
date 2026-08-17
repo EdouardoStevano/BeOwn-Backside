@@ -2,7 +2,6 @@ import {
   Body,
   Controller,
   Delete,
-  Get,
   HttpCode,
   HttpStatus,
   Param,
@@ -24,8 +23,6 @@ import type { ActiveUser } from 'src/common/auth/current-user.decorator';
 import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
 import { RequirePermission } from 'src/common/auth/require-permission.decorator';
 import { DeleteMyAccountUseCase } from 'src/iam/applications/usecases/account/delete-my-account.usecase';
-import { GetMyAccountUseCase } from 'src/iam/applications/usecases/account/get-my-account.usecase';
-import { GetUserAccountUseCase } from 'src/iam/applications/usecases/account/get-user-account.usecase';
 import {
   DeclareUserTypeUseCase,
   UpdateMyAccountUseCase,
@@ -58,8 +55,14 @@ export class DeleteAccountDto {
  * Ce qui reste est le métier d'un contrôleur : valider le DTO, appeler le use
  * case, rendre la réponse (§12.5).
  *
+ * Ne restent ici que les routes d'**écriture** du compte, celles dont IAM est
+ * seul propriétaire. Les deux lectures composées — `GET /users/me` et
+ * `GET /users/:id` — sont parties dans `AccountOverviewModule` : elles
+ * assemblaient quatre contextes qui dépendent tous d'IAM, et les servir depuis
+ * ici obligeait IAM à dépendre d'eux en retour. Leurs URL n'ont pas changé.
+ *
  * Les préférences ont quitté ce fichier pour le contexte Preferences ; leurs
- * routes, elles, n'ont pas changé d'URL.
+ * routes, elles, n'ont pas changé d'URL non plus.
  */
 @SkipThrottle()
 @ApiTags('Users')
@@ -68,8 +71,6 @@ export class DeleteAccountDto {
 @UseGuards(JwtAuthGuard)
 export class UserController {
   constructor(
-    private readonly getMyAccount: GetMyAccountUseCase,
-    private readonly getUserAccount: GetUserAccountUseCase,
     private readonly updateMyAccount: UpdateMyAccountUseCase,
     private readonly declareUserType: DeclareUserTypeUseCase,
     private readonly updateUserByAdmin: UpdateUserByAdminUseCase,
@@ -80,12 +81,7 @@ export class UserController {
   // 10/15 min). Le `POST /users` qui existait ici appelait le même usecase mais
   // depuis un contrôleur `@SkipThrottle()` et sans captcha — doublon supprimé.
 
-  @ApiOperation({ summary: 'Mon profil complet' })
-  @ApiResponse({ status: 200, description: 'Profil complet retourné' })
-  @Get('me')
-  getMe(@CurrentUser() user: ActiveUser) {
-    return this.getMyAccount.execute(user.userId);
-  }
+  // `GET me` et `GET :id` sont servies par `AccountOverviewController`.
 
   @ApiOperation({ summary: 'Mettre à jour mon profil' })
   @ApiResponse({ status: 200, description: 'Profil mis à jour' })
@@ -107,24 +103,6 @@ export class UserController {
       dto.userType,
     );
     return compte.toJSON();
-  }
-
-  @ApiOperation({
-    summary: 'Obtenir un utilisateur par ID (soi-même ou admin)',
-  })
-  @ApiParam({ name: 'id', description: "ID numérique de l'utilisateur" })
-  @ApiResponse({
-    status: 200,
-    description: 'Utilisateur + KYC + wallet retournés',
-  })
-  @ApiResponse({ status: 403, description: 'Accès refusé' })
-  @ApiResponse({ status: 404, description: 'Utilisateur introuvable' })
-  @Get(':id')
-  findOne(
-    @Param('id', ParseIntPipe) id: number,
-    @CurrentUser() currentUser: ActiveUser,
-  ) {
-    return this.getUserAccount.execute(id, currentUser.userId);
   }
 
   @ApiOperation({ summary: 'Mettre à jour un utilisateur (admin seulement)' })
