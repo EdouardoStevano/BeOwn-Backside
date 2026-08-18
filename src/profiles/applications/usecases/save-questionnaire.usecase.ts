@@ -1,80 +1,92 @@
-import { Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { QuestionnaireAdequationEntity } from '../../infrastructure/persistences/entities/questionnaire-adequation.entity';
-import { ProfilPPEntity } from '../../infrastructure/persistences/entities/profil-pp.entity';
-import { CategoriePsfp } from '../../domains/enums/kyc-status.enum';
-import { SaveQuestionnaireDto } from '../../presenters/dto/questionnaire.dto';
+import { Inject, Injectable } from '@nestjs/common';
+import { CategoriePsfp } from 'src/profiles/domains/enums/kyc-status.enum';
+import { QuestionnaireAdequationFactory } from 'src/profiles/domains/factories/questionnaire-adequation.factory';
+import {
+  PROFIL_PP_REPOSITORY,
+  type ProfilPPRepository,
+} from 'src/profiles/domains/ports/profil-pp.repository';
+import {
+  QUESTIONNAIRE_ADEQUATION_REPOSITORY,
+  type QuestionnaireAdequationRepository,
+} from 'src/profiles/domains/ports/questionnaire-adequation.repository';
+import { QuestionnaireAdequation } from 'src/profiles/domains/questionnaire-adequation';
+import { SaveQuestionnaireDto } from 'src/profiles/presenters/dto/questionnaire.dto';
+import { reponsesDepuisDto } from '../mappers/questionnaire-reponses.mapper';
 import { RiskScoringService } from '../risk-scoring.service';
 
+/**
+ * Passage du questionnaire d'adéquation PSFP.
+ *
+ * Ce use case n'orchestre plus que des accès (§6 — Application Service) :
+ * relire le questionnaire du compte, lui donner les nouvelles réponses ou le
+ * faire naître, le persister, puis reporter le classement là où il produit ses
+ * effets. Le classement lui-même — trois étapes, trois seuils réglementaires et
+ * le calcul du plafond conseillé — a migré dans `ResultatAdequation`, où il se
+ * teste sans base de données.
+ *
+ * **Le report sur le profil est synchrone, et doit le rester.** Il serait
+ * tentant d'en faire un abonné à un Domain Event, comme pour les décisions KYC ;
+ * ce serait une erreur : `create-investment.usecase` lit `categoriePsfp` et
+ * `montantMaxConseille` sur le profil pour opposer le plafond PSFP. Un report
+ * différé, même de peu, laisserait passer une souscription contrôlée avec
+ * l'ancien classement.
+ */
 @Injectable()
 export class SaveQuestionnaireUseCase {
   constructor(
-    @InjectRepository(QuestionnaireAdequationEntity)
-    private readonly questionnaireRepo: Repository<QuestionnaireAdequationEntity>,
-    @InjectRepository(ProfilPPEntity)
-    private readonly profilPPRepo: Repository<ProfilPPEntity>,
+    @Inject(QUESTIONNAIRE_ADEQUATION_REPOSITORY)
+    private readonly questionnaireRepository: QuestionnaireAdequationRepository,
+    @Inject(PROFIL_PP_REPOSITORY)
+    private readonly profilPPRepository: ProfilPPRepository,
     private readonly riskScoringService: RiskScoringService,
   ) {}
 
-  async execute(userId: number, dto: SaveQuestionnaireDto): Promise<QuestionnaireAdequationEntity> {
-    // Étape 1 — Pré-qualification : 2 sur 3 → professionnel
-    const proPoints = [
-      dto.workInFinancialSector,
-      dto.moreThan10TransactionsPerQuarter,
-      dto.portfolioOver500k,
-    ].filter(Boolean).length;
+  async execute(
+    userId: number,
+    dto: SaveQuestionnaireDto,
+  ): Promise<QuestionnaireAdequation> {
+    const reponses = reponsesDepuisDto(dto);
 
-    let categorie: CategoriePsfp;
-    let montantMax: number | null = null;
-
-    if (proPoints >= 2) {
-      categorie = CategoriePsfp.PROFESSIONNEL;
-    } else {
-      // Étape 2 — Qualification : 4 sur 5 → averti
-      const advancedPoints = [
-        dto.previousUnlistedInvestments,
-        dto.investmentExperienceOver5Years,
-        dto.financialPatrimonyOver500k,
-        dto.understandsTotalLossRisk,
-        dto.financialSectorBackground,
-      ].filter(Boolean).length;
-
-      if (advancedPoints >= 4) {
-        categorie = CategoriePsfp.AVERTI;
-      } else {
-        categorie = CategoriePsfp.NON_AVERTI;
-        // Étape 3 — Simulation : montantMax = max(1000, patrimoine * 5%)
-        const patrimoine = Number(dto.patrimoineNet ?? 0);
-        montantMax = Math.max(1000, Math.round(patrimoine * 0.05));
-      }
+    // Un titulaire n'a qu'un questionnaire : repasser le formulaire remplace
+    // ses réponses et son classement, il n'en crée pas un second.
+    const existant = await this.questionnaireRepository.findByUserId(userId);
+    if (existant) {
+      existant.repondre(reponses);
     }
 
-    // Save questionnaire (upsert by userId)
-    let q = await this.questionnaireRepo.findOne({ where: { utilisateurId: userId } });
-    if (!q) q = this.questionnaireRepo.create({ utilisateurId: userId });
-    Object.assign(q, {
-      ...dto,
-      patrimoineNet: dto.patrimoineNet ?? null,
-      revenuAnnuel: dto.revenuAnnuel ?? null,
-      budgetAnnuelInvestissement: dto.budgetAnnuelInvestissement ?? null,
-      resultCategorie: categorie,
-      resultMontantMaxConseille: montantMax,
-    });
-    const saved = await this.questionnaireRepo.save(q);
+    const questionnaire = await this.questionnaireRepository.save(
+      existant ??
+        QuestionnaireAdequationFactory.repondre({
+          utilisateurId: userId,
+          ...reponses,
+        }),
+    );
 
-    // Sync to ProfilPP
-    const profilPP = await this.profilPPRepo.findOne({ where: { utilisateurId: userId } });
-    if (profilPP) {
-      profilPP.categoriePsfp = categorie;
-      (profilPP as any).patrimoineDeclare = dto.patrimoineNet ?? null;
-      (profilPP as any).montantMaxConseille = montantMax;
-      await this.profilPPRepo.save(profilPP);
-    }
-
-    // Compute and store risk level
+    await this.reporterSurLeProfil(userId, questionnaire);
     await this.riskScoringService.computeAndStore(userId);
 
-    return saved;
+    return questionnaire;
+  }
+
+  /**
+   * Le classement vit en deux endroits : dans le questionnaire, qui en est la
+   * pièce justificative, et sur le profil, que le reste de l'application
+   * interroge — contrôle de plafond à la souscription, écrans admin, exports.
+   *
+   * Il y était recopié par un `profilPP.categoriePsfp = …` suivi de deux
+   * affectations en `as any`, sur l'entité ORM chargée depuis le use case. Le
+   * port nomme l'opération et la restreint à ces trois colonnes.
+   */
+  private async reporterSurLeProfil(
+    userId: number,
+    questionnaire: QuestionnaireAdequation,
+  ): Promise<void> {
+    await this.profilPPRepository.enregistrerClassementPsfp(userId, {
+      // Un questionnaire qui vient d'être rempli a toujours un classement ; le
+      // repli protège les lignes anciennes relues sans `resultCategorie`.
+      categoriePsfp: questionnaire.categoriePsfp ?? CategoriePsfp.NON_AVERTI,
+      patrimoineDeclare: questionnaire.patrimoineNet,
+      montantMaxConseille: questionnaire.montantMaxConseille,
+    });
   }
 }

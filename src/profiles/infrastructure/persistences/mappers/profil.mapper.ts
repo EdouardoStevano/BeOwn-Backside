@@ -1,135 +1,233 @@
 import { ProfilPP } from 'src/profiles/domains/profil-pp';
+// Aliasé : le domaine a lui aussi un mapper de profil, qui traduit entre
+// l'agrégat et son snapshot. Celui-ci ne fait que la moitié ORM du chemin et
+// délègue l'autre.
+import { ProfilPPMapper as ProfilPPDomainMapper } from 'src/profiles/domains/mappers/profil-pp.mapper';
+import { ProfilPMMapper as ProfilPMDomainMapper } from 'src/profiles/domains/mappers/profil-pm.mapper';
+import { KycMapper as KycDomainMapper } from 'src/profiles/domains/mappers/kyc.mapper';
+import { QuestionnaireAdequationMapper as QuestionnaireAdequationDomainMapper } from 'src/profiles/domains/mappers/questionnaire-adequation.mapper';
+import { QuestionnaireAdequation } from 'src/profiles/domains/questionnaire-adequation';
 import { ProfilPM } from 'src/profiles/domains/profil-pm';
 import { Kyc } from 'src/profiles/domains/kyc';
 import { ProfilPPEntity } from '../entities/profil-pp.entity';
 import { ProfilPMEntity } from '../entities/profil-pm.entity';
 import { KycEntity } from '../entities/kyc.entity';
+import { QuestionnaireAdequationEntity } from '../entities/questionnaire-adequation.entity';
 
 export class ProfilMapper {
+  /**
+   * `paysNaissance`, `patrimoineDeclare`, `montantMaxConseille`,
+   * `niveauRisque` et les dates de contact étaient absents de cette
+   * traduction : la colonne existait, l'agrégat aussi, mais la valeur se
+   * perdait entre les deux. La conséquence la plus visible touchait le plafond
+   * PSFP — `create-investment.usecase` lisait `profilPP.patrimoineDeclare`,
+   * toujours `undefined`, et retombait donc systématiquement sur le plancher
+   * de 1 000 € au lieu des 5 % du patrimoine déclaré.
+   */
   static ppToDomain(entity: ProfilPPEntity): ProfilPP {
-    const domain = new ProfilPP();
-    domain.utilisateurId = entity.utilisateurId;
-    domain.prenom = entity.prenom;
-    domain.nom = entity.nom;
-    domain.nomNaissance = entity.nomNaissance;
-    domain.civilite = entity.civilite;
-    domain.dateNaissance = entity.dateNaissance;
-    domain.lieuNaissance = entity.lieuNaissance;
-    domain.nationalite = entity.nationalite;
-    domain.adresseLigne1 = entity.adresseLigne1;
-    domain.adresseLigne2 = entity.adresseLigne2;
-    domain.codePostal = entity.codePostal;
-    domain.ville = entity.ville;
-    domain.pays = entity.pays;
-    domain.telephone = entity.telephone;
-    domain.profession = entity.profession;
-    domain.secteurActivite = entity.secteurActivite;
-    domain.pep = entity.pep;
-    domain.residenceFiscale = entity.residenceFiscale;
-    domain.nif = entity.nif;
-    domain.categoriePsfp = entity.categoriePsfp;
-    domain.createdAt = entity.createdAt;
-    domain.updatedAt = entity.updatedAt;
-    return domain;
+    return ProfilPPDomainMapper.restore({
+      utilisateurId: entity.utilisateurId,
+      nomNaissance: entity.nomNaissance,
+      civilite: entity.civilite,
+      dateNaissance: entity.dateNaissance,
+      lieuNaissance: entity.lieuNaissance,
+      paysNaissance: entity.paysNaissance,
+      nationalite: entity.nationalite,
+      adresseLigne1: entity.adresseLigne1,
+      adresseLigne2: entity.adresseLigne2,
+      codePostal: entity.codePostal,
+      ville: entity.ville,
+      pays: entity.pays,
+      profession: entity.profession,
+      secteurActivite: entity.secteurActivite,
+      pep: entity.pep,
+      residenceFiscale: entity.residenceFiscale,
+      nif: entity.nif,
+      categoriePsfp: entity.categoriePsfp,
+      patrimoineDeclare: entity.patrimoineDeclare,
+      montantMaxConseille: entity.montantMaxConseille,
+      niveauRisque: entity.niveauRisque,
+      dernierContactAdmin: entity.dernierContactAdmin,
+      prochainContactDu: entity.prochainContactDu,
+      createdAt: entity.createdAt,
+      updatedAt: entity.updatedAt,
+    });
   }
 
+  /**
+   * Sens écriture : **seuls les champs dont l'agrégat est propriétaire**.
+   *
+   * `patrimoineDeclare`, `montantMaxConseille`, `niveauRisque` et les dates de
+   * contact sont relus par `ppToDomain` mais délibérément absents ici. Ils
+   * appartiennent à `SaveQuestionnaireUseCase` et `RiskScoringService`, qui
+   * écrivent directement sur l'entité ; les recopier depuis le profil ferait
+   * qu'une mise à jour d'adresse partie d'un profil chargé avant le
+   * questionnaire écraserait le classement calculé entre-temps. Les laisser
+   * `undefined` dit à TypeORM de ne pas toucher à la colonne.
+   */
   static ppToEntity(domain: ProfilPP): ProfilPPEntity {
+    const snapshot = ProfilPPDomainMapper.toSnapshot(domain);
     const entity = new ProfilPPEntity();
-    entity.utilisateurId = domain.utilisateurId;
-    entity.prenom = domain.prenom;
-    entity.nom = domain.nom;
-    entity.nomNaissance = domain.nomNaissance;
-    entity.civilite = domain.civilite;
-    entity.dateNaissance = domain.dateNaissance;
-    entity.lieuNaissance = domain.lieuNaissance;
-    entity.nationalite = domain.nationalite;
-    entity.adresseLigne1 = domain.adresseLigne1;
-    entity.adresseLigne2 = domain.adresseLigne2;
-    entity.codePostal = domain.codePostal;
-    entity.ville = domain.ville;
-    entity.pays = domain.pays;
-    entity.telephone = domain.telephone;
-    entity.profession = domain.profession;
-    entity.secteurActivite = domain.secteurActivite;
-    entity.pep = domain.pep;
-    entity.residenceFiscale = domain.residenceFiscale;
-    entity.nif = domain.nif;
-    entity.categoriePsfp = domain.categoriePsfp;
+    entity.utilisateurId = snapshot.utilisateurId;
+    entity.nomNaissance = snapshot.nomNaissance;
+    entity.civilite = snapshot.civilite;
+    // Une colonne Postgres `date` se renseigne aussi bien avec la chaîne
+    // civile `AAAA-MM-JJ` qu'avec un `Date` — et c'est cette chaîne que le
+    // driver rend à la lecture, malgré le type déclaré sur l'entité.
+    entity.dateNaissance = snapshot.dateNaissance as unknown as Date | null;
+    entity.lieuNaissance = snapshot.lieuNaissance;
+    entity.paysNaissance = snapshot.paysNaissance;
+    entity.nationalite = snapshot.nationalite;
+    entity.adresseLigne1 = snapshot.adresseLigne1;
+    entity.adresseLigne2 = snapshot.adresseLigne2;
+    entity.codePostal = snapshot.codePostal;
+    entity.ville = snapshot.ville;
+    entity.pays = snapshot.pays;
+    entity.profession = snapshot.profession;
+    entity.secteurActivite = snapshot.secteurActivite;
+    entity.pep = snapshot.pep;
+    entity.residenceFiscale = snapshot.residenceFiscale;
+    entity.nif = snapshot.nif;
+    entity.categoriePsfp = snapshot.categoriePsfp;
     return entity;
   }
 
   static pmToDomain(entity: ProfilPMEntity): ProfilPM {
-    const domain = new ProfilPM();
-    domain.utilisateurId = entity.utilisateurId;
-    domain.raisonSociale = entity.raisonSociale;
-    domain.formeJuridique = entity.formeJuridique;
-    domain.siren = entity.siren;
-    domain.rcsVille = entity.rcsVille;
-    domain.capitalSocial = entity.capitalSocial;
-    domain.siegeAdresse = entity.siegeAdresse;
-    domain.representantId = entity.representantId;
-    domain.secteurActivite = entity.secteurActivite;
-    domain.createdAt = entity.createdAt;
-    domain.updatedAt = entity.updatedAt;
-    return domain;
+    return ProfilPMDomainMapper.restore({
+      utilisateurId: entity.utilisateurId,
+      raisonSociale: entity.raisonSociale,
+      formeJuridique: entity.formeJuridique,
+      siren: entity.siren,
+      rcsVille: entity.rcsVille,
+      capitalSocial: entity.capitalSocial,
+      siegeAdresse: entity.siegeAdresse,
+      representantId: entity.representantId,
+      secteurActivite: entity.secteurActivite,
+      createdAt: entity.createdAt,
+      updatedAt: entity.updatedAt,
+    });
   }
 
   static pmToEntity(domain: ProfilPM): ProfilPMEntity {
+    const snapshot = ProfilPMDomainMapper.toSnapshot(domain);
     const entity = new ProfilPMEntity();
-    entity.utilisateurId = domain.utilisateurId;
-    entity.raisonSociale = domain.raisonSociale;
-    entity.formeJuridique = domain.formeJuridique;
-    entity.siren = domain.siren;
-    entity.rcsVille = domain.rcsVille;
-    entity.capitalSocial = domain.capitalSocial;
-    entity.siegeAdresse = domain.siegeAdresse;
-    entity.representantId = domain.representantId;
-    entity.secteurActivite = domain.secteurActivite;
+    entity.utilisateurId = snapshot.utilisateurId;
+    entity.raisonSociale = snapshot.raisonSociale;
+    entity.formeJuridique = snapshot.formeJuridique;
+    entity.siren = snapshot.siren;
+    entity.rcsVille = snapshot.rcsVille;
+    entity.capitalSocial = snapshot.capitalSocial;
+    entity.siegeAdresse = snapshot.siegeAdresse;
+    entity.representantId = snapshot.representantId;
+    entity.secteurActivite = snapshot.secteurActivite;
+    return entity;
+  }
+
+  static questionnaireToDomain(
+    entity: QuestionnaireAdequationEntity,
+  ): QuestionnaireAdequation {
+    return QuestionnaireAdequationDomainMapper.restore({
+      id: entity.id,
+      utilisateurId: entity.utilisateurId,
+      workInFinancialSector: entity.workInFinancialSector,
+      moreThan10TransactionsPerQuarter: entity.moreThan10TransactionsPerQuarter,
+      portfolioOver500k: entity.portfolioOver500k,
+      previousUnlistedInvestments: entity.previousUnlistedInvestments,
+      investmentExperienceOver5Years: entity.investmentExperienceOver5Years,
+      financialPatrimonyOver500k: entity.financialPatrimonyOver500k,
+      understandsTotalLossRisk: entity.understandsTotalLossRisk,
+      financialSectorBackground: entity.financialSectorBackground,
+      patrimoineNet: entity.patrimoineNet,
+      revenuAnnuel: entity.revenuAnnuel,
+      budgetAnnuelInvestissement: entity.budgetAnnuelInvestissement,
+      acceptsSimulatedLoss: entity.acceptsSimulatedLoss,
+      resultCategorie: entity.resultCategorie,
+      resultMontantMaxConseille: entity.resultMontantMaxConseille,
+      createdAt: entity.createdAt,
+      updatedAt: entity.updatedAt,
+    });
+  }
+
+  /**
+   * Sens écriture : tout l'état du questionnaire, classement compris.
+   *
+   * Contrairement au profil, l'agrégat est ici **propriétaire de toutes ses
+   * colonnes** — y compris `resultCategorie` et `resultMontantMaxConseille`,
+   * que personne d'autre n'écrit : ils sont déduits des réponses par
+   * `ResultatAdequation.calculer`. C'est le questionnaire qui les reporte
+   * ensuite sur le profil, via `enregistrerClassementPsfp`.
+   */
+  static questionnaireToEntity(
+    domain: QuestionnaireAdequation,
+  ): QuestionnaireAdequationEntity {
+    const snapshot = QuestionnaireAdequationDomainMapper.toSnapshot(domain);
+    const entity = new QuestionnaireAdequationEntity();
+    // Absent d'un premier passage : l'uuid est généré en base.
+    if (snapshot.id) entity.id = snapshot.id;
+    entity.utilisateurId = snapshot.utilisateurId;
+    entity.workInFinancialSector = snapshot.workInFinancialSector;
+    entity.moreThan10TransactionsPerQuarter =
+      snapshot.moreThan10TransactionsPerQuarter;
+    entity.portfolioOver500k = snapshot.portfolioOver500k;
+    entity.previousUnlistedInvestments = snapshot.previousUnlistedInvestments;
+    entity.investmentExperienceOver5Years =
+      snapshot.investmentExperienceOver5Years;
+    entity.financialPatrimonyOver500k = snapshot.financialPatrimonyOver500k;
+    entity.understandsTotalLossRisk = snapshot.understandsTotalLossRisk;
+    entity.financialSectorBackground = snapshot.financialSectorBackground;
+    entity.patrimoineNet = snapshot.patrimoineNet;
+    entity.revenuAnnuel = snapshot.revenuAnnuel;
+    entity.budgetAnnuelInvestissement = snapshot.budgetAnnuelInvestissement;
+    entity.acceptsSimulatedLoss = snapshot.acceptsSimulatedLoss;
+    entity.resultCategorie = snapshot.resultCategorie;
+    entity.resultMontantMaxConseille = snapshot.resultMontantMaxConseille;
     return entity;
   }
 
   static kycToDomain(entity: KycEntity): Kyc {
-    const domain = new Kyc();
-    domain.id = entity.id;
-    domain.utilisateurId = entity.utilisateurId;
-    domain.statut = entity.statut;
-    domain.niveau = entity.niveau;
-    domain.scoreRisque = entity.scoreRisque;
-    domain.fournisseur = entity.fournisseur;
-    domain.fournisseurRef = entity.fournisseurRef;
-    domain.valideJusquAu = entity.valideJusquAu;
-    domain.motifRefus = entity.motifRefus;
-    domain.stripeReportId = (entity as any).stripeReportId ?? null;
-    domain.identiteExtrait = (entity as any).identiteExtrait ?? null;
-    domain.createdAt = entity.createdAt;
-    domain.updatedAt = entity.updatedAt;
-    if (entity.utilisateur) {
-      domain.utilisateur = {
-        userId: entity.utilisateur.userId,
-        firstname: entity.utilisateur.firstname ?? undefined,
-        lastname: entity.utilisateur.lastname ?? undefined,
-        role: entity.utilisateur.role,
-        status: entity.utilisateur.status,
-        createdAt: entity.utilisateur.createdAt,
-        userEmail: entity.utilisateur.userEmail
-          ? { email: entity.utilisateur.userEmail.email }
-          : undefined,
-      };
-    }
-    return domain;
+    return KycDomainMapper.restore({
+      id: entity.id,
+      utilisateurId: entity.utilisateurId,
+      statut: entity.statut,
+      niveau: entity.niveau,
+      scoreRisque: entity.scoreRisque,
+      fournisseur: entity.fournisseur,
+      fournisseurRef: entity.fournisseurRef,
+      valideJusquAu: entity.valideJusquAu,
+      motifRefus: entity.motifRefus,
+      stripeReportId: entity.stripeReportId,
+      identiteExtrait: entity.identiteExtrait,
+      createdAt: entity.createdAt,
+      updatedAt: entity.updatedAt,
+    });
   }
 
+  /**
+   * Sens écriture : **seuls les champs dont l'agrégat est propriétaire**.
+   *
+   * `stripeReportId` et `identiteExtrait` sont relus par `kycToDomain` mais
+   * délibérément absents ici — comme pour `ppToEntity`. Ils appartiennent à
+   * `updateReportData`, que le webhook Stripe appelle avec les données du
+   * rapport de vérification ; les recopier depuis un dossier chargé avant le
+   * webhook écraserait ce que celui-ci vient d'écrire. Les laisser `undefined`
+   * dit à TypeORM de ne pas toucher à la colonne.
+   */
   static kycToEntity(domain: Kyc): KycEntity {
+    const snapshot = KycDomainMapper.toSnapshot(domain);
     const entity = new KycEntity();
-    if (domain.id) entity.id = domain.id;
-    entity.utilisateurId = domain.utilisateurId;
-    entity.statut = domain.statut;
-    entity.niveau = domain.niveau;
-    entity.scoreRisque = domain.scoreRisque;
-    entity.fournisseur = domain.fournisseur;
-    entity.fournisseurRef = domain.fournisseurRef;
-    entity.valideJusquAu = domain.valideJusquAu;
-    entity.motifRefus = domain.motifRefus;
+    // Absent d'un dossier qui vient de naître : l'uuid est généré en base.
+    if (snapshot.id) entity.id = snapshot.id;
+    entity.utilisateurId = snapshot.utilisateurId;
+    entity.statut = snapshot.statut;
+    entity.niveau = snapshot.niveau;
+    entity.scoreRisque = snapshot.scoreRisque;
+    entity.fournisseur = snapshot.fournisseur;
+    entity.fournisseurRef = snapshot.fournisseurRef;
+    // Une colonne Postgres `date` se renseigne aussi bien avec la chaîne civile
+    // `AAAA-MM-JJ` qu'avec un `Date` — et c'est cette chaîne que le driver rend
+    // à la lecture, malgré le type déclaré sur l'entité (cf. `ppToEntity`).
+    entity.valideJusquAu = snapshot.valideJusquAu as unknown as Date | null;
+    entity.motifRefus = snapshot.motifRefus;
     return entity;
   }
 }

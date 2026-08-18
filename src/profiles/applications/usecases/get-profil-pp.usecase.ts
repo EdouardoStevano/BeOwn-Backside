@@ -1,21 +1,40 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { Inject } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import {
-  PROFIL_REPOSITORY,
-  type ProfilRepository,
-} from '../ports/repositories/profil.repository';
+  USER_REPOSITORY,
+  type UserRepository,
+} from 'src/iam/domains/ports/user.repository';
+import {
+  PROFIL_PP_REPOSITORY,
+  type ProfilPPRepository,
+} from 'src/profiles/domains/ports/profil-pp.repository';
+import { ProfilPPIntrouvableError } from 'src/profiles/domains/errors';
+import { VueProfilPP, vueProfilPP } from '../mappers/profil-pp-vue.mapper';
 
+/**
+ * Lecture du profil investisseur — personne physique.
+ *
+ * Deux lectures, une réponse : le dossier réglementaire d'un côté, l'état
+ * civil et le numéro de l'autre, depuis que ceux-ci ont quitté `profil_pp`
+ * pour le compte qui les portait déjà. La forme publiée ne change pas — voir
+ * `vueProfilPP`.
+ */
 @Injectable()
 export class GetProfilPPUseCase {
   constructor(
-    @Inject(PROFIL_REPOSITORY) private readonly profilRepository: ProfilRepository,
+    @Inject(PROFIL_PP_REPOSITORY)
+    private readonly profilPPRepository: ProfilPPRepository,
+    @Inject(USER_REPOSITORY)
+    private readonly userRepository: UserRepository,
   ) {}
 
-  async execute(userId: number) {
-    const profil = await this.profilRepository.findProfilPPByUserId(userId);
+  async execute(userId: number): Promise<VueProfilPP> {
+    const [profil, compte] = await Promise.all([
+      this.profilPPRepository.findByUserId(userId),
+      this.userRepository.findById(userId),
+    ]);
     if (!profil) {
-      throw new NotFoundException('Profil PP non trouvé');
+      throw new ProfilPPIntrouvableError();
     }
-    return profil;
+    return vueProfilPP(profil, compte);
   }
 }

@@ -51,6 +51,14 @@ export class UserEntity {
   @Column({ type: 'varchar', nullable: true })
   userType: UserType | null;
 
+  /**
+   * Numéro de rappel du titulaire. Il vivait sur `profil_pp`, où il faisait
+   * doublon avec un compte qui n'en portait aucun — voir la migration
+   * `MoveIdentityToUser`.
+   */
+  @Column({ type: 'varchar', nullable: true })
+  telephone: string | null;
+
   @Column({ type: 'varchar', default: RegimeFiscal.PFU })
   regimeFiscal: RegimeFiscal;
 

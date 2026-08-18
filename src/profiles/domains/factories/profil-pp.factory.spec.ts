@@ -1,0 +1,98 @@
+import { CreerProfilPPProps, ProfilPPFactory } from './profil-pp.factory';
+import { ProfilPP } from 'src/profiles/domains/profil-pp';
+import { CategoriePsfp } from 'src/profiles/domains/enums/kyc-status.enum';
+import { ChampProfilInvalideError } from 'src/profiles/domains/errors';
+
+function creer(champs: Partial<CreerProfilPPProps> = {}): ProfilPP {
+  return ProfilPPFactory.creer({ utilisateurId: 42, ...champs });
+}
+
+/** Le champ fautif remonté au front, pour surligner la bonne entrée. */
+function champFautif(action: () => unknown): string {
+  try {
+    action();
+  } catch (error) {
+    if (error instanceof ChampProfilInvalideError) {
+      return (error.details as { field: string }).field;
+    }
+    throw error;
+  }
+  throw new Error('aucune erreur levée');
+}
+
+describe('ProfilPPFactory — répartition entre les blocs', () => {
+  it('confie chaque déclaration au bloc qui la porte', () => {
+    const profil = creer({
+      nationalite: 'ci',
+      ville: 'Abidjan',
+      profession: 'Ingénieur',
+      residenceFiscale: 'CI',
+      nif: '1234567890',
+    });
+
+    expect(profil.identite.nationalite).toBe('CI');
+    expect(profil.coordonnees.ville).toBe('Abidjan');
+    expect(profil.situationProfessionnelle.profession).toBe('Ingénieur');
+    expect(profil.situationFiscale.nif).toBe('1234567890');
+  });
+
+  it('laisse chaque bloc refuser sa part', () => {
+    // La fabrique ne valide rien elle-même hors de la clé : elle passe la main.
+    expect(champFautif(() => creer({ nationalite: 'ZZ' }))).toBe('nationalite');
+    expect(champFautif(() => creer({ codePostal: '1000', pays: 'FR' }))).toBe(
+      'codePostal',
+    );
+    expect(champFautif(() => creer({ nif: '1234567890' }))).toBe(
+      'residenceFiscale',
+    );
+  });
+
+  it("n'accepte plus l'état civil, qui appartient au compte", () => {
+    // `prenom`, `nom` et `telephone` ne sont plus des props : le dossier ne
+    // peut donc plus en garder une copie divergente de `user`.
+    const profil = creer({
+      prenom: 'Awa',
+      nom: 'Koné',
+      telephone: '0612345678',
+    } as unknown as Partial<CreerProfilPPProps>);
+
+    expect(Object.keys(profil.toJSON())).not.toContain('prenom');
+    expect(Object.keys(profil.toJSON())).not.toContain('telephone');
+  });
+});
+
+describe('ProfilPPFactory — ce que la fabrique décide seule', () => {
+  it('refuse un identifiant utilisateur qui ne désigne aucun compte', () => {
+    expect(champFautif(() => creer({ utilisateurId: 0 }))).toBe(
+      'utilisateurId',
+    );
+    expect(champFautif(() => creer({ utilisateurId: -1 }))).toBe(
+      'utilisateurId',
+    );
+  });
+
+  it('naît toujours non averti, quelle que soit la demande', () => {
+    const profil = creer({
+      // Le DTO ne propose pas la catégorie, mais un import ou un script
+      // pourrait la glisser : elle n'est tout simplement pas un paramètre.
+      categoriePsfp: CategoriePsfp.PROFESSIONNEL,
+      patrimoineDeclare: 10_000_000,
+    } as unknown as Partial<CreerProfilPPProps>);
+
+    expect(profil.categoriePsfp).toBe(CategoriePsfp.NON_AVERTI);
+    expect(profil.estNonAverti()).toBe(true);
+    expect(profil.patrimoineDeclare).toBeNull();
+  });
+
+  it('ne déclare personne politiquement exposé par défaut', () => {
+    expect(creer().estPep()).toBe(false);
+    expect(creer({ pep: true }).estPep()).toBe(true);
+  });
+
+  it('laisse la persistance attribuer les dates', () => {
+    const profil = creer();
+
+    expect(profil.createdAt).toBeUndefined();
+    expect(profil.updatedAt).toBeUndefined();
+  });
+});

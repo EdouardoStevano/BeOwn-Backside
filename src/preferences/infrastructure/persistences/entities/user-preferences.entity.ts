@@ -2,15 +2,17 @@ import {
   Column,
   CreateDateColumn,
   Entity,
-  JoinColumn,
-  OneToOne,
   PrimaryColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 
 @Entity('user_preferences')
 export class UserPreferencesEntity {
+  /**
+   * Le titulaire des réglages, **par identité seule** : la relation vers
+   * `UserEntity` n'était lue nulle part et faisait dépendre Preferences de
+   * l'infrastructure d'IAM (§12.7). La clé étrangère en base ne bouge pas.
+   */
   @PrimaryColumn()
   userId: number;
 
@@ -40,8 +42,4 @@ export class UserPreferencesEntity {
 
   @UpdateDateColumn()
   updatedAt: Date;
-
-  @OneToOne(() => UserEntity)
-  @JoinColumn({ name: 'userId' })
-  user: UserEntity;
 }

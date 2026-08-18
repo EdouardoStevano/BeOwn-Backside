@@ -106,6 +106,20 @@ export class AdminController {
     }
   }
 
+  /** Les comptes d'une page, indexés par id — une requête, pas une par ligne. */
+  private async usersByIds(
+    userIds: number[],
+  ): Promise<Map<number, UserEntity>> {
+    if (userIds.length === 0) return new Map();
+
+    const users = await this.userRepo.find({
+      where: { userId: In([...new Set(userIds)]) },
+      relations: ['userEmail'],
+    });
+
+    return new Map(users.map((u) => [u.userId, u]));
+  }
+
   private displayName(u: UserEntity): string {
     return (
       [u.firstname, u.lastname].filter(Boolean).join(' ') ||
@@ -568,27 +582,37 @@ export class AdminController {
 
     // KYC events
     if (all || type === 'kyc') {
+      // `KycEntity` n'a plus de relation vers `UserEntity` : le contexte
+      // Profiles référence son titulaire par identité seule, pour ne pas
+      // dépendre de l'infrastructure d'IAM. Le back-office, lui, est en aval
+      // des deux et compose ce que ni l'un ni l'autre ne publie — d'où les deux
+      // lectures ici, et non une jointure d'ORM à travers la frontière.
       tasks.push(
         this.kycRepo
-          .createQueryBuilder('k')
-          .innerJoinAndSelect('k.utilisateur', 'u')
-          .leftJoinAndSelect('u.userEmail', 'e')
-          .orderBy('k.updatedAt', 'DESC')
-          .limit(limit)
-          .getMany()
-          .then((rows) =>
-            rows.map((k) => ({
-              type: 'kyc',
-              userId: k.utilisateurId,
-              user: this.displayName(k.utilisateur),
-              email: k.utilisateur?.userEmail?.email ?? '',
-              action: this.kycActionLabel(k.statut),
-              detail: k.motifRefus ?? null,
-              status: this.kycActivityStatus(k.statut),
-              date: k.updatedAt,
-              time: this.relativeTime(k.updatedAt),
-            })),
-          ),
+          .find({ order: { updatedAt: 'DESC' }, take: limit })
+          .then(async (rows) => {
+            const titulaires = await this.usersByIds(
+              rows.map((k) => k.utilisateurId),
+            );
+            return rows
+              .map((k) => ({ k, u: titulaires.get(k.utilisateurId) }))
+              // Comme l'INNER JOIN d'avant : un dossier sans compte rattaché
+              // ne figure pas dans le flux d'activité.
+              .filter((ligne): ligne is { k: KycEntity; u: UserEntity } =>
+                Boolean(ligne.u),
+              )
+              .map(({ k, u }) => ({
+                type: 'kyc',
+                userId: k.utilisateurId,
+                user: this.displayName(u),
+                email: u.userEmail?.email ?? '',
+                action: this.kycActionLabel(k.statut),
+                detail: k.motifRefus ?? null,
+                status: this.kycActivityStatus(k.statut),
+                date: k.updatedAt,
+                time: this.relativeTime(k.updatedAt),
+              }));
+          }),
       );
     }
 

@@ -3,11 +3,8 @@ import {
   CreateDateColumn,
   Entity,
   Index,
-  JoinColumn,
-  ManyToOne,
   PrimaryGeneratedColumn,
 } from 'typeorm';
-import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 
 export enum NotificationCanal {
   EMAIL = 'email',
@@ -44,13 +41,15 @@ export class NotificationEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
+  /**
+   * Le destinataire, **par identité seule** — `null` pour une notification
+   * d'audience (diffusion). La relation vers `UserEntity` n'était chargée nulle
+   * part et faisait dépendre Notifications de l'infrastructure d'IAM (§12.7).
+   * La clé étrangère en base ne bouge pas.
+   */
   @Column({ type: 'integer', nullable: true })
   @Index()
   utilisateurId: number | null;
-
-  @ManyToOne(() => UserEntity, { nullable: true })
-  @JoinColumn({ name: 'utilisateurId' })
-  utilisateur: UserEntity;
 
   @Column({ type: 'varchar', nullable: true })
   canal: NotificationCanal | null;

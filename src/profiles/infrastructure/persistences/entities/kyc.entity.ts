@@ -3,12 +3,9 @@ import {
   CreateDateColumn,
   Entity,
   Index,
-  JoinColumn,
-  ManyToOne,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 import {
   KycNiveau,
   KycStatus,
@@ -19,13 +16,20 @@ export class KycEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
+  /**
+   * Le titulaire du dossier, **par identité seule**.
+   *
+   * C'était la dernière relation de ce contexte vers `UserEntity`, et la seule
+   * qui était réellement chargée : `findAll` la joignait pour que la liste
+   * d'administration affiche un nom. Profiles dépendait donc de
+   * l'infrastructure d'IAM pour un besoin d'affichage (§12.7).
+   *
+   * Le nom est désormais composé au-dessus, par le port `USER_REPOSITORY`
+   * (`GetKycUseCase.executeAll`). La clé étrangère en base est inchangée.
+   */
   @Column()
   @Index()
   utilisateurId: number;
-
-  @ManyToOne(() => UserEntity)
-  @JoinColumn({ name: 'utilisateurId' })
-  utilisateur: UserEntity;
 
   @Column({ type: 'varchar', default: KycStatus.NON_DEMARRE })
   statut: KycStatus;

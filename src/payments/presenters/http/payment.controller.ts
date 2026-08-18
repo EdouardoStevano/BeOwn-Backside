@@ -54,8 +54,12 @@ import { UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
 import { KycValidatedGuard } from 'src/common/auth/kyc-validated.guard';
 import { UpdateKycStatusUseCase } from 'src/profiles/applications/usecases/update-kyc-status.usecase';
-import { KycStatus, KycNiveau } from 'src/profiles/domains/enums/kyc-status.enum';
-import { PROFIL_REPOSITORY, type ProfilRepository } from 'src/profiles/applications/ports/repositories/profil.repository';
+import { CreateKycUseCase } from 'src/profiles/applications/usecases/create-kyc.usecase';
+import { KycStatus } from 'src/profiles/domains/enums/kyc-status.enum';
+import {
+  KYC_REPOSITORY,
+  type KycRepository,
+} from 'src/profiles/domains/ports/kyc.repository';
 import { Kyc } from 'src/profiles/domains/kyc';
 import { SkipThrottle } from '@nestjs/throttler';
 import { NotificationService } from 'src/notifications/applications/notification.service';
@@ -75,11 +79,12 @@ export class PaymentController {
     private readonly identityService: StripeIdentityServiceImpl,
     private readonly stripeConnect: StripeConnectService,
     private readonly updateKycStatus: UpdateKycStatusUseCase,
+    private readonly createKyc: CreateKycUseCase,
     private readonly notificationService: NotificationService,
     private readonly auditLog: AuditLogService,
     private readonly config: ConfigService,
-    @Inject(PROFIL_REPOSITORY)
-    private readonly profilRepository: ProfilRepository,
+    @Inject(KYC_REPOSITORY)
+    private readonly kycRepository: KycRepository,
     @InjectRepository(WalletEntity)
     private readonly walletRepo: Repository<WalletEntity>,
     @InjectRepository(TransactionEntity)
@@ -95,7 +100,7 @@ export class PaymentController {
   ): Promise<void> {
     if (hasPermission(user.role, 'kyc:validate')) return;
 
-    const kyc = await this.profilRepository.findKycByUserId(user.userId);
+    const kyc = await this.kycRepository.findByUserId(user.userId);
     if (kyc?.fournisseurRef === sessionId) return;
 
     throw new ForbiddenException('Acces refuse.');
@@ -315,20 +320,12 @@ export class PaymentController {
   @ApiResponse({ status: 201, description: 'Session KYC créée — rediriger vers url' })
   @Post('kyc/start')
   async startKyc(@CurrentUser() user: ActiveUser) {
-    // Find or create KYC record
-    let kyc = await this.profilRepository.findKycByUserId(user.userId);
-    if (!kyc) {
-      const newKyc = new Kyc();
-      newKyc.utilisateurId = user.userId;
-      newKyc.statut = KycStatus.NON_DEMARRE;
-      newKyc.niveau = KycNiveau.STANDARD;
-      newKyc.fournisseur = 'stripeIdentity';
-      newKyc.scoreRisque = null;
-      newKyc.fournisseurRef = null;
-      newKyc.valideJusquAu = null;
-      newKyc.motifRefus = null;
-      kyc = await this.profilRepository.saveKyc(newKyc);
-    }
+    // Find or create — le même chemin que POST /profiles/kyc/me. Le dossier
+    // était fabriqué ici à la main, huit affectations recopiées de
+    // `CreateKycUseCase` : ouvrir un dossier est un cas d'usage du contexte
+    // Profiles, pas l'affaire d'un contrôleur Payments (§12.5). Le use case est
+    // idempotent, d'où l'absence de test d'existence.
+    const kyc = await this.createKyc.execute(user.userId);
 
     // Create Stripe Identity session
     const session = await this.identityService.createVerificationSession(
@@ -337,7 +334,7 @@ export class PaymentController {
     );
 
     // Persist session ID — status stays NON_DEMARRE until Stripe confirms photo capture (processing event)
-    await this.profilRepository.updateKycSession(
+    await this.kycRepository.updateSession(
       kyc.id,
       session.sessionId,
       KycStatus.NON_DEMARRE,
@@ -351,7 +348,7 @@ export class PaymentController {
   @ApiResponse({ status: 200, description: 'URLs signées ou null si pas de KYC validé' })
   @Get('kyc/images/me')
   async getMyKycImages(@CurrentUser() user: ActiveUser) {
-    const kyc = await this.profilRepository.findKycByUserId(user.userId);
+    const kyc = await this.kycRepository.findByUserId(user.userId);
     if (!kyc?.identiteExtrait) return { available: false };
 
     const { documentFrontFileId, documentBackFileId, selfieFileId } = kyc.identiteExtrait as any;
@@ -381,7 +378,7 @@ export class PaymentController {
   async getKycImagesForUser(@Param('userId') userId: string) {
     const uid = parseInt(userId, 10);
     if (isNaN(uid)) throw new BadRequestException('userId invalide');
-    const kyc = await this.profilRepository.findKycByUserId(uid);
+    const kyc = await this.kycRepository.findByUserId(uid);
     if (!kyc?.identiteExtrait) return { available: false };
 
     const { documentFrontFileId, documentBackFileId, selfieFileId } = kyc.identiteExtrait as any;
@@ -590,7 +587,7 @@ export class PaymentController {
       );
       return null;
     }
-    const kyc = await this.profilRepository.findKycByUserId(userId);
+    const kyc = await this.kycRepository.findByUserId(userId);
     if (!kyc) {
       this.logger.warn(
         `Identity webhook: KYC introuvable pour userId=${userId} (session=${session?.id}) — no-op`,
@@ -679,7 +676,7 @@ export class PaymentController {
           : Promise.resolve(undefined),
       ]);
 
-      await this.profilRepository.updateKycReportData(kyc.id, reportData.reportId, {
+      await this.kycRepository.updateReportData(kyc.id, reportData.reportId, {
         nom: reportData.nom,
         prenom: reportData.prenom,
         dateNaissance: reportData.dateNaissance,

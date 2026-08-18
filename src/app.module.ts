@@ -7,6 +7,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { HealthController } from './health/health.controller';
 import { IamModule } from './iam/iam.module';
+import { AccountOverviewModule } from './account-overview/account-overview.module';
 import { IamInfrastructureModule } from './iam/infrastructure/iam-infrastructure.module';
 import { JwtAuthGuard } from './common/auth/jwt-auth.guard';
 import { AccountStatusGuard } from './common/auth/account-status.guard';
@@ -22,6 +23,7 @@ import { WalletsModule } from './wallets/applications/wallets.module';
 import { PaymentsModule } from './payments/payments.module';
 import { SecondaryMarketModule } from './secondarymarket/applications/secondary-market.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { PreferencesModule } from 'src/preferences/applications/preferences.module';
 import { DocumentsModule } from './documents/applications/documents.module';
 import { NotificationTestModule } from './common/test/notification-test.module';
 import { AdminModule } from './admin/admin.module';
@@ -100,7 +102,12 @@ function requireEnv(name: string): string {
     PaymentsModule,
     SecondaryMarketModule,
     NotificationsModule,
+    PreferencesModule,
     DocumentsModule,
+    // Module de composition, monté après les contextes qu'il assemble (IAM,
+    // Profiles, Preferences, Documents, Wallets) : il en dépend tous, et aucun
+    // ne dépend de lui. Sert `GET /users/me` et `GET /users/:id`.
+    AccountOverviewModule,
     AvisModule,
     NewsModule,
     KpiModule,

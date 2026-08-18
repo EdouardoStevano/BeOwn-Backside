@@ -2,31 +2,31 @@ import {
   Column,
   CreateDateColumn,
   Entity,
-  JoinColumn,
-  OneToOne,
   PrimaryColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 import { CategoriePsfp } from 'src/profiles/domains/enums/kyc-status.enum';
 
 @Entity('profil_personne_physique')
 export class ProfilPPEntity {
+  /**
+   * Le titulaire est référencé **par son identité seule** — pas par une
+   * relation vers `UserEntity`.
+   *
+   * La relation existait sans être lue nulle part, et coûtait un import de
+   * l'entité ORM d'IAM : Profiles dépendait donc de l'infrastructure d'un autre
+   * contexte pour une jointure qu'il ne faisait jamais (§12.7). Un agrégat
+   * référence un autre agrégat par identifiant, jamais par objet — la frontière
+   * d'agrégat est aussi la frontière du chargement.
+   *
+   * La clé étrangère en base est **inchangée** : elle est posée par migration,
+   * pas déduite de ce décorateur.
+   */
   @PrimaryColumn()
   utilisateurId: number;
 
-  @OneToOne(() => UserEntity)
-  @JoinColumn({ name: 'utilisateurId' })
-  utilisateur: UserEntity;
-
   @Column({ type: 'varchar', nullable: true })
   civilite: string | null;
-
-  @Column({ type: 'varchar' })
-  prenom: string;
-
-  @Column({ type: 'varchar' })
-  nom: string;
 
   @Column({ type: 'varchar', nullable: true })
   nomNaissance: string | null;
@@ -57,9 +57,6 @@ export class ProfilPPEntity {
 
   @Column({ type: 'char', length: 2, nullable: true })
   pays: string | null;
-
-  @Column({ type: 'varchar', nullable: true })
-  telephone: string | null;
 
   @Column({ type: 'varchar', nullable: true })
   profession: string | null;

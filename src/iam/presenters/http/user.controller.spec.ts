@@ -1,86 +1,79 @@
-import { NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { UserController } from 'src/iam/presenters/http/user.controller';
+import { UserType } from 'src/iam/domains/enums/user.enum';
+import { buildUser } from 'src/iam/domains/models/user.fixture';
 
 /**
- * Couvre le point sensible de DELETE /users/me : la confirmation du mot de
- * passe. Le hash de mot de passe vit sur une colonne `select: false`, donc la
- * vérification DOIT passer par findByIdWithPassword (findById laisse le hash à
- * undefined et casserait la suppression pour tous les comptes).
+ * Le contrôleur ne fait plus que router : ces tests vérifient qu'il passe les
+ * bons arguments au bon use case, et rien d'autre.
+ *
+ * Ce qu'il portait — confirmation du mot de passe, contrôle de rôle relu en
+ * base, composition du profil complet — est éprouvé là où il vit désormais :
+ * `delete-my-account.usecase.spec.ts`, `get-user-account.usecase.spec.ts`,
+ * `get-onboarding-status.usecase.spec.ts`.
+ *
+ * Les deux lectures composées ont leur propre contrôleur et leur propre
+ * fichier de test : `account-overview.controller.spec.ts`.
  */
-describe('UserController.deleteMe', () => {
-  let controller: UserController;
-  let userRepository: any;
-  let hashingService: any;
-  let deleteAccountUseCase: any;
-
+describe('UserController', () => {
   const activeUser = {
     userId: 42,
     email: 'jean@example.com',
     role: 'investisseur',
+  } as never;
+
+  const monter = () => {
+    const useCases = {
+      updateMyAccount: { execute: jest.fn().mockResolvedValue(buildUser()) },
+      declareUserType: { execute: jest.fn().mockResolvedValue(buildUser()) },
+      updateUserByAdmin: { execute: jest.fn().mockResolvedValue(buildUser()) },
+      deleteMyAccount: { execute: jest.fn().mockResolvedValue(undefined) },
+    };
+
+    const controller = new UserController(
+      useCases.updateMyAccount as never,
+      useCases.declareUserType as never,
+      useCases.updateUserByAdmin as never,
+      useCases.deleteMyAccount as never,
+    );
+
+    return { controller, useCases };
   };
 
-  beforeEach(() => {
-    userRepository = {
-      findById: jest.fn(),
-      findByIdWithPassword: jest.fn(),
-    };
-    hashingService = { compare: jest.fn() };
-    deleteAccountUseCase = { execute: jest.fn().mockResolvedValue(undefined) };
+  it('transmet le type déclaré', async () => {
+    const { controller, useCases } = monter();
 
-    controller = new UserController(
-      userRepository,
-      {} as any, // profilRepository
-      {} as any, // documentRepository
-      {} as any, // walletRepository
-      hashingService,
-      {} as any, // notificationEvents
-      deleteAccountUseCase,
+    await controller.setUserType(activeUser, { userType: UserType.PM });
+
+    expect(useCases.declareUserType.execute).toHaveBeenCalledWith(
+      42,
+      UserType.PM,
     );
   });
 
-  it('charge le hash via findByIdWithPassword (pas findById) et délègue au usecase avec le bon mot de passe', async () => {
-    userRepository.findByIdWithPassword.mockResolvedValue({
-      userId: 42,
-      password: '$2b$hash',
-      role: 'investisseur',
-    });
-    hashingService.compare.mockResolvedValue(true);
+  it("transmet l'auteur de la modification administrative", async () => {
+    const { controller, useCases } = monter();
 
-    await controller.deleteMe(activeUser as any, { password: 'bon-mdp' });
+    await controller.updateById(7, activeUser, { firstname: 'Awa' });
 
-    expect(userRepository.findByIdWithPassword).toHaveBeenCalledWith(42);
-    expect(userRepository.findById).not.toHaveBeenCalled();
-    expect(hashingService.compare).toHaveBeenCalledWith('bon-mdp', '$2b$hash');
-    expect(deleteAccountUseCase.execute).toHaveBeenCalledWith(42, {
-      userId: 42,
-      role: 'investisseur',
-    });
+    expect(useCases.updateUserByAdmin.execute).toHaveBeenCalledWith(
+      7,
+      { firstname: 'Awa' },
+      42,
+    );
   });
 
-  it('mauvais mot de passe → 401 avec code INVALID_PASSWORD, sans supprimer', async () => {
-    userRepository.findByIdWithPassword.mockResolvedValue({
-      userId: 42,
-      password: '$2b$hash',
-      role: 'investisseur',
+  it('ne fait pas transiter le mot de passe au-delà du use case', async () => {
+    const { controller, useCases } = monter();
+
+    const reponse = await controller.deleteMe(activeUser, {
+      password: 'bon-mdp',
     });
-    hashingService.compare.mockResolvedValue(false);
 
-    let caught: any;
-    try {
-      await controller.deleteMe(activeUser as any, { password: 'mauvais' });
-    } catch (e) {
-      caught = e;
-    }
-    expect(caught).toBeInstanceOf(UnauthorizedException);
-    expect(caught.getResponse()).toMatchObject({ code: 'INVALID_PASSWORD' });
-    expect(deleteAccountUseCase.execute).not.toHaveBeenCalled();
-  });
-
-  it('utilisateur introuvable → 404', async () => {
-    userRepository.findByIdWithPassword.mockResolvedValue(null);
-    await expect(
-      controller.deleteMe(activeUser as any, { password: 'x' }),
-    ).rejects.toBeInstanceOf(NotFoundException);
-    expect(deleteAccountUseCase.execute).not.toHaveBeenCalled();
+    expect(useCases.deleteMyAccount.execute).toHaveBeenCalledWith(
+      42,
+      'bon-mdp',
+    );
+    // 204 : le corps est vide, la suppression ne rend rien.
+    expect(reponse).toBeUndefined();
   });
 });

@@ -22,6 +22,8 @@ export class UserMapper {
       passwordHash: entity.password,
       role: entity.role,
       status: entity.status,
+      userType: entity.userType,
+      telephone: entity.telephone,
       cguAccepteesLe: entity.cguAccepteesLe,
       lastLoginAt: entity.lastLoginAt,
       createdAt: entity.createdAt,
@@ -48,6 +50,13 @@ export class UserMapper {
     // CREE → EMAIL_VERIFIE lors de la confirmation d'email) était perdu au
     // save(). Undefined reste ignoré par TypeORM (insert → défaut CREE).
     if (snapshot.status) entity.status = snapshot.status;
+    // Même raison que le statut : sans ce mapping, `User.declarerType()` ne
+    // laissait aucune trace en base — la colonne existait, l'agrégat aussi, et
+    // la valeur se perdait entre les deux.
+    if (snapshot.userType) entity.userType = snapshot.userType;
+    // `null` est une valeur ici — effacer son numéro doit s'écrire — donc pas
+    // de garde `if` : seul `undefined` laisserait TypeORM ignorer la colonne.
+    entity.telephone = snapshot.telephone;
 
     if (snapshot.email !== null) {
       const emailEntity = new UserEmailEntity();

@@ -2,21 +2,15 @@ import {
   Column,
   CreateDateColumn,
   Entity,
-  JoinColumn,
-  OneToOne,
   PrimaryColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 
 @Entity('profil_personne_morale')
 export class ProfilPMEntity {
+  /** @see ProfilPPEntity.utilisateurId — référence par identité, sans relation. */
   @PrimaryColumn()
   utilisateurId: number;
-
-  @OneToOne(() => UserEntity)
-  @JoinColumn({ name: 'utilisateurId' })
-  utilisateur: UserEntity;
 
   @Column({ type: 'varchar' })
   raisonSociale: string;

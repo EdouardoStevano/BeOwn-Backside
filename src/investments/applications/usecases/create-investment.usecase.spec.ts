@@ -24,7 +24,7 @@ describe('CreateInvestmentUseCase — atomicité', () => {
   let walletRepository: any;
   let documentRepository: any;
   let userRepository: any;
-  let profilRepository: any;
+  let profilPPRepository: any;
   let contractGenerator: any;
   let cloudStorage: any;
   let notificationService: any;
@@ -83,8 +83,8 @@ describe('CreateInvestmentUseCase — atomicité', () => {
         userEmail: { email: 'jean@example.com' },
       }),
     };
-    profilRepository = {
-      findProfilPPByUserId: jest.fn().mockResolvedValue(null),
+    profilPPRepository = {
+      findByUserId: jest.fn().mockResolvedValue(null),
     };
     contractGenerator = {
       generateBulletin: jest.fn().mockResolvedValue(Buffer.from('pdf')),
@@ -128,7 +128,7 @@ describe('CreateInvestmentUseCase — atomicité', () => {
       walletRepository,
       documentRepository,
       userRepository,
-      profilRepository,
+      profilPPRepository,
       contractGenerator,
       cloudStorage,
       notificationService,

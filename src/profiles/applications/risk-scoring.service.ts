@@ -1,59 +1,69 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, IsNull, LessThan } from 'typeorm';
-import { ProfilPPEntity } from '../infrastructure/persistences/entities/profil-pp.entity';
-import { QuestionnaireAdequationEntity } from '../infrastructure/persistences/entities/questionnaire-adequation.entity';
+import { NiveauRisque } from 'src/profiles/domains/enums/niveau-risque.enum';
+import {
+  PROFIL_PP_REPOSITORY,
+  type ProfilPPRepository,
+} from 'src/profiles/domains/ports/profil-pp.repository';
+import {
+  QUESTIONNAIRE_ADEQUATION_REPOSITORY,
+  type QuestionnaireAdequationRepository,
+} from 'src/profiles/domains/ports/questionnaire-adequation.repository';
+import { ProfilPP } from 'src/profiles/domains/profil-pp';
+import { prochainContactApres } from 'src/profiles/domains/services/suivi-investisseur.domain-service';
 
+/** Au-delà, la liste n'est plus exploitable à la main : elle est paginée côté admin. */
+const MAX_CONTACTS_DUS = 500;
+
+/**
+ * Surveillance périodique de la clientèle : à quel rythme reprendre la relation
+ * avec chaque investisseur, et qui est à contacter maintenant.
+ *
+ * Le service ne porte plus aucune règle. Le **niveau de risque** est déduit des
+ * réponses par `QuestionnaireAdequation.niveauRisque()` — il comparait ici
+ * `resultCategorie` à des chaînes nues — et la **cadence de contact** par
+ * `prochainContactApres`, où le niveau inconnu ne retombe plus silencieusement
+ * sur le suivi le plus lâche. Il ne reste ici que l'orchestration : lire,
+ * demander au domaine, écrire.
+ *
+ * Il n'injecte plus de `Repository` TypeORM : une classe de `applications/` ne
+ * connaît que des ports (§12.3).
+ */
 @Injectable()
 export class RiskScoringService {
   private readonly logger = new Logger(RiskScoringService.name);
 
   constructor(
-    @InjectRepository(ProfilPPEntity)
-    private readonly profilPPRepo: Repository<ProfilPPEntity>,
-    @InjectRepository(QuestionnaireAdequationEntity)
-    private readonly questionnaireRepo: Repository<QuestionnaireAdequationEntity>,
+    @Inject(PROFIL_PP_REPOSITORY)
+    private readonly profilPPRepository: ProfilPPRepository,
+    @Inject(QUESTIONNAIRE_ADEQUATION_REPOSITORY)
+    private readonly questionnaireRepository: QuestionnaireAdequationRepository,
   ) {}
 
-  /** Calcule et stocke le niveau de risque d'un investisseur. */
-  async computeAndStore(userId: number): Promise<string> {
-    const q = await this.questionnaireRepo.findOne({ where: { utilisateurId: userId } });
-    const niveau = this.score(q);
-    const next = this.nextContactDate(niveau);
-    await this.profilPPRepo.update(
-      { utilisateurId: userId },
-      { niveauRisque: niveau, prochainContactDu: next },
-    );
-    return niveau;
-  }
+  /**
+   * Calcule et stocke le niveau de risque d'un investisseur.
+   *
+   * Sans questionnaire, le titulaire est traité comme vulnérable : c'est le
+   * suivi le plus rapproché, et se tromper dans ce sens ne coûte qu'un contact
+   * de trop.
+   */
+  async computeAndStore(userId: number): Promise<NiveauRisque> {
+    const questionnaire =
+      await this.questionnaireRepository.findByUserId(userId);
+    const niveauRisque =
+      questionnaire?.niveauRisque() ?? NiveauRisque.VULNERABLE;
 
-  private score(q: QuestionnaireAdequationEntity | null): string {
-    if (!q) return 'vulnerable';
-    if (q.resultCategorie === 'professionnel') return 'qualifie';
-    if (q.resultCategorie === 'averti') return 'modere';
-    // non_averti — différencier par patrimoine
-    const patrimoine = Number(q.patrimoineNet ?? 0);
-    if (patrimoine >= 100_000) return 'modere';
-    return 'vulnerable';
-  }
+    await this.profilPPRepository.enregistrerSuiviRisque(userId, {
+      niveauRisque,
+      prochainContactDu: prochainContactApres(niveauRisque),
+    });
 
-  private nextContactDate(niveau: string): Date {
-    const next = new Date();
-    const monthsAhead = niveau === 'vulnerable' ? 3 : niveau === 'modere' ? 6 : 12;
-    next.setMonth(next.getMonth() + monthsAhead);
-    return next;
+    return niveauRisque;
   }
 
   /** Liste les investisseurs dont le prochain contact est dû (export Excel/CSV). */
-  async listDueContacts(): Promise<ProfilPPEntity[]> {
-    return this.profilPPRepo.find({
-      where: [
-        { prochainContactDu: LessThan(new Date()) },
-        { prochainContactDu: IsNull(), niveauRisque: 'vulnerable' },
-      ],
-      take: 500,
-    });
+  listDueContacts(): Promise<ProfilPP[]> {
+    return this.profilPPRepository.listerContactsDus(MAX_CONTACTS_DUS);
   }
 
   /** CRON quotidien : recalcule les contacts dus. */

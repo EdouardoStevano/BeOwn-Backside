@@ -1,7 +1,7 @@
 import {
   Body,
-  ConflictException,
   Controller,
+  Inject,
   ForbiddenException,
   Param,
   ParseIntPipe,
@@ -11,7 +11,6 @@ import {
   HttpStatus,
   Get,
   Query,
-  Inject,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -19,23 +18,27 @@ import {
   ApiResponse,
   ApiBearerAuth,
 } from '@nestjs/swagger';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
-import { UserRole } from 'src/iam/domains/enums/user.enum';
+import {
+  USER_REPOSITORY,
+  type UserRepository,
+} from 'src/iam/domains/ports/user.repository';
 import { CreateProfilPPUseCase } from 'src/profiles/applications/usecases/create-profil-pp.usecase';
 import { CreateKycUseCase } from 'src/profiles/applications/usecases/create-kyc.usecase';
-import { UpdateKycStatusUseCase } from 'src/profiles/applications/usecases/update-kyc-status.usecase';
+import { RequestKycManualReviewUseCase } from 'src/profiles/applications/usecases/request-kyc-manual-review.usecase';
+import { DecideKycManualReviewUseCase } from 'src/profiles/applications/usecases/decide-kyc-manual-review.usecase';
 import { GetProfilPPUseCase } from 'src/profiles/applications/usecases/get-profil-pp.usecase';
 import { UpdateProfilPPUseCase } from 'src/profiles/applications/usecases/update-profil-pp.usecase';
 import { CreateProfilPMUseCase } from 'src/profiles/applications/usecases/create-profil-pm.usecase';
+import { GetProfilPMUseCase } from 'src/profiles/applications/usecases/get-profil-pm.usecase';
+import { UpdateProfilPMUseCase } from 'src/profiles/applications/usecases/update-profil-pm.usecase';
 import { GetKycUseCase } from 'src/profiles/applications/usecases/get-kyc.usecase';
 import { SaveQuestionnaireUseCase } from 'src/profiles/applications/usecases/save-questionnaire.usecase';
-import { QuestionnaireAdequationEntity } from 'src/profiles/infrastructure/persistences/entities/questionnaire-adequation.entity';
+import { GetQuestionnaireUseCase } from 'src/profiles/applications/usecases/get-questionnaire.usecase';
 import {
   CreateProfilPPDto,
   UpdateKycStatusDto,
   CreateProfilPMDto,
+  UpdateProfilPMDto,
 } from '../dto/profil.dto';
 import { SaveQuestionnaireDto } from '../dto/questionnaire.dto';
 import { CurrentUser } from 'src/common/auth/current-user.decorator';
@@ -43,29 +46,10 @@ import type { ActiveUser } from 'src/common/auth/current-user.decorator';
 import { UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
 import { RequirePermission } from 'src/common/auth/require-permission.decorator';
-import {
-  hasPermission,
-  rolesWithPermission,
-} from 'src/common/auth/permissions.constants';
-import { NotificationService } from 'src/notifications/applications/notification.service';
-import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
-import { NotificationEventService } from 'src/notifications/applications/notification-event.service';
-import { KycStatus } from 'src/profiles/domains/enums/kyc-status.enum';
+import { rolesWithPermission } from 'src/common/auth/permissions.constants';
 
 /** Rôles détenant `kyc:validate` — Compliance (+ super_admin via wildcard). */
 const KYC_REVIEWER_ROLES: string[] = rolesWithPermission('kyc:validate');
-
-/**
- * Le KYC est validé AUTOMATIQUEMENT par Stripe Identity (voir webhook
- * `identity.verification_session.verified` dans PaymentController). L'admin
- * n'intervient QUE lorsque Stripe n'a pas pu vérifier automatiquement — le
- * dossier passe alors en revue manuelle (EN_REVUE) et l'utilisateur est invité
- * à renvoyer ses documents. Cette route est donc réservée aux dossiers
- * EN_REVUE : un dossier déjà auto-validé (ou pas encore soumis) est en
- * lecture seule pour l'admin.
- */
-const KYC_MANUAL_REVIEW_REQUIRED_MESSAGE =
-  "Ce dossier n'est pas en revue manuelle : il a été validé automatiquement par Stripe Identity, ou n'a pas encore été soumis pour vérification. Seuls les dossiers en revue manuelle peuvent faire l'objet d'une décision manuelle.";
 
 @ApiTags('Profiles & KYC')
 @ApiBearerAuth()
@@ -75,94 +59,64 @@ export class ProfileController {
   constructor(
     private readonly createProfilPP: CreateProfilPPUseCase,
     private readonly createKyc: CreateKycUseCase,
-    private readonly updateKycStatus: UpdateKycStatusUseCase,
+    private readonly requestKycManualReview: RequestKycManualReviewUseCase,
+    private readonly decideKycManualReview: DecideKycManualReviewUseCase,
     private readonly getProfilPP: GetProfilPPUseCase,
     private readonly updateProfilPP: UpdateProfilPPUseCase,
     private readonly createProfilPM: CreateProfilPMUseCase,
+    private readonly getProfilPM: GetProfilPMUseCase,
+    private readonly updateProfilPM: UpdateProfilPMUseCase,
     private readonly getKyc: GetKycUseCase,
     private readonly saveQuestionnaireUseCase: SaveQuestionnaireUseCase,
-    @InjectRepository(QuestionnaireAdequationEntity)
-    private readonly questionnaireRepo: Repository<QuestionnaireAdequationEntity>,
-    @InjectRepository(UserEntity)
-    private readonly userRepo: Repository<UserEntity>,
-    private readonly notifications: NotificationService,
-    private readonly notificationEvents: NotificationEventService,
+    private readonly getQuestionnaire: GetQuestionnaireUseCase,
+    // Port du contexte IAM : le contrôleur relit le rôle du compte, il n'a pas
+    // à connaître la table qui le porte (§12.9).
+    @Inject(USER_REPOSITORY)
+    private readonly userRepository: UserRepository,
   ) {}
 
   /** Défense en profondeur : mutation KYC réservée à `kyc:validate` (Compliance + super_admin). */
   private async assertKycReviewer(user: ActiveUser): Promise<void> {
-    const u = await this.userRepo.findOne({ where: { userId: user.userId } });
-    if (!u || !KYC_REVIEWER_ROLES.includes(u.role)) {
+    const compte = await this.userRepository.findById(user.userId);
+    if (!compte || !KYC_REVIEWER_ROLES.includes(compte.role)) {
       throw new ForbiddenException(
-        "Action réservée aux équipes admin / compliance.",
+        'Action réservée aux équipes admin / compliance.',
       );
     }
   }
 
-  /** Auto-accès (son propre dossier) ou permission kyc:validate. */
-  private assertSelfOrKycReviewer(user: ActiveUser, targetUserId: number): void {
-    if (String(user.userId) === String(targetUserId)) return;
-    if (!hasPermission(user.role, 'kyc:validate')) {
-      throw new ForbiddenException('Accès réservé.');
-    }
-  }
-
-  @ApiOperation({ summary: 'Créer le profil personne physique' })
+  @ApiOperation({ summary: 'Créer mon profil personne physique' })
   @ApiResponse({ status: 201, description: 'Profil PP créé' })
   @ApiResponse({ status: 409, description: 'Profil déjà existant' })
-  @Post(':userId/pp')
-  createPP(
-    @Param('userId', ParseIntPipe) userId: number,
-    @Body() dto: CreateProfilPPDto,
-    @CurrentUser() user: ActiveUser,
-  ) {
-    this.assertSelfOrKycReviewer(user, userId);
-    return this.createProfilPP.execute(userId, dto);
+  @Post('pp/me')
+  createPP(@CurrentUser() user: ActiveUser, @Body() dto: CreateProfilPPDto) {
+    return this.createProfilPP.execute(user.userId, dto);
   }
 
-  @ApiOperation({ summary: 'Initialiser le dossier KYC' })
+  @ApiOperation({ summary: 'Initialiser mon dossier KYC' })
   @ApiResponse({ status: 201, description: 'KYC créé' })
-  @Post(':userId/kyc')
-  initKyc(
-    @Param('userId', ParseIntPipe) userId: number,
-    @CurrentUser() user: ActiveUser,
-  ) {
-    this.assertSelfOrKycReviewer(user, userId);
-    return this.createKyc.execute(userId);
+  @Post('kyc/me')
+  initKyc(@CurrentUser() user: ActiveUser) {
+    return this.createKyc.execute(user.userId);
   }
 
   @ApiOperation({
-    summary: 'Demander une revue manuelle du KYC (dépôt manuel de documents)',
+    summary: 'Passer mon KYC en revue manuelle (dépôt manuel de documents)',
     description:
       "Fallback quand la vérification automatique Stripe Identity n'aboutit " +
-      "pas (pas de réponse webhook, statut bloqué). Après téléversement manuel " +
+      'pas (pas de réponse webhook, statut bloqué). Après téléversement manuel ' +
       "de la pièce d'identité + selfie, l'utilisateur passe son dossier en " +
       'revue manuelle (EN_REVUE) ; la compliance est notifiée pour décision ' +
       'via la route de décision manuelle existante.',
   })
   @ApiResponse({ status: 200, description: 'Dossier passé en revue manuelle' })
   @HttpCode(HttpStatus.OK)
-  @Post(':userId/kyc/manual-review')
-  async requestManualReview(
-    @Param('userId', ParseIntPipe) userId: number,
-    @CurrentUser() user: ActiveUser,
-  ) {
-    this.assertSelfOrKycReviewer(user, userId);
-    const updated = await this.updateKycStatus.execute(
-      userId,
-      KycStatus.EN_REVUE,
-      'Dépôt manuel de documents — revue requise',
-    );
-    this.notifications
-      .pushToAdmins({
-        type: NotificationType.KYC_REVUE_MANUELLE,
-        titre: 'KYC en revue manuelle',
-        message: `Un utilisateur (#${userId}) a déposé ses documents manuellement — dossier à valider.`,
-        roles: [UserRole.COMPLIANCE, UserRole.SUPER_ADMIN],
-        metadata: { userId },
-      })
-      .catch(() => {});
-    return updated;
+  @Post('kyc/me/manual-review')
+  requestManualReview(@CurrentUser() user: ActiveUser) {
+    // L'alerte de la compliance a suivi le dossier : elle est déclenchée par
+    // `KycRevueManuelleDemandeeEventHandler`, abonné au fait métier levé par le
+    // use case. Le contrôleur ne sait plus quels rôles prévenir (§12.5).
+    return this.requestKycManualReview.execute(user.userId);
   }
 
   @ApiOperation({
@@ -170,13 +124,19 @@ export class ProfileController {
     description:
       'Le KYC est validé automatiquement par Stripe Identity. Cette route ' +
       "n'agit que sur les dossiers passés en revue manuelle (EN_REVUE) suite " +
-      "à un échec de la vérification automatique — un dossier auto-validé " +
-      'ou pas encore soumis est en lecture seule pour l\'admin (409).',
+      'à un échec de la vérification automatique — un dossier auto-validé ' +
+      "ou pas encore soumis est en lecture seule pour l'admin (409).",
   })
   @ApiResponse({ status: 200, description: 'Statut KYC mis à jour' })
-  @ApiResponse({ status: 403, description: 'Réservé aux équipes admin / compliance' })
+  @ApiResponse({
+    status: 403,
+    description: 'Réservé aux équipes admin / compliance',
+  })
   @ApiResponse({ status: 404, description: 'KYC introuvable' })
-  @ApiResponse({ status: 409, description: "Dossier pas en revue manuelle — décision manuelle impossible" })
+  @ApiResponse({
+    status: 409,
+    description: 'Dossier pas en revue manuelle — décision manuelle impossible',
+  })
   @HttpCode(HttpStatus.OK)
   @RequirePermission('kyc:validate')
   @Patch(':userId/kyc/status')
@@ -185,46 +145,18 @@ export class ProfileController {
     @Body() dto: UpdateKycStatusDto,
     @CurrentUser() currentUser: ActiveUser,
   ) {
+    // La seule chose que la présentation garde de cette route : vérifier qui
+    // appelle. Le reste — dossier réservé aux revues manuelles, écriture du
+    // statut, annonce au titulaire et trace d'audit — appartient au use case et
+    // à ses abonnés (§12.5).
     await this.assertKycReviewer(currentUser);
 
-    // Fallback manuel réservé aux dossiers en revue manuelle : la validation
-    // auto (Stripe Identity) rend un dossier déjà VALIDE en lecture seule, et
-    // un dossier pas encore soumis n'a rien à décider.
-    const current = await this.getKyc.execute(userId);
-    if (current.statut !== KycStatus.EN_REVUE) {
-      throw new ConflictException(KYC_MANUAL_REVIEW_REQUIRED_MESSAGE);
-    }
-
-    const updated = await this.updateKycStatus.execute(userId, dto.status, dto.motifRefus);
-
-    if (dto.status === KycStatus.VALIDE) {
-      this.notifications
-        .push({
-          utilisateurId: userId,
-          type: NotificationType.KYC_VALIDE,
-          titre: 'KYC validé',
-          message:
-            'Votre KYC a été validé. Vous pouvez désormais investir sur BeOwn.',
-          metadata: { decidedAt: new Date().toISOString() },
-        })
-        .catch(() => {});
-      this.notificationEvents.kycValidatedByAdmin(userId, currentUser.userId);
-    } else if (dto.status === KycStatus.REFUSE) {
-      this.notifications
-        .push({
-          utilisateurId: userId,
-          type: NotificationType.KYC_REJETE,
-          titre: 'KYC refusé',
-          message: dto.motifRefus
-            ? `Votre KYC a été refusé : ${dto.motifRefus}`
-            : 'Votre KYC a été refusé. Merci de mettre à jour votre dossier.',
-          metadata: { motifRefus: dto.motifRefus ?? null },
-        })
-        .catch(() => {});
-      this.notificationEvents.kycRejectedByAdmin(userId, dto.motifRefus ?? '—', currentUser.userId);
-    }
-
-    return updated;
+    return this.decideKycManualReview.execute({
+      utilisateurId: userId,
+      decision: dto.status,
+      motifRefus: dto.motifRefus,
+      decidePar: currentUser.userId,
+    });
   }
 
   @ApiOperation({ summary: 'Obtenir mon profil PP' })
@@ -244,11 +176,37 @@ export class ProfileController {
     return this.updateProfilPP.execute(user.userId, dto);
   }
 
-  @ApiOperation({ summary: 'Créer le profil personne morale' })
+  @ApiOperation({ summary: 'Créer mon profil personne morale' })
   @ApiResponse({ status: 201, description: 'Profil PM créé' })
   @Post('pm/me')
   createPM(@CurrentUser() user: ActiveUser, @Body() dto: CreateProfilPMDto) {
     return this.createProfilPM.execute(user.userId, dto);
+  }
+
+  @ApiOperation({ summary: 'Obtenir le détail de mon profil personne morale' })
+  @ApiResponse({ status: 200, description: 'Profil PM retourné' })
+  @ApiResponse({ status: 404, description: 'Aucun profil PM pour ce compte' })
+  @Get('pm/me')
+  getMyProfilePM(@CurrentUser() user: ActiveUser) {
+    return this.getProfilPM.execute(user.userId);
+  }
+
+  @ApiOperation({
+    summary: 'Mettre à jour mon profil personne morale',
+    description:
+      'Mise à jour partielle : seuls les champs présents dans le corps sont ' +
+      'modifiés, `null` efface la valeur. La raison sociale ne peut pas être ' +
+      'effacée — une société sans dénomination ne désigne personne.',
+  })
+  @ApiResponse({ status: 200, description: 'Profil PM mis à jour' })
+  @ApiResponse({ status: 400, description: 'Donnée déclarée invalide' })
+  @ApiResponse({ status: 404, description: 'Aucun profil PM pour ce compte' })
+  @Patch('pm/me')
+  updateMyProfilePM(
+    @CurrentUser() user: ActiveUser,
+    @Body() dto: UpdateProfilPMDto,
+  ) {
+    return this.updateProfilPM.execute(user.userId, dto);
   }
 
   @ApiOperation({ summary: 'Obtenir mon KYC' })
@@ -259,13 +217,13 @@ export class ProfileController {
   }
 
   @ApiOperation({ summary: 'Lister tous les KYC (admin)' })
-  @ApiResponse({ status: 200, description: 'Liste paginée des KYC avec données utilisateur' })
+  @ApiResponse({
+    status: 200,
+    description: 'Liste paginée des KYC avec données utilisateur',
+  })
   @RequirePermission('kyc:validate')
   @Get('kyc/all')
-  listAllKyc(
-    @Query('page') page?: string,
-    @Query('limit') limit?: string,
-  ) {
+  listAllKyc(@Query('page') page?: string, @Query('limit') limit?: string) {
     return this.getKyc.executeAll({
       page: page ? parseInt(page, 10) : 1,
       limit: limit ? parseInt(limit, 10) : 20,
@@ -273,7 +231,10 @@ export class ProfileController {
   }
 
   @ApiOperation({ summary: "Sauvegarder le questionnaire d'adéquation PSFP" })
-  @ApiResponse({ status: 201, description: 'Questionnaire enregistré, catégorie et plafond calculés' })
+  @ApiResponse({
+    status: 201,
+    description: 'Questionnaire enregistré, catégorie et plafond calculés',
+  })
   @Post('questionnaire')
   saveQuestionnaire(
     @CurrentUser() user: ActiveUser,
@@ -286,6 +247,6 @@ export class ProfileController {
   @ApiResponse({ status: 200, description: 'Questionnaire retourné' })
   @Get('questionnaire/me')
   getMyQuestionnaire(@CurrentUser() user: ActiveUser) {
-    return this.questionnaireRepo.findOne({ where: { utilisateurId: user.userId } });
+    return this.getQuestionnaire.execute(user.userId);
   }
 }
