@@ -16,7 +16,6 @@ import {
 } from 'src/iam/domains/models/mfa-method';
 
 import { AuthMailerService } from 'src/iam/applications/services/auth-mailer.service';
-import type { MfaMethodRepository } from 'src/iam/domains/ports/mfa-method.repository';
 import { OtpService } from 'src/iam/applications/services/otp/otp.service';
 import type { SecretCipher } from 'src/iam/applications/ports/secret-cipher.port';
 import type { TotpGenerator } from 'src/iam/applications/ports/totp-generator.port';
@@ -45,24 +44,27 @@ const makeOtpStore = () => ({
   invalidate: jest.fn().mockResolvedValue(undefined),
 });
 
-const makeChannelRepository = (methods: MfaMethod[] = []) => ({
-  create: jest.fn().mockResolvedValue(1),
-  findAllByUserId: jest.fn().mockResolvedValue(methods),
-  deletePendingForUser: jest.fn().mockResolvedValue(undefined),
-  deactivateChannel: jest.fn().mockResolvedValue(undefined),
-  deactivateAll: jest.fn().mockResolvedValue(undefined),
-  activate: jest.fn().mockResolvedValue(undefined),
-});
-
-const makeUserRepository = (email = ACCOUNT_EMAIL) => ({
-  findById: jest.fn().mockResolvedValue(buildUser({ email })),
-  findByEmail: jest.fn(),
-  save: jest.fn(),
-  update: jest.fn(),
-  findOneBySocialId: jest.fn(),
-  findPreferences: jest.fn(),
-  savePreferences: jest.fn(),
-});
+/**
+ * Un seul port, celui du compte : les facteurs sont ses entites, et c'est en
+ * sauvegardant le compte qu'on les enregistre. Les assertions portent donc sur
+ * l'agregat capture dans `update`, et non plus sur les appels d'un repository
+ * de facteurs qui n'existe plus.
+ */
+const makeUserRepository = (
+  methods: MfaMethod[] = [],
+  email = ACCOUNT_EMAIL,
+) => {
+  const compte = buildUser({ email, facteurs: methods });
+  return {
+    compte,
+    findById: jest.fn().mockResolvedValue(compte),
+    findByIdWithFacteurs: jest.fn().mockResolvedValue(compte),
+    findByEmail: jest.fn(),
+    save: jest.fn(),
+    update: jest.fn((u: unknown) => Promise.resolve(u)),
+    findOneBySocialId: jest.fn(),
+  };
+};
 
 /** Requête d'enrôlement nominale — le canal est une donnée, pas une route. */
 const request = (
@@ -126,8 +128,7 @@ describe('EnrollMfaUseCase — résolution du canal', () => {
 describe('EmailEnrollmentStrategy', () => {
   const makeStrategy = (methods: MfaMethod[] = [], email = ACCOUNT_EMAIL) => {
     const otpService = makeOtpStore();
-    const methodRepository = makeChannelRepository(methods);
-    const userRepository = makeUserRepository(email);
+    const userRepository = makeUserRepository(methods, email);
     const authMailer = {
       sendEmailVerificationLink: jest.fn().mockResolvedValue(undefined),
       sendLoginOtp: jest.fn().mockResolvedValue(undefined),
@@ -135,18 +136,11 @@ describe('EmailEnrollmentStrategy', () => {
 
     const strategy = new EmailEnrollmentStrategy(
       otpService as unknown as OtpService,
-      methodRepository as unknown as MfaMethodRepository,
       userRepository as unknown as UserRepository,
       authMailer as unknown as AuthMailerService,
     );
 
-    return {
-      strategy,
-      otpService,
-      methodRepository,
-      userRepository,
-      authMailer,
-    };
+    return { strategy, otpService, userRepository, authMailer };
   };
 
   it("envoie le code à l'adresse du compte, jamais à celle du body", async () => {
@@ -181,26 +175,30 @@ describe('EmailEnrollmentStrategy', () => {
   });
 
   it('purge les enrôlements abandonnés avant de créer la méthode en attente', async () => {
-    const { strategy, methodRepository } = makeStrategy();
+    // Un seul enrolement en attente par canal : la purge et la creation sont
+    // desormais la meme operation sur l'agregat, donc indissociables.
+    const abandonne = MfaMethod.rehydrate({
+      id: 3,
+      isActive: false,
+      method: MfaMethodType.EMAIL,
+      credential: ACCOUNT_EMAIL,
+    });
+    const { strategy, userRepository } = makeStrategy([abandonne]);
 
     await strategy.start(request());
 
-    expect(methodRepository.deletePendingForUser).toHaveBeenCalledWith(
-      USER_ID,
+    const enAttente = userRepository.compte.facteurEnAttente(
       MfaMethodType.EMAIL,
     );
-    expect(methodRepository.create).toHaveBeenCalledWith(
-      USER_ID,
-      MfaMethodType.EMAIL,
-      ACCOUNT_EMAIL,
-    );
-    expect(
-      methodRepository.deletePendingForUser.mock.invocationCallOrder[0],
-    ).toBeLessThan(methodRepository.create.mock.invocationCallOrder[0]);
+    expect(enAttente).not.toBeNull();
+    // Le nouveau, pas l'ancien : celui-ci n'a pas encore d'identifiant.
+    expect(enAttente?.id).toBeNull();
+    expect(userRepository.compte.facteurs).toHaveLength(1);
+    expect(userRepository.update).toHaveBeenCalledWith(userRepository.compte);
   });
 
   it('refuse de réenrôler un canal déjà actif sur la même destination', async () => {
-    const { strategy, methodRepository } = makeStrategy([
+    const { strategy, userRepository } = makeStrategy([
       MfaMethod.rehydrate({
         id: 1,
         isActive: true,
@@ -212,11 +210,11 @@ describe('EmailEnrollmentStrategy', () => {
     await expect(strategy.start(request())).rejects.toBeInstanceOf(
       MfaMethodAlreadyEnrolledError,
     );
-    expect(methodRepository.create).not.toHaveBeenCalled();
+    expect(userRepository.update).not.toHaveBeenCalled();
   });
 
   it('réémet un code même si le précédent est encore valide', async () => {
-    const { strategy, otpService, methodRepository } = makeStrategy();
+    const { strategy, otpService, userRepository } = makeStrategy();
     otpService.hasActiveOtp.mockResolvedValue(true);
 
     // Rappeler `start` est le moyen de redemander un code quand le premier
@@ -225,7 +223,7 @@ describe('EmailEnrollmentStrategy', () => {
       method: MfaMethodType.EMAIL,
     });
     expect(otpService.generateOtp).toHaveBeenCalled();
-    expect(methodRepository.create).toHaveBeenCalled();
+    expect(userRepository.update).toHaveBeenCalled();
   });
 
   it("invalide l'OTP si la remise échoue, pour autoriser un retry immédiat", async () => {
@@ -263,7 +261,7 @@ describe('EmailEnrollmentStrategy', () => {
   });
 
   it("n'active rien si le code de confirmation est faux", async () => {
-    const { strategy, otpService, methodRepository } = makeStrategy([
+    const { strategy, otpService, userRepository } = makeStrategy([
       MfaMethod.rehydrate({
         id: 7,
         isActive: false,
@@ -280,8 +278,8 @@ describe('EmailEnrollmentStrategy', () => {
         otp: '000000',
       }),
     ).rejects.toBeInstanceOf(InvalidOtpCodeError);
-    expect(methodRepository.activate).not.toHaveBeenCalled();
-    expect(methodRepository.deactivateAll).not.toHaveBeenCalled();
+    expect(userRepository.compte.facteurActif()).toBeNull();
+    expect(userRepository.update).not.toHaveBeenCalled();
   });
 
   it('désarme les facteurs des AUTRES canaux en activant celui-ci', async () => {
@@ -290,12 +288,18 @@ describe('EmailEnrollmentStrategy', () => {
     // qu'on enrôle — sinon un compte protégé par TOTP qui enrôle l'email
     // garderait les deux armés, et le plus faible resterait un chemin d'entrée
     // ouvert à son insu.
-    const { strategy, methodRepository } = makeStrategy([
+    const { strategy, userRepository } = makeStrategy([
       MfaMethod.rehydrate({
         id: 7,
         isActive: false,
         method: MfaMethodType.EMAIL,
         credential: ACCOUNT_EMAIL,
+      }),
+      MfaMethod.rehydrate({
+        id: 9,
+        isActive: true,
+        method: MfaMethodType.TOTP,
+        credential: 'secret-chiffre',
       }),
     ]);
 
@@ -305,14 +309,19 @@ describe('EmailEnrollmentStrategy', () => {
       otp: '123456',
     });
 
-    expect(methodRepository.deactivateAll).toHaveBeenCalledWith(USER_ID);
-    // Et surtout : pas de désactivation bornée au canal, qui laisserait
-    // survivre le facteur d'un autre canal.
-    expect(methodRepository.deactivateChannel).not.toHaveBeenCalled();
+    // Le TOTP qui protegeait le compte est desarme : l'invariant est tenu par
+    // l'agregat, et non plus par un `deactivateAll` que chaque appelant devait
+    // penser a lancer avant d'activer.
+    expect(userRepository.compte.facteursActifsDe(MfaMethodType.TOTP)).toEqual(
+      [],
+    );
+    expect(userRepository.compte.facteurActif()?.method).toBe(
+      MfaMethodType.EMAIL,
+    );
   });
 
   it('fait de la méthode confirmée la seule méthode active du canal', async () => {
-    const { strategy, methodRepository } = makeStrategy([
+    const { strategy, userRepository } = makeStrategy([
       MfaMethod.rehydrate({
         id: 7,
         isActive: false,
@@ -333,17 +342,16 @@ describe('EmailEnrollmentStrategy', () => {
       otp: '123456',
     });
 
-    expect(methodRepository.activate).toHaveBeenCalledWith(7);
-    expect(
-      methodRepository.deactivateAll.mock.invocationCallOrder[0],
-    ).toBeLessThan(methodRepository.activate.mock.invocationCallOrder[0]);
+    const actifs = userRepository.compte.facteursActifsDe(MfaMethodType.EMAIL);
+    expect(actifs).toHaveLength(1);
+    expect(actifs[0].id).toBe(7);
   });
 });
 
 describe('SmsEnrollmentStrategy — destination', () => {
   const makeStrategy = (methods: MfaMethod[] = []) => {
     const otpService = makeOtpStore();
-    const methodRepository = makeChannelRepository(methods);
+    const userRepository = makeUserRepository(methods);
     const smsService = {
       sendOtp: jest.fn().mockResolvedValue(undefined),
       sendTransactional: jest.fn().mockResolvedValue(undefined),
@@ -351,11 +359,11 @@ describe('SmsEnrollmentStrategy — destination', () => {
 
     const strategy = new SmsEnrollmentStrategy(
       otpService as unknown as OtpService,
-      methodRepository as unknown as MfaMethodRepository,
+      userRepository as unknown as UserRepository,
       smsService as unknown as SmsService,
     );
 
-    return { strategy, otpService, methodRepository, smsService };
+    return { strategy, otpService, userRepository, smsService };
   };
 
   it('exige un numéro : le compte ne porte pas de téléphone', async () => {
@@ -377,17 +385,16 @@ describe('SmsEnrollmentStrategy — destination', () => {
   it('normalise le numéro avant de le persister et de l’appeler', async () => {
     // Sans normalisation, « +33 6 12 34 56 78 » et « +33612345678 »
     // créeraient deux enrôlements distincts pour la même ligne.
-    const { strategy, methodRepository, smsService } = makeStrategy();
+    const { strategy, userRepository, smsService } = makeStrategy();
 
     const challenge = await strategy.start(
       request({ method: MfaMethodType.SMS, phone: '+33 6 12 34 56 78' }),
     );
 
-    expect(methodRepository.create).toHaveBeenCalledWith(
-      USER_ID,
-      MfaMethodType.SMS,
-      '+33612345678',
-    );
+    // Le facteur enrôlé porte le numéro normalisé : c'est le compte qui le
+    // garde, et c'est lui qu'on sauvegarde.
+    const enrole = userRepository.compte.facteurEnAttente(MfaMethodType.SMS);
+    expect(enrole?.destination).toBe('+33612345678');
     expect(smsService.sendOtp).toHaveBeenCalledWith('+33612345678', '123456');
     expect(challenge.sentTo).toBe('+33612345678');
   });
@@ -419,21 +426,13 @@ describe('TotpEnrollmentStrategy', () => {
       buildUri: jest.fn().mockReturnValue('otpauth://totp/x'),
       verify: jest.fn().mockResolvedValue(false),
     };
-    const totpMethodRepository = {
-      create: jest.fn().mockResolvedValue(undefined),
-      findAllByUserId: jest.fn().mockResolvedValue(methods),
-      deletePendingForUser: jest.fn().mockResolvedValue(undefined),
-      deactivateChannel: jest.fn().mockResolvedValue(undefined),
-      deactivateAll: jest.fn().mockResolvedValue(undefined),
-      activate: jest.fn().mockResolvedValue(undefined),
-    };
     const secretCipher = {
       encrypt: jest.fn((plaintext: string) => `enc(${plaintext})`),
       decrypt: jest.fn((ciphertext: string) =>
         ciphertext.replace(/^enc\(|\)$/g, ''),
       ),
     };
-    const userRepository = makeUserRepository();
+    const userRepository = makeUserRepository(methods);
     const authMailer = {
       sendTotpQrCode: jest.fn().mockResolvedValue(undefined),
     };
@@ -446,7 +445,6 @@ describe('TotpEnrollmentStrategy', () => {
       totpSecrets as unknown as TotpSecretService,
       totpGenerator as unknown as TotpGenerator,
       userRepository as unknown as UserRepository,
-      totpMethodRepository as unknown as MfaMethodRepository,
       secretCipher as unknown as SecretCipher,
       authMailer as unknown as AuthMailerService,
       configService as unknown as ConfigService,
@@ -456,7 +454,6 @@ describe('TotpEnrollmentStrategy', () => {
       strategy,
       totpSecrets,
       totpGenerator,
-      totpMethodRepository,
       secretCipher,
       authMailer,
       configService,
@@ -513,7 +510,7 @@ describe('TotpEnrollmentStrategy', () => {
     });
 
     it('conserve l’enrôlement quand l’envoi échoue', async () => {
-      const { strategy, authMailer, configService, totpMethodRepository } =
+      const { strategy, authMailer, configService, userRepository } =
         makeStrategy();
       configService.get.mockImplementation(env({ TOTP_QR_EMAIL: 'true' }));
       authMailer.sendTotpQrCode.mockRejectedValue(new Error('SMTP down'));
@@ -523,12 +520,12 @@ describe('TotpEnrollmentStrategy', () => {
       await expect(
         strategy.start(request({ method: MfaMethodType.TOTP })),
       ).resolves.toMatchObject({ secret: 'PLAIN-SECRET' });
-      expect(totpMethodRepository.create).toHaveBeenCalled();
+      expect(userRepository.update).toHaveBeenCalled();
     });
   });
 
   it('rend le secret en clair à scanner mais ne persiste que sa version chiffrée', async () => {
-    const { strategy, totpMethodRepository, secretCipher } = makeStrategy();
+    const { strategy, userRepository, secretCipher } = makeStrategy();
 
     const challenge = await strategy.start(
       request({ method: MfaMethodType.TOTP }),
@@ -540,25 +537,24 @@ describe('TotpEnrollmentStrategy', () => {
       uri: 'otpauth://totp/x',
     });
     expect(secretCipher.encrypt).toHaveBeenCalledWith('PLAIN-SECRET');
-    expect(totpMethodRepository.create).toHaveBeenCalledWith(
-      USER_ID,
-      MfaMethodType.TOTP,
-      'enc(PLAIN-SECRET)',
-    );
+    // Le compte porte le secret chiffré, jamais le clair.
+    expect(
+      userRepository.compte.facteurEnAttente(MfaMethodType.TOTP)
+        ?.encryptedSecret,
+    ).toBe('enc(PLAIN-SECRET)');
   });
 
   it('purge les secrets abandonnés avant de créer le nouveau', async () => {
-    const { strategy, totpMethodRepository } = makeStrategy();
+    // Un QR code affiché puis abandonné ne doit pas rester enrôlable : le
+    // nouvel enrôlement remplace l'ancien au lieu de s'y ajouter.
+    const { strategy, userRepository } = makeStrategy([totpMethod({ id: 4 })]);
 
     await strategy.start(request({ method: MfaMethodType.TOTP }));
 
-    expect(totpMethodRepository.deletePendingForUser).toHaveBeenCalledWith(
-      USER_ID,
-      MfaMethodType.TOTP,
-    );
+    expect(userRepository.compte.facteurs).toHaveLength(1);
     expect(
-      totpMethodRepository.deletePendingForUser.mock.invocationCallOrder[0],
-    ).toBeLessThan(totpMethodRepository.create.mock.invocationCallOrder[0]);
+      userRepository.compte.facteurEnAttente(MfaMethodType.TOTP)?.id,
+    ).toBeNull();
   });
 
   it('signale un compte sans méthode TOTP enrôlée', async () => {
@@ -576,7 +572,7 @@ describe('TotpEnrollmentStrategy', () => {
   it('rejette un code qui ne valide aucun secret enrôlé', async () => {
     // Régression : `verify` rendait autrefois une Promise testée sans await,
     // donc toujours vraie — n'importe quel code à 6 chiffres passait.
-    const { strategy, totpMethodRepository } = makeStrategy([totpMethod()]);
+    const { strategy, userRepository } = makeStrategy([totpMethod()]);
 
     await expect(
       strategy.confirm({
@@ -585,11 +581,11 @@ describe('TotpEnrollmentStrategy', () => {
         otp: '000000',
       }),
     ).rejects.toBeInstanceOf(InvalidTotpCodeError);
-    expect(totpMethodRepository.activate).not.toHaveBeenCalled();
+    expect(userRepository.compte.facteurActif()).toBeNull();
   });
 
   it('active la méthode à sa première vérification réussie', async () => {
-    const { strategy, totpGenerator, totpMethodRepository } = makeStrategy([
+    const { strategy, totpGenerator, userRepository } = makeStrategy([
       totpMethod({ id: 9 }),
     ]);
     totpGenerator.verify.mockResolvedValue(true);
@@ -601,12 +597,12 @@ describe('TotpEnrollmentStrategy', () => {
     });
 
     expect(totpGenerator.verify).toHaveBeenCalledWith('123456', 'PLAIN-SECRET');
-    expect(totpMethodRepository.deactivateAll).toHaveBeenCalledWith(USER_ID);
-    expect(totpMethodRepository.activate).toHaveBeenCalledWith(9);
+    expect(userRepository.compte.facteurActif()?.id).toBe(9);
+    expect(userRepository.update).toHaveBeenCalled();
   });
 
   it('ne réécrit rien quand la méthode validée est déjà active', async () => {
-    const { strategy, totpGenerator, totpMethodRepository } = makeStrategy([
+    const { strategy, totpGenerator, userRepository } = makeStrategy([
       totpMethod({ id: 9, isActive: true }),
     ]);
     totpGenerator.verify.mockResolvedValue(true);
@@ -617,7 +613,6 @@ describe('TotpEnrollmentStrategy', () => {
       otp: '123456',
     });
 
-    expect(totpMethodRepository.deactivateAll).not.toHaveBeenCalled();
-    expect(totpMethodRepository.activate).not.toHaveBeenCalled();
+    expect(userRepository.update).not.toHaveBeenCalled();
   });
 });

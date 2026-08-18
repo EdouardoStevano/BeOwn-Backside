@@ -1,12 +1,13 @@
 import { Logger } from '@nestjs/common';
 import { MfaMethodType } from 'src/iam/domains/enums/mfa-method.enum';
 import { OtpService } from 'src/iam/applications/services/otp/otp.service';
-import { type MfaMethodRepository } from 'src/iam/domains/ports/mfa-method.repository';
+import { type UserRepository } from 'src/iam/domains/ports/user.repository';
 import {
   InvalidOtpCodeError,
   OtpDeliveryFailedError,
   MfaEnrollmentNotStartedError,
   MfaMethodAlreadyEnrolledError,
+  UserNotFoundError,
 } from 'src/iam/domains/errors';
 import {
   MfaEnrollmentChallenge,
@@ -38,7 +39,9 @@ export abstract class ChannelEnrollmentStrategy implements MfaEnrollmentStrategy
 
   protected constructor(
     protected readonly otpService: OtpService,
-    protected readonly methodRepository: MfaMethodRepository,
+    // Le compte est la racine de l'agrégat : les facteurs se lisent et
+    // s'écrivent à travers lui, jamais par un port qui leur serait propre.
+    protected readonly userRepository: UserRepository,
   ) {}
 
   /**
@@ -60,11 +63,10 @@ export abstract class ChannelEnrollmentStrategy implements MfaEnrollmentStrategy
     const credential = await this.resolveCredential(request);
     const { userId } = request;
 
-    const enrolled = await this.methodRepository.findAllByUserId(
-      userId,
-      this.method,
-    );
-    if (enrolled.some((factor) => factor.isActiveOn(credential))) {
+    const compte = await this.userRepository.findByIdWithFacteurs(userId);
+    if (!compte) throw new UserNotFoundError();
+
+    if (compte.protegeDeja(this.method, credential)) {
       // Renvoyer un code sur un canal déjà prouvé relèverait du parcours de
       // connexion, pas de l'enrôlement.
       throw new MfaMethodAlreadyEnrolledError(this.method);
@@ -78,11 +80,11 @@ export abstract class ChannelEnrollmentStrategy implements MfaEnrollmentStrategy
     // temps du TTL, sans recours. Le nombre d'envois est borné là où c'est son
     // sujet — le quota de requêtes de la route (3/min).
     //
-    // Au plus un enrôlement en attente par canal : les tentatives abandonnées
-    // sont purgées, sans quoi la confirmation aurait à deviner laquelle des
-    // lignes inactives l'utilisateur est en train de prouver.
-    await this.methodRepository.deletePendingForUser(userId, this.method);
-    await this.methodRepository.create(userId, this.method, credential);
+    // Au plus un enrôlement en attente par canal : `enrolerFacteur` purge les
+    // tentatives abandonnées, sans quoi la confirmation aurait à deviner
+    // laquelle des lignes inactives l'utilisateur est en train de prouver.
+    compte.enrolerFacteur(this.method, credential);
+    await this.userRepository.update(compte);
 
     const otp = await this.otpService.generateOtp(key);
 
@@ -103,22 +105,16 @@ export abstract class ChannelEnrollmentStrategy implements MfaEnrollmentStrategy
   }
 
   async hasPending(userId: number): Promise<boolean> {
-    const methods = await this.methodRepository.findAllByUserId(
-      userId,
-      this.method,
-    );
-    return methods.some((factor) => factor.isPending());
+    const compte = await this.userRepository.findByIdWithFacteurs(userId);
+    return compte !== null && compte.facteurEnAttente(this.method) !== null;
   }
 
   async confirm(confirmation: MfaEnrollmentConfirmation): Promise<void> {
     const { userId, otp } = confirmation;
 
-    const methods = await this.methodRepository.findAllByUserId(
-      userId,
-      this.method,
-    );
-    const pending = methods.find((factor) => factor.isPending());
-    if (!pending) {
+    const compte = await this.userRepository.findByIdWithFacteurs(userId);
+    if (!compte) throw new UserNotFoundError();
+    if (!compte.facteurEnAttente(this.method)) {
       throw new MfaEnrollmentNotStartedError(this.method);
     }
 
@@ -127,12 +123,10 @@ export abstract class ChannelEnrollmentStrategy implements MfaEnrollmentStrategy
       throw new InvalidOtpCodeError();
     }
 
-    // Comme pour TOTP : le facteur fraîchement confirmé devient l'unique
-    // facteur actif du **compte**, et non de son seul canal. Un compte protégé
-    // par TOTP qui enrôle l'email troque donc un facteur contre l'autre — le
-    // laisser cumuler donnerait un second chemin d'entrée, plus faible, dont
-    // l'utilisateur ignorerait qu'il reste ouvert.
-    await this.methodRepository.deactivateAll(userId);
-    await this.methodRepository.activate(pending.id);
+    // Le facteur fraîchement confirmé devient l'unique facteur actif du
+    // **compte**, et non de son seul canal : c'est l'invariant que
+    // `confirmerFacteur` applique, sans que l'appelant ait à y penser.
+    compte.confirmerFacteur(this.method);
+    await this.userRepository.update(compte);
   }
 }

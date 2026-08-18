@@ -7,7 +7,8 @@ import { MfaMethodType } from 'src/iam/domains/enums/mfa-method.enum';
 import { MfaMethod } from 'src/iam/domains/models/mfa-method';
 
 import { AuthMailerService } from 'src/iam/applications/services/auth-mailer.service';
-import type { MfaMethodRepository } from 'src/iam/domains/ports/mfa-method.repository';
+import type { UserRepository } from 'src/iam/domains/ports/user.repository';
+import { buildUser } from 'src/iam/domains/models/user.fixture';
 import { OtpService } from 'src/iam/applications/services/otp/otp.service';
 import type { SecretCipher } from 'src/iam/applications/ports/secret-cipher.port';
 import type { TotpGenerator } from 'src/iam/applications/ports/totp-generator.port';
@@ -30,14 +31,18 @@ const makeOtpStore = () => ({
   invalidate: jest.fn().mockResolvedValue(undefined),
 });
 
-const makeChannelRepository = (methods: MfaMethod[] = []) => ({
-  create: jest.fn().mockResolvedValue(1),
-  findAllByUserId: jest.fn().mockResolvedValue(methods),
-  deletePendingForUser: jest.fn().mockResolvedValue(undefined),
-  deactivateChannel: jest.fn().mockResolvedValue(undefined),
-  deactivateAll: jest.fn().mockResolvedValue(undefined),
-  activate: jest.fn().mockResolvedValue(undefined),
-});
+/**
+ * Le compte porte ses facteurs : la stratégie le charge et y filtre son canal,
+ * au lieu d'interroger un port qui n'existe plus.
+ */
+const makeChannelRepository = (methods: MfaMethod[] = []) => {
+  const compte = buildUser({ facteurs: methods });
+  return {
+    compte,
+    findByIdWithFacteurs: jest.fn().mockResolvedValue(compte),
+    update: jest.fn().mockResolvedValue(undefined),
+  };
+};
 
 const activeEmail: MfaMethod = MfaMethod.rehydrate({
   id: 1,
@@ -59,7 +64,7 @@ const buildEmail = (methods: MfaMethod[] = [activeEmail]) => {
 
   const strategy = new EmailChallengeStrategy(
     otpService as unknown as OtpService,
-    repository as unknown as MfaMethodRepository,
+    repository as unknown as UserRepository,
     mailer as unknown as AuthMailerService,
   );
 
@@ -73,7 +78,7 @@ const buildSms = (methods: MfaMethod[] = [activeSms]) => {
 
   const strategy = new SmsChallengeStrategy(
     otpService as unknown as OtpService,
-    repository as unknown as MfaMethodRepository,
+    repository as unknown as UserRepository,
     sms as unknown as SmsService,
   );
 
@@ -167,10 +172,10 @@ describe('ChannelChallengeStrategy — canaux email et SMS', () => {
 
     await strategy.deactivate(USER_ID);
 
-    expect(repository.deactivateChannel).toHaveBeenCalledWith(
-      USER_ID,
-      MfaMethodType.EMAIL,
-    );
+    // Le retrait passe par le compte : c'est lui qu'on sauvegarde, avec son
+    // facteur désormais inactif.
+    expect(repository.update).toHaveBeenCalledWith(repository.compte);
+    expect(repository.compte.facteursActifsDe(MfaMethodType.EMAIL)).toEqual([]);
     expect(otpService.invalidate).toHaveBeenCalledWith(
       `otp:mfa:${MfaMethodType.EMAIL}:${USER_ID}`,
     );
@@ -181,12 +186,10 @@ describe('TotpChallengeStrategy', () => {
   const build = (methods: MfaMethod[]) => {
     const totpGenerator = { generate: jest.fn(), verify: jest.fn() };
     const repository = {
-      create: jest.fn(),
-      findAllByUserId: jest.fn().mockResolvedValue(methods),
-      deletePendingForUser: jest.fn(),
-      deactivateChannel: jest.fn().mockResolvedValue(undefined),
-      deactivateAll: jest.fn().mockResolvedValue(undefined),
-      activate: jest.fn(),
+      findByIdWithFacteurs: jest
+        .fn()
+        .mockResolvedValue(buildUser({ facteurs: methods })),
+      update: jest.fn().mockResolvedValue(undefined),
     };
     const cipher = {
       encrypt: jest.fn(),
@@ -195,7 +198,7 @@ describe('TotpChallengeStrategy', () => {
 
     const strategy = new TotpChallengeStrategy(
       totpGenerator as unknown as TotpGenerator,
-      repository as unknown as MfaMethodRepository,
+      repository as unknown as UserRepository,
       cipher as unknown as SecretCipher,
     );
 
@@ -258,15 +261,39 @@ describe('MfaFactorService', () => {
     deactivate: jest.fn(),
   });
 
-  const build = (...strategies: ReturnType<typeof stub>[]) =>
-    new MfaFactorService(strategies as unknown as MfaChallengeStrategy[]);
+  /**
+   * L'ordre de préférence est passé du service au compte : c'est `User` qui
+   * dit quel facteur sera opposé, et le service ne fait plus que le lui
+   * demander — une lecture au lieu d'une par canal.
+   */
+  const build = (
+    facteurs: MfaMethod[],
+    ...strategies: ReturnType<typeof stub>[]
+  ) =>
+    new MfaFactorService(
+      strategies as unknown as MfaChallengeStrategy[],
+      {
+        findByIdWithFacteurs: jest
+          .fn()
+          .mockResolvedValue(buildUser({ facteurs })),
+        update: jest.fn(),
+      } as unknown as UserRepository,
+    );
+
+  const facteur = (method: MfaMethodType, id: number) =>
+    MfaMethod.rehydrate({
+      id,
+      method,
+      isActive: true,
+      credential: method === MfaMethodType.TOTP ? 'secret' : ACCOUNT_EMAIL,
+    });
 
   it('préfère TOTP quand plusieurs canaux sont actifs — ni envoi ni interception', async () => {
-    const service = build(
-      stub(MfaMethodType.TOTP, true),
-      stub(MfaMethodType.EMAIL, true),
-      stub(MfaMethodType.SMS, true),
-    );
+    const service = build([
+      facteur(MfaMethodType.EMAIL, 1),
+      facteur(MfaMethodType.SMS, 2),
+      facteur(MfaMethodType.TOTP, 3),
+    ]);
 
     await expect(service.findActiveMethod(USER_ID)).resolves.toBe(
       MfaMethodType.TOTP,
@@ -274,11 +301,10 @@ describe('MfaFactorService', () => {
   });
 
   it('préfère le SMS à l’email : la boîte email est ce que protège le mot de passe', async () => {
-    const service = build(
-      stub(MfaMethodType.TOTP, false),
-      stub(MfaMethodType.EMAIL, true),
-      stub(MfaMethodType.SMS, true),
-    );
+    const service = build([
+      facteur(MfaMethodType.EMAIL, 1),
+      facteur(MfaMethodType.SMS, 2),
+    ]);
 
     await expect(service.findActiveMethod(USER_ID)).resolves.toBe(
       MfaMethodType.SMS,
@@ -286,17 +312,13 @@ describe('MfaFactorService', () => {
   });
 
   it('rend `null` quand le compte n’a aucun facteur — la connexion se poursuit sans MFA', async () => {
-    const service = build(
-      stub(MfaMethodType.TOTP, false),
-      stub(MfaMethodType.EMAIL, false),
-      stub(MfaMethodType.SMS, false),
-    );
+    const service = build([]);
 
     await expect(service.findActiveMethod(USER_ID)).resolves.toBeNull();
   });
 
   it('refuse un canal qu’aucune stratégie ne couvre', () => {
-    const service = build(stub(MfaMethodType.TOTP, true));
+    const service = build([], stub(MfaMethodType.TOTP, true));
 
     expect(() => service.strategyFor(MfaMethodType.SMS)).toThrow(
       UnsupportedMfaMethodError,

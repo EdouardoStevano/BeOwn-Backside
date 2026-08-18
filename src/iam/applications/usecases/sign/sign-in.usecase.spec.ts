@@ -4,7 +4,10 @@ import { MfaMethodType } from 'src/iam/domains/enums/mfa-method.enum';
 import { MfaChallengePurpose } from 'src/iam/applications/models/mfa-challenge';
 import { type AuthSession } from 'src/iam/applications/models/auth-token';
 import { User } from 'src/iam/domains/models/user';
-import { buildUser as buildUserFixture } from 'src/iam/domains/models/user.fixture';
+import {
+  buildFacteur,
+  buildUser as buildUserFixture,
+} from 'src/iam/domains/models/user.fixture';
 import { UserStatus } from 'src/iam/domains/enums/user.enum';
 import {
   ACCOUNT_CLOSED_CODE,
@@ -38,17 +41,21 @@ const makeUsecase = (user: User | null, passwordValid = true) => {
     generateEmailToken: jest.fn(),
     verifyEmailToken: jest.fn(),
   };
+  // Par défaut, aucun facteur MFA actif : la connexion se termine en un temps,
+  // comme avant l'introduction de la double authentification. Le compte porte
+  // ses facteurs, c'est donc lui qu'on charge — `findByIdWithFacteurs`.
   const usersRepository = {
     findByEmail: jest.fn().mockResolvedValue(user),
+    // `facteurs: []` et non l'absence : cette lecture les charge toujours, et
+    // un compte « facteurs non chargés » refuserait de répondre.
+    findByIdWithFacteurs: jest
+      .fn()
+      .mockResolvedValue(buildUserFixture({ facteurs: [] })),
     save: jest.fn(),
     findById: jest.fn(),
     update: jest.fn(),
     findOneBySocialId: jest.fn(),
-    findPreferences: jest.fn(),
-    savePreferences: jest.fn(),
   };
-  // Par défaut, aucun facteur MFA actif : la connexion se termine en un temps,
-  // comme avant l'introduction de la double authentification.
   const challengeStrategy = {
     method: MfaMethodType.TOTP,
     isActiveFor: jest.fn().mockResolvedValue(false),
@@ -56,7 +63,10 @@ const makeUsecase = (user: User | null, passwordValid = true) => {
     verify: jest.fn(),
     deactivate: jest.fn(),
   };
-  const mfaFactors = new MfaFactorService([challengeStrategy as any]);
+  const mfaFactors = new MfaFactorService(
+    [challengeStrategy as any],
+    usersRepository as any,
+  );
   const mfaChallenges = {
     issue: jest.fn((draft: unknown) =>
       Promise.resolve({
@@ -140,9 +150,20 @@ describe('SignInUsecase', () => {
 
   describe('double authentification', () => {
     it('lève MFA_REQUIRED au lieu de rendre des tokens quand un facteur est actif', async () => {
-      const { usecase, tokenService, challengeStrategy, mfaChallenges } =
-        makeUsecase(buildUser(UserStatus.ACTIF));
-      challengeStrategy.isActiveFor.mockResolvedValue(true);
+      const {
+        usecase,
+        tokenService,
+        challengeStrategy,
+        mfaChallenges,
+        usersRepository,
+      } = makeUsecase(buildUser(UserStatus.ACTIF));
+      // Le facteur actif se déclare sur le compte : c'est lui qui dit lequel
+      // sera opposé, dans son ordre de préférence.
+      usersRepository.findByIdWithFacteurs.mockResolvedValue(
+        buildUserFixture({
+          facteurs: [buildFacteur({ method: MfaMethodType.TOTP })],
+        }),
+      );
       challengeStrategy.issue.mockResolvedValue({
         sentTo: 'j***n@example.com',
       });

@@ -1,7 +1,7 @@
 import { Logger } from '@nestjs/common';
 import { MfaMethodType } from 'src/iam/domains/enums/mfa-method.enum';
 import { OtpService } from 'src/iam/applications/services/otp/otp.service';
-import { type MfaMethodRepository } from 'src/iam/domains/ports/mfa-method.repository';
+import { type UserRepository } from 'src/iam/domains/ports/user.repository';
 import { MfaMethod } from 'src/iam/domains/models/mfa-method';
 import {
   NoActiveMfaMethodError,
@@ -38,7 +38,8 @@ export abstract class ChannelChallengeStrategy implements MfaChallengeStrategy {
 
   protected constructor(
     protected readonly otpService: OtpService,
-    protected readonly methodRepository: MfaMethodRepository,
+    // Les facteurs se lisent sur le compte, racine de l'agrégat.
+    protected readonly userRepository: UserRepository,
   ) {}
 
   /** Remise effective du code sur le canal. */
@@ -52,9 +53,9 @@ export abstract class ChannelChallengeStrategy implements MfaChallengeStrategy {
   }
 
   async describeFor(userId: number): Promise<MfaMethodSummary[]> {
-    const methods = await this.methodRepository.findAllByUserId(
-      userId,
-      this.method,
+    const compte = await this.userRepository.findByIdWithFacteurs(userId);
+    const methods = (compte?.facteurs ?? []).filter(
+      (facteur) => facteur.method === this.method,
     );
 
     return methods.map((entry) => ({
@@ -106,7 +107,11 @@ export abstract class ChannelChallengeStrategy implements MfaChallengeStrategy {
     // retirer un facteur ne doit toucher que celui qu'on retire. Comme le
     // compte n'en a qu'un actif à la fois, cela revient au même aujourd'hui —
     // mais dire « désactive tout » ici serait exact par accident.
-    await this.methodRepository.deactivateChannel(userId, this.method);
+    const compte = await this.userRepository.findByIdWithFacteurs(userId);
+    if (compte) {
+      compte.retirerFacteursDe(this.method);
+      await this.userRepository.update(compte);
+    }
     // Le code en vol devient sans objet : le laisser vivre permettrait de
     // prouver un facteur qui n'existe plus.
     await this.otpService.invalidate(challengeOtpKey(this.method, userId));
@@ -114,10 +119,7 @@ export abstract class ChannelChallengeStrategy implements MfaChallengeStrategy {
 
   /** Facteur actif du canal, s'il y en a un. */
   private async activeMethod(userId: number): Promise<MfaMethod | null> {
-    const methods = await this.methodRepository.findAllByUserId(
-      userId,
-      this.method,
-    );
-    return methods.find((factor) => factor.isActive()) ?? null;
+    const compte = await this.userRepository.findByIdWithFacteurs(userId);
+    return compte?.facteursActifsDe(this.method)[0] ?? null;
   }
 }

@@ -145,3 +145,23 @@ export class NoPendingMfaEnrollmentError extends IamError {
     );
   }
 }
+
+/**
+ * On a voulu lire ou modifier les facteurs d'un compte chargé sans eux.
+ *
+ * Un défaut de programmation, pas une faute de l'appelant : la lecture aurait
+ * dû passer par `findByIdWithFacteurs`. Elle est signalée plutôt que rattrapée
+ * par une liste vide, qui ferait passer « je ne sais pas » pour « il n'y en a
+ * aucun » — et une confirmation d'enrôlement effacerait alors silencieusement
+ * le facteur en place.
+ */
+export class FacteursMfaNonChargesError extends IamError {
+  readonly kind = IamErrorKind.UNEXPECTED;
+
+  constructor() {
+    super(
+      "Les facteurs d'authentification du compte n'ont pas été chargés — utilisez findByIdWithFacteurs.",
+      { code: 'FACTEURS_MFA_NON_CHARGES' },
+    );
+  }
+}

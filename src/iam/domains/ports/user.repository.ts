@@ -24,6 +24,16 @@ export interface UserRepository {
    * simplement absents — l'appelant indexe par `userId`.
    */
   findManyByIds(userIds: number[]): Promise<User[]>;
+  /**
+   * Comme `findById`, mais avec les **facteurs d'authentification** chargés.
+   *
+   * Le chargement est explicite parce que ces lignes portent des secrets
+   * chiffrés et que presque aucun appelant n'en a besoin : le compte est lu à
+   * chaque requête pour son rôle ou son statut. Seuls les parcours MFA passent
+   * par ici — et eux seuls peuvent modifier les facteurs, `User` refusant toute
+   * transition sur une collection non chargée.
+   */
+  findByIdWithFacteurs(userId: number): Promise<User | null>;
   findByEmail(email: string): Promise<User | null>;
   update(user: User): Promise<User>;
   findOneBySocialId(socialId: string): Promise<User | null>;

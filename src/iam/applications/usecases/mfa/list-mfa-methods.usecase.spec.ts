@@ -1,6 +1,7 @@
 import { MfaMethodType } from 'src/iam/domains/enums/mfa-method.enum';
 import { MfaMethod } from 'src/iam/domains/models/mfa-method';
-import type { MfaMethodRepository } from 'src/iam/domains/ports/mfa-method.repository';
+import type { UserRepository } from 'src/iam/domains/ports/user.repository';
+import { buildUser } from 'src/iam/domains/models/user.fixture';
 import { OtpService } from 'src/iam/applications/services/otp/otp.service';
 import { AuthMailerService } from 'src/iam/applications/services/auth-mailer.service';
 import type { SecretCipher } from 'src/iam/applications/ports/secret-cipher.port';
@@ -18,27 +19,24 @@ const ENCRYPTED_SECRET = 'enc(PLAIN-SECRET)';
 const makeRepository = (
   byMethod: Partial<Record<MfaMethodType, MfaMethod[]>>,
 ) => {
-  const findAllByUserId = jest
+  // Les facteurs sont portés par le compte : chaque canal filtre la collection
+  // de l'agrégat au lieu d'interroger une table qui lui serait propre.
+  const facteurs = Object.values(byMethod).flat();
+  const findByIdWithFacteurs = jest
     .fn()
-    .mockImplementation((_userId: number, method: MfaMethodType) =>
-      Promise.resolve(byMethod[method] ?? []),
-    );
+    .mockResolvedValue(buildUser({ facteurs }));
 
   return {
-    findAllByUserId,
+    findByIdWithFacteurs,
     repository: {
-      create: jest.fn(),
-      findAllByUserId,
-      deletePendingForUser: jest.fn(),
-      deactivateChannel: jest.fn(),
-      deactivateAll: jest.fn(),
-      activate: jest.fn(),
-    } as unknown as MfaMethodRepository,
+      findByIdWithFacteurs,
+      update: jest.fn(),
+    } as unknown as UserRepository,
   };
 };
 
 const makeSut = (byMethod: Partial<Record<MfaMethodType, MfaMethod[]>>) => {
-  const { repository, findAllByUserId } = makeRepository(byMethod);
+  const { repository, findByIdWithFacteurs } = makeRepository(byMethod);
 
   const email = new EmailChallengeStrategy(
     {} as unknown as OtpService,
@@ -56,7 +54,7 @@ const makeSut = (byMethod: Partial<Record<MfaMethodType, MfaMethod[]>>) => {
       totp,
       email,
     ] as unknown as MfaChallengeStrategy[]),
-    findAllByUserId,
+    findByIdWithFacteurs,
   };
 };
 
@@ -153,12 +151,14 @@ describe('ListMfaMethodsUseCase', () => {
     await expect(usecase.execute(USER_ID)).resolves.toEqual([]);
   });
 
-  it('interroge chaque canal pour le compte demandé', async () => {
-    const { usecase, findAllByUserId } = makeSut({});
+  it('interroge le compte demandé, une fois par canal', async () => {
+    // Chaque stratégie lit le compte et y filtre son canal : le use case reste
+    // ignorant des canaux, mais la lecture porte bien sur le bon titulaire.
+    const { usecase, findByIdWithFacteurs } = makeSut({});
 
     await usecase.execute(USER_ID);
 
-    expect(findAllByUserId).toHaveBeenCalledWith(USER_ID, MfaMethodType.TOTP);
-    expect(findAllByUserId).toHaveBeenCalledWith(USER_ID, MfaMethodType.EMAIL);
+    expect(findByIdWithFacteurs).toHaveBeenCalledWith(USER_ID);
+    expect(findByIdWithFacteurs).toHaveBeenCalledTimes(2);
   });
 });

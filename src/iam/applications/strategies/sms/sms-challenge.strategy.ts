@@ -3,9 +3,9 @@ import { MfaMethodType } from 'src/iam/domains/enums/mfa-method.enum';
 import { OtpService } from 'src/iam/applications/services/otp/otp.service';
 import { SMS_SERVICE, type SmsService } from 'src/shared/sms/sms.service';
 import {
-  MFA_METHOD_REPOSITORY,
-  type MfaMethodRepository,
-} from 'src/iam/domains/ports/mfa-method.repository';
+  USER_REPOSITORY,
+  type UserRepository,
+} from 'src/iam/domains/ports/user.repository';
 import { ChannelChallengeStrategy } from '../channel/channel-challenge.strategy';
 
 /** Vérification du facteur SMS : le code repart au numéro enrôlé. */
@@ -15,11 +15,10 @@ export class SmsChallengeStrategy extends ChannelChallengeStrategy {
 
   constructor(
     otpService: OtpService,
-    @Inject(MFA_METHOD_REPOSITORY)
-    methodRepository: MfaMethodRepository,
+    @Inject(USER_REPOSITORY) userRepository: UserRepository,
     @Inject(SMS_SERVICE) private readonly smsService: SmsService,
   ) {
-    super(otpService, methodRepository);
+    super(otpService, userRepository);
   }
 
   protected deliver(credential: string, otp: string): Promise<void> {
