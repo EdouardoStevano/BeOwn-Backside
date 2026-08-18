@@ -34,6 +34,16 @@ function monter(roleAppelant: UserRole = UserRole.INVESTISSEUR) {
 }
 
 describe('GetUserAccountUseCase', () => {
+  it('publie le numéro de rappel du titulaire', async () => {
+    // Le compte le porte depuis qu'il a quitté `profil_pp` : c'est cette
+    // lecture-ci qui doit le rendre, plus le dossier investisseur.
+    const { useCase } = monter();
+
+    const compte = await useCase.execute(APPELANT, APPELANT);
+
+    expect(compte).toHaveProperty('telephone');
+  });
+
   it('laisse chacun lire son propre compte', async () => {
     const { useCase, mocks } = monter();
 

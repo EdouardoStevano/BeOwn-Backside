@@ -39,6 +39,15 @@ export interface PublicUser {
   firstname: string;
   lastname: string | null;
   socialId: string | null;
+  /**
+   * Numéro de rappel du titulaire.
+   *
+   * Il était publié par le profil investisseur, où il vivait avant de rejoindre
+   * le compte. Le sortir de `profil_pp` sans l'ajouter ici l'a fait disparaître
+   * de tout ce qui lit un compte — `GET /users/me` le premier. C'est le compte
+   * qui le porte, c'est donc lui qui le publie.
+   */
+  telephone: string | null;
   role: UserRole;
   status: UserStatus;
   cguAccepteesLe: Date | null;
@@ -171,6 +180,7 @@ export class UserMapper {
       firstname: user.firstname,
       lastname: user.lastname,
       socialId: user.socialId,
+      telephone: user.telephone,
       role: user.role,
       status: user.status,
       cguAccepteesLe: user.cguAccepteesLe,
