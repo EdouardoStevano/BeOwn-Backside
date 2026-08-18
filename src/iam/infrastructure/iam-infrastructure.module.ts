@@ -4,6 +4,12 @@ import jwtConfig from './config/jwt.config';
 import { TokenSignerModule } from 'src/shared/token/token-signer.module';
 import { SessionCacheService } from '../applications/services/session-cache.service';
 import { TokenService } from '../applications/services/token/token.service';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { SESSION_STORE } from '../applications/ports/session-store.port';
+import { RefreshTokenEntity } from './persistence/entities/refresh-token.entity';
+import { TypeOrmSessionStore } from './persistence/repositories/typeorm-session-store.repository';
+import { CacheSessionStore } from './session/cache-session-store.adapter';
+import { CacheFirstSessionStoreProxy } from './session/cache-first-session-store.proxy';
 
 /**
  * Noyau d'infrastructure IAM partagé par tous les autres Bounded Contexts
@@ -18,7 +24,13 @@ import { TokenService } from '../applications/services/token/token.service';
  * politique IAM posée par-dessus.
  */
 @Module({
-  imports: [TokenSignerModule, ConfigModule.forFeature(jwtConfig)],
+  imports: [
+    TokenSignerModule,
+    ConfigModule.forFeature(jwtConfig),
+    // La table des sessions : `TokenService` en dépend par `SESSION_STORE`, et
+    // c'est elle qui les fait survivre à un redémarrage du cache.
+    TypeOrmModule.forFeature([RefreshTokenEntity]),
+  ],
   providers: [
     // Classes concrètes, injectées par leur type : ce sont des services
     // **applicatifs**, pas des ports. `TOKEN_SERVICE` a disparu avec
@@ -29,7 +41,14 @@ import { TokenService } from '../applications/services/token/token.service';
     // `AuthenticationModule`, seul à s'en servir (CRP, §5).
     SessionCacheService,
     TokenService,
+    // Les deux supports de session, et le proxy qui les compose (§9). Seul le
+    // proxy est publié sous le port : personne d'autre n'a à savoir qu'il y a
+    // un cache devant une table.
+    CacheSessionStore,
+    TypeOrmSessionStore,
+    { provide: SESSION_STORE, useClass: CacheFirstSessionStoreProxy },
+    CacheFirstSessionStoreProxy,
   ],
-  exports: [SessionCacheService, TokenService],
+  exports: [SessionCacheService, TokenService, SESSION_STORE],
 })
 export class IamInfrastructureModule {}

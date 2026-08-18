@@ -25,17 +25,17 @@ const buildTtlConfig = () => ({
  * tokens signés — pas sur le driver lui-même.
  */
 const makeService = () => {
-  const cacheManagerService = {
-    insertRefreshTokenId: jest.fn(),
-    validateRefreshToken: jest.fn(),
-    invalidateRefreshTokenId: jest.fn(),
-    insertEmailTokenId: jest.fn(),
-    validateEmailToken: jest.fn(),
-    invalidateEmailTokenId: jest.fn(),
+  // Une session par appareil : le store enregistre, valide et révoque par
+  // couple (compte, identifiant de rotation).
+  const sessionStore = {
+    enregistrer: jest.fn(),
+    estValide: jest.fn().mockResolvedValue(true),
+    revoquer: jest.fn(),
+    revoquerToutes: jest.fn(),
   };
   return new TokenService(
     new JwtTokenSignerAdapter(new JwtService(), buildSignerConfig() as any),
-    cacheManagerService as any,
+    sessionStore as any,
     buildTtlConfig() as any,
   );
 };
@@ -55,6 +55,38 @@ describe('TokenService — confusion de tokens typés vs access tokens', () => {
     expect(payload.sub).toBe(42);
     expect(payload.email).toBe('user@example.com');
     expect(payload.role).toBe('investisseur');
+  });
+
+  it('rejette un REFRESH token soumis comme access token', async () => {
+    // Il ne porte pas de claim `type`, comme l'access token : c'est son
+    // `refreshTokenId` qui le trahit. Sans ce contrôle, il ouvrait toutes les
+    // routes protégées pendant 24 h — et sans jamais être consommé, la
+    // rotation n'ayant lieu que sur la route de rafraîchissement.
+    const service = makeService();
+    const { refreshToken } = await service.generateTokens({
+      sub: 42,
+      email: 'user@example.com',
+      role: 'investisseur',
+      refreshTokenId: null,
+    });
+
+    await expect(service.verifyAccessToken(refreshToken)).rejects.toThrow(
+      InvalidAccessTokenError,
+    );
+  });
+
+  it('laisse le rafraîchissement au seul chemin prévu pour lui', async () => {
+    // Le symétrique : un access token ne rafraîchit rien, faute de
+    // `refreshTokenId`. Les deux gardes se répondent.
+    const service = makeService();
+    const { accessToken } = await service.generateTokens({
+      sub: 42,
+      email: 'user@example.com',
+      role: 'investisseur',
+      refreshTokenId: null,
+    });
+
+    await expect(service.refreshTokens(accessToken)).rejects.toThrow();
   });
 
   it('rejette un token notif_unsubscribe soumis comme access token', async () => {

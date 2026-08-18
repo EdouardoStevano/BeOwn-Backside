@@ -16,7 +16,10 @@ import {
   UNSUBSCRIBE_TOKEN_AUDIENCE,
   UnsubscribeTokenPayload,
 } from '../../models/auth-token';
-import { SessionCacheService } from '../session-cache.service';
+import {
+  SESSION_STORE,
+  type SessionStore,
+} from 'src/iam/applications/ports/session-store.port';
 
 /**
  * Tous les tokens du contexte IAM : session (accès/rafraîchissement), lien
@@ -35,7 +38,7 @@ export class TokenService {
   constructor(
     @Inject(TOKEN_SIGNER) private readonly tokenSigner: TokenSigner,
 
-    private readonly sessionCache: SessionCacheService,
+    @Inject(SESSION_STORE) private readonly sessions: SessionStore,
 
     @Inject(jwtConfig.KEY)
     private readonly jwtConfiguration: ConfigType<typeof jwtConfig>,
@@ -58,7 +61,15 @@ export class TokenService {
       }),
     ]);
 
-    await this.sessionCache.insertRefreshTokenId(payload.email, refreshTokenId);
+    // Une session **de plus**, et non à la place de la précédente : le compte
+    // peut être ouvert sur autant d'appareils que son titulaire en connecte.
+    await this.sessions.enregistrer({
+      utilisateurId: payload.sub,
+      refreshTokenId,
+      expireLe: new Date(
+        Date.now() + this.jwtConfiguration.refreshTokenTtl * 1000,
+      ),
+    });
 
     return { accessToken, refreshToken };
   }
@@ -81,10 +92,14 @@ export class TokenService {
     // utile typée là où `verifyAsync` rendait `any`.
     const isValidToken =
       typeof refreshTokenId === 'string' &&
-      (await this.sessionCache.validateRefreshToken(email, refreshTokenId));
+      (await this.sessions.estValide(sub, refreshTokenId));
 
     if (isValidToken) {
-      await this.sessionCache.invalidateRefreshTokenId(email);
+      // Rotation : seule **cette** session est retirée, celle de l'appareil
+      // qui présente le token. Les autres continuent — c'est toute la
+      // différence avec l'ancien `invalidateRefreshTokenId(email)`, qui
+      // fermait la seule session que le compte pouvait avoir.
+      await this.sessions.revoquer(sub, refreshTokenId);
     } else {
       throw new Error('Refresh token is no longer available!');
     }
@@ -109,6 +124,21 @@ export class TokenService {
     // refresh tokens légitimes ne portent JAMAIS de claim `type` (voir
     // generateTokens/signToken) : tout token qui en porte un est rejeté.
     if (payload.type) {
+      throw new InvalidAccessTokenError();
+    }
+
+    // Second volet de la même garde : un **refresh token** ne portant pas non
+    // plus de `type`, le contrôle ci-dessus le laissait passer. Présenté en
+    // `Authorization: Bearer`, il ouvrait donc l'accès à toutes les routes
+    // protégées — et pour 24 h au lieu d'1 h, précisément parce qu'il n'était
+    // pas censé circuler à chaque requête. La rotation ne le rattrapait pas :
+    // elle n'a lieu que sur la route de rafraîchissement, si bien qu'un
+    // refresh token employé ainsi n'était jamais consommé.
+    //
+    // `refreshTokenId` est le discriminant exact : `generateTokens` ne le
+    // signe que dans le refresh token. Le contrôle est le symétrique de celui
+    // de `refreshTokens`, qui refuse déjà un access token faute de ce claim.
+    if (typeof payload.refreshTokenId === 'string') {
       throw new InvalidAccessTokenError();
     }
 
