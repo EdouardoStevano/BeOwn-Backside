@@ -3,13 +3,13 @@ import { MfaMethodType } from 'src/iam/domains/enums/mfa-method.enum';
 import { OtpService } from 'src/iam/applications/services/otp/otp.service';
 import { SMS_SERVICE, type SmsService } from 'src/shared/sms/sms.service';
 import {
-  MFA_METHOD_REPOSITORY,
-  type MfaMethodRepository,
-} from 'src/iam/domains/ports/mfa-method.repository';
-import {
   InvalidPhoneNumberError,
   MissingPhoneNumberError,
 } from 'src/iam/domains/errors';
+import {
+  USER_REPOSITORY,
+  type UserRepository,
+} from 'src/iam/domains/ports/user.repository';
 import { ChannelEnrollmentStrategy } from '../channel/channel-enrollment.strategy';
 import { MfaEnrollmentRequest } from '../mfa/mfa-enrollment.strategy';
 
@@ -29,11 +29,10 @@ export class SmsEnrollmentStrategy extends ChannelEnrollmentStrategy {
 
   constructor(
     otpService: OtpService,
-    @Inject(MFA_METHOD_REPOSITORY)
-    methodRepository: MfaMethodRepository,
+    @Inject(USER_REPOSITORY) userRepository: UserRepository,
     @Inject(SMS_SERVICE) private readonly smsService: SmsService,
   ) {
-    super(otpService, methodRepository);
+    super(otpService, userRepository);
   }
 
   protected resolveCredential(request: MfaEnrollmentRequest): Promise<string> {

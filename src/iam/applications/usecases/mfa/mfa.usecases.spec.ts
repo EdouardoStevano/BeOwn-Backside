@@ -12,7 +12,11 @@ import {
   NoActiveMfaMethodError,
   NoPendingMfaEnrollmentError,
 } from 'src/iam/domains/errors';
-import { buildUser as buildUserFixture } from 'src/iam/domains/models/user.fixture';
+import {
+  buildFacteur,
+  buildUser as buildUserFixture,
+} from 'src/iam/domains/models/user.fixture';
+import type { MfaMethod } from 'src/iam/domains/models/mfa-method';
 import { UserStatus } from 'src/iam/domains/enums/user.enum';
 import { MfaFactorService } from '../../services/mfa/mfa-factor.service';
 import { EnableMfaUseCase } from './enable-mfa.usecase';
@@ -20,6 +24,22 @@ import { DisableMfaUseCase } from './disable-mfa.usecase';
 import { VerifyMfaChallengeUseCase } from './verify-mfa-challenge.usecase';
 import { CompleteMfaSignInUseCase } from './complete-mfa-sign-in.usecase';
 import { ResendMfaChallengeUseCase } from './resend-mfa-challenge.usecase';
+
+/**
+ * `MfaFactorService` demande au compte quel facteur opposer : c'est l'agrégat
+ * qui porte les facteurs et l'ordre de préférence. On lui fournit donc un
+ * compte, plus seulement des stratégies.
+ */
+const makeFactorService = (strategies: unknown[], facteurs: MfaMethod[] = []) =>
+  new MfaFactorService(
+    strategies as any,
+    {
+      findByIdWithFacteurs: jest
+        .fn()
+        .mockResolvedValue(buildUserFixture({ facteurs })),
+      update: jest.fn(),
+    } as any,
+  );
 
 /** Stratégie de vérification factice, pilotable canal par canal. */
 const makeChallengeStrategy = (method: MfaMethodType) => ({
@@ -145,7 +165,7 @@ const buildMfaSignIn = () => {
 
   const verify = new VerifyMfaChallengeUseCase(
     challenges as any,
-    new MfaFactorService([strategy as any]),
+    makeFactorService([strategy]),
   );
   const complete = new CompleteMfaSignInUseCase(
     verify,
@@ -326,18 +346,23 @@ describe('CompleteMfaSignInUseCase', () => {
 });
 
 describe('DisableMfaUseCase', () => {
-  const build = () => {
+  const build = (facteurs: MfaMethod[] = []) => {
     const strategy = makeChallengeStrategy(MfaMethodType.EMAIL);
     const challenges = makeChallengeStore();
     const usecase = new DisableMfaUseCase(
       challenges as any,
-      new MfaFactorService([strategy as any]),
+      makeFactorService([strategy], facteurs),
     );
     return { usecase, strategy, challenges };
   };
 
+  /** Compte protégé par un facteur email actif. */
+  const avecFacteurEmail = () => [
+    buildFacteur({ method: MfaMethodType.EMAIL }),
+  ];
+
   it('premier temps : émet le code sur le canal actif et rend un challengeId', async () => {
-    const { usecase, strategy } = build();
+    const { usecase, strategy } = build(avecFacteurEmail());
     strategy.isActiveFor.mockResolvedValue(true);
     strategy.issue.mockResolvedValue({ sentTo: 'j***n@example.com' });
 
@@ -358,7 +383,7 @@ describe('DisableMfaUseCase', () => {
   });
 
   it('second temps : retire le facteur quand le code est bon', async () => {
-    const { usecase, strategy, challenges } = build();
+    const { usecase, strategy, challenges } = build(avecFacteurEmail());
     strategy.isActiveFor.mockResolvedValue(true);
     const { challengeId } = await usecase.request({ userId: 42 });
     strategy.verify.mockResolvedValue(true);
@@ -372,7 +397,7 @@ describe('DisableMfaUseCase', () => {
   });
 
   it('ne retire rien sur code faux', async () => {
-    const { usecase, strategy } = build();
+    const { usecase, strategy } = build(avecFacteurEmail());
     strategy.isActiveFor.mockResolvedValue(true);
     const { challengeId } = await usecase.request({ userId: 42 });
 
@@ -383,7 +408,7 @@ describe('DisableMfaUseCase', () => {
   });
 
   it('refuse un challenge appartenant à un autre compte', async () => {
-    const { usecase, strategy } = build();
+    const { usecase, strategy } = build(avecFacteurEmail());
     strategy.isActiveFor.mockResolvedValue(true);
     strategy.verify.mockResolvedValue(true);
     const { challengeId } = await usecase.request({ userId: 42 });
@@ -422,7 +447,7 @@ describe('ResendMfaChallengeUseCase', () => {
     const challenges = makeChallengeStore();
     const usecase = new ResendMfaChallengeUseCase(
       challenges as any,
-      new MfaFactorService([strategy as any]),
+      makeFactorService([strategy]),
     );
     return { usecase, strategy, challenges };
   };

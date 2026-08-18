@@ -118,6 +118,7 @@ export class UserMapper {
       email: snapshot.email === null ? null : Email.restore(snapshot.email),
       emailVerified: snapshot.emailVerified,
       emailVerifiedDate: snapshot.emailVerifiedDate,
+      facteurs: snapshot.facteurs,
     });
   }
 

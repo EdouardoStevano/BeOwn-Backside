@@ -1,4 +1,5 @@
 import { User } from 'src/iam/domains/models/user';
+import { MfaMethod } from 'src/iam/domains/models/mfa-method';
 // Aliasé : le domaine a lui aussi un `UserMapper`, qui traduit entre l'entité
 // et ses représentations. Celui-ci ne fait que la moitié ORM du chemin et
 // délègue l'autre.
@@ -13,7 +14,12 @@ import { UserEmailEntity } from 'src/iam/infrastructure/persistence/entities/use
  * métier de l'entité.
  */
 export class UserMapper {
-  static toDomain(entity: UserEntity): User {
+  /**
+   * @param facteurs facteurs MFA de l'agrégat, quand la lecture les a chargés.
+   *   Omis, le compte les tiendra pour « non chargés » et refusera toute
+   *   transition dessus — voir `User._facteurs`.
+   */
+  static toDomain(entity: UserEntity, facteurs?: MfaMethod[]): User {
     return UserDomainMapper.restore({
       userId: entity.userId,
       firstname: entity.firstname,
@@ -34,6 +40,7 @@ export class UserMapper {
       email: entity.userEmail?.email ?? null,
       emailVerified: entity.userEmail?.isVerified ?? false,
       emailVerifiedDate: entity.userEmail?.verifiedDate ?? null,
+      facteurs,
     });
   }
 

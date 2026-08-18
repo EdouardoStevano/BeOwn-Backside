@@ -10,14 +10,11 @@ import { NotificationsModule } from 'src/notifications/notifications.module';
 import { HASHING_SERVICE } from 'src/common/hashing/hashing.service';
 import { BcryptService } from 'src/common/hashing/bcrypt.service';
 import { RecaptchaService } from 'src/common/recaptcha/recaptcha.service';
-import { MfaMethodEntity } from 'src/iam/infrastructure/persistence/entities/mfa-method.entity';
 import { OTP_RECORD_STORE } from 'src/iam/applications/ports/otp-record-store.port';
 import { TOTP_GENERATOR } from 'src/iam/applications/ports/totp-generator.port';
-import { MFA_METHOD_REPOSITORY } from 'src/iam/domains/ports/mfa-method.repository';
 import { SECRET_CIPHER } from 'src/iam/applications/ports/secret-cipher.port';
 import { CacheOtpRecordStoreAdapter } from 'src/iam/infrastructure/otp/cache-otp-record-store.adapter';
 import { OtplibTotpGeneratorAdapter } from 'src/iam/infrastructure/otp/otplib-totp-generator.adapter';
-import { TypeOrmMfaMethodRepository } from 'src/iam/infrastructure/persistence/repositories/typeorm-mfa-method.repository';
 import { AesGcmSecretCipherAdapter } from 'src/iam/infrastructure/crypto/aes-gcm-secret-cipher.adapter';
 import { GoogleStrategy } from 'src/iam/infrastructure/oauth/strategies/google-auth.strategy';
 import { FacebookAuthStrategy } from 'src/iam/infrastructure/oauth/strategies/facebook-auth.strategy';
@@ -83,12 +80,9 @@ import { TotpSecretService } from './services/totp/totp-secret.service';
  *   (importé une seule fois par AppModule). Un binding local masquerait ce
  *   provider et ferait revenir le crash au démarrage quand les identifiants
  *   Twilio sont absents.
- * - `MfaMethodEntity` est déclarée ici, et non dans `IamInfrastructureModule` :
- *   ce dernier reste limité aux tokens et au cache dont dépendent les ~23
- *   modules à contrôleur authentifié (CRP, §5). Il fallait auparavant y
- *   déclarer les quatre classes de la hiérarchie STI, la parente comprise,
- *   pour que les `@ChildEntity` se résolvent — l'entité unique supprime ce
- *   piège au câblage.
+ * - `MfaMethodEntity` n'est plus déclarée ici : les facteurs sont des entités
+ *   de l'agrégat `User`, chargées et sauvegardées par son repository. Elle
+ *   suit donc `UsersInfrastructureModule`, avec la racine qui les porte.
  */
 @Module({
   imports: [
@@ -103,7 +97,6 @@ import { TotpSecretService } from './services/totp/totp-secret.service';
     // Bus d'événements : `RegisterUseCase` publie un Domain Event, dont les
     // abonnés vivent dans `applications/events/` (§8).
     CqrsModule,
-    TypeOrmModule.forFeature([MfaMethodEntity]),
   ],
   providers: [
     // Adapters de sortie (§4 — DIP : le port est déclaré du côté qui exprime
@@ -127,7 +120,6 @@ import { TotpSecretService } from './services/totp/totp-secret.service';
     // `SMS_METHOD_REPOSITORY`) pour deux contrats et quatre adapters, dont le
     // seul rôle était de choisir la table fille à interroger. Le canal étant
     // devenu une colonne, il est passé en paramètre (§4 — DIP/LSP).
-    { provide: MFA_METHOD_REPOSITORY, useClass: TypeOrmMfaMethodRepository },
     { provide: SECRET_CIPHER, useClass: AesGcmSecretCipherAdapter },
 
     // Stratégies Passport des fournisseurs OAuth.

@@ -6,10 +6,6 @@ import {
   type TotpGenerator,
 } from 'src/iam/applications/ports/totp-generator.port';
 import {
-  MFA_METHOD_REPOSITORY,
-  type MfaMethodRepository,
-} from 'src/iam/domains/ports/mfa-method.repository';
-import {
   SECRET_CIPHER,
   type SecretCipher,
 } from 'src/iam/applications/ports/secret-cipher.port';
@@ -34,10 +30,9 @@ import {
 /**
  * Enrôlement TOTP (Google Authenticator & co).
  *
- * Reprend à l'identique la logique de l'ancien `CreateTotpUseCase` : la
- * persistance passe par `MfaMethodRepository`, le chiffrement du secret par
- * `SecretCipher` et la composition du secret par `TotpSecretService` — cette
- * classe ne
+ * Le facteur est enrôlé **sur le compte**, qui en est la racine : c'est en
+ * sauvegardant `User` qu'on le persiste. Le chiffrement du secret revient à
+ * `SecretCipher` et sa composition à `TotpSecretService` — cette classe ne
  * connaît ni TypeORM, ni `crypto`, ni otplib.
  */
 @Injectable()
@@ -53,36 +48,27 @@ export class TotpEnrollmentStrategy implements MfaEnrollmentStrategy {
     private readonly totpSecrets: TotpSecretService,
     @Inject(TOTP_GENERATOR) private readonly totpGenerator: TotpGenerator,
     @Inject(USER_REPOSITORY) private readonly userRepository: UserRepository,
-    @Inject(MFA_METHOD_REPOSITORY)
-    private readonly mfaMethodRepository: MfaMethodRepository,
     @Inject(SECRET_CIPHER) private readonly secretCipher: SecretCipher,
     private readonly authMailer: AuthMailerService,
     private readonly configService: ConfigService,
   ) {}
 
   async start(request: MfaEnrollmentRequest): Promise<MfaEnrollmentChallenge> {
-    const user = await this.userRepository.findById(request.userId);
+    const user = await this.userRepository.findByIdWithFacteurs(request.userId);
     if (!user) throw new UserNotFoundError();
 
     const payload = this.totpSecrets.create(user.email || request.email);
 
     // Au plus un secret en attente, comme sur les canaux email/SMS : un QR code
-    // affiché puis abandonné ne doit pas rester enrôlable. Les méthodes déjà
-    // actives ne sont pas touchées — l'ancien authenticator continue de servir
-    // tant que le nouveau n'est pas confirmé.
-    await this.mfaMethodRepository.deletePendingForUser(
-      request.userId,
-      this.method,
-    );
-
+    // affiché puis abandonné ne doit pas rester enrôlable. `enrolerFacteur`
+    // purge les attentes du canal sans toucher aux facteurs actifs — l'ancien
+    // authenticator continue de servir tant que le nouveau n'est pas confirmé.
+    //
     // `credential` porte ici le secret partagé **chiffré** — jamais en clair.
     // Le même champ contient une adresse ou un numéro sur les autres canaux ;
     // c'est `method` qui dit lequel.
-    await this.mfaMethodRepository.create(
-      request.userId,
-      this.method,
-      this.secretCipher.encrypt(payload.secret),
-    );
+    user.enrolerFacteur(this.method, this.secretCipher.encrypt(payload.secret));
+    await this.userRepository.update(user);
 
     await this.mailQrCodeInDevelopment(user.email || request.email, payload);
 
@@ -135,22 +121,18 @@ export class TotpEnrollmentStrategy implements MfaEnrollmentStrategy {
   }
 
   async hasPending(userId: number): Promise<boolean> {
-    const methods = await this.mfaMethodRepository.findAllByUserId(
-      userId,
-      this.method,
-    );
-    return methods.some((factor) => factor.isPending());
+    const compte = await this.userRepository.findByIdWithFacteurs(userId);
+    return compte !== null && compte.facteurEnAttente(this.method) !== null;
   }
 
   async confirm(confirmation: MfaEnrollmentConfirmation): Promise<void> {
     const { userId, otp } = confirmation;
 
-    const user = await this.userRepository.findById(userId);
+    const user = await this.userRepository.findByIdWithFacteurs(userId);
     if (!user) throw new UserNotFoundError();
 
-    const methods = await this.mfaMethodRepository.findAllByUserId(
-      userId,
-      this.method,
+    const methods = user.facteurs.filter(
+      (facteur) => facteur.method === this.method,
     );
     if (methods.length === 0) {
       throw new TotpNotConfiguredError();
@@ -170,10 +152,11 @@ export class TotpEnrollmentStrategy implements MfaEnrollmentStrategy {
     }
 
     // Première vérification réussie d'un facteur fraîchement enrôlé : il
-    // devient l'unique facteur actif du compte, tous canaux confondus.
+    // devient l'unique facteur actif du compte, tous canaux confondus —
+    // `confirmerFacteur` s'en charge, l'appelant n'a rien à désactiver.
     if (validMethod.isPending()) {
-      await this.mfaMethodRepository.deactivateAll(userId);
-      await this.mfaMethodRepository.activate(validMethod.id);
+      user.confirmerFacteur(this.method);
+      await this.userRepository.update(user);
     }
   }
 }

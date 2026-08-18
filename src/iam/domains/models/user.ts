@@ -1,3 +1,5 @@
+import { MfaMethodType } from 'src/iam/domains/enums/mfa-method.enum';
+import { MfaMethod } from 'src/iam/domains/models/mfa-method';
 import { Email } from 'src/iam/domains/value-objects/email.vo';
 import { NumeroTelephone } from 'src/iam/domains/value-objects/numero-telephone.vo';
 import {
@@ -14,12 +16,23 @@ import {
   InvalidUserTypeError,
   STATUTS_ADMINISTRABLES,
 } from 'src/iam/domains/errors/user-administration.errors';
+import { FacteursMfaNonChargesError } from 'src/iam/domains/errors/mfa.errors';
 import {
   UserMapper,
   type PublicUser,
   type PublicUserMfa,
 } from 'src/iam/domains/mappers/user.mapper';
 import { AggregateRoot } from '@nestjs/cqrs';
+
+/**
+ * Ordre dans lequel un facteur est retenu quand le compte en a plusieurs.
+ * Voir {@link User.facteurActif} pour le pourquoi de cet ordre.
+ */
+const PREFERENCE_FACTEURS: readonly MfaMethodType[] = [
+  MfaMethodType.TOTP,
+  MfaMethodType.SMS,
+  MfaMethodType.EMAIL,
+];
 
 /**
  * Compare un mot de passe en clair à son empreinte. Injecté à l'appel plutôt
@@ -52,6 +65,12 @@ export interface UserSnapshot {
   email: string | null;
   emailVerified: boolean;
   emailVerifiedDate: Date | null;
+  /**
+   * Entités de l'agrégat, transportées telles quelles : elles ont leur propre
+   * table et leur propre cycle de vie, et n'ont donc pas de forme plate à
+   * prendre ici. Absentes quand la lecture ne les a pas chargées.
+   */
+  facteurs?: MfaMethod[];
 }
 
 /**
@@ -79,6 +98,8 @@ export interface UserState {
   email: Email | null;
   emailVerified: boolean;
   emailVerifiedDate: Date | null;
+  /** Absents quand la lecture ne les a pas chargés — voir `User._facteurs`. */
+  facteurs?: MfaMethod[] | null;
 }
 
 export interface RegisterUserProps {
@@ -151,6 +172,18 @@ export class User extends AggregateRoot {
   private _email: Email | null;
   private _emailVerified: boolean;
   private _emailVerifiedDate: Date | null;
+  /**
+   * Facteurs d'authentification enrôlés — **entités de cet agrégat**.
+   *
+   * `null` signifie « non chargés », et non « aucun » : le compte est lu des
+   * dizaines de fois par requête pour son rôle ou son statut, et joindre à
+   * chaque fois une table qui porte des secrets chiffrés serait payer cher un
+   * état dont presque personne n'a besoin. Les parcours MFA passent donc par
+   * `findByIdWithFacteurs`, et toute transition sur un compte dont les facteurs
+   * ne sont pas chargés lève plutôt que de deviner (§6 — un agrégat partiel ne
+   * se modifie pas).
+   */
+  private _facteurs: MfaMethod[] | null;
 
   /**
    * @internal Réservé à `User.register` et à `UserMapper`.
@@ -179,6 +212,7 @@ export class User extends AggregateRoot {
     this._email = state.email;
     this._emailVerified = state.emailVerified;
     this._emailVerifiedDate = state.emailVerifiedDate;
+    this._facteurs = state.facteurs ?? null;
   }
 
   /** Nouveau compte : statut CREE, identifiants non encore vérifiés. */
@@ -336,6 +370,125 @@ export class User extends AggregateRoot {
 
     this._userType = userType;
     return true;
+  }
+
+  // ── Facteurs d'authentification ───────────────────────────────────────────
+  //
+  // Le compte est la racine : un facteur ne se crée, ne s'active et ne se
+  // retire qu'à travers lui. Ces méthodes ne persistent rien — c'est la
+  // sauvegarde du compte qui enregistre l'état de ses facteurs.
+
+  /**
+   * Enrôle un facteur, en attente de la preuve que le titulaire le possède.
+   *
+   * Purge au passage les enrôlements du même canal jamais confirmés : il n'y a
+   * donc **au plus un facteur en attente par canal**, et la confirmation n'a
+   * jamais à deviner lequel des enrôlements inactifs on est en train de
+   * prouver. Les facteurs **actifs** ne sont pas touchés — l'authenticator en
+   * place continue de servir tant que le nouveau n'est pas confirmé.
+   */
+  enrolerFacteur(method: MfaMethodType, credential: string): MfaMethod {
+    const facteurs = this.exigerFacteurs();
+    const conserves = facteurs.filter(
+      (facteur) => facteur.method !== method || facteur.isActive(),
+    );
+
+    const enrole = MfaMethod.enroler(method, credential);
+    this._facteurs = [...conserves, enrole];
+    return enrole;
+  }
+
+  /**
+   * Confirme le facteur en attente d'un canal : il devient **l'unique facteur
+   * actif du compte**.
+   *
+   * C'est ici que vit l'invariant, et non plus dans un `deactivateAll()` que
+   * chaque appelant devait penser à lancer avant d'activer. L'oublier une fois
+   * suffisait à laisser deux facteurs armés, dont un — le plus faible — que la
+   * connexion n'opposait jamais et dont le titulaire ignorait qu'il restait
+   * ouvert.
+   *
+   * @returns le facteur activé, `null` si ce canal n'a aucun enrôlement en
+   *   attente — à l'appelant de dire que l'enrôlement n'a pas commencé.
+   */
+  confirmerFacteur(method: MfaMethodType): MfaMethod | null {
+    const enAttente = this.facteurEnAttente(method);
+    if (!enAttente) return null;
+
+    for (const facteur of this.exigerFacteurs()) facteur.desactiver();
+    enAttente.activer();
+    return enAttente;
+  }
+
+  /** Retire les facteurs d'un canal — le compte peut rester protégé par un autre. */
+  retirerFacteursDe(method: MfaMethodType): void {
+    for (const facteur of this.exigerFacteurs()) {
+      if (facteur.method === method) facteur.desactiver();
+    }
+  }
+
+  /**
+   * Facteur que la connexion opposera, `null` si le compte n'en a aucun d'actif.
+   *
+   * L'ordre de préférence est une règle du compte, pas d'un service : TOTP
+   * d'abord — il ne coûte ni SMS ni email, ne dépend d'aucun réseau de
+   * livraison et ne peut pas être intercepté en transit ; puis le SMS, qui
+   * suppose la possession d'un appareil, avant l'email, qui est justement ce
+   * que protège le mot de passe qu'on vient de saisir.
+   */
+  facteurActif(): MfaMethod | null {
+    const facteurs = this.exigerFacteurs();
+    for (const method of PREFERENCE_FACTEURS) {
+      const actif = facteurs.find(
+        (facteur) => facteur.method === method && facteur.isActive(),
+      );
+      if (actif) return actif;
+    }
+    return null;
+  }
+
+  /** Les facteurs ont-ils été chargés ? Seule la persistance a besoin de le savoir. */
+  get facteursCharges(): boolean {
+    return this._facteurs !== null;
+  }
+
+  /** Facteurs actifs d'un canal donné. */
+  facteursActifsDe(method: MfaMethodType): MfaMethod[] {
+    return this.exigerFacteurs().filter(
+      (facteur) => facteur.method === method && facteur.isActive(),
+    );
+  }
+
+  /** Enrôlement de ce canal jamais confirmé, `null` s'il n'y en a pas. */
+  facteurEnAttente(method: MfaMethodType): MfaMethod | null {
+    return (
+      this.exigerFacteurs().find(
+        (facteur) => facteur.method === method && facteur.isPending(),
+      ) ?? null
+    );
+  }
+
+  /** Un facteur actif de ce canal protège-t-il déjà cette destination ? */
+  protegeDeja(method: MfaMethodType, destination: string): boolean {
+    return this.exigerFacteurs().some(
+      (facteur) => facteur.method === method && facteur.isActiveOn(destination),
+    );
+  }
+
+  /** Tous les facteurs du compte, actifs ou non — pour les projections. */
+  get facteurs(): readonly MfaMethod[] {
+    return this.exigerFacteurs();
+  }
+
+  /**
+   * Refuse de travailler sur un compte dont les facteurs n'ont pas été
+   * chargés : rendre une liste vide ferait passer « je ne sais pas » pour
+   * « il n'y en a aucun », et une confirmation d'enrôlement effacerait alors
+   * silencieusement le facteur en place.
+   */
+  private exigerFacteurs(): MfaMethod[] {
+    if (this._facteurs === null) throw new FacteursMfaNonChargesError();
+    return this._facteurs;
   }
 
   /**

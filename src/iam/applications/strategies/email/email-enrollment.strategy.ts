@@ -3,10 +3,6 @@ import { MfaMethodType } from 'src/iam/domains/enums/mfa-method.enum';
 import { OtpService } from 'src/iam/applications/services/otp/otp.service';
 import { AuthMailerService } from 'src/iam/applications/services/auth-mailer.service';
 import {
-  MFA_METHOD_REPOSITORY,
-  type MfaMethodRepository,
-} from 'src/iam/domains/ports/mfa-method.repository';
-import {
   USER_REPOSITORY,
   type UserRepository,
 } from 'src/iam/domains/ports/user.repository';
@@ -26,12 +22,10 @@ export class EmailEnrollmentStrategy extends ChannelEnrollmentStrategy {
 
   constructor(
     otpService: OtpService,
-    @Inject(MFA_METHOD_REPOSITORY)
-    methodRepository: MfaMethodRepository,
-    @Inject(USER_REPOSITORY) private readonly userRepository: UserRepository,
+    @Inject(USER_REPOSITORY) userRepository: UserRepository,
     private readonly authMailer: AuthMailerService,
   ) {
-    super(otpService, methodRepository);
+    super(otpService, userRepository);
   }
 
   protected async resolveCredential(

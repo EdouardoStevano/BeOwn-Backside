@@ -3,7 +3,8 @@ import { MfaCredentialMismatchError } from '../errors/mfa.errors';
 
 /** État complet du facteur, tel qu'il transite depuis la persistance. */
 export interface MfaMethodSnapshot {
-  id: number;
+  /** Attribué par la persistance : absent d'un facteur qui vient d'être enrôlé. */
+  id: number | null;
   method: MfaMethodType;
   isActive: boolean;
   credential: string;
@@ -40,17 +41,35 @@ const DELIVERING_CHANNELS: readonly MfaMethodType[] = [
  * - `email` : l'adresse à laquelle le code est envoyé ;
  * - `sms` : le numéro E.164 auquel le code est envoyé.
  *
- * Immuable : les transitions d'état (activer, désactiver) passent par
- * `MfaMethodRepository`, qui travaille par identifiant. Exposer ici un
- * `activate()` qui ne persisterait rien laisserait croire le contraire.
+ * **Entité de l'agrégat `User`, et non agrégat elle-même.** Elle n'a plus de
+ * repository : un facteur n'existe pas sans le compte qui le porte, et
+ * l'invariant qui compte — « au plus un facteur actif, tous canaux
+ * confondus » — traverse les facteurs d'un même compte. Le tenir depuis un
+ * port par identifiant, comme le faisait `MfaMethodRepository.deactivateAll`,
+ * demandait à chaque appelant de se souvenir de l'appeler avant d'activer.
+ * C'est `User` qui l'applique désormais, sans qu'on puisse l'oublier.
+ *
+ * Ses transitions ne persistent rien par elles-mêmes : c'est la sauvegarde du
+ * compte qui les enregistre, comme pour tout ce que porte un agrégat.
  */
 export class MfaMethod {
   private constructor(
-    private readonly _id: number,
+    private readonly _id: number | null,
     private readonly _method: MfaMethodType,
-    private readonly _isActive: boolean,
+    private _isActive: boolean,
     private readonly _credential: string,
   ) {}
+
+  /**
+   * Facteur qu'on vient d'enrôler : en attente de la preuve, donc inactif, et
+   * sans identifiant tant que la persistance ne lui en a pas donné.
+   *
+   * @internal Réservé à `User.enrolerFacteur` — un facteur ne s'attache pas à
+   * un compte sans passer par lui.
+   */
+  static enroler(method: MfaMethodType, credential: string): MfaMethod {
+    return new MfaMethod(null, method, false, credential);
+  }
 
   /** Reconstruit un facteur depuis la persistance. */
   static rehydrate(snapshot: MfaMethodSnapshot): MfaMethod {
@@ -62,8 +81,34 @@ export class MfaMethod {
     );
   }
 
-  get id(): number {
+  /** `null` tant que la persistance ne l'a pas attribué. */
+  get id(): number | null {
     return this._id;
+  }
+
+  /**
+   * Le facteur devient opposable aux connexions.
+   *
+   * @internal Réservé à `User.confirmerFacteur` : activer un facteur sans
+   * désactiver les autres casserait l'invariant du compte.
+   */
+  activer(): void {
+    this._isActive = true;
+  }
+
+  /** @internal Réservé à `User` — voir {@link activer}. */
+  desactiver(): void {
+    this._isActive = false;
+  }
+
+  /** État complet, pour la persistance de l'agrégat. */
+  toSnapshot(): MfaMethodSnapshot {
+    return {
+      id: this._id,
+      method: this._method,
+      isActive: this._isActive,
+      credential: this._credential,
+    };
   }
 
   get method(): MfaMethodType {

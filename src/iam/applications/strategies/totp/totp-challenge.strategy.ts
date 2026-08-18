@@ -5,9 +5,9 @@ import {
   type TotpGenerator,
 } from 'src/iam/applications/ports/totp-generator.port';
 import {
-  MFA_METHOD_REPOSITORY,
-  type MfaMethodRepository,
-} from 'src/iam/domains/ports/mfa-method.repository';
+  USER_REPOSITORY,
+  type UserRepository,
+} from 'src/iam/domains/ports/user.repository';
 import {
   SECRET_CIPHER,
   type SecretCipher,
@@ -32,17 +32,14 @@ export class TotpChallengeStrategy implements MfaChallengeStrategy {
 
   constructor(
     @Inject(TOTP_GENERATOR) private readonly totpGenerator: TotpGenerator,
-    @Inject(MFA_METHOD_REPOSITORY)
-    private readonly mfaMethodRepository: MfaMethodRepository,
+    @Inject(USER_REPOSITORY)
+    private readonly userRepository: UserRepository,
     @Inject(SECRET_CIPHER) private readonly secretCipher: SecretCipher,
   ) {}
 
   async isActiveFor(userId: number): Promise<boolean> {
-    const methods = await this.mfaMethodRepository.findAllByUserId(
-      userId,
-      this.method,
-    );
-    return methods.some((factor) => factor.isActive());
+    const compte = await this.userRepository.findByIdWithFacteurs(userId);
+    return (compte?.facteursActifsDe(this.method).length ?? 0) > 0;
   }
 
   /** Rien à transmettre : le code vit dans l'application de l'utilisateur. */
@@ -51,9 +48,9 @@ export class TotpChallengeStrategy implements MfaChallengeStrategy {
   }
 
   async describeFor(userId: number): Promise<MfaMethodSummary[]> {
-    const methods = await this.mfaMethodRepository.findAllByUserId(
-      userId,
-      this.method,
+    const compte = await this.userRepository.findByIdWithFacteurs(userId);
+    const methods = (compte?.facteurs ?? []).filter(
+      (facteur) => facteur.method === this.method,
     );
 
     // Aucun `sentTo` : il n'y a pas de destination à montrer, et surtout le
@@ -66,15 +63,12 @@ export class TotpChallengeStrategy implements MfaChallengeStrategy {
   }
 
   async verify(userId: number, code: string): Promise<boolean> {
-    const methods = await this.mfaMethodRepository.findAllByUserId(
-      userId,
-      this.method,
-    );
+    const compte = await this.userRepository.findByIdWithFacteurs(userId);
 
     // Seules les méthodes actives sont éprouvées : un secret enrôlé mais jamais
     // confirmé ne doit pas pouvoir ouvrir de session, sans quoi afficher un QR
     // code suffirait à contourner le facteur en place.
-    for (const factor of methods.filter((m) => m.isActive())) {
+    for (const factor of compte?.facteursActifsDe(this.method) ?? []) {
       const secret = this.secretCipher.decrypt(factor.encryptedSecret);
       if (await this.totpGenerator.verify(code, secret)) return true;
     }
@@ -83,6 +77,10 @@ export class TotpChallengeStrategy implements MfaChallengeStrategy {
   }
 
   async deactivate(userId: number): Promise<void> {
-    await this.mfaMethodRepository.deactivateChannel(userId, this.method);
+    const compte = await this.userRepository.findByIdWithFacteurs(userId);
+    if (!compte) return;
+
+    compte.retirerFacteursDe(this.method);
+    await this.userRepository.update(compte);
   }
 }
