@@ -20,16 +20,16 @@ export class MoveIdentityToUser1783400000000 implements MigrationInterface {
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(
-      `ALTER TABLE "user" ADD COLUMN IF NOT EXISTS "telephone" character varying`,
+      `ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "telephone" character varying`,
     );
 
     // Reprise des numéros déjà déclarés. `WHERE user.telephone IS NULL` rend
     // l'opération rejouable : relancée, elle n'écrase pas un numéro saisi
     // depuis sur le compte.
     await queryRunner.query(`
-      UPDATE "user" u
+      UPDATE "users" u
       SET "telephone" = p."telephone"
-      FROM "profil_pp" p
+      FROM "profil_personne_physique" p
       WHERE p."utilisateurId" = u."userId"
         AND p."telephone" IS NOT NULL
         AND u."telephone" IS NULL
@@ -40,13 +40,13 @@ export class MoveIdentityToUser1783400000000 implements MigrationInterface {
     // écrit pour les comptes sans état civil. La recopier écraserait le compte
     // par sa propre ombre.
     await queryRunner.query(
-      `ALTER TABLE "profil_pp" DROP COLUMN IF EXISTS "prenom"`,
+      `ALTER TABLE "profil_personne_physique" DROP COLUMN IF EXISTS "prenom"`,
     );
     await queryRunner.query(
-      `ALTER TABLE "profil_pp" DROP COLUMN IF EXISTS "nom"`,
+      `ALTER TABLE "profil_personne_physique" DROP COLUMN IF EXISTS "nom"`,
     );
     await queryRunner.query(
-      `ALTER TABLE "profil_pp" DROP COLUMN IF EXISTS "telephone"`,
+      `ALTER TABLE "profil_personne_physique" DROP COLUMN IF EXISTS "telephone"`,
     );
   }
 
@@ -61,40 +61,40 @@ export class MoveIdentityToUser1783400000000 implements MigrationInterface {
    */
   public async down(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(
-      `ALTER TABLE "profil_pp" ADD COLUMN IF NOT EXISTS "prenom" character varying`,
+      `ALTER TABLE "profil_personne_physique" ADD COLUMN IF NOT EXISTS "prenom" character varying`,
     );
     await queryRunner.query(
-      `ALTER TABLE "profil_pp" ADD COLUMN IF NOT EXISTS "nom" character varying`,
+      `ALTER TABLE "profil_personne_physique" ADD COLUMN IF NOT EXISTS "nom" character varying`,
     );
     await queryRunner.query(
-      `ALTER TABLE "profil_pp" ADD COLUMN IF NOT EXISTS "telephone" character varying`,
+      `ALTER TABLE "profil_personne_physique" ADD COLUMN IF NOT EXISTS "telephone" character varying`,
     );
 
     await queryRunner.query(`
-      UPDATE "profil_pp" p
+      UPDATE "profil_personne_physique" p
       SET "prenom" = COALESCE(NULLIF(u."firstname", ''), '—'),
           "nom" = COALESCE(NULLIF(u."lastname", ''), '—'),
           "telephone" = u."telephone"
-      FROM "user" u
+      FROM "users" u
       WHERE p."utilisateurId" = u."userId"
     `);
     // Dossiers dont le compte a disparu : la contrainte doit tout de même tenir.
     await queryRunner.query(
-      `UPDATE "profil_pp" SET "prenom" = '—' WHERE "prenom" IS NULL`,
+      `UPDATE "profil_personne_physique" SET "prenom" = '—' WHERE "prenom" IS NULL`,
     );
     await queryRunner.query(
-      `UPDATE "profil_pp" SET "nom" = '—' WHERE "nom" IS NULL`,
-    );
-
-    await queryRunner.query(
-      `ALTER TABLE "profil_pp" ALTER COLUMN "prenom" SET NOT NULL`,
-    );
-    await queryRunner.query(
-      `ALTER TABLE "profil_pp" ALTER COLUMN "nom" SET NOT NULL`,
+      `UPDATE "profil_personne_physique" SET "nom" = '—' WHERE "nom" IS NULL`,
     );
 
     await queryRunner.query(
-      `ALTER TABLE "user" DROP COLUMN IF EXISTS "telephone"`,
+      `ALTER TABLE "profil_personne_physique" ALTER COLUMN "prenom" SET NOT NULL`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "profil_personne_physique" ALTER COLUMN "nom" SET NOT NULL`,
+    );
+
+    await queryRunner.query(
+      `ALTER TABLE "users" DROP COLUMN IF EXISTS "telephone"`,
     );
   }
 }

@@ -3,7 +3,10 @@ import { Inject } from '@nestjs/common';
 import { EmailTokenPayload } from 'src/iam/applications/models/auth-token';
 import { TokenService } from '../../services/token/token.service';
 import { TokenEmailCacheService } from '../../services/token/token-email-cache.service';
-import { SessionCacheService } from '../../services/session-cache.service';
+import {
+  SESSION_STORE,
+  type SessionStore,
+} from 'src/iam/applications/ports/session-store.port';
 import { Password } from 'src/iam/domains/value-objects/password.vo';
 import {
   USER_REPOSITORY,
@@ -29,7 +32,7 @@ export class ResetPasswordUseCase {
     // Deux magasins parce que la réinitialisation touche aux deux : elle
     // consomme le token reçu par email, puis coupe les sessions en cours.
     private readonly emailTokenCache: TokenEmailCacheService,
-    private readonly sessionCache: SessionCacheService,
+    @Inject(SESSION_STORE) private readonly sessions: SessionStore,
   ) {}
 
   async execute(command: ResetPasswordCommand): Promise<void> {
@@ -81,10 +84,10 @@ export class ResetPasswordUseCase {
     const hashedPassword = await this.hashingService.hash(newPassword.value);
     user.changePassword(hashedPassword);
     await this.userRepository.update(user);
-    // A password reset invalidates every refresh session for the account.
-    // (payload.email = l'email du compte porté par le token password_reset,
-    // déjà utilisé plus haut pour invalider le token email — le domaine User
-    // n'expose pas d'accès direct .email ici.)
-    await this.sessionCache.invalidateRefreshTokenId(payload.email);
+    // Réinitialiser le mot de passe ferme **toutes** les sessions du compte,
+    // et non plus la seule qu'il pouvait avoir : depuis le multi-appareil, en
+    // oublier une laisserait un appareil connecté avec l'ancien mot de passe —
+    // exactement ce dont on cherche à reprendre le contrôle.
+    await this.sessions.revoquerToutes(payload.sub);
   }
 }

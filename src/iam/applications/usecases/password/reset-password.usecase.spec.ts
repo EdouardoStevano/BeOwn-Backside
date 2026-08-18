@@ -39,10 +39,13 @@ const makeUsecase = () => {
     insertEmailTokenId: jest.fn(),
     invalidateEmailTokenId: jest.fn(),
   };
+  // Réinitialiser ferme toutes les sessions du compte, plus la seule qu'il
+  // pouvait avoir.
   const sessionCache = {
-    insertRefreshTokenId: jest.fn(),
-    validateRefreshToken: jest.fn(),
-    invalidateRefreshTokenId: jest.fn(),
+    enregistrer: jest.fn(),
+    estValide: jest.fn(),
+    revoquer: jest.fn(),
+    revoquerToutes: jest.fn(),
   };
 
   const usecase = new ResetPasswordUseCase(
@@ -65,7 +68,7 @@ const makeUsecase = () => {
 
 describe('ResetPasswordUseCase', () => {
   it('réinitialise le mot de passe pour un token password_reset valide et non rejoué', async () => {
-    const { usecase, tokenService, emailTokenCache, userRepository } =
+    const { usecase, tokenService, emailTokenCache, userRepository, sessionCache } =
       makeUsecase();
     tokenService.verifyEmailToken.mockResolvedValue(buildPayload());
     emailTokenCache.validateEmailToken.mockResolvedValue(true);
@@ -83,6 +86,10 @@ describe('ResetPasswordUseCase', () => {
       'password_reset',
     );
     expect(userRepository.update).toHaveBeenCalled();
+    // Toutes les sessions tombent, pas seulement une : depuis le
+    // multi-appareil, en laisser une ouverte rendrait la réinitialisation
+    // inopérante sur l'appareil qu'on cherche justement à couper.
+    expect(sessionCache.revoquerToutes).toHaveBeenCalledWith(42);
   });
 
   it('rejette (401) un token de type email_verify — bug de confusion de token', async () => {

@@ -15,15 +15,13 @@ interface RedisBackedStore {
 }
 
 /**
- * Ce qui ouvre ou prolonge une session : l'identifiant du refresh token en
- * cours, et le code à usage unique qui clôt un parcours OAuth.
+ * Le code à usage unique qui clôt un parcours OAuth — une session en transit,
+ * échangée contre des tokens dans les trente secondes.
  *
- * Les deux vont ensemble parce qu'ils portent la même chose — le droit d'être
- * connecté. Le code OAuth n'est qu'une session en transit : il est échangé
- * contre les tokens dans les trente secondes. Les tokens email
- * ([TokenEmailCacheService]) et les challenges MFA
- * ([MFAChallengeCacheService]) prouvent au contraire une possession, avant que
- * la session n'existe.
+ * Les refresh tokens ont quitté ce service : ils ne sont plus une valeur de
+ * cache mais des **sessions**, une par appareil, dont le cache n'est que le
+ * chemin rapide devant une table (`SESSION_STORE` et son proxy). Ce qui reste
+ * ici est réellement éphémère et n'a rien à survivre.
  */
 @Injectable()
 export class SessionCacheService {
@@ -32,41 +30,6 @@ export class SessionCacheService {
     @Inject(jwtConfig.KEY)
     private readonly jwtConfiguration: ConfigType<typeof jwtConfig>,
   ) {}
-
-  // ── Refresh tokens ────────────────────────────────────────────────────────
-
-  /**
-   * Le TTL est repris de la durée de vie du refresh token : la config parle en
-   * secondes, le cache en millisecondes.
-   */
-  async insertRefreshTokenId(
-    email: string,
-    refreshTokenId: string,
-  ): Promise<void> {
-    await this.cacheManager.set<string>(
-      this.getRefreshTokenKey(email),
-      refreshTokenId,
-      this.jwtConfiguration.refreshTokenTtl * 1000,
-    );
-  }
-
-  async validateRefreshToken(
-    email: string,
-    refreshTokenId: string,
-  ): Promise<boolean> {
-    const storedId = await this.cacheManager.get<string>(
-      this.getRefreshTokenKey(email),
-    );
-    return storedId === refreshTokenId;
-  }
-
-  async invalidateRefreshTokenId(email: string): Promise<void> {
-    await this.cacheManager.del(this.getRefreshTokenKey(email));
-  }
-
-  private getRefreshTokenKey(email: string) {
-    return `refresh-${email}`;
-  }
 
   // ── Codes OAuth ───────────────────────────────────────────────────────────
 
