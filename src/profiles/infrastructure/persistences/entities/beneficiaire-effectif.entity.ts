@@ -1,5 +1,11 @@
 import {
-  Column, CreateDateColumn, Entity, Index, ManyToOne, JoinColumn, PrimaryGeneratedColumn,
+  Column,
+  CreateDateColumn,
+  Entity,
+  Index,
+  ManyToOne,
+  JoinColumn,
+  PrimaryGeneratedColumn,
 } from 'typeorm';
 import { ProfilPMEntity } from './profil-pm.entity';
 

@@ -1,3 +1,4 @@
+import type { EventBus } from '@nestjs/cqrs';
 import { CreateProfilPPUseCase } from './create-profil-pp.usecase';
 import { buildUser } from 'src/iam/domains/models/user.fixture';
 import type { User } from 'src/iam/domains/models/user';
@@ -10,6 +11,7 @@ import {
   ProfilPPDejaExistantError,
 } from 'src/profiles/domains/errors';
 import { CategoriePsfp } from 'src/profiles/domains/enums/kyc-status.enum';
+import { ProfilPPCreeDomainEvent } from 'src/profiles/domains/events/profil-pp-cree.domain-event';
 import { CreateProfilPPDto } from 'src/profiles/presenters/dto/profil.dto';
 
 /**
@@ -37,12 +39,17 @@ function monter(
     update: jest.fn((u: User) => Promise.resolve(u)),
   };
 
+  // Le report du téléphone sur le compte a quitté le use case : il est
+  // désormais le fait d'un abonné, et ce qu'on éprouve ici est l'annonce.
+  const eventBus = { publish: jest.fn() };
+
   const useCase = new CreateProfilPPUseCase(
     profilPPRepository as ProfilPPRepository,
     userRepository as unknown as UserRepository,
+    eventBus as unknown as EventBus,
   );
 
-  return { useCase, profilPPRepository, userRepository, compte };
+  return { useCase, profilPPRepository, userRepository, eventBus, compte };
 }
 
 const DTO_VIDE = {} as CreateProfilPPDto;
@@ -128,23 +135,48 @@ describe('CreateProfilPPUseCase', () => {
     expect(profil.situationFiscale.nif).toBe('1234567890');
   });
 
-  it('écrit le téléphone déclaré sur le compte, pas sur le dossier', async () => {
-    const { useCase, userRepository, compte } = monter();
+  it('annonce le numéro déclaré plutôt que de le poser lui-même', async () => {
+    // Le compte n'est plus écrit ici : `ProfilPPCreeEventHandler` s'en charge.
+    const { useCase, userRepository, eventBus } = monter();
+
+    await useCase.execute(42, {
+      telephone: '0033612345678',
+    } as CreateProfilPPDto);
+
+    expect(userRepository.update).not.toHaveBeenCalled();
+    const [event] = eventBus.publish.mock.calls[0] as [ProfilPPCreeDomainEvent];
+    expect(event).toBeInstanceOf(ProfilPPCreeDomainEvent);
+    expect(event.utilisateurId).toBe(42);
+    expect(event.telephoneDeclare).toBe('0033612345678');
+  });
+
+  it('rend le numéro déclaré, que le compte ne porte pas encore', async () => {
+    // Le report étant différé, relire la colonne rendrait l'ancien numéro à
+    // qui vient d'en saisir un nouveau.
+    const { useCase } = monter();
 
     const vue = await useCase.execute(42, {
       telephone: '0033612345678',
     } as CreateProfilPPDto);
 
-    expect(compte?.telephone).toBe('+33612345678');
-    expect(userRepository.update).toHaveBeenCalledWith(compte);
-    expect(vue.telephone).toBe('+33612345678');
+    expect(vue.telephone).toBe('0033612345678');
   });
 
-  it("n'écrit pas le compte quand le formulaire ne donne aucun numéro", async () => {
-    const { useCase, userRepository } = monter();
+  it('annonce le fait même sans numéro déclaré', async () => {
+    const { useCase, eventBus } = monter();
 
     await useCase.execute(42, DTO_VIDE);
 
-    expect(userRepository.update).not.toHaveBeenCalled();
+    const [event] = eventBus.publish.mock.calls[0] as [ProfilPPCreeDomainEvent];
+    expect(event.telephoneDeclare).toBeUndefined();
+  });
+
+  it("n'annonce rien quand le profil n'a pas pu naître", async () => {
+    const { useCase, eventBus } = monter();
+
+    await expect(
+      useCase.execute(42, { nationalite: 'ZZ' } as CreateProfilPPDto),
+    ).rejects.toBeInstanceOf(ChampProfilInvalideError);
+    expect(eventBus.publish).not.toHaveBeenCalled();
   });
 });

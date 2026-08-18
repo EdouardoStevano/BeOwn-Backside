@@ -11,6 +11,7 @@ import { DecideKycManualReviewUseCase } from './usecases/decide-kyc-manual-revie
 import { KycRevueManuelleDemandeeEventHandler } from './events/kyc-revue-manuelle-demandee.event-handler';
 import { KycValideEventHandler } from './events/kyc-valide.event-handler';
 import { KycRefuseEventHandler } from './events/kyc-refuse.event-handler';
+import { TelephoneDeclareEventHandler } from './events/telephone-declare.event-handler';
 import { ProfileController } from '../presenters/http/profile.controller';
 import { GetProfilPPUseCase } from './usecases/get-profil-pp.usecase';
 import { UpdateProfilPPUseCase } from './usecases/update-profil-pp.usecase';
@@ -23,6 +24,7 @@ import { GetQuestionnaireUseCase } from './usecases/get-questionnaire.usecase';
 import { GetOnboardingStatusUseCase } from './usecases/get-onboarding-status.usecase';
 import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructure.module';
 import { UsersInfrastructureModule } from 'src/iam/infrastructure/users-infrastructure.module';
+import { AccountContactModule } from 'src/iam/applications/account-contact.module';
 import { NotificationsModule } from 'src/notifications/notifications.module';
 import { RiskScoringService } from './risk-scoring.service';
 import { BeneficiaireEffectifEntity } from '../infrastructure/persistences/entities/beneficiaire-effectif.entity';
@@ -45,6 +47,9 @@ import { ProfilesErrorFilter } from '../presenters/http/filters/profiles-error.f
     // comptes avec (CRP, §5).
     IamInfrastructureModule,
     UsersInfrastructureModule,
+    // Pour `ChangerTelephoneUseCase` : le numéro déclaré au formulaire de
+    // profil appartient au compte, et c'est IAM qui décide comment il s'écrit.
+    AccountContactModule,
     NotificationsModule,
     // Ce qui reste ici est la seule table que la présentation lit encore en
     // direct : les bénéficiaires effectifs, et le profil moral auquel ils se
@@ -71,6 +76,7 @@ import { ProfilesErrorFilter } from '../presenters/http/filters/profiles-error.f
     KycRevueManuelleDemandeeEventHandler,
     KycValideEventHandler,
     KycRefuseEventHandler,
+    TelephoneDeclareEventHandler,
     // Traduit les erreurs métier du contexte en réponses HTTP : le domaine ne
     // connaît aucun statut (§12.1), la présentation s'en charge.
     { provide: APP_FILTER, useClass: ProfilesErrorFilter },
