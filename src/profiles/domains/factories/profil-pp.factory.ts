@@ -12,9 +12,6 @@ import { SituationProfessionnelle } from 'src/profiles/domains/value-objects/sit
 /** Ce qu'il faut pour faire naître un profil, en plus des champs déclarés. */
 export interface CreerProfilPPProps extends ChampsDeclaresProfilPP {
   utilisateurId: number;
-  /** Repris du compte — voir `MARQUEUR_IDENTITE_INCONNUE`. */
-  prenom: string | null | undefined;
-  nom: string | null | undefined;
 }
 
 /**
@@ -25,6 +22,10 @@ export interface CreerProfilPPProps extends ChampsDeclaresProfilPP {
  * départ. Rien de tout cela n'est le métier de l'agrégat, qui a pour rôle de
  * faire respecter ses règles une fois né — deux raisons de changer pour une
  * même classe (§4 — SRP). `ProfilPP.creer` a donc migré ici.
+ *
+ * Le prénom, le nom et le téléphone ne figurent plus parmi les props : ils
+ * appartiennent au compte. La fabrique n'a donc plus besoin qu'on lui passe
+ * l'état civil, et le dossier ne peut plus en garder une copie divergente.
  *
  * Une classe à méthodes statiques, sans `@Injectable` : contrairement à
  * `UserFactory` du contexte IAM, qui doit se faire injecter le port de hachage,
@@ -59,10 +60,7 @@ export class ProfilPPFactory {
         createdAt: undefined as unknown as Date,
         updatedAt: undefined as unknown as Date,
       },
-      identite: Identite.declarer(
-        { prenom: props.prenom, nom: props.nom },
-        props,
-      ),
+      identite: Identite.declarer(props),
       coordonnees: Coordonnees.declarer(props),
       situationProfessionnelle: SituationProfessionnelle.declarer(props),
       situationFiscale: SituationFiscale.declarer(props),

@@ -27,8 +27,6 @@ export class ProfilMapper {
   static ppToDomain(entity: ProfilPPEntity): ProfilPP {
     return ProfilPPDomainMapper.restore({
       utilisateurId: entity.utilisateurId,
-      prenom: entity.prenom,
-      nom: entity.nom,
       nomNaissance: entity.nomNaissance,
       civilite: entity.civilite,
       dateNaissance: entity.dateNaissance,
@@ -40,7 +38,6 @@ export class ProfilMapper {
       codePostal: entity.codePostal,
       ville: entity.ville,
       pays: entity.pays,
-      telephone: entity.telephone,
       profession: entity.profession,
       secteurActivite: entity.secteurActivite,
       pep: entity.pep,
@@ -72,8 +69,6 @@ export class ProfilMapper {
     const snapshot = ProfilPPDomainMapper.toSnapshot(domain);
     const entity = new ProfilPPEntity();
     entity.utilisateurId = snapshot.utilisateurId;
-    entity.prenom = snapshot.prenom;
-    entity.nom = snapshot.nom;
     entity.nomNaissance = snapshot.nomNaissance;
     entity.civilite = snapshot.civilite;
     // Une colonne Postgres `date` se renseigne aussi bien avec la chaîne
@@ -88,7 +83,6 @@ export class ProfilMapper {
     entity.codePostal = snapshot.codePostal;
     entity.ville = snapshot.ville;
     entity.pays = snapshot.pays;
-    entity.telephone = snapshot.telephone;
     entity.profession = snapshot.profession;
     entity.secteurActivite = snapshot.secteurActivite;
     entity.pep = snapshot.pep;

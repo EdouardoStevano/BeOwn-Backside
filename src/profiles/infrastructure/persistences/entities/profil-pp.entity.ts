@@ -28,12 +28,6 @@ export class ProfilPPEntity {
   @Column({ type: 'varchar', nullable: true })
   civilite: string | null;
 
-  @Column({ type: 'varchar' })
-  prenom: string;
-
-  @Column({ type: 'varchar' })
-  nom: string;
-
   @Column({ type: 'varchar', nullable: true })
   nomNaissance: string | null;
 
@@ -63,9 +57,6 @@ export class ProfilPPEntity {
 
   @Column({ type: 'char', length: 2, nullable: true })
   pays: string | null;
-
-  @Column({ type: 'varchar', nullable: true })
-  telephone: string | null;
 
   @Column({ type: 'varchar', nullable: true })
   profession: string | null;

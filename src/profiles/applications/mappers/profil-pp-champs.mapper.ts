@@ -4,6 +4,10 @@ import { ChampsDeclaresProfilPP } from 'src/profiles/domains/profil-pp';
 /**
  * Traduit le DTO HTTP en champs déclarés du domaine.
  *
+ * `telephone` n'y est plus non plus : il appartient au compte, et
+ * `CreateProfilPPUseCase` l'y écrit par le port d'IAM plutôt que de le laisser
+ * entrer dans le dossier.
+ *
  * L'intérêt est dans ce qui **n'est pas** repris : `patrimoineDeclare` et
  * `montantMaxConseille` figurent dans le DTO mais sont le résultat du
  * questionnaire d'adéquation (`SaveQuestionnaireUseCase`), pas une déclaration
@@ -30,7 +34,6 @@ export function champsDeclaresDepuisDto(
     codePostal: dto.codePostal,
     ville: dto.ville,
     pays: dto.pays,
-    telephone: dto.telephone,
     profession: dto.profession,
     secteurActivite: dto.secteurActivite,
     pep: dto.pep,

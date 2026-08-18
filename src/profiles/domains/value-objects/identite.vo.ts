@@ -8,28 +8,6 @@ import { NomPersonne } from './nom-personne.vo';
 /** Longueur d'un libellé de lieu — commune de naissance. */
 const MAX_LIEU = 100;
 
-/**
- * Marqueur d'identité manquante.
- *
- * `prenom` et `nom` sont NOT NULL en base mais ne sont pas redemandés par le
- * formulaire de complétion : ils viennent du compte, où le nom de famille est
- * facultatif. Refuser la création pour autant fermerait la porte à un
- * utilisateur inscrit sans nom — il ne pourrait plus ni compléter son profil,
- * ni faire son KYC, ni donc corriger quoi que ce soit.
- *
- * Le tiret cadratin est donc écrit sciemment, et nommé ici pour que
- * {@link Identite.estConnue} puisse le reconnaître : c'est un trou déclaré,
- * pas une valeur. Il était auparavant un littéral perdu dans un use case,
- * invisible à quiconque lisait le modèle.
- */
-export const MARQUEUR_IDENTITE_INCONNUE = '—';
-
-/** État civil relu depuis le compte — jamais modifié depuis le profil. */
-export interface EtatCivilDuCompte {
-  prenom: string | null | undefined;
-  nom: string | null | undefined;
-}
-
 /** Part de l'identité que le titulaire déclare lui-même. */
 export interface ChampsIdentite {
   civilite?: string | null;
@@ -43,8 +21,6 @@ export interface ChampsIdentite {
 
 export interface IdentiteSnapshot {
   civilite: string | null;
-  prenom: string;
-  nom: string;
   nomNaissance: string | null;
   dateNaissance: string | null;
   lieuNaissance: string | null;
@@ -62,8 +38,6 @@ export interface IdentiteSnapshotBrut extends Omit<
 
 interface EtatIdentite {
   civilite: Civilite | null;
-  prenom: NomPersonne;
-  nom: NomPersonne;
   nomNaissance: NomPersonne | null;
   dateNaissance: DateNaissance | null;
   lieuNaissance: Libelle | null;
@@ -74,8 +48,11 @@ interface EtatIdentite {
 /**
  * État civil du titulaire du profil.
  *
- * Regroupe ce qui répond à « qui est cette personne » : civilité, noms,
- * naissance, nationalité. C'est le bloc que le KYC rapproche de la pièce
+ * Regroupe ce que le titulaire déclare de son état civil : civilité, nom de
+ * naissance, naissance, nationalité. Son **prénom et son nom** n'y sont plus :
+ * ils étaient recopiés du compte à la création, jamais modifiables depuis le
+ * formulaire, et dupliquaient donc `user.firstname` / `user.lastname` — deux
+ * vérités sur la même personne, dont une seule bougeait au renommage. C'est le bloc que le KYC rapproche de la pièce
  * d'identité, ce qui explique qu'il tienne ensemble — un rapprochement porte
  * sur l'ensemble, jamais sur un champ isolé.
  *
@@ -87,17 +64,9 @@ interface EtatIdentite {
 export class Identite {
   private constructor(private readonly etat: EtatIdentite) {}
 
-  /**
-   * Première déclaration. L'état civil vient du compte, le reste du
-   * formulaire ; à défaut d'état civil, le marqueur plutôt qu'un refus.
-   */
-  static declarer(
-    compte: EtatCivilDuCompte,
-    champs: ChampsIdentite = {},
-  ): Identite {
+  /** Première déclaration : tout vient du formulaire de complétion. */
+  static declarer(champs: ChampsIdentite = {}): Identite {
     return new Identite({
-      prenom: reprendreDuCompte(compte.prenom, 'Le prénom', 'prenom'),
-      nom: reprendreDuCompte(compte.nom, 'Le nom', 'nom'),
       civilite: parseCivilite(champs.civilite),
       nomNaissance: NomPersonne.of(
         champs.nomNaissance,
@@ -128,10 +97,6 @@ export class Identite {
   static restore(snapshot: IdentiteSnapshotBrut): Identite {
     return new Identite({
       civilite: restoreCivilite(snapshot.civilite),
-      // Le marqueur est plus court que le minimum exigé : la relecture ne peut
-      // pas repasser par la règle, sinon elle refuserait ce qu'elle a écrit.
-      prenom: NomPersonne.marqueur(snapshot.prenom),
-      nom: NomPersonne.marqueur(snapshot.nom),
       nomNaissance: NomPersonne.restore(snapshot.nomNaissance),
       dateNaissance: DateNaissance.restore(snapshot.dateNaissance),
       lieuNaissance: Libelle.restore(snapshot.lieuNaissance),
@@ -140,15 +105,9 @@ export class Identite {
     });
   }
 
-  /**
-   * Identité révisée. Prénom et nom n'en font pas partie : ils appartiennent au
-   * compte, et se changent par le renommage du compte (contexte IAM). Les
-   * dupliquer ici ferait diverger deux vérités sur la même personne.
-   */
+  /** Identité révisée. */
   avec(champs: ChampsIdentite): Identite {
     return new Identite({
-      prenom: this.etat.prenom,
-      nom: this.etat.nom,
       civilite: siDeclare(champs.civilite, parseCivilite, this.etat.civilite),
       nomNaissance: siDeclare(
         champs.nomNaissance,
@@ -178,17 +137,6 @@ export class Identite {
     });
   }
 
-  /**
-   * L'état civil vient-il réellement du compte, ou n'a-t-on que le marqueur ?
-   * Un dossier KYC ne peut pas être instruit sans état civil.
-   */
-  estConnue(): boolean {
-    return (
-      this.etat.prenom.value !== MARQUEUR_IDENTITE_INCONNUE &&
-      this.etat.nom.value !== MARQUEUR_IDENTITE_INCONNUE
-    );
-  }
-
   /** Âge en années révolues, `null` si la date de naissance n'est pas connue. */
   age(): number | null {
     return this.etat.dateNaissance?.age() ?? null;
@@ -196,12 +144,6 @@ export class Identite {
 
   get civilite(): string | null {
     return this.etat.civilite;
-  }
-  get prenom(): string {
-    return this.etat.prenom.value;
-  }
-  get nom(): string {
-    return this.etat.nom.value;
   }
   get nomNaissance(): string | null {
     return this.etat.nomNaissance?.value ?? null;
@@ -224,8 +166,6 @@ export class Identite {
   equals(other: Identite): boolean {
     return (
       this.civilite === other.civilite &&
-      this.prenom === other.prenom &&
-      this.nom === other.nom &&
       this.nomNaissance === other.nomNaissance &&
       this.dateNaissance === other.dateNaissance &&
       this.lieuNaissance === other.lieuNaissance &&
@@ -237,8 +177,6 @@ export class Identite {
   toSnapshot(): IdentiteSnapshot {
     return {
       civilite: this.civilite,
-      prenom: this.prenom,
-      nom: this.nom,
       nomNaissance: this.nomNaissance,
       dateNaissance: this.dateNaissance,
       lieuNaissance: this.lieuNaissance,
@@ -249,13 +187,3 @@ export class Identite {
 }
 
 /** Nom ou prénom repris du compte, avec repli sur le marqueur. */
-function reprendreDuCompte(
-  raw: string | null | undefined,
-  label: string,
-  field: string,
-): NomPersonne {
-  return (
-    NomPersonne.of(raw, label, field) ??
-    NomPersonne.marqueur(MARQUEUR_IDENTITE_INCONNUE)
-  );
-}

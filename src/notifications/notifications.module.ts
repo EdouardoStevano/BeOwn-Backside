@@ -7,7 +7,6 @@ import { AuditLogEntity } from './infrastructure/persistences/entities/audit-log
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 import { UserPreferencesEntity } from 'src/preferences/infrastructure/persistences/entities/user-preferences.entity';
 import { ProjectEntity } from 'src/projects/infrastructure/persistences/entities/project.entity';
-import { ProfilPPEntity } from 'src/profiles/infrastructure/persistences/entities/profil-pp.entity';
 import { AdminSettingsEntity } from 'src/admin/entities/admin-settings.entity';
 import { NotificationService } from './applications/notification.service';
 import { NotificationEventService } from './applications/notification-event.service';
@@ -32,7 +31,6 @@ import { PreferencesModule } from 'src/preferences/applications/preferences.modu
       // téléphone), projet diffusé (horodatage anti-doublon) et toggles admin.
       UserPreferencesEntity,
       ProjectEntity,
-      ProfilPPEntity,
       AdminSettingsEntity,
     ]),
     IamInfrastructureModule,
@@ -57,7 +55,11 @@ import { PreferencesModule } from 'src/preferences/applications/preferences.modu
     BroadcastService,
     // que AdminModule/AuthenticationModule.
   ],
-  controllers: [NotificationController, AuditLogController, PublicUnsubscribeController],
+  controllers: [
+    NotificationController,
+    AuditLogController,
+    PublicUnsubscribeController,
+  ],
   exports: [
     NotificationService,
     NotificationEventService,

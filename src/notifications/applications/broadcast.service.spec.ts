@@ -26,12 +26,17 @@ function makeProject(overrides: Record<string, unknown> = {}) {
   };
 }
 
+/**
+ * Le téléphone vient du compte depuis qu'il a quitté `profil_pp` : plus de
+ * jointure, plus de titulaire injoignable faute de dossier.
+ */
 function makeUser(userId: number, overrides: Record<string, unknown> = {}) {
   return {
     userId,
     firstname: `User${userId}`,
     status: UserStatus.ACTIF,
     role: 'investisseur',
+    telephone: '+33612345678',
     userEmail: { email: `user${userId}@test.fr` },
     ...overrides,
   };
@@ -52,7 +57,6 @@ interface Deps {
   projectRepo: any;
   userRepo: any;
   prefsRepo: any;
-  profilRepo: any;
   settingsRepo: any;
   templates: any;
   emailService: any;
@@ -74,7 +78,6 @@ function makeDeps(overrides: Partial<Deps> = {}): Deps {
       findOne: jest.fn().mockResolvedValue({ userId: 99, role: 'super_admin' }),
     },
     prefsRepo: { find: jest.fn().mockResolvedValue([makePrefs(1)]) },
-    profilRepo: { find: jest.fn().mockResolvedValue([]) },
     settingsRepo: { findOne: jest.fn().mockResolvedValue(null) },
     templates: {
       render: jest.fn().mockResolvedValue({
@@ -105,7 +108,6 @@ function makeService(deps: Deps): BroadcastService {
     deps.projectRepo,
     deps.userRepo,
     deps.prefsRepo,
-    deps.profilRepo,
     deps.settingsRepo,
     deps.templates,
     deps.emailService,
@@ -300,9 +302,6 @@ describe('BroadcastService — filtrage des destinataires', () => {
     deps.prefsRepo.find.mockResolvedValue([
       makePrefs(1, { notifMarketing: false }),
     ]);
-    deps.profilRepo.find.mockResolvedValue([
-      { utilisateurId: 1, telephone: '+33612345678' },
-    ]);
 
     const result = await makeService(deps).announceProjectLaunched(
       PROJECT_ID,
@@ -360,19 +359,14 @@ describe('BroadcastService — filtrage des destinataires', () => {
     const deps = makeDeps();
     deps.settingsRepo.findOne.mockResolvedValue(settingsWithSms());
     deps.userRepo.find.mockResolvedValue([
-      makeUser(1),
-      makeUser(2),
+      makeUser(1, { telephone: null }), // aucun numéro déclaré
+      makeUser(2, { telephone: '0612345678' }), // national, pas E.164
       makeUser(3),
     ]);
     deps.prefsRepo.find.mockResolvedValue([
       makePrefs(1),
       makePrefs(2),
       makePrefs(3),
-    ]);
-    deps.profilRepo.find.mockResolvedValue([
-      // user 1 : pas de profil → pas de téléphone
-      { utilisateurId: 2, telephone: '0612345678' }, // format national, pas E.164
-      { utilisateurId: 3, telephone: '+33612345678' },
     ]);
 
     const result = await makeService(deps).announceProjectLaunched(
@@ -433,9 +427,6 @@ describe('BroadcastService — toggles admin', () => {
   it('SMS OFF PAR DÉFAUT : sans réglage admin, aucun SMS ne part même en full opt-in', async () => {
     const deps = makeDeps();
     deps.settingsRepo.findOne.mockResolvedValue(null); // aucun réglage stocké
-    deps.profilRepo.find.mockResolvedValue([
-      { utilisateurId: 1, telephone: '+33612345678' },
-    ]);
     // prefs par défaut du makeDeps : notifSms=true, notifMarketing=true
 
     const result = await makeService(deps).announceProjectLaunched(
@@ -444,8 +435,6 @@ describe('BroadcastService — toggles admin', () => {
     );
 
     expect(deps.smsService.sendTransactional).not.toHaveBeenCalled();
-    // Les téléphones ne sont même pas chargés quand le canal SMS est off.
-    expect(deps.profilRepo.find).not.toHaveBeenCalled();
     expect(result.sms).toBe(0);
     expect(result.emails).toBe(1);
   });
@@ -497,9 +486,6 @@ describe('BroadcastService — résilience des envois', () => {
     const deps = makeDeps();
     deps.templates.render.mockResolvedValue(null);
     deps.settingsRepo.findOne.mockResolvedValue(settingsWithSms());
-    deps.profilRepo.find.mockResolvedValue([
-      { utilisateurId: 1, telephone: '+33612345678' },
-    ]);
 
     const result = await makeService(deps).announceProjectLaunched(
       PROJECT_ID,

@@ -14,12 +14,7 @@ function ilYA(annees: number): string {
 }
 
 function creer(champs: Partial<CreerProfilPPProps> = {}): ProfilPP {
-  return ProfilPPFactory.creer({
-    utilisateurId: 42,
-    prenom: 'Awa',
-    nom: 'Koné',
-    ...champs,
-  });
+  return ProfilPPFactory.creer({ utilisateurId: 42, ...champs });
 }
 
 /** Le champ fautif remonté au front, pour surligner la bonne entrée. */
@@ -115,18 +110,15 @@ describe('ProfilPP.toJSON', () => {
         'nationalite',
         'nif',
         'niveauRisque',
-        'nom',
         'nomNaissance',
         'patrimoineDeclare',
         'pays',
         'paysNaissance',
         'pep',
-        'prenom',
         'prochainContactDu',
         'profession',
         'residenceFiscale',
         'secteurActivite',
-        'telephone',
         'utilisateurId',
         'ville',
       ].sort(),

@@ -1,4 +1,4 @@
-import { ChampProfilInvalideError } from 'src/profiles/domains/errors';
+import { InvalidTelephoneError } from 'src/iam/domains/errors/profile.errors';
 
 /** Longueur du numéro national, indicatif compris — borne haute de l'E.164. */
 const MAX_CHIFFRES = 15;
@@ -12,11 +12,14 @@ const MIN_CHIFFRES = 8;
 /** Séparateurs de confort qu'on retire avant tout contrôle. */
 const SEPARATEURS = /[\s.\-()/]/g;
 
-const LABEL = 'Le numéro de téléphone';
-const FIELD = 'telephone';
-
 /**
- * Numéro de téléphone du titulaire.
+ * Numéro de téléphone du titulaire du compte.
+ *
+ * Il vivait dans le contexte Profiles, sur le dossier investisseur, alors que
+ * la colonne existait déjà — vide — nulle part ailleurs : c'est un moyen de
+ * **joindre le compte**, pas une donnée réglementaire du dossier. Il a suivi
+ * `prenom` et `nom` vers `user`, dont il partage le cycle de vie : un compte
+ * sans profil a un numéro, un profil supprimé ne le fait pas disparaître.
  *
  * Le DTO n'exigeait qu'une chaîne : « à demander » ou « 06 » étaient acceptés
  * et stockés. C'est le canal de rappel obligatoire du conseil PSFP (§ contact
@@ -42,7 +45,7 @@ export class NumeroTelephone {
   static of(raw: string | null | undefined): NumeroTelephone | null {
     if (raw === null || raw === undefined) return null;
     if (typeof raw !== 'string') {
-      throw new ChampProfilInvalideError(LABEL, 'est invalide.', FIELD);
+      throw new InvalidTelephoneError('est invalide.');
     }
 
     const compacte = raw.replace(SEPARATEURS, '');
@@ -57,17 +60,13 @@ export class NumeroTelephone {
       : international;
 
     if (!/^\d+$/.test(chiffres)) {
-      throw new ChampProfilInvalideError(
-        LABEL,
+      throw new InvalidTelephoneError(
         "ne doit contenir que des chiffres, éventuellement précédés d'un indicatif '+'.",
-        FIELD,
       );
     }
     if (chiffres.length < MIN_CHIFFRES || chiffres.length > MAX_CHIFFRES) {
-      throw new ChampProfilInvalideError(
-        LABEL,
+      throw new InvalidTelephoneError(
         `doit contenir entre ${MIN_CHIFFRES} et ${MAX_CHIFFRES} chiffres.`,
-        FIELD,
       );
     }
 

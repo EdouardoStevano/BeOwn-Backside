@@ -60,30 +60,6 @@ describe('Coordonnees — code postal rapporté à son pays', () => {
   });
 });
 
-describe('Coordonnees — téléphone', () => {
-  it("ramène la forme européenne '00' à l'indicatif '+'", () => {
-    expect(declarer({ telephone: '0033 6 12 34 56 78' }).telephone).toBe(
-      '+33612345678',
-    );
-  });
-
-  it('conserve un numéro national tel quel, faute de pays de référence', () => {
-    expect(declarer({ telephone: '06 12 34 56 78' }).telephone).toBe(
-      '0612345678',
-    );
-  });
-
-  it('refuse un numéro trop court pour joindre qui que ce soit', () => {
-    expect(champFautif(() => declarer({ telephone: '06' }))).toBe('telephone');
-  });
-
-  it('refuse un numéro qui contient autre chose que des chiffres', () => {
-    expect(champFautif(() => declarer({ telephone: 'à demander' }))).toBe(
-      'telephone',
-    );
-  });
-});
-
 describe('Coordonnees — adresse', () => {
   it('borne les lignes de texte libre', () => {
     expect(champFautif(() => declarer({ ville: 'x'.repeat(101) }))).toBe(
@@ -135,11 +111,9 @@ describe('Coordonnees.restore', () => {
       codePostal: '1000',
       ville: null,
       pays: 'FR',
-      telephone: '06',
     });
 
     expect(coordonnees.codePostal).toBe('1000');
     expect(coordonnees.pays).toBe('FR');
-    expect(coordonnees.telephone).toBe('06');
   });
 });

@@ -18,18 +18,12 @@ const UTILISATEUR = 42;
 const profilPPRenseigne = () =>
   ProfilPPFactory.creer({
     utilisateurId: UTILISATEUR,
-    prenom: 'Awa',
-    nom: 'Koné',
     nationalite: 'FR',
   });
 
 /** Profil créé mais formulaire jamais ouvert : aucun champ du dossier rempli. */
 const profilPPVide = () =>
-  ProfilPPFactory.creer({
-    utilisateurId: UTILISATEUR,
-    prenom: 'Awa',
-    nom: 'Koné',
-  });
+  ProfilPPFactory.creer({ utilisateurId: UTILISATEUR });
 
 const kycAuStatut = (statut: KycStatus) =>
   KycMapper.restore({
@@ -42,14 +36,16 @@ const kycAuStatut = (statut: KycStatus) =>
     updatedAt: new Date(),
   });
 
-function monter(etat: {
-  profilPP?: ReturnType<typeof profilPPVide> | null;
-  profilPM?: ReturnType<typeof ProfilPMFactory.creer> | null;
-  kyc?: ReturnType<typeof kycAuStatut> | null;
-  questionnaire?: ReturnType<
-    typeof QuestionnaireAdequationFactory.repondre
-  > | null;
-} = {}) {
+function monter(
+  etat: {
+    profilPP?: ReturnType<typeof profilPPVide> | null;
+    profilPM?: ReturnType<typeof ProfilPMFactory.creer> | null;
+    kyc?: ReturnType<typeof kycAuStatut> | null;
+    questionnaire?: ReturnType<
+      typeof QuestionnaireAdequationFactory.repondre
+    > | null;
+  } = {},
+) {
   const useCase = new GetOnboardingStatusUseCase(
     {
       findByUserId: jest.fn().mockResolvedValue(etat.profilPP ?? null),
@@ -74,7 +70,7 @@ const etape = (
 ) => statut.completionSteps.find((e) => e.id === id)!;
 
 describe('GetOnboardingStatusUseCase', () => {
-  it('part de zéro quand aucun dossier n\'existe', async () => {
+  it("part de zéro quand aucun dossier n'existe", async () => {
     const statut = await monter().execute({ utilisateurId: UTILISATEUR });
 
     expect(statut.userType).toBeNull();
@@ -99,10 +95,12 @@ describe('GetOnboardingStatusUseCase', () => {
   });
 
   it('déduit le type du dossier réellement ouvert', async () => {
-    const statut = await monter({ profilPM: ProfilPMFactory.creer({
-      utilisateurId: UTILISATEUR,
-      raisonSociale: 'BeOwn',
-    }) }).execute({ utilisateurId: UTILISATEUR, typeDeclare: 'PP' });
+    const statut = await monter({
+      profilPM: ProfilPMFactory.creer({
+        utilisateurId: UTILISATEUR,
+        raisonSociale: 'BeOwn',
+      }),
+    }).execute({ utilisateurId: UTILISATEUR, typeDeclare: 'PP' });
 
     // Le dossier prime sur l'annonce : c'est lui qui est opposable.
     expect(statut.userType).toBe('PM');
@@ -185,7 +183,7 @@ describe('GetOnboardingStatusUseCase', () => {
     expect(etape(statut, 'kyc').detail).toBe('Document illisible');
   });
 
-  it("distingue le profil ouvert du profil renseigné", async () => {
+  it('distingue le profil ouvert du profil renseigné', async () => {
     const statut = await monter({ profilPP: profilPPVide() }).execute({
       utilisateurId: UTILISATEUR,
     });
@@ -203,7 +201,9 @@ describe('GetOnboardingStatusUseCase', () => {
         findByUserId: jest.fn().mockResolvedValue(null),
       } as unknown as ProfilPMRepository,
       {
-        findByUserId: jest.fn().mockResolvedValue(kycAuStatut(KycStatus.VALIDE)),
+        findByUserId: jest
+          .fn()
+          .mockResolvedValue(kycAuStatut(KycStatus.VALIDE)),
       } as unknown as KycRepository,
       {
         findByUserId: jest.fn().mockResolvedValue(null),
@@ -216,9 +216,11 @@ describe('GetOnboardingStatusUseCase', () => {
   });
 
   it("n'invente pas de dossier KYC quand il n'y en a pas", async () => {
-    const statut = await monter({ kyc: KycFactory.creer({
-      utilisateurId: UTILISATEUR,
-    }) }).execute({ utilisateurId: UTILISATEUR });
+    const statut = await monter({
+      kyc: KycFactory.creer({
+        utilisateurId: UTILISATEUR,
+      }),
+    }).execute({ utilisateurId: UTILISATEUR });
 
     expect(etape(statut, 'kyc').status).toBe('not_started');
   });

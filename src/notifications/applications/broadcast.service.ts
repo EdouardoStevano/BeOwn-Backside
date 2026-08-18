@@ -15,7 +15,6 @@ import {
 import { EmailTemplateService } from 'src/shared/email/email-template.service';
 import { SMS_SERVICE, type SmsService } from 'src/shared/sms/sms.service';
 import { TokenService } from 'src/iam/applications/services/token/token.service';
-import { ProfilPPEntity } from 'src/profiles/infrastructure/persistences/entities/profil-pp.entity';
 import { ProjectEntity } from 'src/projects/infrastructure/persistences/entities/project.entity';
 import { UserPreferencesEntity } from 'src/preferences/infrastructure/persistences/entities/user-preferences.entity';
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
@@ -151,8 +150,6 @@ export class BroadcastService {
     private readonly userRepo: Repository<UserEntity>,
     @InjectRepository(UserPreferencesEntity)
     private readonly prefsRepo: Repository<UserPreferencesEntity>,
-    @InjectRepository(ProfilPPEntity)
-    private readonly profilRepo: Repository<ProfilPPEntity>,
     @InjectRepository(AdminSettingsEntity)
     private readonly settingsRepo: Repository<AdminSettingsEntity>,
     private readonly templates: EmailTemplateService,
@@ -219,7 +216,7 @@ export class BroadcastService {
       }
 
       const toggles = await this.loadToggles(campaign.event);
-      const recipients = await this.loadRecipients(toggles);
+      const recipients = await this.loadRecipients();
       stats.destinataires = recipients.length;
 
       const vars = this.templateVars(project);
@@ -343,12 +340,14 @@ export class BroadcastService {
   /**
    * Destinataires : comptes ACTIFS uniquement (les statuts cree /
    * email_verifie / suspendu / clos / supprime sont exclus), enrichis de leurs
-   * préférences et de leur téléphone. Les téléphones ne sont chargés que si le
-   * canal SMS est activé.
+   * préférences.
+   *
+   * Le téléphone était lu sur `profil_pp` — une requête de plus, et des
+   * titulaires sans dossier injoignables par SMS alors que leur compte porte
+   * un numéro. Il vit sur `user` depuis qu'il a rejoint le reste de l'identité,
+   * donc il arrive avec le compte, sans jointure.
    */
-  private async loadRecipients(
-    toggles: BroadcastChannelToggles,
-  ): Promise<Recipient[]> {
+  private async loadRecipients(): Promise<Recipient[]> {
     const users = await this.userRepo.find({
       where: { status: UserStatus.ACTIF },
     });
@@ -358,23 +357,13 @@ export class BroadcastService {
     const prefs = await this.prefsRepo.find({ where: { userId: In(ids) } });
     const prefsByUser = new Map(prefs.map((p) => [p.userId, p]));
 
-    const phoneByUser = new Map<number, string | null>();
-    if (toggles.sms) {
-      const profils = await this.profilRepo.find({
-        where: { utilisateurId: In(ids) },
-      });
-      for (const p of profils) {
-        phoneByUser.set(p.utilisateurId, p.telephone ?? null);
-      }
-    }
-
     return users.map((u) => {
       const p = prefsByUser.get(u.userId);
       return {
         userId: u.userId,
         prenom: u.firstname?.trim() || 'investisseur',
         email: u.userEmail?.email ?? null,
-        telephone: phoneByUser.get(u.userId) ?? null,
+        telephone: u.telephone ?? null,
         notifEmail: p?.notifEmail ?? BROADCAST_PREF_DEFAULTS.notifEmail,
         notifSms: p?.notifSms ?? BROADCAST_PREF_DEFAULTS.notifSms,
         notifMarketing:

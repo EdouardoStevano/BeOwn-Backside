@@ -1,8 +1,4 @@
-import {
-  ChampsIdentite,
-  Identite,
-  MARQUEUR_IDENTITE_INCONNUE,
-} from './identite.vo';
+import { ChampsIdentite, Identite } from './identite.vo';
 import { ChampProfilInvalideError } from 'src/profiles/domains/errors';
 
 /** Date de naissance calculée pour ne jamais périmer le test. */
@@ -12,10 +8,8 @@ function ilYA(annees: number): string {
   return date.toISOString().slice(0, 10);
 }
 
-const COMPTE = { prenom: 'Awa', nom: 'Koné' };
-
 function declarer(champs: ChampsIdentite = {}): Identite {
-  return Identite.declarer(COMPTE, champs);
+  return Identite.declarer(champs);
 }
 
 /** Le champ fautif remonté au front, pour surligner la bonne entrée. */
@@ -30,38 +24,6 @@ function champFautif(action: () => unknown): string {
   }
   throw new Error('aucune erreur levée');
 }
-
-describe('Identite — état civil repris du compte', () => {
-  it("marque l'identité manquante plutôt que de refuser la création", () => {
-    // Le nom de famille est facultatif à l'inscription : refuser ici
-    // enfermerait le compte, qui ne pourrait plus rien compléter.
-    const identite = Identite.declarer({ prenom: 'Awa', nom: null });
-
-    expect(identite.nom).toBe(MARQUEUR_IDENTITE_INCONNUE);
-    expect(identite.estConnue()).toBe(false);
-  });
-
-  it('reconnaît une identité complète', () => {
-    expect(declarer().estConnue()).toBe(true);
-  });
-
-  it('normalise les espaces de saisie', () => {
-    expect(
-      Identite.declarer({ prenom: '  Awa   Marie ', nom: 'Koné' }).prenom,
-    ).toBe('Awa Marie');
-  });
-
-  it("ne laisse pas modifier l'état civil, qui appartient au compte", () => {
-    const identite = declarer();
-
-    // `prenom` n'existe pas dans ChampsIdentite : le renommage passe par IAM.
-    const revisee = identite.avec({
-      prenom: 'Autre',
-    } as unknown as ChampsIdentite);
-
-    expect(revisee.prenom).toBe('Awa');
-  });
-});
 
 describe('Identite — date de naissance', () => {
   it('accepte un majeur et sait dire son âge', () => {
@@ -197,8 +159,6 @@ describe('Identite.restore', () => {
     // corriger la donnée fautive.
     const identite = Identite.restore({
       civilite: 'Monsieur',
-      prenom: 'A',
-      nom: 'K',
       nomNaissance: null,
       dateNaissance: '2015-01-01',
       lieuNaissance: null,
@@ -208,14 +168,11 @@ describe('Identite.restore', () => {
 
     expect(identite.nationalite).toBe('ZZ');
     expect(identite.dateNaissance).toBe('2015-01-01');
-    expect(identite.prenom).toBe('A');
   });
 
   it('accepte un `Date`, forme que rend parfois le driver', () => {
     const identite = Identite.restore({
       civilite: null,
-      prenom: 'Awa',
-      nom: 'Koné',
       nomNaissance: null,
       dateNaissance: new Date('1985-06-15T00:00:00.000Z'),
       lieuNaissance: null,

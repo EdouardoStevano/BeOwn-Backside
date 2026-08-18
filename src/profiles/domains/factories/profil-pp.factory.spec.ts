@@ -2,15 +2,9 @@ import { CreerProfilPPProps, ProfilPPFactory } from './profil-pp.factory';
 import { ProfilPP } from 'src/profiles/domains/profil-pp';
 import { CategoriePsfp } from 'src/profiles/domains/enums/kyc-status.enum';
 import { ChampProfilInvalideError } from 'src/profiles/domains/errors';
-import { MARQUEUR_IDENTITE_INCONNUE } from 'src/profiles/domains/value-objects/identite.vo';
 
 function creer(champs: Partial<CreerProfilPPProps> = {}): ProfilPP {
-  return ProfilPPFactory.creer({
-    utilisateurId: 42,
-    prenom: 'Awa',
-    nom: 'Koné',
-    ...champs,
-  });
+  return ProfilPPFactory.creer({ utilisateurId: 42, ...champs });
 }
 
 /** Le champ fautif remonté au front, pour surligner la bonne entrée. */
@@ -45,15 +39,25 @@ describe('ProfilPPFactory — répartition entre les blocs', () => {
   it('laisse chaque bloc refuser sa part', () => {
     // La fabrique ne valide rien elle-même hors de la clé : elle passe la main.
     expect(champFautif(() => creer({ nationalite: 'ZZ' }))).toBe('nationalite');
-    expect(champFautif(() => creer({ telephone: '06' }))).toBe('telephone');
+    expect(champFautif(() => creer({ codePostal: '1000', pays: 'FR' }))).toBe(
+      'codePostal',
+    );
     expect(champFautif(() => creer({ nif: '1234567890' }))).toBe(
       'residenceFiscale',
     );
   });
 
-  it("reprend l'état civil du compte, marqueur compris", () => {
-    expect(creer().identite.estConnue()).toBe(true);
-    expect(creer({ nom: null }).identite.nom).toBe(MARQUEUR_IDENTITE_INCONNUE);
+  it("n'accepte plus l'état civil, qui appartient au compte", () => {
+    // `prenom`, `nom` et `telephone` ne sont plus des props : le dossier ne
+    // peut donc plus en garder une copie divergente de `user`.
+    const profil = creer({
+      prenom: 'Awa',
+      nom: 'Koné',
+      telephone: '0612345678',
+    } as unknown as Partial<CreerProfilPPProps>);
+
+    expect(Object.keys(profil.toJSON())).not.toContain('prenom');
+    expect(Object.keys(profil.toJSON())).not.toContain('telephone');
   });
 });
 

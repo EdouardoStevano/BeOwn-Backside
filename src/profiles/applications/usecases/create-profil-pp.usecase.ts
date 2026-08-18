@@ -8,19 +8,23 @@ import {
   type ProfilPPRepository,
 } from 'src/profiles/domains/ports/profil-pp.repository';
 import { CreateProfilPPDto } from 'src/profiles/presenters/dto/profil.dto';
-import { ProfilPP } from 'src/profiles/domains/profil-pp';
 import { ProfilPPFactory } from 'src/profiles/domains/factories/profil-pp.factory';
 import { ProfilPPDejaExistantError } from 'src/profiles/domains/errors';
 import { champsDeclaresDepuisDto } from '../mappers/profil-pp-champs.mapper';
+import { VueProfilPP, vueProfilPP } from '../mappers/profil-pp-vue.mapper';
 
 /**
  * Complétion du profil investisseur — personne physique.
  *
- * Ce use case n'orchestre plus que des accès (§6 — Application Service) :
- * vérifier l'unicité, récupérer l'identité du compte, faire naître l'agrégat,
- * le persister. La validité des données déclarées, le repli sur l'identité du
- * compte et le classement PSFP initial sont désormais dans `ProfilPPFactory.creer` —
- * ils y valent pour tout point d'entrée, pas seulement pour cette route HTTP.
+ * Ce use case n'orchestre que des accès (§6 — Application Service) : vérifier
+ * l'unicité, faire naître l'agrégat, le persister, et recomposer la vue rendue
+ * au front. La validité des données déclarées et le classement PSFP initial
+ * vivent dans `ProfilPPFactory.creer`.
+ *
+ * **Le formulaire alimente deux propriétaires.** Le téléphone qu'il porte
+ * appartient au compte, comme le prénom et le nom : il est donc écrit par le
+ * port d'IAM, et non déposé dans le dossier. C'est la seule chose qui empêche
+ * la duplication de revenir par la porte du DTO.
  */
 @Injectable()
 export class CreateProfilPPUseCase {
@@ -29,27 +33,42 @@ export class CreateProfilPPUseCase {
     private readonly profilPPRepository: ProfilPPRepository,
     // Port du contexte IAM, et non son entité ORM : le profil a besoin de
     // l'identité du compte, pas de savoir dans quelle table elle est rangée
-    // (§12.3). C'est aussi ce que fait déjà `notifications`, `investments` ou
-    // `fiscalite` — `UsersInfrastructureModule` n'expose que ce port.
+    // (§12.3).
     @Inject(USER_REPOSITORY)
     private readonly userRepository: UserRepository,
   ) {}
 
-  async execute(userId: number, dto: CreateProfilPPDto): Promise<ProfilPP> {
+  async execute(userId: number, dto: CreateProfilPPDto): Promise<VueProfilPP> {
     const existing = await this.profilPPRepository.findByUserId(userId);
     if (existing) throw new ProfilPPDejaExistantError();
 
-    // prenom / nom sont NOT NULL et ne sont pas redemandés par le formulaire de
-    // complétion : on les reprend de l'identité fournie à l'inscription.
+    const profil = await this.profilPPRepository.save(
+      ProfilPPFactory.creer({
+        utilisateurId: userId,
+        ...champsDeclaresDepuisDto(dto),
+      }),
+    );
+
+    const compte = await this.enregistrerTelephone(userId, dto.telephone);
+
+    return vueProfilPP(profil, compte);
+  }
+
+  /**
+   * Le numéro déclaré au formulaire va sur le compte. Écrit après le dossier :
+   * un profil sauvegardé sans numéro reste corrigeable par la route de mise à
+   * jour, alors qu'un numéro posé sur un profil qui échoue ensuite laisserait
+   * le compte modifié sans que rien ne l'ait demandé.
+   */
+  private async enregistrerTelephone(
+    userId: number,
+    telephone: string | undefined,
+  ) {
     const compte = await this.userRepository.findById(userId);
+    if (!compte) return null;
 
-    const profil = ProfilPPFactory.creer({
-      utilisateurId: userId,
-      prenom: compte?.firstname,
-      nom: compte?.lastname,
-      ...champsDeclaresDepuisDto(dto),
-    });
+    if (!compte.changerTelephone(telephone)) return compte;
 
-    return this.profilPPRepository.save(profil);
+    return this.userRepository.update(compte);
   }
 }

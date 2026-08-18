@@ -1,4 +1,5 @@
 import { Email } from 'src/iam/domains/value-objects/email.vo';
+import { NumeroTelephone } from 'src/iam/domains/value-objects/numero-telephone.vo';
 import {
   FirstName,
   LastName,
@@ -106,6 +107,7 @@ export class UserMapper {
       role: snapshot.role,
       status: snapshot.status,
       userType: snapshot.userType,
+      telephone: NumeroTelephone.restore(snapshot.telephone),
       cguAccepteesLe: snapshot.cguAccepteesLe,
       lastLoginAt: snapshot.lastLoginAt,
       createdAt: snapshot.createdAt,
@@ -138,6 +140,7 @@ export class UserMapper {
       role: user.role,
       status: user.status,
       userType: user.userType,
+      telephone: user.telephone,
       cguAccepteesLe: user.cguAccepteesLe,
       lastLoginAt: user.lastLoginAt,
       createdAt: user.createdAt,

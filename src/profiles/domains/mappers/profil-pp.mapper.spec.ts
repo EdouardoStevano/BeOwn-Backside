@@ -12,8 +12,6 @@ import { CategoriePsfp } from 'src/profiles/domains/enums/kyc-status.enum';
 const LIGNE: ProfilPPSnapshotBrut = {
   utilisateurId: 42,
   civilite: 'Monsieur',
-  prenom: 'A',
-  nom: 'K',
   nomNaissance: null,
   paysNaissance: null,
   dateNaissance: '2015-01-01',
@@ -24,7 +22,6 @@ const LIGNE: ProfilPPSnapshotBrut = {
   codePostal: '1000',
   ville: null,
   pays: 'FR',
-  telephone: '06',
   profession: null,
   secteurActivite: null,
   pep: false,
@@ -48,7 +45,6 @@ describe('ProfilPPMapper.restore', () => {
 
     expect(profil.identite.nationalite).toBe('ZZ');
     expect(profil.identite.dateNaissance).toBe('2015-01-01');
-    expect(profil.coordonnees.telephone).toBe('06');
     expect(profil.situationFiscale.nif).toBe('X');
     expect(profil.categoriePsfp).toBe(CategoriePsfp.AVERTI);
   });
@@ -82,8 +78,6 @@ describe('ProfilPPMapper.toSnapshot', () => {
   it('assemble à plat ce que le découpage en blocs a séparé', () => {
     const profil = ProfilPPFactory.creer({
       utilisateurId: 42,
-      prenom: 'Awa',
-      nom: 'Koné',
       nationalite: 'FR',
       ville: 'Paris',
       profession: 'Ingénieur',
