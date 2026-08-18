@@ -1,7 +1,19 @@
 import {
-  Body, Controller, Delete, Get, Param, Post, UseGuards, NotFoundException,
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Post,
+  UseGuards,
+  NotFoundException,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiParam,
+  ApiTags,
+} from '@nestjs/swagger';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
@@ -40,7 +52,9 @@ export class BeneficiaireEffectifController {
     return profilPM;
   }
 
-  @ApiOperation({ summary: 'Lister les bénéficiaires effectifs (>25%) de mon profil PM' })
+  @ApiOperation({
+    summary: 'Lister les bénéficiaires effectifs (>25%) de mon profil PM',
+  })
   @Get()
   async list(@CurrentUser() user: ActiveUser) {
     const profilPM = await this.profilPMDe(user);
@@ -64,7 +78,9 @@ export class BeneficiaireEffectifController {
     return this.beneficiaireRepo.save(entity);
   }
 
-  @ApiOperation({ summary: 'Supprimer un bénéficiaire effectif de mon profil PM' })
+  @ApiOperation({
+    summary: 'Supprimer un bénéficiaire effectif de mon profil PM',
+  })
   @ApiParam({ name: 'id', description: 'UUID du bénéficiaire' })
   @Delete(':id')
   async remove(@Param('id') id: string, @CurrentUser() user: ActiveUser) {
