@@ -23,8 +23,7 @@ import { SignatureEntity } from 'src/signatures/infrastructure/persistences/enti
 import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/wallet.entity';
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 import { UserEmailEntity } from 'src/iam/infrastructure/persistence/entities/user-email.entity';
-import { KycEntity } from 'src/profiles/infrastructure/persistences/entities/kyc.entity';
-import { KycValidatedGuard } from 'src/common/auth/kyc-validated.guard';
+import { KycModule } from 'src/kyc/applications/kyc.module';
 import { EcheanceEntity } from 'src/investments/infrastructure/persistences/entities/echeance.entity';
 import { EcheancesCronService } from './echeances-cron.service';
 import { IfuGenerationService } from './ifu-generation.service';
@@ -44,7 +43,6 @@ import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entit
       WalletEntity,
       UserEntity,
       UserEmailEntity,
-      KycEntity,
       EcheanceEntity,
       TransactionEntity,
     ]),
@@ -58,6 +56,8 @@ import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entit
     CloudStorageModule,
     YouSignModule,
     NotificationsModule,
+    // `KycValidatedGuard` : investir exige un dossier vérifié.
+    KycModule,
   ],
   providers: [
     CreateInvestmentUseCase,
@@ -65,7 +65,6 @@ import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entit
     TopUpInvestmentUseCase,
     InitiateInvestmentUseCase,
     CancelInvestmentUseCase,
-    KycValidatedGuard,
     EcheancesCronService,
     IfuGenerationService,
     PayEcheanceUseCase,

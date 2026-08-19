@@ -7,20 +7,19 @@ import { CancelReservationUseCase } from './usecases/cancel-reservation.usecase'
 import { ReservationController } from '../presenters/http/reservation.controller';
 import { RESERVATION_REPOSITORY } from './ports/repositories/reservation.repository';
 import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructure.module';
-import { KycEntity } from 'src/profiles/infrastructure/persistences/entities/kyc.entity';
-import { KycValidatedGuard } from 'src/common/auth/kyc-validated.guard';
+import { KycModule } from 'src/kyc/applications/kyc.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([KycEntity]),
     ReservationsInfrastructureModule,
     ProjectsInfrastructureModule,
     IamInfrastructureModule,
+    // `KycValidatedGuard` : réserver exige un dossier vérifié.
+    KycModule,
   ],
   providers: [
     CreateReservationUseCase,
     CancelReservationUseCase,
-    KycValidatedGuard,
   ],
   controllers: [ReservationController],
   exports: [CreateReservationUseCase],

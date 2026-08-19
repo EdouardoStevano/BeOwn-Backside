@@ -3,7 +3,7 @@ import {
   CreerProfilPPProps,
   ProfilPPFactory,
 } from './factories/profil-pp.factory';
-import { CategoriePsfp } from './enums/kyc-status.enum';
+import { CategoriePsfp } from './enums/categorie-psfp.enum';
 import { ChampProfilInvalideError } from './errors';
 
 /** Date de naissance calculée pour ne jamais périmer le test. */

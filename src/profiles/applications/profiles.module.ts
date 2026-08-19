@@ -4,13 +4,6 @@ import { CqrsModule } from '@nestjs/cqrs';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ProfilesInfrastructureModule } from '../infrastructure/profiles-infrastructure.module';
 import { CreateProfilPPUseCase } from './usecases/create-profil-pp.usecase';
-import { CreateKycUseCase } from './usecases/create-kyc.usecase';
-import { UpdateKycStatusUseCase } from './usecases/update-kyc-status.usecase';
-import { RequestKycManualReviewUseCase } from './usecases/request-kyc-manual-review.usecase';
-import { DecideKycManualReviewUseCase } from './usecases/decide-kyc-manual-review.usecase';
-import { KycRevueManuelleDemandeeEventHandler } from './events/kyc-revue-manuelle-demandee.event-handler';
-import { KycValideEventHandler } from './events/kyc-valide.event-handler';
-import { KycRefuseEventHandler } from './events/kyc-refuse.event-handler';
 import { TelephoneDeclareEventHandler } from './events/telephone-declare.event-handler';
 import { ProfileController } from '../presenters/http/profile.controller';
 import { GetProfilPPUseCase } from './usecases/get-profil-pp.usecase';
@@ -18,12 +11,12 @@ import { UpdateProfilPPUseCase } from './usecases/update-profil-pp.usecase';
 import { CreateProfilPMUseCase } from './usecases/create-profil-pm.usecase';
 import { GetProfilPMUseCase } from './usecases/get-profil-pm.usecase';
 import { UpdateProfilPMUseCase } from './usecases/update-profil-pm.usecase';
-import { GetKycUseCase } from './usecases/get-kyc.usecase';
 import { SaveQuestionnaireUseCase } from './usecases/save-questionnaire.usecase';
 import { GetQuestionnaireUseCase } from './usecases/get-questionnaire.usecase';
 import { GetOnboardingStatusUseCase } from './usecases/get-onboarding-status.usecase';
 import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructure.module';
 import { UsersInfrastructureModule } from 'src/iam/infrastructure/users-infrastructure.module';
+import { KycInfrastructureModule } from 'src/kyc/infrastructure/kyc-infrastructure.module';
 import { AccountContactModule } from 'src/iam/applications/account-contact.module';
 import { NotificationsModule } from 'src/notifications/notifications.module';
 import { RiskScoringService } from './risk-scoring.service';
@@ -34,9 +27,8 @@ import { ProfilesErrorFilter } from '../presenters/http/filters/profiles-error.f
 
 @Module({
   imports: [
-    // Bus d'événements du contexte : les use cases KYC y publient les faits
-    // métier (revue demandée, dossier validé, dossier refusé), les handlers de
-    // `applications/events/` s'y abonnent (§8).
+    // Bus d'événements du contexte : `TelephoneDeclareEventHandler` s'y abonne
+    // au fait métier levé par la complétion du profil (§8).
     CqrsModule,
     ProfilesInfrastructureModule,
     // `IamInfrastructureModule` pour `TokenService` (JwtAuthGuard),
@@ -47,6 +39,11 @@ import { ProfilesErrorFilter } from '../presenters/http/filters/profiles-error.f
     // comptes avec (CRP, §5).
     IamInfrastructureModule,
     UsersInfrastructureModule,
+    // `KYC_REPOSITORY` — pour la seule étape « vérification d'identité » du
+    // parcours d'entrée en relation (`GetOnboardingStatusUseCase`). L'infra du
+    // contexte KYC, pas son module applicatif : Profiles lit un dossier, il
+    // n'ouvre pas de session Stripe et n'écoute aucun de ses événements (§5).
+    KycInfrastructureModule,
     // Pour `ChangerTelephoneUseCase` : le numéro déclaré au formulaire de
     // profil appartient au compte, et c'est IAM qui décide comment il s'écrit.
     AccountContactModule,
@@ -59,23 +56,15 @@ import { ProfilesErrorFilter } from '../presenters/http/filters/profiles-error.f
   ],
   providers: [
     CreateProfilPPUseCase,
-    CreateKycUseCase,
-    UpdateKycStatusUseCase,
-    RequestKycManualReviewUseCase,
-    DecideKycManualReviewUseCase,
     GetProfilPPUseCase,
     UpdateProfilPPUseCase,
     CreateProfilPMUseCase,
     GetProfilPMUseCase,
     UpdateProfilPMUseCase,
-    GetKycUseCase,
     SaveQuestionnaireUseCase,
     GetQuestionnaireUseCase,
     GetOnboardingStatusUseCase,
     RiskScoringService,
-    KycRevueManuelleDemandeeEventHandler,
-    KycValideEventHandler,
-    KycRefuseEventHandler,
     TelephoneDeclareEventHandler,
     // Traduit les erreurs métier du contexte en réponses HTTP : le domaine ne
     // connaît aucun statut (§12.1), la présentation s'en charge.
@@ -86,8 +75,6 @@ import { ProfilesErrorFilter } from '../presenters/http/filters/profiles-error.f
     // Consommé par `UserController` (IAM) : `GET /users/me` compose le compte
     // avec l'avancement du dossier, que seul ce contexte sait calculer.
     GetOnboardingStatusUseCase,
-    CreateKycUseCase,
-    UpdateKycStatusUseCase,
     ProfilesInfrastructureModule,
     RiskScoringService,
   ],

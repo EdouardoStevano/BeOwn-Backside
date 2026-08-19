@@ -11,7 +11,7 @@ import {
 import {
   KYC_REPOSITORY,
   type KycRepository,
-} from 'src/profiles/domains/ports/kyc.repository';
+} from 'src/kyc/domains/ports/kyc.repository';
 import { WalletType } from 'src/wallets/domains/enums/wallet.enum';
 import {
   WALLET_REPOSITORY,

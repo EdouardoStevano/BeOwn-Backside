@@ -1,4 +1,4 @@
-import { CategoriePsfp } from 'src/profiles/domains/enums/kyc-status.enum';
+import { CategoriePsfp } from 'src/profiles/domains/enums/categorie-psfp.enum';
 import {
   Column,
   CreateDateColumn,

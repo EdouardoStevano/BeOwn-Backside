@@ -1,5 +1,5 @@
 import { SaveQuestionnaireUseCase } from './save-questionnaire.usecase';
-import { CategoriePsfp } from 'src/profiles/domains/enums/kyc-status.enum';
+import { CategoriePsfp } from 'src/profiles/domains/enums/categorie-psfp.enum';
 import { ChampProfilInvalideError } from 'src/profiles/domains/errors';
 import { QuestionnaireAdequationFactory } from 'src/profiles/domains/factories/questionnaire-adequation.factory';
 import type { ProfilPPRepository } from 'src/profiles/domains/ports/profil-pp.repository';

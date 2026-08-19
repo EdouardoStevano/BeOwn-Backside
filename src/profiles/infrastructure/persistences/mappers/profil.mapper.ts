@@ -4,14 +4,11 @@ import { ProfilPP } from 'src/profiles/domains/profil-pp';
 // délègue l'autre.
 import { ProfilPPMapper as ProfilPPDomainMapper } from 'src/profiles/domains/mappers/profil-pp.mapper';
 import { ProfilPMMapper as ProfilPMDomainMapper } from 'src/profiles/domains/mappers/profil-pm.mapper';
-import { KycMapper as KycDomainMapper } from 'src/profiles/domains/mappers/kyc.mapper';
 import { QuestionnaireAdequationMapper as QuestionnaireAdequationDomainMapper } from 'src/profiles/domains/mappers/questionnaire-adequation.mapper';
 import { QuestionnaireAdequation } from 'src/profiles/domains/questionnaire-adequation';
 import { ProfilPM } from 'src/profiles/domains/profil-pm';
-import { Kyc } from 'src/profiles/domains/kyc';
 import { ProfilPPEntity } from '../entities/profil-pp.entity';
 import { ProfilPMEntity } from '../entities/profil-pm.entity';
-import { KycEntity } from '../entities/kyc.entity';
 import { QuestionnaireAdequationEntity } from '../entities/questionnaire-adequation.entity';
 
 export class ProfilMapper {
@@ -181,53 +178,6 @@ export class ProfilMapper {
     entity.acceptsSimulatedLoss = snapshot.acceptsSimulatedLoss;
     entity.resultCategorie = snapshot.resultCategorie;
     entity.resultMontantMaxConseille = snapshot.resultMontantMaxConseille;
-    return entity;
-  }
-
-  static kycToDomain(entity: KycEntity): Kyc {
-    return KycDomainMapper.restore({
-      id: entity.id,
-      utilisateurId: entity.utilisateurId,
-      statut: entity.statut,
-      niveau: entity.niveau,
-      scoreRisque: entity.scoreRisque,
-      fournisseur: entity.fournisseur,
-      fournisseurRef: entity.fournisseurRef,
-      valideJusquAu: entity.valideJusquAu,
-      motifRefus: entity.motifRefus,
-      stripeReportId: entity.stripeReportId,
-      identiteExtrait: entity.identiteExtrait,
-      createdAt: entity.createdAt,
-      updatedAt: entity.updatedAt,
-    });
-  }
-
-  /**
-   * Sens écriture : **seuls les champs dont l'agrégat est propriétaire**.
-   *
-   * `stripeReportId` et `identiteExtrait` sont relus par `kycToDomain` mais
-   * délibérément absents ici — comme pour `ppToEntity`. Ils appartiennent à
-   * `updateReportData`, que le webhook Stripe appelle avec les données du
-   * rapport de vérification ; les recopier depuis un dossier chargé avant le
-   * webhook écraserait ce que celui-ci vient d'écrire. Les laisser `undefined`
-   * dit à TypeORM de ne pas toucher à la colonne.
-   */
-  static kycToEntity(domain: Kyc): KycEntity {
-    const snapshot = KycDomainMapper.toSnapshot(domain);
-    const entity = new KycEntity();
-    // Absent d'un dossier qui vient de naître : l'uuid est généré en base.
-    if (snapshot.id) entity.id = snapshot.id;
-    entity.utilisateurId = snapshot.utilisateurId;
-    entity.statut = snapshot.statut;
-    entity.niveau = snapshot.niveau;
-    entity.scoreRisque = snapshot.scoreRisque;
-    entity.fournisseur = snapshot.fournisseur;
-    entity.fournisseurRef = snapshot.fournisseurRef;
-    // Une colonne Postgres `date` se renseigne aussi bien avec la chaîne civile
-    // `AAAA-MM-JJ` qu'avec un `Date` — et c'est cette chaîne que le driver rend
-    // à la lecture, malgré le type déclaré sur l'entité (cf. `ppToEntity`).
-    entity.valideJusquAu = snapshot.valideJusquAu as unknown as Date | null;
-    entity.motifRefus = snapshot.motifRefus;
     return entity;
   }
 }

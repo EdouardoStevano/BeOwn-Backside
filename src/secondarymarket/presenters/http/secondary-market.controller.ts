@@ -34,7 +34,7 @@ import { InvestmentStatus } from 'src/investments/domains/enums/investment-statu
 import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
 import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
-import { KycValidatedGuard } from 'src/common/auth/kyc-validated.guard';
+import { KycValidatedGuard } from 'src/kyc/presenters/guards/kyc-validated.guard';
 import { Public } from 'src/common/auth/public.decorator';
 import { NotificationService } from 'src/notifications/applications/notification.service';
 import { NotificationEventService } from 'src/notifications/applications/notification-event.service';

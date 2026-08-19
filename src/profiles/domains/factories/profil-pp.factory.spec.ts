@@ -1,6 +1,6 @@
 import { CreerProfilPPProps, ProfilPPFactory } from './profil-pp.factory';
 import { ProfilPP } from 'src/profiles/domains/profil-pp';
-import { CategoriePsfp } from 'src/profiles/domains/enums/kyc-status.enum';
+import { CategoriePsfp } from 'src/profiles/domains/enums/categorie-psfp.enum';
 import { ChampProfilInvalideError } from 'src/profiles/domains/errors';
 
 function creer(champs: Partial<CreerProfilPPProps> = {}): ProfilPP {

@@ -76,14 +76,10 @@ describe('PaymentController — sécurité des flux monétaires (H-1 / H-2)', ()
 
     controller = new PaymentController(
       stripeService,
-      /* identityService */ {} as any,
       stripeConnect,
-      /* updateKycStatus */ {} as any,
-      /* createKyc */ {} as any,
       notificationService,
-      /* auditLog */ {} as any,
       /* config */ { get: jest.fn() } as any,
-      /* kycRepository */ {} as any,
+      /* identityWebhook */ { handle: jest.fn() } as any,
       walletRepo,
       txRepo,
       dataSource,
@@ -93,7 +89,7 @@ describe('PaymentController — sécurité des flux monétaires (H-1 / H-2)', ()
 
   // ── H-1 ────────────────────────────────────────────────────────────────────
   describe('confirmDepot — anti-BOLA (H-1)', () => {
-    it("refuse le crédit si le PaymentIntent appartient à un autre utilisateur", async () => {
+    it('refuse le crédit si le PaymentIntent appartient à un autre utilisateur', async () => {
       stripeService.retrievePaymentIntent.mockResolvedValue({
         status: 'succeeded',
         amount: 100_00,
@@ -109,7 +105,7 @@ describe('PaymentController — sécurité des flux monétaires (H-1 / H-2)', ()
       expect(txRepo.save).not.toHaveBeenCalled();
     });
 
-    it("refuse le crédit si le PaymentIntent ne porte pas de metadata.userId", async () => {
+    it('refuse le crédit si le PaymentIntent ne porte pas de metadata.userId', async () => {
       stripeService.retrievePaymentIntent.mockResolvedValue({
         status: 'succeeded',
         amount: 100_00,
@@ -121,7 +117,7 @@ describe('PaymentController — sécurité des flux monétaires (H-1 / H-2)', ()
       ).rejects.toBeInstanceOf(ForbiddenException);
     });
 
-    it('crédite le wallet quand le PaymentIntent appartient bien à l\'appelant', async () => {
+    it("crédite le wallet quand le PaymentIntent appartient bien à l'appelant", async () => {
       stripeService.retrievePaymentIntent.mockResolvedValue({
         status: 'succeeded',
         amount: 100_00,
@@ -191,7 +187,12 @@ describe('PaymentController — sécurité des flux monétaires (H-1 / H-2)', ()
       runTx(manager);
 
       const res = await controller.createRetrait(
-        { walletId: 'w1', amount: 100, currency: 'EUR', ibanDestination: 'FR..' } as any,
+        {
+          walletId: 'w1',
+          amount: 100,
+          currency: 'EUR',
+          ibanDestination: 'FR..',
+        } as any,
         user,
       );
 
@@ -209,7 +210,12 @@ describe('PaymentController — sécurité des flux monétaires (H-1 / H-2)', ()
       runTx(manager);
 
       const res = await controller.createRetrait(
-        { walletId: 'w1', amount: 100, currency: 'EUR', ibanDestination: 'FR..' } as any,
+        {
+          walletId: 'w1',
+          amount: 100,
+          currency: 'EUR',
+          ibanDestination: 'FR..',
+        } as any,
         user,
       );
 
@@ -220,7 +226,10 @@ describe('PaymentController — sécurité des flux monétaires (H-1 / H-2)', ()
     });
 
     it('est idempotent : une resoumission avec la même clé ne rejoue pas le débit', async () => {
-      txRepo.findOne.mockResolvedValue({ id: 'tx-existing', statut: 'EN_ATTENTE_PAIEMENT' });
+      txRepo.findOne.mockResolvedValue({
+        id: 'tx-existing',
+        statut: 'EN_ATTENTE_PAIEMENT',
+      });
 
       const res = await controller.createRetrait(
         {
@@ -234,7 +243,11 @@ describe('PaymentController — sécurité des flux monétaires (H-1 / H-2)', ()
       );
 
       expect(res).toEqual(
-        expect.objectContaining({ success: true, alreadyProcessed: true, transactionId: 'tx-existing' }),
+        expect.objectContaining({
+          success: true,
+          alreadyProcessed: true,
+          transactionId: 'tx-existing',
+        }),
       );
       // La transaction bancaire ne doit jamais être ouverte pour un rejeu.
       expect(dataSource.transaction).not.toHaveBeenCalled();

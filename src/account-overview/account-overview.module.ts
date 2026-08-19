@@ -5,6 +5,7 @@ import { AccountOverviewController } from './presenters/http/account-overview.co
 import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructure.module';
 import { UsersInfrastructureModule } from 'src/iam/infrastructure/users-infrastructure.module';
 import { ProfilesModule } from 'src/profiles/applications/profiles.module';
+import { KycInfrastructureModule } from 'src/kyc/infrastructure/kyc-infrastructure.module';
 import { PreferencesModule } from 'src/preferences/applications/preferences.module';
 import { DocumentsInfrastructureModule } from 'src/documents/infrastructure/documents-infrastructure.module';
 import { WalletsInfrastructureModule } from 'src/wallets/infrastructure/wallets-infrastructure.module';
@@ -33,9 +34,10 @@ import { WalletsInfrastructureModule } from 'src/wallets/infrastructure/wallets-
     IamInfrastructureModule,
     // `USER_REPOSITORY` — l'identité du compte, lue par son port.
     UsersInfrastructureModule,
-    // `GetOnboardingStatusUseCase` (avancement du dossier réglementaire) et,
-    // par réexport, `KYC_REPOSITORY`.
+    // `GetOnboardingStatusUseCase` — l'avancement du dossier réglementaire.
     ProfilesModule,
+    // `KYC_REPOSITORY` — le dossier de vérification, publié à côté du compte.
+    KycInfrastructureModule,
     // `GetPreferencesUseCase` — les réglages publiés à côté du compte.
     PreferencesModule,
     DocumentsInfrastructureModule,

@@ -30,7 +30,7 @@ import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
 import { UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
-import { KycValidatedGuard } from 'src/common/auth/kyc-validated.guard';
+import { KycValidatedGuard } from 'src/kyc/presenters/guards/kyc-validated.guard';
 import { RequirePermission } from 'src/common/auth/require-permission.decorator';
 import { hasPermission } from 'src/common/auth/permissions.constants';
 import { Roles } from 'src/common/auth/roles.decorator';

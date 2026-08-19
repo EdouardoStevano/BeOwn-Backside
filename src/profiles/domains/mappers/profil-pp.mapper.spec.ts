@@ -1,7 +1,7 @@
 import { ProfilPPMapper } from './profil-pp.mapper';
 import { ProfilPPSnapshotBrut } from 'src/profiles/domains/profil-pp';
 import { ProfilPPFactory } from 'src/profiles/domains/factories/profil-pp.factory';
-import { CategoriePsfp } from 'src/profiles/domains/enums/kyc-status.enum';
+import { CategoriePsfp } from 'src/profiles/domains/enums/categorie-psfp.enum';
 
 /**
  * Une ligne délibérément fautive au regard des règles actuelles : code pays

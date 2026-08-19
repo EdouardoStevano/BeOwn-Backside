@@ -1,4 +1,4 @@
-import { CategoriePsfp } from 'src/profiles/domains/enums/kyc-status.enum';
+import { CategoriePsfp } from 'src/profiles/domains/enums/categorie-psfp.enum';
 import { PLANCHER_PLAFOND_NON_AVERTI } from 'src/profiles/domains/services/plafond-psfp.domain-service';
 import { CapaciteDePerte } from './capacite-de-perte.vo';
 import { PreQualificationPsfp } from './pre-qualification-psfp.vo';
