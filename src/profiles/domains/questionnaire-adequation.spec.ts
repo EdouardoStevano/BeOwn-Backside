@@ -1,4 +1,4 @@
-import { CategoriePsfp } from './enums/kyc-status.enum';
+import { CategoriePsfp } from './enums/categorie-psfp.enum';
 import { NiveauRisque } from './enums/niveau-risque.enum';
 import { ChampProfilInvalideError } from './errors';
 import { QuestionnaireAdequationFactory } from './factories/questionnaire-adequation.factory';

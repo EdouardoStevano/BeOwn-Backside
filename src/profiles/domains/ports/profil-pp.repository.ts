@@ -1,4 +1,4 @@
-import { CategoriePsfp } from 'src/profiles/domains/enums/kyc-status.enum';
+import { CategoriePsfp } from 'src/profiles/domains/enums/categorie-psfp.enum';
 import { NiveauRisque } from 'src/profiles/domains/enums/niveau-risque.enum';
 import { ProfilPP } from 'src/profiles/domains/profil-pp';
 

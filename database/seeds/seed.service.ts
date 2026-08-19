@@ -25,12 +25,9 @@ import { InvestmentEntity } from 'src/investments/infrastructure/persistences/en
 import { InvestmentStatus } from 'src/investments/domains/enums/investment-status.enum';
 import { ProfilPPEntity } from 'src/profiles/infrastructure/persistences/entities/profil-pp.entity';
 import { ProfilPMEntity } from 'src/profiles/infrastructure/persistences/entities/profil-pm.entity';
-import { KycEntity } from 'src/profiles/infrastructure/persistences/entities/kyc.entity';
-import {
-  KycStatus,
-  KycNiveau,
-  CategoriePsfp,
-} from 'src/profiles/domains/enums/kyc-status.enum';
+import { KycEntity } from 'src/kyc/infrastructure/persistences/entities/kyc.entity';
+import { KycStatus, KycNiveau } from 'src/kyc/domains/enums/kyc-status.enum';
+import { CategoriePsfp } from 'src/profiles/domains/enums/categorie-psfp.enum';
 import {
   NotificationEntity,
   NotificationCanal,

@@ -78,14 +78,10 @@ describe('PaymentController — retrait Stripe Connect (E3, sécurité argent)',
 
     controller = new PaymentController(
       /* stripeService */ {} as any,
-      /* identityService */ {} as any,
       stripeConnect,
-      /* updateKycStatus */ {} as any,
-      /* createKyc */ {} as any,
       notificationService,
-      /* auditLog */ {} as any,
       /* config */ { get: jest.fn() } as any,
-      /* kycRepository */ {} as any,
+      /* identityWebhook */ { handle: jest.fn() } as any,
       walletRepo,
       txRepo,
       dataSource,
@@ -95,12 +91,16 @@ describe('PaymentController — retrait Stripe Connect (E3, sécurité argent)',
 
   it("sans walletId : résout le wallet INVESTISSEUR de l'utilisateur (front n'envoie que le montant)", async () => {
     const openManager = {
-      findOne: jest.fn().mockResolvedValue({ id: 'w1', solde: 500, devise: 'EUR' }),
+      findOne: jest
+        .fn()
+        .mockResolvedValue({ id: 'w1', solde: 500, devise: 'EUR' }),
       createQueryBuilder: jest.fn(() => chainableQB({ affected: 1 })),
       create: jest.fn((_e: any, x: any) => x),
       save: jest.fn(async (x: any) => ({ ...x, id: 'tx1' })),
     };
-    dataSource.transaction.mockImplementationOnce(async (cb: any) => cb(openManager));
+    dataSource.transaction.mockImplementationOnce(async (cb: any) =>
+      cb(openManager),
+    );
     stripeConnect.createTransfer.mockResolvedValue('tr_1');
     stripeConnect.createPayoutOnConnectedAccount.mockResolvedValue('po_1');
 
@@ -141,7 +141,11 @@ describe('PaymentController — retrait Stripe Connect (E3, sécurité argent)',
       statut: TransactionStatus.EN_COURS,
       montant: 100,
       walletId: 'w1',
-      metadata: { method: 'stripe_connect', connectedAccountId: 'acct_1', userId: 42 },
+      metadata: {
+        method: 'stripe_connect',
+        connectedAccountId: 'acct_1',
+        userId: 42,
+      },
     };
     const recreditQB = chainableQB({ affected: 1 });
     const recreditManager = {
@@ -153,7 +157,9 @@ describe('PaymentController — retrait Stripe Connect (E3, sécurité argent)',
       .mockImplementationOnce(async (cb: any) => cb(openManager))
       .mockImplementationOnce(async (cb: any) => cb(recreditManager));
 
-    stripeConnect.createTransfer.mockRejectedValue(new Error('insufficient funds'));
+    stripeConnect.createTransfer.mockRejectedValue(
+      new Error('insufficient funds'),
+    );
 
     const res = await controller.createRetrait(
       { walletId: 'w1', amount: 100, currency: 'EUR' } as any,
@@ -187,7 +193,10 @@ describe('PaymentController — retrait Stripe Connect (E3, sécurité argent)',
     const manager = {
       // findOne renvoie l'objet partagé, muté par le 1er recrédit.
       findOne: jest.fn().mockImplementation(async () => txRow),
-      createQueryBuilder: jest.fn().mockReturnValueOnce(qb1).mockReturnValueOnce(qb2),
+      createQueryBuilder: jest
+        .fn()
+        .mockReturnValueOnce(qb1)
+        .mockReturnValueOnce(qb2),
       save: jest.fn(async (x: any) => x),
     };
     dataSource.transaction.mockImplementation(async (cb: any) => cb(manager));
@@ -217,7 +226,11 @@ describe('PaymentController — retrait Stripe Connect (E3, sécurité argent)',
       statut: TransactionStatus.EN_COURS,
       montant: 100,
       walletId: 'w1',
-      metadata: { userId: 42, transferId: 'tr_1', connectedAccountId: 'acct_1' },
+      metadata: {
+        userId: 42,
+        transferId: 'tr_1',
+        connectedAccountId: 'acct_1',
+      },
     };
     // txRepo.findOne (lecture initiale du handler) renvoie le retrait.
     txRepo.findOne.mockResolvedValue(txRow);
@@ -240,7 +253,10 @@ describe('PaymentController — retrait Stripe Connect (E3, sécurité argent)',
     await (controller as any).handlePayoutFailed(event);
 
     // Reversal appelé AVANT recrédit, avec une clé idempotente stable.
-    expect(stripeConnect.reverseTransfer).toHaveBeenCalledWith('tr_1', 'retrait-reverse:tx1');
+    expect(stripeConnect.reverseTransfer).toHaveBeenCalledWith(
+      'tr_1',
+      'retrait-reverse:tx1',
+    );
     // Wallet recrédité + retrait ECHOUE.
     expect(recreditQB.execute).toHaveBeenCalled();
     expect(txRow.statut).toBe(TransactionStatus.ECHOUE);
@@ -259,7 +275,9 @@ describe('PaymentController — retrait Stripe Connect (E3, sécurité argent)',
       metadata: { userId: 42, transferId: 'tr_1' },
     };
     txRepo.findOne.mockResolvedValue(txRow);
-    stripeConnect.reverseTransfer.mockRejectedValue(new Error('reversal refused'));
+    stripeConnect.reverseTransfer.mockRejectedValue(
+      new Error('reversal refused'),
+    );
     dataSource.transaction.mockImplementation(async (cb: any) => cb({} as any));
 
     const event = {

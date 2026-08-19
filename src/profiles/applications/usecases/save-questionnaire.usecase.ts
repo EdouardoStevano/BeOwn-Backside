@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { CategoriePsfp } from 'src/profiles/domains/enums/kyc-status.enum';
+import { CategoriePsfp } from 'src/profiles/domains/enums/categorie-psfp.enum';
 import { QuestionnaireAdequationFactory } from 'src/profiles/domains/factories/questionnaire-adequation.factory';
 import {
   PROFIL_PP_REPOSITORY,

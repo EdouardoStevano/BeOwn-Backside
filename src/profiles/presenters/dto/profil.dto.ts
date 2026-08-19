@@ -1,7 +1,6 @@
 import {
   IsBoolean,
   IsDateString,
-  IsEnum,
   IsNotEmpty,
   IsNumber,
   IsOptional,
@@ -9,7 +8,6 @@ import {
   Length,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
-import { KycStatus } from 'src/profiles/domains/enums/kyc-status.enum';
 
 export class CreateProfilPPDto {
   @ApiPropertyOptional({ example: 'M.', description: 'Civilité (M. / Mme)' })
@@ -164,14 +162,3 @@ export class CreateProfilPMDto {
  * produit un 400 lisible et documente Swagger.
  */
 export class UpdateProfilPMDto extends PartialType(CreateProfilPMDto) {}
-
-export class UpdateKycStatusDto {
-  @ApiProperty({ enum: KycStatus })
-  @IsEnum(KycStatus)
-  status: KycStatus;
-
-  @ApiPropertyOptional({ example: 'Document expiré' })
-  @IsOptional()
-  @IsString()
-  motifRefus?: string;
-}

@@ -1,4 +1,4 @@
-import { CategoriePsfp } from './enums/kyc-status.enum';
+import { CategoriePsfp } from './enums/categorie-psfp.enum';
 import { ProfilPPMapper } from './mappers/profil-pp.mapper';
 import {
   ChampsCoordonnees,

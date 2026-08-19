@@ -1,4 +1,4 @@
-import { CategoriePsfp } from 'src/profiles/domains/enums/kyc-status.enum';
+import { CategoriePsfp } from 'src/profiles/domains/enums/categorie-psfp.enum';
 import { plafondConseillePour } from 'src/profiles/domains/services/plafond-psfp.domain-service';
 
 export interface EvaluationInvestisseurSnapshot {

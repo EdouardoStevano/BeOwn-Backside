@@ -10,8 +10,7 @@ import { YouSignModule } from 'src/common/yousign/yousign.module';
 import { ContractGeneratorService } from 'src/investments/applications/usecases/contract-generator.service';
 import { InitiateBuyUseCase } from './usecases/initiate-buy.usecase';
 import { CancelInitiationUseCase } from './usecases/cancel-initiation.usecase';
-import { KycEntity } from 'src/profiles/infrastructure/persistences/entities/kyc.entity';
-import { KycValidatedGuard } from 'src/common/auth/kyc-validated.guard';
+import { KycModule } from 'src/kyc/applications/kyc.module';
 import { ProjectEntity } from 'src/projects/infrastructure/persistences/entities/project.entity';
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 import { InvestmentEntity } from 'src/investments/infrastructure/persistences/entities/investment.entity';
@@ -20,7 +19,7 @@ import { UsersInfrastructureModule } from 'src/iam/infrastructure/users-infrastr
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([KycEntity, ProjectEntity, UserEntity, InvestmentEntity]),
+    TypeOrmModule.forFeature([ProjectEntity, UserEntity, InvestmentEntity]),
     SecondaryMarketInfrastructureModule,
     IamInfrastructureModule,
     NotificationsModule,
@@ -28,12 +27,13 @@ import { UsersInfrastructureModule } from 'src/iam/infrastructure/users-infrastr
     YouSignModule,
     UsersModule,
     UsersInfrastructureModule,
+    // `KycValidatedGuard` : acheter au marché secondaire exige un dossier vérifié.
+    KycModule,
   ],
   providers: [
     ContractGeneratorService,
     InitiateBuyUseCase,
     CancelInitiationUseCase,
-    KycValidatedGuard,
   ],
   controllers: [SecondaryMarketController, YouSignWebhookController],
 })

@@ -6,7 +6,7 @@ import {
 } from 'src/iam/domains/errors';
 import { buildUser } from 'src/iam/domains/models/user.fixture';
 import type { UserRepository } from 'src/iam/domains/ports/user.repository';
-import type { KycRepository } from 'src/profiles/domains/ports/kyc.repository';
+import type { KycRepository } from 'src/kyc/domains/ports/kyc.repository';
 import type { WalletRepository } from 'src/wallets/applications/ports/repositories/wallet.repository';
 
 const CIBLE = 7;

@@ -1,10 +1,10 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { KycStatus } from 'src/profiles/domains/enums/kyc-status.enum';
-import { Kyc } from 'src/profiles/domains/kyc';
+import { KycStatus } from 'src/kyc/domains/enums/kyc-status.enum';
+import { Kyc } from 'src/kyc/domains/kyc';
 import {
   KYC_REPOSITORY,
   type KycRepository,
-} from 'src/profiles/domains/ports/kyc.repository';
+} from 'src/kyc/domains/ports/kyc.repository';
 import {
   PROFIL_PM_REPOSITORY,
   type ProfilPMRepository,

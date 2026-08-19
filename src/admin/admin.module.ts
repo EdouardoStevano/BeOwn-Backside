@@ -16,7 +16,7 @@ import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.ent
 import { ProjectEntity } from 'src/projects/infrastructure/persistences/entities/project.entity';
 import { InvestmentEntity } from 'src/investments/infrastructure/persistences/entities/investment.entity';
 import { EcheanceEntity } from 'src/investments/infrastructure/persistences/entities/echeance.entity';
-import { KycEntity } from 'src/profiles/infrastructure/persistences/entities/kyc.entity';
+import { KycEntity } from 'src/kyc/infrastructure/persistences/entities/kyc.entity';
 import { OrdreMarcheEntity } from 'src/secondarymarket/infrastructure/persistences/entities/ordre-marche.entity';
 import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/wallet.entity';
 import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entities/transaction.entity';

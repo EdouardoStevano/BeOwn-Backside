@@ -10,7 +10,7 @@ import {
   ChampProfilInvalideError,
   ProfilPPDejaExistantError,
 } from 'src/profiles/domains/errors';
-import { CategoriePsfp } from 'src/profiles/domains/enums/kyc-status.enum';
+import { CategoriePsfp } from 'src/profiles/domains/enums/categorie-psfp.enum';
 import { ProfilPPCreeDomainEvent } from 'src/profiles/domains/events/profil-pp-cree.domain-event';
 import { CreateProfilPPDto } from 'src/profiles/presenters/dto/profil.dto';
 

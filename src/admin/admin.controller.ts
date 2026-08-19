@@ -35,7 +35,7 @@ import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.ent
 import { UserRole, UserStatus } from 'src/iam/domains/enums/user.enum';
 import { ProjectEntity } from 'src/projects/infrastructure/persistences/entities/project.entity';
 import { InvestmentEntity } from 'src/investments/infrastructure/persistences/entities/investment.entity';
-import { KycEntity } from 'src/profiles/infrastructure/persistences/entities/kyc.entity';
+import { KycEntity } from 'src/kyc/infrastructure/persistences/entities/kyc.entity';
 import { OrdreMarcheEntity } from 'src/secondarymarket/infrastructure/persistences/entities/ordre-marche.entity';
 import { OrdreMarcheStatus } from 'src/secondarymarket/domains/ordre-marche';
 import { ProjectStatus } from 'src/projects/domains/enums/project-status.enum';

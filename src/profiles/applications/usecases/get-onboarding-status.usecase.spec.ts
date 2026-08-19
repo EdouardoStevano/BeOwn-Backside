@@ -1,14 +1,11 @@
 import { GetOnboardingStatusUseCase } from './get-onboarding-status.usecase';
-import {
-  KycNiveau,
-  KycStatus,
-} from 'src/profiles/domains/enums/kyc-status.enum';
-import { KycFactory } from 'src/profiles/domains/factories/kyc.factory';
+import { KycNiveau, KycStatus } from 'src/kyc/domains/enums/kyc-status.enum';
+import { KycFactory } from 'src/kyc/domains/factories/kyc.factory';
 import { ProfilPMFactory } from 'src/profiles/domains/factories/profil-pm.factory';
 import { ProfilPPFactory } from 'src/profiles/domains/factories/profil-pp.factory';
 import { QuestionnaireAdequationFactory } from 'src/profiles/domains/factories/questionnaire-adequation.factory';
-import { KycMapper } from 'src/profiles/domains/mappers/kyc.mapper';
-import type { KycRepository } from 'src/profiles/domains/ports/kyc.repository';
+import { KycMapper } from 'src/kyc/domains/mappers/kyc.mapper';
+import type { KycRepository } from 'src/kyc/domains/ports/kyc.repository';
 import type { ProfilPMRepository } from 'src/profiles/domains/ports/profil-pm.repository';
 import type { ProfilPPRepository } from 'src/profiles/domains/ports/profil-pp.repository';
 import type { QuestionnaireAdequationRepository } from 'src/profiles/domains/ports/questionnaire-adequation.repository';
