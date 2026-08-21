@@ -3,7 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { DistributionsInfrastructureModule } from '../infrastructure/distributions-infrastructure.module';
 import { LocativeManagementInfrastructureModule } from 'src/locative-management/infrastructure/locative-management-infrastructure.module';
 import { CatalogInfrastructureModule } from 'src/catalog/infrastructure/catalog-infrastructure.module';
-import { InvestmentsInfrastructureModule } from 'src/investments/infrastructure/investments-infrastructure.module';
+import { SubscriptionInfrastructureModule } from 'src/subscription/infrastructure/subscription-infrastructure.module';
 import { NotificationsModule } from 'src/notifications/notifications.module';
 import { AmlModule } from 'src/common/aml/aml.module';
 import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructure.module';
@@ -22,7 +22,7 @@ import { InvestisseurDistributionsController } from '../presenters/http/investis
     DistributionsInfrastructureModule,
     LocativeManagementInfrastructureModule,
     CatalogInfrastructureModule,
-    InvestmentsInfrastructureModule,
+    SubscriptionInfrastructureModule,
     NotificationsModule,
     AmlModule,
     IamInfrastructureModule,

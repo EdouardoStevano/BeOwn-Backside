@@ -7,7 +7,7 @@
   ManyToOne,
   PrimaryGeneratedColumn,
 } from 'typeorm';
-import { InvestmentEntity } from 'src/investments/infrastructure/persistences/entities/investment.entity';
+import { InvestmentEntity } from 'src/subscription/infrastructure/persistence/entities/investment.entity';
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 import {
   OrdreMarcheSens,

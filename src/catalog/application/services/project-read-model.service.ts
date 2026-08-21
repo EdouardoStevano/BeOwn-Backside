@@ -5,9 +5,9 @@ import { DOCUMENT_REPOSITORY } from 'src/documents/applications/ports/repositori
 import type { DocumentRepository } from 'src/documents/applications/ports/repositories/document.repository';
 import { Document } from 'src/documents/domains/document';
 import { DocumentType } from 'src/documents/domains/enums/document-type.enum';
-import { INVESTMENT_REPOSITORY } from 'src/investments/applications/ports/repositories/investment.repository';
-import type { InvestmentRepository } from 'src/investments/applications/ports/repositories/investment.repository';
-import { InvestmentStatus } from 'src/investments/domains/enums/investment-status.enum';
+import { INVESTMENT_REPOSITORY } from 'src/subscription/domain/repositories/investment.repository';
+import type { InvestmentRepository } from 'src/subscription/domain/repositories/investment.repository';
+import { InvestmentStatus } from 'src/subscription/domain/enums/investment-status.enum';
 import { ProjetIntrouvableError } from 'src/catalog/domain/errors';
 import { Project, ProjectSnapshot } from 'src/catalog/domain/aggregates/project';
 import { LocalisationSnapshot } from 'src/catalog/domain/value-objects/localisation.vo';

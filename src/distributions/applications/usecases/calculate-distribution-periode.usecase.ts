@@ -32,10 +32,10 @@ import {
 import {
   INVESTMENT_REPOSITORY,
   type InvestmentRepository,
-} from 'src/investments/applications/ports/repositories/investment.repository';
+} from 'src/subscription/domain/repositories/investment.repository';
 import { ModeleEconomique } from 'src/catalog/domain/enums/modele-economique.enum';
 import { ProjectStatus } from 'src/catalog/domain/enums/project-status.enum';
-import { InvestmentStatus } from 'src/investments/domains/enums/investment-status.enum';
+import { InvestmentStatus } from 'src/subscription/domain/enums/investment-status.enum';
 import { PlatformFeesService } from 'src/common/platform-fees/platform-fees.service';
 
 const PERIODE_REGEX = /^\d{4}-(0[1-9]|1[0-2])$/;

@@ -4,8 +4,8 @@ import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { NotFoundException } from '@nestjs/common';
 import { ProjectKpiService } from './project-kpi.service';
 import { ProjectEntity } from 'src/catalog/infrastructure/persistence/entities/project.entity';
-import { InvestmentEntity } from 'src/investments/infrastructure/persistences/entities/investment.entity';
-import { EcheanceStatus, InvestmentStatus } from 'src/investments/domains/enums/investment-status.enum';
+import { InvestmentEntity } from 'src/subscription/infrastructure/persistence/entities/investment.entity';
+import { EcheanceStatus, InvestmentStatus } from 'src/subscription/domain/enums/investment-status.enum';
 import { ProjectStatus } from 'src/catalog/domain/enums/project-status.enum';
 
 describe('ProjectKpiService', () => {

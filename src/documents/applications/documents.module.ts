@@ -6,7 +6,7 @@ import { DocumentsInfrastructureModule } from '../infrastructure/documents-infra
 import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructure.module';
 import { CloudStorageModule } from 'src/shared/cloud-storage/cloud-storage.module';
 import { DocumentController } from '../presenters/http/document.controller';
-import { InvestmentEntity } from 'src/investments/infrastructure/persistences/entities/investment.entity';
+import { InvestmentEntity } from 'src/subscription/infrastructure/persistence/entities/investment.entity';
 import { ProjectEntity } from 'src/catalog/infrastructure/persistence/entities/project.entity';
 
 @Module({

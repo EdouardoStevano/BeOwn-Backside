@@ -32,12 +32,12 @@ import type { ActiveUser } from 'src/iam/presentation/decorators/current-user.de
 import { formatEur } from 'src/shared/money/format-eur';
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 import { UserRole } from 'src/iam/domain/enums/user.enum';
-import { EcheanceEntity } from 'src/investments/infrastructure/persistences/entities/echeance.entity';
-import { InvestmentEntity } from 'src/investments/infrastructure/persistences/entities/investment.entity';
+import { EcheanceEntity } from 'src/subscription/infrastructure/persistence/entities/echeance.entity';
+import { InvestmentEntity } from 'src/subscription/infrastructure/persistence/entities/investment.entity';
 import {
   EcheanceStatus,
   InvestmentStatus,
-} from 'src/investments/domains/enums/investment-status.enum';
+} from 'src/subscription/domain/enums/investment-status.enum';
 import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/wallet.entity';
 import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entities/transaction.entity';
 import {
@@ -48,8 +48,8 @@ import {
 } from 'src/wallets/domains/enums/wallet.enum';
 import { NotificationService } from 'src/notifications/applications/notification.service';
 import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
-import { PayEcheanceUseCase } from 'src/investments/applications/usecases/pay-echeance.usecase';
-import { ProjectScheduleGeneratorService } from 'src/investments/applications/project-schedule-generator.service';
+import { PayEcheanceUseCase } from 'src/subscription/application/usecases/pay-echeance.usecase';
+import { ProjectScheduleGeneratorService } from 'src/subscription/application/services/project-schedule-generator.service';
 import { TriggerEcheancePaymentUseCase } from './usecases/trigger-echeance-payment.usecase';
 import { GetAggregatedScheduleUseCase } from './usecases/get-aggregated-schedule.usecase';
 import { PatchAggregatedEcheanceUseCase } from './usecases/patch-aggregated-echeance.usecase';

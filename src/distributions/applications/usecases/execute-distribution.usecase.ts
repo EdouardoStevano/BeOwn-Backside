@@ -20,7 +20,7 @@ import {
 import {
   INVESTMENT_REPOSITORY,
   type InvestmentRepository,
-} from 'src/investments/applications/ports/repositories/investment.repository';
+} from 'src/subscription/domain/repositories/investment.repository';
 import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/wallet.entity';
 import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entities/transaction.entity';
 import {

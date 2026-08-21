@@ -2,9 +2,9 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { AmlMonitorService } from 'src/common/aml/aml-monitor.service';
 import { PlatformFeesService } from 'src/common/platform-fees/platform-fees.service';
 import { UserRole } from 'src/iam/domain/enums/user.enum';
-import { InvestmentStatus } from 'src/investments/domains/enums/investment-status.enum';
-import { INVESTMENT_REPOSITORY } from 'src/investments/applications/ports/repositories/investment.repository';
-import type { InvestmentRepository } from 'src/investments/applications/ports/repositories/investment.repository';
+import { InvestmentStatus } from 'src/subscription/domain/enums/investment-status.enum';
+import { INVESTMENT_REPOSITORY } from 'src/subscription/domain/repositories/investment.repository';
+import type { InvestmentRepository } from 'src/subscription/domain/repositories/investment.repository';
 import { AuditLogService } from 'src/notifications/applications/audit-log.service';
 import {
   ProjetIntrouvableError,

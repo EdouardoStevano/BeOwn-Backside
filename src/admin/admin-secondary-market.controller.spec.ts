@@ -4,8 +4,8 @@ import { OrdreMarcheEntity } from 'src/secondarymarket/infrastructure/persistenc
 import { OrdreMarcheStatus } from 'src/secondarymarket/domains/ordre-marche';
 import { SignatureEntity } from 'src/signatures/infrastructure/persistences/entities/signature.entity';
 import { SignatureStatus } from 'src/signatures/domains/enums/signature-status.enum';
-import { InvestmentEntity } from 'src/investments/infrastructure/persistences/entities/investment.entity';
-import { InvestmentStatus } from 'src/investments/domains/enums/investment-status.enum';
+import { InvestmentEntity } from 'src/subscription/infrastructure/persistence/entities/investment.entity';
+import { InvestmentStatus } from 'src/subscription/domain/enums/investment-status.enum';
 import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/wallet.entity';
 import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entities/transaction.entity';
 import { TransactionStatus, WalletType } from 'src/wallets/domains/enums/wallet.enum';

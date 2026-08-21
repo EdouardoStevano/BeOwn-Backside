@@ -5,7 +5,7 @@ import { AvisInfrastructureModule } from 'src/avis/infrastructure/avis-infrastru
 import { AmlModule } from 'src/common/aml/aml.module';
 import { DocumentsInfrastructureModule } from 'src/documents/infrastructure/documents-infrastructure.module';
 import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructure.module';
-import { InvestmentsInfrastructureModule } from 'src/investments/infrastructure/investments-infrastructure.module';
+import { SubscriptionInfrastructureModule } from 'src/subscription/infrastructure/subscription-infrastructure.module';
 import { NotificationsModule } from 'src/notifications/notifications.module';
 import { CatalogInfrastructureModule } from './infrastructure/catalog-infrastructure.module';
 import { AdminSortiesController } from './presentation/http/admin-sorties.controller';
@@ -61,7 +61,7 @@ import { ListSpvUseCase } from './application/usecases/spv/list-spv.usecase';
     CqrsModule,
     CatalogInfrastructureModule,
     // Read-models : la fiche projet agrège investissements, documents et avis.
-    InvestmentsInfrastructureModule,
+    SubscriptionInfrastructureModule,
     DocumentsInfrastructureModule,
     AvisInfrastructureModule,
     // Annonces, diffusions et journal d'audit.

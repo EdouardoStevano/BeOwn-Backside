@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { FiscaliteInfrastructureModule } from '../infrastructure/fiscalite-infrastructure.module';
 import { DistributionsInfrastructureModule } from 'src/distributions/infrastructure/distributions-infrastructure.module';
-import { InvestmentsInfrastructureModule } from 'src/investments/infrastructure/investments-infrastructure.module';
+import { SubscriptionInfrastructureModule } from 'src/subscription/infrastructure/subscription-infrastructure.module';
 import { UsersInfrastructureModule } from 'src/iam/infrastructure/users-infrastructure.module';
 import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructure.module';
 import { GenerateInvestisseurIfuUseCase } from './usecases/generate-investisseur-ifu.usecase';
@@ -14,7 +14,7 @@ import { AdminFiscaliteController } from '../presenters/http/admin-fiscalite.con
   imports: [
     FiscaliteInfrastructureModule,
     DistributionsInfrastructureModule,
-    InvestmentsInfrastructureModule,
+    SubscriptionInfrastructureModule,
     UsersInfrastructureModule,
     IamInfrastructureModule,
   ],

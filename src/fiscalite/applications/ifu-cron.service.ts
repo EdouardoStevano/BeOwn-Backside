@@ -8,7 +8,7 @@ import {
 import {
   INVESTMENT_REPOSITORY,
   type InvestmentRepository,
-} from 'src/investments/applications/ports/repositories/investment.repository';
+} from 'src/subscription/domain/repositories/investment.repository';
 
 /**
  * Cron annuel : génère les IFU N-1 pour tous les investisseurs ayant eu

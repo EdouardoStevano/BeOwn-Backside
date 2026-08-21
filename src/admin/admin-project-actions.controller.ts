@@ -29,9 +29,9 @@ import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.ent
 import { UserRole } from 'src/iam/domain/enums/user.enum';
 import { ProjectEntity } from 'src/catalog/infrastructure/persistence/entities/project.entity';
 import { ProjectStatus } from 'src/catalog/domain/enums/project-status.enum';
-import { InvestmentEntity } from 'src/investments/infrastructure/persistences/entities/investment.entity';
-import { InvestmentStatus } from 'src/investments/domains/enums/investment-status.enum';
-import { RefundCollecteService } from 'src/investments/applications/refund-collecte.service';
+import { InvestmentEntity } from 'src/subscription/infrastructure/persistence/entities/investment.entity';
+import { InvestmentStatus } from 'src/subscription/domain/enums/investment-status.enum';
+import { RefundCollecteService } from 'src/subscription/application/services/refund-collecte.service';
 import { NotificationService } from 'src/notifications/applications/notification.service';
 import { BroadcastService } from 'src/notifications/applications/broadcast.service';
 import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';

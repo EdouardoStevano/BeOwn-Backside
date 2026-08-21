@@ -10,7 +10,7 @@ import type { ActiveUser } from 'src/iam/presentation/decorators/current-user.de
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/wallet.entity';
 import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entities/transaction.entity';
-import { InvestmentEntity } from 'src/investments/infrastructure/persistences/entities/investment.entity';
+import { InvestmentEntity } from 'src/subscription/infrastructure/persistence/entities/investment.entity';
 import { ProjectEntity } from 'src/catalog/infrastructure/persistence/entities/project.entity';
 import { WalletType, TransactionStatus } from 'src/wallets/domains/enums/wallet.enum';
 
