@@ -5,7 +5,7 @@ import { ProjectsInfrastructureModule } from 'src/projects/infrastructure/projec
 import { WalletsInfrastructureModule } from 'src/wallets/infrastructure/wallets-infrastructure.module';
 import { DocumentsInfrastructureModule } from 'src/documents/infrastructure/documents-infrastructure.module';
 import { UsersInfrastructureModule } from 'src/iam/infrastructure/users-infrastructure.module';
-import { ProfilesInfrastructureModule } from 'src/iam/infrastructure/profiles-infrastructure.module';
+import { ProfilesInfrastructureModule } from 'src/compliance/infrastructure/profiles-infrastructure.module';
 import { CloudStorageModule } from 'src/shared/cloud-storage/cloud-storage.module';
 import { YouSignModule } from 'src/common/yousign/yousign.module';
 import { CreateInvestmentUseCase } from './usecases/create-investment.usecase';
@@ -23,7 +23,7 @@ import { SignatureEntity } from 'src/signatures/infrastructure/persistences/enti
 import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/wallet.entity';
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 import { UserEmailEntity } from 'src/iam/infrastructure/persistence/entities/user-email.entity';
-import { KycModule } from 'src/kyc/applications/kyc.module';
+import { KycModule } from 'src/compliance/application/kyc.module';
 import { EcheanceEntity } from 'src/investments/infrastructure/persistences/entities/echeance.entity';
 import { EcheancesCronService } from './echeances-cron.service';
 import { IfuGenerationService } from './ifu-generation.service';

@@ -46,12 +46,12 @@ import { CurrentUser } from 'src/iam/presentation/decorators/current-user.decora
 import type { ActiveUser } from 'src/iam/presentation/decorators/current-user.decorator';
 import { UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from 'src/iam/presentation/guards/jwt-auth.guard';
-import { KycValidatedGuard } from 'src/kyc/presenters/guards/kyc-validated.guard';
+import { KycValidatedGuard } from 'src/compliance/presentation/guards/kyc-validated.guard';
 import { SkipThrottle } from '@nestjs/throttler';
 import { NotificationService } from 'src/notifications/applications/notification.service';
 import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
 import { UserRole } from 'src/iam/domain/enums/user.enum';
-import { HandleIdentityWebhookUseCase } from 'src/kyc/applications/usecases/handle-identity-webhook.usecase';
+import { HandleIdentityWebhookUseCase } from 'src/compliance/application/usecases/kyc/handle-identity-webhook.usecase';
 
 /**
  * Dépôts, retraits Stripe Connect, et l'endpoint webhook Stripe.

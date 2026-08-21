@@ -39,7 +39,7 @@ import { CurrentUser } from 'src/iam/presentation/decorators/current-user.decora
 import type { ActiveUser } from 'src/iam/presentation/decorators/current-user.decorator';
 import { UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from 'src/iam/presentation/guards/jwt-auth.guard';
-import { KycValidatedGuard } from 'src/kyc/presenters/guards/kyc-validated.guard';
+import { KycValidatedGuard } from 'src/compliance/presentation/guards/kyc-validated.guard';
 import { Roles } from 'src/iam/presentation/decorators/roles.decorator';
 import { RequirePermission } from 'src/iam/presentation/decorators/require-permission.decorator';
 import { hasPermission } from 'src/iam/domain/policies/role-permissions.policy';

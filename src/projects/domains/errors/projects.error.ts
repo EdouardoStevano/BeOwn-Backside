@@ -6,7 +6,7 @@
  * « cette transition de statut n'existe pas ») ; c'est la couche présentation —
  * `ProjectsErrorFilter` — qui traduit en réponse HTTP.
  *
- * Les contextes KYC (`KycError`), Profiles (`IamError`) et IAM (`IamError`)
+ * Les contextes KYC (`ComplianceError`), Profiles (`IamError`) et IAM (`IamError`)
  * portent le même socle. Ce doublon est assumé, et pour la raison que
  * `kyc.error.ts` énonce déjà : partager une classe de base obligerait chaque
  * Bounded Context à dépendre d'un module commun qui grossirait à chaque nouveau

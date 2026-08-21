@@ -7,7 +7,7 @@ import { CancelReservationUseCase } from './usecases/cancel-reservation.usecase'
 import { ReservationController } from '../presenters/http/reservation.controller';
 import { RESERVATION_REPOSITORY } from './ports/repositories/reservation.repository';
 import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructure.module';
-import { KycModule } from 'src/kyc/applications/kyc.module';
+import { KycModule } from 'src/compliance/application/kyc.module';
 
 @Module({
   imports: [

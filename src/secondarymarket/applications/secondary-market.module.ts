@@ -10,7 +10,7 @@ import { YouSignModule } from 'src/common/yousign/yousign.module';
 import { ContractGeneratorService } from 'src/investments/applications/usecases/contract-generator.service';
 import { InitiateBuyUseCase } from './usecases/initiate-buy.usecase';
 import { CancelInitiationUseCase } from './usecases/cancel-initiation.usecase';
-import { KycModule } from 'src/kyc/applications/kyc.module';
+import { KycModule } from 'src/compliance/application/kyc.module';
 import { ProjectEntity } from 'src/projects/infrastructure/persistences/entities/project.entity';
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 import { InvestmentEntity } from 'src/investments/infrastructure/persistences/entities/investment.entity';

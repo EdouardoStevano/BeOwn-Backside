@@ -10,7 +10,7 @@ import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.ent
 import { PAYMENT_SERVICE } from './applications/ports/payment.service';
 import { WalletsInfrastructureModule } from 'src/wallets/infrastructure/wallets-infrastructure.module';
 import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructure.module';
-import { KycModule } from 'src/kyc/applications/kyc.module';
+import { KycModule } from 'src/compliance/application/kyc.module';
 import { CloudStorageModule } from 'src/shared/cloud-storage/cloud-storage.module';
 import { NotificationsModule } from 'src/notifications/notifications.module';
 import { RequestRetraitUseCase } from './applications/usecases/request-retrait.usecase';
