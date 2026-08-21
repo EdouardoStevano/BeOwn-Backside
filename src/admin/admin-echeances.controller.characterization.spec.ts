@@ -7,7 +7,7 @@ import { rolesWithPermission } from 'src/iam/domain/policies/role-permissions.po
 import {
   EcheanceStatus,
   InvestmentStatus,
-} from 'src/investments/domains/enums/investment-status.enum';
+} from 'src/subscription/domain/enums/investment-status.enum';
 import {
   TransactionFournisseur,
   TransactionStatus,

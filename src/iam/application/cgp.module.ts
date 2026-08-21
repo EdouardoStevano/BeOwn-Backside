@@ -5,7 +5,7 @@ import { UsersInfrastructureModule } from 'src/iam/infrastructure/users-infrastr
 import { PORTEFEUILLE_INVESTISSEUR } from 'src/iam/application/ports/portefeuille-investisseur.port';
 import { TypeOrmPortefeuilleInvestisseurAdapter } from 'src/iam/infrastructure/anti-corruption/typeorm-portefeuille-investisseur.adapter';
 import { CgpController } from 'src/iam/presentation/http/cgp.controller';
-import { InvestmentEntity } from 'src/investments/infrastructure/persistences/entities/investment.entity';
+import { InvestmentEntity } from 'src/subscription/infrastructure/persistence/entities/investment.entity';
 import { ConsulterPortefeuilleCgpUseCase } from './usecases/cgp/consulter-portefeuille-cgp.usecase';
 import { PublierCodeParrainageUseCase } from './usecases/cgp/publier-code-parrainage.usecase';
 import { RattacherAUnCgpUseCase } from './usecases/cgp/rattacher-a-un-cgp.usecase';

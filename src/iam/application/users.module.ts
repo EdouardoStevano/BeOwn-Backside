@@ -17,7 +17,7 @@ import { NotificationsModule } from 'src/notifications/notifications.module';
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 import { NotificationEntity } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
 import { InvestorInactivityCronService } from 'src/iam/application/services/investor-inactivity-cron.service';
-import { InvestmentEntity } from 'src/investments/infrastructure/persistences/entities/investment.entity';
+import { InvestmentEntity } from 'src/subscription/infrastructure/persistence/entities/investment.entity';
 import { OrdreMarcheEntity } from 'src/secondarymarket/infrastructure/persistences/entities/ordre-marche.entity';
 import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/wallet.entity';
 import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entities/transaction.entity';

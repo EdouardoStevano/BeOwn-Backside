@@ -1,5 +1,5 @@
 import { UserRole } from 'src/iam/domain/enums/user.enum';
-import { InvestmentStatus } from 'src/investments/domains/enums/investment-status.enum';
+import { InvestmentStatus } from 'src/subscription/domain/enums/investment-status.enum';
 import { ProjectStatus } from 'src/catalog/domain/enums/project-status.enum';
 import { StatutSortie } from 'src/catalog/domain/enums/statut-sortie.enum';
 import {

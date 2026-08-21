@@ -23,14 +23,14 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import { SkipThrottle } from '@nestjs/throttler';
 import { OrdreMarcheEntity } from 'src/secondarymarket/infrastructure/persistences/entities/ordre-marche.entity';
-import { InvestmentEntity } from 'src/investments/infrastructure/persistences/entities/investment.entity';
+import { InvestmentEntity } from 'src/subscription/infrastructure/persistence/entities/investment.entity';
 import { ProjectEntity } from 'src/catalog/infrastructure/persistence/entities/project.entity';
 import { CreateOrdreMarcheDto, ExecuteOrderDto } from '../dto/ordre-marche.dto';
 import {
   OrdreMarcheStatus,
   OrdreMarcheSens,
 } from 'src/secondarymarket/domains/ordre-marche';
-import { InvestmentStatus } from 'src/investments/domains/enums/investment-status.enum';
+import { InvestmentStatus } from 'src/subscription/domain/enums/investment-status.enum';
 import { CurrentUser } from 'src/iam/presentation/decorators/current-user.decorator';
 import type { ActiveUser } from 'src/iam/presentation/decorators/current-user.decorator';
 import { JwtAuthGuard } from 'src/iam/presentation/guards/jwt-auth.guard';

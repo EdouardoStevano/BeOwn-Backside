@@ -43,7 +43,7 @@ import {
   DocumentRelatedTo,
   DocumentType,
 } from 'src/documents/domains/enums/document-type.enum';
-import { InvestmentEntity } from 'src/investments/infrastructure/persistences/entities/investment.entity';
+import { InvestmentEntity } from 'src/subscription/infrastructure/persistence/entities/investment.entity';
 import { ProjectEntity } from 'src/catalog/infrastructure/persistence/entities/project.entity';
 import { SetOrdreDto, UploadDocumentDto } from '../dto/document.dto';
 import { CloudStorageService } from 'src/shared/cloud-storage/cloud-storage.service';

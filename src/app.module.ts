@@ -18,7 +18,7 @@ import { AuditInterceptor } from './common/audit/audit.interceptor';
 import { ComplianceModule } from './compliance/compliance.module';
 import { CatalogModule } from './catalog/catalog.module';
 import { ReservationModule } from './reservation/reservation.module';
-import { InvestmentsModule } from './investments/applications/investments.module';
+import { SubscriptionModule } from './subscription/subscription.module';
 import { WalletsModule } from './wallets/applications/wallets.module';
 import { PaymentsModule } from './payments/payments.module';
 import { SecondaryMarketModule } from './secondarymarket/applications/secondary-market.module';
@@ -97,7 +97,7 @@ function requireEnv(name: string): string {
     ComplianceModule,
     CatalogModule,
     ReservationModule,
-    InvestmentsModule,
+    SubscriptionModule,
     WalletsModule,
     PaymentsModule,
     SecondaryMarketModule,

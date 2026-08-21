@@ -25,8 +25,8 @@ import { formatEur } from 'src/shared/money/format-eur';
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 import { UserRole } from 'src/iam/domain/enums/user.enum';
 import { ProjectEntity } from 'src/catalog/infrastructure/persistence/entities/project.entity';
-import { InvestmentEntity } from 'src/investments/infrastructure/persistences/entities/investment.entity';
-import { InvestmentStatus } from 'src/investments/domains/enums/investment-status.enum';
+import { InvestmentEntity } from 'src/subscription/infrastructure/persistence/entities/investment.entity';
+import { InvestmentStatus } from 'src/subscription/domain/enums/investment-status.enum';
 import PDFDocument = require('pdfkit');
 
 const ADMIN_ROLES: string[] = rolesWithPermission('reports:read');

@@ -5,8 +5,8 @@ import {
   PortefeuilleInvestisseur,
   ResumePortefeuille,
 } from 'src/iam/application/ports/portefeuille-investisseur.port';
-import { InvestmentStatus } from 'src/investments/domains/enums/investment-status.enum';
-import { InvestmentEntity } from 'src/investments/infrastructure/persistences/entities/investment.entity';
+import { InvestmentStatus } from 'src/subscription/domain/enums/investment-status.enum';
+import { InvestmentEntity } from 'src/subscription/infrastructure/persistence/entities/investment.entity';
 
 /**
  * Statuts qui sortent une souscription de l'encours : elle n'a jamais produit

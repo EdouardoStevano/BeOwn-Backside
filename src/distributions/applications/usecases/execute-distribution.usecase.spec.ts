@@ -29,7 +29,7 @@ describe('ExecuteDistributionUseCase — audit role', () => {
       findByPeriode: jest.fn().mockResolvedValue([]),
       markPaid: jest.fn(),
     };
-    investmentRepo = { findInvestmentById: jest.fn() };
+    investmentRepo = { findById: jest.fn() };
     auditLog = { create: jest.fn().mockResolvedValue(undefined) };
 
     const walletRepo: any = {};
@@ -114,7 +114,7 @@ describe('ExecuteDistributionUseCase — encaissement des frais plateforme', () 
       findByPeriode: jest.fn().mockResolvedValue([]),
       markPaid: jest.fn(),
     };
-    investmentRepo = { findInvestmentById: jest.fn() };
+    investmentRepo = { findById: jest.fn() };
 
     walletPlat = null;
     saved = [];

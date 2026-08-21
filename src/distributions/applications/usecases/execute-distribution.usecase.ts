@@ -20,7 +20,7 @@ import {
 import {
   INVESTMENT_REPOSITORY,
   type InvestmentRepository,
-} from 'src/investments/applications/ports/repositories/investment.repository';
+} from 'src/subscription/domain/repositories/investment.repository';
 import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/wallet.entity';
 import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entities/transaction.entity';
 import {
@@ -210,9 +210,7 @@ export class ExecuteDistributionUseCase {
         }
 
         // Trouver l'investissement pour récupérer l'utilisateurId
-        const inv = await this.investmentRepo.findInvestmentById(
-          part.investissementId,
-        );
+        const inv = await this.investmentRepo.findById(part.investissementId);
         if (!inv) {
           this.logger.warn(
             `Investissement ${part.investissementId} introuvable — part ignorée.`,

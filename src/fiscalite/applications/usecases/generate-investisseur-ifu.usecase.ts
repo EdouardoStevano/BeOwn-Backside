@@ -11,8 +11,8 @@ import {
 import {
   INVESTMENT_REPOSITORY,
   type InvestmentRepository,
-} from 'src/investments/applications/ports/repositories/investment.repository';
-import { InvestmentStatus } from 'src/investments/domains/enums/investment-status.enum';
+} from 'src/subscription/domain/repositories/investment.repository';
+import { InvestmentStatus } from 'src/subscription/domain/enums/investment-status.enum';
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 

@@ -34,12 +34,12 @@ import { NotificationEventService } from 'src/notifications/applications/notific
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 import { UserRole, UserStatus } from 'src/iam/domain/enums/user.enum';
 import { ProjectEntity } from 'src/catalog/infrastructure/persistence/entities/project.entity';
-import { InvestmentEntity } from 'src/investments/infrastructure/persistences/entities/investment.entity';
+import { InvestmentEntity } from 'src/subscription/infrastructure/persistence/entities/investment.entity';
 import { KycEntity } from 'src/compliance/infrastructure/persistence/entities/kyc.entity';
 import { OrdreMarcheEntity } from 'src/secondarymarket/infrastructure/persistences/entities/ordre-marche.entity';
 import { OrdreMarcheStatus } from 'src/secondarymarket/domains/ordre-marche';
 import { ProjectStatus } from 'src/catalog/domain/enums/project-status.enum';
-import { InvestmentStatus } from 'src/investments/domains/enums/investment-status.enum';
+import { InvestmentStatus } from 'src/subscription/domain/enums/investment-status.enum';
 import { DeleteAccountUseCase } from 'src/iam/application/usecases/account/delete-account.usecase';
 import { SkipThrottle } from '@nestjs/throttler';
 

@@ -21,12 +21,12 @@ import {
   TransactionFournisseur,
 } from 'src/wallets/domains/enums/wallet.enum';
 import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entities/transaction.entity';
-import { InvestmentEntity } from 'src/investments/infrastructure/persistences/entities/investment.entity';
+import { InvestmentEntity } from 'src/subscription/infrastructure/persistence/entities/investment.entity';
 import {
   InvestmentStatus,
   EcheanceStatus,
-} from 'src/investments/domains/enums/investment-status.enum';
-import { EcheanceEntity } from 'src/investments/infrastructure/persistences/entities/echeance.entity';
+} from 'src/subscription/domain/enums/investment-status.enum';
+import { EcheanceEntity } from 'src/subscription/infrastructure/persistence/entities/echeance.entity';
 import { ReservationEntity } from 'src/reservation/infrastructure/persistence/entities/reservation.entity';
 import { ReservationStatus } from 'src/reservation/domain/enums/reservation-status.enum';
 import { ProfilPPEntity } from 'src/compliance/infrastructure/persistence/entities/profil-pp.entity';

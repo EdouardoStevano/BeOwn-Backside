@@ -14,8 +14,8 @@ import { AdminEmailTemplatesController } from './admin-email-templates.controlle
 import { EmailTemplateEntity } from 'src/shared/email/entities/email-template.entity';
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 import { ProjectEntity } from 'src/catalog/infrastructure/persistence/entities/project.entity';
-import { InvestmentEntity } from 'src/investments/infrastructure/persistences/entities/investment.entity';
-import { EcheanceEntity } from 'src/investments/infrastructure/persistences/entities/echeance.entity';
+import { InvestmentEntity } from 'src/subscription/infrastructure/persistence/entities/investment.entity';
+import { EcheanceEntity } from 'src/subscription/infrastructure/persistence/entities/echeance.entity';
 import { KycEntity } from 'src/compliance/infrastructure/persistence/entities/kyc.entity';
 import { OrdreMarcheEntity } from 'src/secondarymarket/infrastructure/persistences/entities/ordre-marche.entity';
 import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/wallet.entity';
@@ -24,7 +24,7 @@ import { ReservationEntity } from 'src/reservation/infrastructure/persistence/en
 import { AdminSettingsEntity } from './entities/admin-settings.entity';
 import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructure.module';
 import { NotificationsModule } from 'src/notifications/notifications.module';
-import { InvestmentsModule } from 'src/investments/applications/investments.module';
+import { SubscriptionModule } from 'src/subscription/subscription.module';
 import { ProfilesModule } from 'src/compliance/application/profiles.module';
 import { UsersModule } from 'src/iam/application/users.module';
 import { TriggerEcheancePaymentUseCase } from './usecases/trigger-echeance-payment.usecase';
@@ -48,7 +48,7 @@ import { PatchAggregatedEcheanceUseCase } from './usecases/patch-aggregated-eche
     ]),
     IamInfrastructureModule,
     NotificationsModule,
-    InvestmentsModule,
+    SubscriptionModule,
     ProfilesModule,
     UsersModule,
   ],

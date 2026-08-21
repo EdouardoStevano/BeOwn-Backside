@@ -7,13 +7,13 @@ import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructu
 import { NotificationsModule } from 'src/notifications/notifications.module';
 import { CloudStorageModule } from 'src/shared/cloud-storage/cloud-storage.module';
 import { YouSignModule } from 'src/common/yousign/yousign.module';
-import { ContractGeneratorService } from 'src/investments/applications/usecases/contract-generator.service';
+import { ContractGeneratorService } from 'src/subscription/application/services/contract-generator.service';
 import { InitiateBuyUseCase } from './usecases/initiate-buy.usecase';
 import { CancelInitiationUseCase } from './usecases/cancel-initiation.usecase';
 import { KycModule } from 'src/compliance/application/kyc.module';
 import { ProjectEntity } from 'src/catalog/infrastructure/persistence/entities/project.entity';
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
-import { InvestmentEntity } from 'src/investments/infrastructure/persistences/entities/investment.entity';
+import { InvestmentEntity } from 'src/subscription/infrastructure/persistence/entities/investment.entity';
 import { UsersModule } from 'src/iam/application/users.module';
 import { UsersInfrastructureModule } from 'src/iam/infrastructure/users-infrastructure.module';
 

@@ -8,12 +8,12 @@ import { DataSource, In, Repository } from 'typeorm';
 import type { ActiveUser } from 'src/iam/presentation/decorators/current-user.decorator';
 import { formatEur } from 'src/shared/money/format-eur';
 import { UserRole } from 'src/iam/domain/enums/user.enum';
-import { EcheanceEntity } from 'src/investments/infrastructure/persistences/entities/echeance.entity';
-import { InvestmentEntity } from 'src/investments/infrastructure/persistences/entities/investment.entity';
+import { EcheanceEntity } from 'src/subscription/infrastructure/persistence/entities/echeance.entity';
+import { InvestmentEntity } from 'src/subscription/infrastructure/persistence/entities/investment.entity';
 import {
   EcheanceStatus,
   InvestmentStatus,
-} from 'src/investments/domains/enums/investment-status.enum';
+} from 'src/subscription/domain/enums/investment-status.enum';
 import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/wallet.entity';
 import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entities/transaction.entity';
 import {
