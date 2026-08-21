@@ -19,7 +19,7 @@ import { rolesWithPermission } from 'src/common/auth/permissions.constants';
 import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
-import { UserRole } from 'src/iam/domains/enums/user.enum';
+import { UserRole } from 'src/iam/domain/enums/user.enum';
 import { RiskScoringService } from 'src/profiles/applications/risk-scoring.service';
 
 const ADMIN_ROLES: string[] = rolesWithPermission('users:read');

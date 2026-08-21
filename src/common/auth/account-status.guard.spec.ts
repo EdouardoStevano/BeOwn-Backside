@@ -10,8 +10,8 @@ import {
   ACCOUNT_CLOSED_MESSAGE,
   ACCOUNT_SUSPENDED_CODE,
   ACCOUNT_SUSPENDED_MESSAGE,
-} from 'src/iam/domains/errors';
-import { UserStatus } from 'src/iam/domains/enums/user.enum';
+} from 'src/iam/domain/errors';
+import { UserStatus } from 'src/iam/domain/enums/user.enum';
 
 const ctx = (userId: number | undefined, isPublic = false): ExecutionContext =>
   ({

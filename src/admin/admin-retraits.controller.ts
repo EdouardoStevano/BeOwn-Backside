@@ -18,7 +18,7 @@ import { rolesWithPermission } from 'src/common/auth/permissions.constants';
 import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
-import { UserRole } from 'src/iam/domains/enums/user.enum';
+import { UserRole } from 'src/iam/domain/enums/user.enum';
 import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entities/transaction.entity';
 import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/wallet.entity';
 import { TransactionStatus, TransactionType } from 'src/wallets/domains/enums/wallet.enum';

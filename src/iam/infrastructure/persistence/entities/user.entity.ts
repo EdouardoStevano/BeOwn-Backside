@@ -16,7 +16,7 @@ import {
   UserRole,
   UserStatus,
   UserType,
-} from 'src/iam/domains/enums/user.enum';
+} from 'src/iam/domain/enums/user.enum';
 
 @Entity('users')
 export class UserEntity {

@@ -3,11 +3,11 @@ import { rolesWithPermission } from 'src/common/auth/permissions.constants';
 import {
   AccesCompteRefuseError,
   UtilisateurIntrouvableError,
-} from 'src/iam/domains/errors';
+} from 'src/iam/domain/errors';
 import {
   USER_REPOSITORY,
   type UserRepository,
-} from 'src/iam/domains/ports/user.repository';
+} from 'src/iam/domain/repositories/user.repository';
 import {
   KYC_REPOSITORY,
   type KycRepository,

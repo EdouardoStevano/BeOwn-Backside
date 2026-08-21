@@ -3,7 +3,7 @@ import { EcheanceStatus } from '../../domains/enums/investment-status.enum';
 import { EcheanceEntity } from '../../infrastructure/persistences/entities/echeance.entity';
 import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/wallet.entity';
 import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entities/transaction.entity';
-import { UserRole } from 'src/iam/domains/enums/user.enum';
+import { UserRole } from 'src/iam/domain/enums/user.enum';
 
 /**
  * Mock EntityManager reproduisant le comportement atomique attendu (correctif

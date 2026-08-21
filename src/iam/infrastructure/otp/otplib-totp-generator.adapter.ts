@@ -3,7 +3,7 @@ import { generateSecret, generateURI, verify } from 'otplib';
 import {
   TotpGenerator,
   TotpUriParams,
-} from 'src/iam/applications/ports/totp-generator.port';
+} from 'src/iam/application/ports/totp-generator.port';
 
 /**
  * Calcul RFC 6238 par otplib — et rien d'autre.

@@ -3,7 +3,7 @@ import { CACHE_MANAGER, type Cache } from '@nestjs/cache-manager';
 import {
   SessionRefresh,
   SessionStore,
-} from 'src/iam/applications/ports/session-store.port';
+} from 'src/iam/application/ports/session-store.port';
 
 /** Une clé par session, et non par compte : c'est ce qui rend le multi-appareil possible. */
 const cle = (utilisateurId: number, refreshTokenId: string): string =>

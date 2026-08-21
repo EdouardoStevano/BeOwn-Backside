@@ -1,7 +1,7 @@
 import { NotificationEventService } from './notification-event.service';
 import { NotificationService } from './notification.service';
 import { NotificationType } from '../infrastructure/persistences/entities/notification.entity';
-import { UserRole } from 'src/iam/domains/enums/user.enum';
+import { UserRole } from 'src/iam/domain/enums/user.enum';
 import { formatEur } from 'src/shared/money/format-eur';
 
 describe('NotificationEventService', () => {

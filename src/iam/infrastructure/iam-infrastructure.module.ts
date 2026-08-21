@@ -1,13 +1,13 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import jwtConfig from './config/jwt.config';
+import jwtConfig from './configuration/jwt.config';
 import { TokenSignerModule } from 'src/shared/token/token-signer.module';
-import { SessionCacheService } from '../applications/services/session-cache.service';
-import { TokenService } from '../applications/services/token/token.service';
+import { SessionCacheService } from '../application/services/session-cache.service';
+import { TokenService } from '../application/services/token/token.service';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { SESSION_STORE } from '../applications/ports/session-store.port';
+import { SESSION_STORE } from '../application/ports/session-store.port';
 import { RefreshTokenEntity } from './persistence/entities/refresh-token.entity';
-import { TypeOrmSessionStore } from './persistence/repositories/typeorm-session-store.repository';
+import { TypeOrmSessionStore } from './repositories/typeorm-session-store.repository';
 import { CacheSessionStore } from './session/cache-session-store.adapter';
 import { CacheFirstSessionStoreProxy } from './session/cache-first-session-store.proxy';
 

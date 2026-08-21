@@ -1,8 +1,8 @@
 import type { EventBus } from '@nestjs/cqrs';
 import { CreateProfilPPUseCase } from './create-profil-pp.usecase';
-import { buildUser } from 'src/iam/domains/models/user.fixture';
-import type { User } from 'src/iam/domains/models/user';
-import type { UserRepository } from 'src/iam/domains/ports/user.repository';
+import { buildUser } from 'src/iam/domain/aggregates/user.fixture';
+import type { User } from 'src/iam/domain/aggregates/user';
+import type { UserRepository } from 'src/iam/domain/repositories/user.repository';
 import type { ProfilPPRepository } from 'src/profiles/domains/ports/profil-pp.repository';
 import { ProfilPP } from 'src/profiles/domains/profil-pp';
 import { ProfilPPFactory } from 'src/profiles/domains/factories/profil-pp.factory';

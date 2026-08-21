@@ -40,10 +40,10 @@ import { YouSignService } from 'src/common/yousign/yousign.service';
 import { CloudStorageService } from 'src/shared/cloud-storage/cloud-storage.service';
 import { NotificationService } from 'src/notifications/applications/notification.service';
 import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
-import { UserRole } from 'src/iam/domains/enums/user.enum';
+import { UserRole } from 'src/iam/domain/enums/user.enum';
 import { NotificationEventService } from 'src/notifications/applications/notification-event.service';
-import type { UserRepository } from 'src/iam/domains/ports/user.repository';
-import { USER_REPOSITORY } from 'src/iam/domains/ports/user.repository';
+import type { UserRepository } from 'src/iam/domain/repositories/user.repository';
+import { USER_REPOSITORY } from 'src/iam/domain/repositories/user.repository';
 
 /**
  * Résultat de l'exécution atomique d'une signature `signature_request.done`.

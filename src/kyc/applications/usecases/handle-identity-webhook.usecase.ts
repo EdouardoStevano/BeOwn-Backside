@@ -9,7 +9,7 @@ import {
   IDENTITY_VERIFICATION_PORT,
   type IdentityVerificationPort,
 } from 'src/kyc/applications/ports/identity-verification.port';
-import { UserRole } from 'src/iam/domains/enums/user.enum';
+import { UserRole } from 'src/iam/domain/enums/user.enum';
 import { AuditLogService } from 'src/notifications/applications/audit-log.service';
 import { NotificationService } from 'src/notifications/applications/notification.service';
 import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';

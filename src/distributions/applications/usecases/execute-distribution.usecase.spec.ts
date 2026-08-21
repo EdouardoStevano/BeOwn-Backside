@@ -1,6 +1,6 @@
 import { ExecuteDistributionUseCase } from './execute-distribution.usecase';
 import { StatutPeriodeDistribution } from '../../domains/enums/statut-periode-distribution.enum';
-import { UserRole } from 'src/iam/domains/enums/user.enum';
+import { UserRole } from 'src/iam/domain/enums/user.enum';
 import { WalletType } from 'src/wallets/domains/enums/wallet.enum';
 
 describe('ExecuteDistributionUseCase — audit role', () => {

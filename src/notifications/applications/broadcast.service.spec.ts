@@ -1,5 +1,5 @@
 import { BroadcastService } from './broadcast.service';
-import { UserStatus } from 'src/iam/domains/enums/user.enum';
+import { UserStatus } from 'src/iam/domain/enums/user.enum';
 
 /**
  * Specs de BroadcastService — AUCUN transport réel : EMAIL_SERVICE et

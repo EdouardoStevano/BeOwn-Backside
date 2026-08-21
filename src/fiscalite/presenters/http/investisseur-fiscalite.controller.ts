@@ -14,7 +14,7 @@ import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
 import { Roles } from 'src/common/auth/roles.decorator';
 import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
-import { UserRole } from 'src/iam/domains/enums/user.enum';
+import { UserRole } from 'src/iam/domain/enums/user.enum';
 import {
   DOCUMENT_FISCAL_REPOSITORY,
   type DocumentFiscalRepository,
@@ -24,7 +24,7 @@ import { IfuPdfService } from '../../applications/ifu-pdf.service';
 import {
   USER_REPOSITORY,
   type UserRepository,
-} from 'src/iam/domains/ports/user.repository';
+} from 'src/iam/domain/repositories/user.repository';
 
 @ApiTags('Investisseur — Documents fiscaux')
 @ApiBearerAuth()

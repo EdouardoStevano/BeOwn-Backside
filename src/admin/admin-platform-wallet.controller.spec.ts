@@ -1,6 +1,6 @@
 import { ForbiddenException } from '@nestjs/common';
 import { AdminPlatformWalletController } from './admin-platform-wallet.controller';
-import { UserRole } from 'src/iam/domains/enums/user.enum';
+import { UserRole } from 'src/iam/domain/enums/user.enum';
 import { WalletType, TransactionStatus } from 'src/wallets/domains/enums/wallet.enum';
 
 // Sources canoniques attendues (ordre stable), 0-remplies si absentes en base.

@@ -2,12 +2,12 @@ import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
 import {
   NOTIF_UNSUBSCRIBE_TYPE,
   type UnsubscribeTokenPayload,
-} from 'src/iam/applications/models/auth-token';
-import { TokenService } from 'src/iam/applications/services/token/token.service';
+} from 'src/iam/application/dto/auth-token';
+import { TokenService } from 'src/iam/application/services/token/token.service';
 import {
   USER_REPOSITORY,
   type UserRepository,
-} from 'src/iam/domains/ports/user.repository';
+} from 'src/iam/domain/repositories/user.repository';
 import { UpdatePreferencesUseCase } from 'src/preferences/applications/usecases/update-preferences.usecase';
 
 /**

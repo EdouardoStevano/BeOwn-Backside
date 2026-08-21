@@ -17,7 +17,7 @@ import { GetOnboardingStatusUseCase } from './usecases/get-onboarding-status.use
 import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructure.module';
 import { UsersInfrastructureModule } from 'src/iam/infrastructure/users-infrastructure.module';
 import { KycInfrastructureModule } from 'src/kyc/infrastructure/kyc-infrastructure.module';
-import { AccountContactModule } from 'src/iam/applications/account-contact.module';
+import { AccountContactModule } from 'src/iam/application/account-contact.module';
 import { NotificationsModule } from 'src/notifications/notifications.module';
 import { RiskScoringService } from './risk-scoring.service';
 import { BeneficiaireEffectifEntity } from '../infrastructure/persistences/entities/beneficiaire-effectif.entity';

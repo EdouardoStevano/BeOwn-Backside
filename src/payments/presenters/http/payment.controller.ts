@@ -50,7 +50,7 @@ import { KycValidatedGuard } from 'src/kyc/presenters/guards/kyc-validated.guard
 import { SkipThrottle } from '@nestjs/throttler';
 import { NotificationService } from 'src/notifications/applications/notification.service';
 import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
-import { UserRole } from 'src/iam/domains/enums/user.enum';
+import { UserRole } from 'src/iam/domain/enums/user.enum';
 import { HandleIdentityWebhookUseCase } from 'src/kyc/applications/usecases/handle-identity-webhook.usecase';
 
 /**

@@ -2,7 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import {
   USER_REPOSITORY,
   type UserRepository,
-} from 'src/iam/domains/ports/user.repository';
+} from 'src/iam/domain/repositories/user.repository';
 import {
   PROFIL_PP_REPOSITORY,
   type ProfilPPRepository,

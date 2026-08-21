@@ -3,11 +3,11 @@ import {
   DOCUMENT_REPOSITORY,
   type DocumentRepository,
 } from 'src/documents/applications/ports/repositories/document.repository';
-import { UtilisateurIntrouvableError } from 'src/iam/domains/errors';
+import { UtilisateurIntrouvableError } from 'src/iam/domain/errors';
 import {
   USER_REPOSITORY,
   type UserRepository,
-} from 'src/iam/domains/ports/user.repository';
+} from 'src/iam/domain/repositories/user.repository';
 import { GetPreferencesUseCase } from 'src/preferences/applications/usecases/get-preferences.usecase';
 import { GetOnboardingStatusUseCase } from 'src/profiles/applications/usecases/get-onboarding-status.usecase';
 import { WalletType } from 'src/wallets/domains/enums/wallet.enum';

@@ -1,5 +1,5 @@
-import { UserRole, UserStatus } from 'src/iam/domains/enums/user.enum';
-import { User } from 'src/iam/domains/models/user';
+import { UserRole, UserStatus } from 'src/iam/domain/enums/user.enum';
+import { User } from 'src/iam/domain/aggregates/user';
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 import { UserEmailEntity } from 'src/iam/infrastructure/persistence/entities/user-email.entity';
 import { UserMapper } from './user.mapper';

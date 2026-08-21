@@ -1,11 +1,11 @@
 import { GetUserAccountUseCase } from './get-user-account.usecase';
-import { UserRole } from 'src/iam/domains/enums/user.enum';
+import { UserRole } from 'src/iam/domain/enums/user.enum';
 import {
   AccesCompteRefuseError,
   UtilisateurIntrouvableError,
-} from 'src/iam/domains/errors';
-import { buildUser } from 'src/iam/domains/models/user.fixture';
-import type { UserRepository } from 'src/iam/domains/ports/user.repository';
+} from 'src/iam/domain/errors';
+import { buildUser } from 'src/iam/domain/aggregates/user.fixture';
+import type { UserRepository } from 'src/iam/domain/repositories/user.repository';
 import type { KycRepository } from 'src/kyc/domains/ports/kyc.repository';
 import type { WalletRepository } from 'src/wallets/applications/ports/repositories/wallet.repository';
 

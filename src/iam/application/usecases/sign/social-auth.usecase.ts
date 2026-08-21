@@ -1,0 +1,96 @@
+﻿import { Inject, Injectable } from '@nestjs/common';
+import { type AuthSession } from 'src/iam/application/dto/auth-token';
+import { TokenService } from '../../services/token/token.service';
+import {
+  USER_REPOSITORY,
+  type UserRepository,
+} from 'src/iam/domain/repositories/user.repository';
+import { SocialProfile } from 'src/iam/application/dto/social-profile';
+import { UserFactory } from '../../../domain/factories/user.factory';
+import {
+  EmailAlreadyRegisteredError,
+  SocialAuthFailedError,
+} from 'src/iam/domain/errors';
+import { NO_MFA } from 'src/iam/domain/mappers/user.mapper';
+import { MfaFactorService } from '../../services/mfa/mfa-factor.service';
+
+@Injectable()
+export class SocialAuthUseCase {
+  constructor(
+    private readonly tokenService: TokenService,
+    @Inject(USER_REPOSITORY) private readonly usersRepository: UserRepository,
+    private readonly userFactory: UserFactory,
+    private readonly mfaFactors: MfaFactorService,
+  ) {}
+
+  async authenticate(
+    social: SocialProfile,
+  ): Promise<AuthSession & { isNewUser: boolean }> {
+    try {
+      const existing = await this.usersRepository.findOneBySocialId(
+        social.socialId,
+      );
+
+      if (existing) {
+        // Auto-verify email for existing social users (provider already verified it)
+        if (!existing.isEmailVerified()) {
+          existing.markEmailAsVerified();
+          await this.usersRepository.update(existing);
+        }
+        const tokens = await this.tokenService.generateTokens({
+          email: existing.email,
+          sub: existing.userId,
+          role: existing.role,
+          refreshTokenId: null,
+        });
+
+        // Publié, mais pas opposé : ce parcours ne réclame pas le second
+        // facteur — le fournisseur a déjà authentifié le porteur. Le front lit
+        // donc ici l'état réel du compte, comme sur toute autre session.
+        const activeMfaMethod = await this.mfaFactors.findActiveMethod(
+          existing.userId,
+        );
+
+        return {
+          ...tokens,
+          user: existing.toJSON({
+            enabled: activeMfaMethod !== null,
+            method: activeMfaMethod,
+          }),
+          isNewUser: false,
+        };
+      }
+
+      const newUser = await this.userFactory.create({
+        password: null,
+        firstname: social.firstname,
+        lastname: social.lastname ?? null,
+        email: social.email,
+        socialId: social.socialId,
+        emailVerified: true,
+      });
+
+      const savedUser = await this.usersRepository.save(newUser);
+      const tokens = await this.tokenService.generateTokens({
+        email: savedUser.email,
+        sub: savedUser.userId,
+        role: savedUser.role,
+        refreshTokenId: null,
+      });
+      // Compte qui vient de naître : aucun facteur ne peut y être armé, rien à
+      // relire.
+      return {
+        ...tokens,
+        user: savedUser.toJSON(NO_MFA),
+        isNewUser: true,
+      };
+    } catch (err) {
+      const pgUniqueViolationErrorCode = '23505';
+      if (err.code === pgUniqueViolationErrorCode) {
+        throw new EmailAlreadyRegisteredError('Email already in use');
+      }
+
+      throw new SocialAuthFailedError();
+    }
+  }
+}

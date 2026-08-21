@@ -1,6 +1,6 @@
 import { Logger } from '@nestjs/common';
 import { EventsHandler, IEventHandler } from '@nestjs/cqrs';
-import { ChangerTelephoneUseCase } from 'src/iam/applications/usecases/account/changer-telephone.usecase';
+import { ChangerTelephoneUseCase } from 'src/iam/application/usecases/account/changer-telephone.usecase';
 import { ProfilPPCreeDomainEvent } from 'src/profiles/domains/events/profil-pp-cree.domain-event';
 import { ProfilPPMisAJourDomainEvent } from 'src/profiles/domains/events/profil-pp-mis-a-jour.domain-event';
 

@@ -8,7 +8,7 @@ import { Reflector } from '@nestjs/core';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
-import { UserStatus } from 'src/iam/domains/enums/user.enum';
+import { UserStatus } from 'src/iam/domain/enums/user.enum';
 import { IS_PUBLIC_KEY } from './public.decorator';
 import type { ActiveUser } from './current-user.decorator';
 
@@ -17,7 +17,7 @@ import {
   ACCOUNT_CLOSED_MESSAGE,
   ACCOUNT_SUSPENDED_CODE,
   ACCOUNT_SUSPENDED_MESSAGE,
-} from 'src/iam/domains/errors';
+} from 'src/iam/domain/errors';
 
 // Les codes/messages décrivent l'état d'un compte : ils vivent avec les
 // erreurs de domaine IAM (`iam/domains/errors/account.errors.ts`), aux côtés

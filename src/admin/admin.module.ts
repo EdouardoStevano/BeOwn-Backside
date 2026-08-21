@@ -26,7 +26,7 @@ import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructu
 import { NotificationsModule } from 'src/notifications/notifications.module';
 import { InvestmentsModule } from 'src/investments/applications/investments.module';
 import { ProfilesModule } from 'src/profiles/applications/profiles.module';
-import { UsersModule } from 'src/iam/applications/users.module';
+import { UsersModule } from 'src/iam/application/users.module';
 import { TriggerEcheancePaymentUseCase } from './usecases/trigger-echeance-payment.usecase';
 import { GetAggregatedScheduleUseCase } from './usecases/get-aggregated-schedule.usecase';
 import { PatchAggregatedEcheanceUseCase } from './usecases/patch-aggregated-echeance.usecase';

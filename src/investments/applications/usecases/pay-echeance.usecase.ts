@@ -13,7 +13,7 @@ import {
 } from 'src/wallets/domains/enums/wallet.enum';
 import { NotificationEventService } from 'src/notifications/applications/notification-event.service';
 import { AuditLogService } from 'src/notifications/applications/audit-log.service';
-import { UserRole } from 'src/iam/domains/enums/user.enum';
+import { UserRole } from 'src/iam/domain/enums/user.enum';
 
 /** Statuts d'échéance depuis lesquels un paiement est légitime. */
 const PAYABLE_STATUSES: EcheanceStatus[] = [

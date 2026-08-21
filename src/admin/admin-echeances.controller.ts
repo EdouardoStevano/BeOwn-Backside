@@ -31,7 +31,7 @@ import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
 import { formatEur } from 'src/shared/money/format-eur';
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
-import { UserRole } from 'src/iam/domains/enums/user.enum';
+import { UserRole } from 'src/iam/domain/enums/user.enum';
 import { EcheanceEntity } from 'src/investments/infrastructure/persistences/entities/echeance.entity';
 import { InvestmentEntity } from 'src/investments/infrastructure/persistences/entities/investment.entity';
 import {

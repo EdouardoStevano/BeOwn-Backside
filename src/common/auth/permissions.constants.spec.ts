@@ -1,4 +1,4 @@
-import { UserRole } from 'src/iam/domains/enums/user.enum';
+import { UserRole } from 'src/iam/domain/enums/user.enum';
 import {
   hasPermission,
   rolesWithPermission,

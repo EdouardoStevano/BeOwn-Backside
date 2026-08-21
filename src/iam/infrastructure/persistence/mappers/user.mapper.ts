@@ -1,9 +1,9 @@
-import { User } from 'src/iam/domains/models/user';
-import { MfaMethod } from 'src/iam/domains/models/mfa-method';
+import { User } from 'src/iam/domain/aggregates/user';
+import { MfaMethod } from 'src/iam/domain/entities/mfa-method';
 // Aliasé : le domaine a lui aussi un `UserMapper`, qui traduit entre l'entité
 // et ses représentations. Celui-ci ne fait que la moitié ORM du chemin et
 // délègue l'autre.
-import { UserMapper as UserDomainMapper } from 'src/iam/domains/mappers/user.mapper';
+import { UserMapper as UserDomainMapper } from 'src/iam/domain/mappers/user.mapper';
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 import { UserEmailEntity } from 'src/iam/infrastructure/persistence/entities/user-email.entity';
 

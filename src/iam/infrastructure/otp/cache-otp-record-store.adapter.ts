@@ -3,7 +3,7 @@ import { CACHE_MANAGER, type Cache } from '@nestjs/cache-manager';
 import {
   OtpRecord,
   OtpRecordStore,
-} from 'src/iam/applications/ports/otp-record-store.port';
+} from 'src/iam/application/ports/otp-record-store.port';
 
 /**
  * Rangement des OTP sur le cache applicatif.

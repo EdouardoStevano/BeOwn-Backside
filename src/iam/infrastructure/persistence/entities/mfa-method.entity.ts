@@ -7,7 +7,7 @@ import {
   ManyToOne,
   PrimaryGeneratedColumn,
 } from 'typeorm';
-import { MfaMethodType } from 'src/iam/domains/enums/mfa-method.enum';
+import { MfaMethodType } from 'src/iam/domain/enums/mfa-method.enum';
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 
 /**
