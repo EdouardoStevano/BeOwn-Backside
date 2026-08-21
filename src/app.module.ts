@@ -16,7 +16,7 @@ import { PermissionsGuard } from 'src/iam/presentation/guards/permissions.guard'
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 import { AuditInterceptor } from './common/audit/audit.interceptor';
 import { ComplianceModule } from './compliance/compliance.module';
-import { ProjectsModule } from './projects/applications/projects.module';
+import { CatalogModule } from './catalog/catalog.module';
 import { ReservationsModule } from './reservations/applications/reservations.module';
 import { InvestmentsModule } from './investments/applications/investments.module';
 import { WalletsModule } from './wallets/applications/wallets.module';
@@ -95,7 +95,7 @@ function requireEnv(name: string): string {
     // feature d'IAM, agrégée par IamModule au même titre qu'Authentication.
     IamModule,
     ComplianceModule,
-    ProjectsModule,
+    CatalogModule,
     ReservationsModule,
     InvestmentsModule,
     WalletsModule,

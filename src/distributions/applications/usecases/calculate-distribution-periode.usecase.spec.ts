@@ -1,7 +1,7 @@
 import { CalculateDistributionPeriodeUseCase } from './calculate-distribution-periode.usecase';
 import { StatutPeriodeDistribution } from '../../domains/enums/statut-periode-distribution.enum';
-import { ModeleEconomique } from 'src/projects/domains/enums/modele-economique.enum';
-import { ProjectStatus } from 'src/projects/domains/enums/project-status.enum';
+import { ModeleEconomique } from 'src/catalog/domain/enums/modele-economique.enum';
+import { ProjectStatus } from 'src/catalog/domain/enums/project-status.enum';
 import { InvestmentStatus } from 'src/investments/domains/enums/investment-status.enum';
 import { DEFAULT_FEE_RATES } from 'src/common/platform-fees/platform-fees.service';
 

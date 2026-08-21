@@ -8,7 +8,7 @@ import { InvestmentStatus } from 'src/investments/domains/enums/investment-statu
 import { InvestmentEntity } from '../entities/investment.entity';
 import { EcheanceEntity } from '../entities/echeance.entity';
 import { InvestmentMapper } from '../mappers/investment.mapper';
-import { ProjectEntity } from 'src/projects/infrastructure/persistences/entities/project.entity';
+import { ProjectEntity } from 'src/catalog/infrastructure/persistence/entities/project.entity';
 
 @Injectable()
 export class InvestmentTypeOrmRepository implements InvestmentRepository {

@@ -6,13 +6,13 @@ import * as crypto from 'crypto';
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 import { UserRole, UserStatus, UserType } from 'src/iam/domain/enums/user.enum';
 import { UserEmailEntity } from 'src/iam/infrastructure/persistence/entities/user-email.entity';
-import { SpvEntity } from 'src/projects/infrastructure/persistences/entities/spv.entity';
-import { ProjectEntity } from 'src/projects/infrastructure/persistences/entities/project.entity';
+import { SpvEntity } from 'src/catalog/infrastructure/persistence/entities/spv.entity';
+import { ProjectEntity } from 'src/catalog/infrastructure/persistence/entities/project.entity';
 import {
   ProjectStatus,
   ProjectType,
   ProjectInstrument,
-} from 'src/projects/domains/enums/project-status.enum';
+} from 'src/catalog/domain/enums/project-status.enum';
 import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/wallet.entity';
 import {
   WalletType,

@@ -13,7 +13,7 @@ import { AdminPlatformWalletController } from './admin-platform-wallet.controlle
 import { AdminEmailTemplatesController } from './admin-email-templates.controller';
 import { EmailTemplateEntity } from 'src/shared/email/entities/email-template.entity';
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
-import { ProjectEntity } from 'src/projects/infrastructure/persistences/entities/project.entity';
+import { ProjectEntity } from 'src/catalog/infrastructure/persistence/entities/project.entity';
 import { InvestmentEntity } from 'src/investments/infrastructure/persistences/entities/investment.entity';
 import { EcheanceEntity } from 'src/investments/infrastructure/persistences/entities/echeance.entity';
 import { KycEntity } from 'src/compliance/infrastructure/persistence/entities/kyc.entity';

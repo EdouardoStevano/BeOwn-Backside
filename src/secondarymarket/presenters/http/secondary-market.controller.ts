@@ -24,7 +24,7 @@ import { Repository, DataSource } from 'typeorm';
 import { SkipThrottle } from '@nestjs/throttler';
 import { OrdreMarcheEntity } from 'src/secondarymarket/infrastructure/persistences/entities/ordre-marche.entity';
 import { InvestmentEntity } from 'src/investments/infrastructure/persistences/entities/investment.entity';
-import { ProjectEntity } from 'src/projects/infrastructure/persistences/entities/project.entity';
+import { ProjectEntity } from 'src/catalog/infrastructure/persistence/entities/project.entity';
 import { CreateOrdreMarcheDto, ExecuteOrderDto } from '../dto/ordre-marche.dto';
 import {
   OrdreMarcheStatus,

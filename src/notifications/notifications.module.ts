@@ -6,7 +6,7 @@ import { NotificationEntity } from './infrastructure/persistences/entities/notif
 import { AuditLogEntity } from './infrastructure/persistences/entities/audit-log.entity';
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 import { UserPreferencesEntity } from 'src/iam/infrastructure/persistence/entities/user-preferences.entity';
-import { ProjectEntity } from 'src/projects/infrastructure/persistences/entities/project.entity';
+import { ProjectEntity } from 'src/catalog/infrastructure/persistence/entities/project.entity';
 import { AdminSettingsEntity } from 'src/admin/entities/admin-settings.entity';
 import { NotificationService } from './applications/notification.service';
 import { NotificationEventService } from './applications/notification-event.service';

@@ -15,7 +15,7 @@ import {
 import { EmailTemplateService } from 'src/shared/email/email-template.service';
 import { SMS_SERVICE, type SmsService } from 'src/shared/sms/sms.service';
 import { TokenService } from 'src/iam/application/services/token/token.service';
-import { ProjectEntity } from 'src/projects/infrastructure/persistences/entities/project.entity';
+import { ProjectEntity } from 'src/catalog/infrastructure/persistence/entities/project.entity';
 import { UserPreferencesEntity } from 'src/iam/infrastructure/persistence/entities/user-preferences.entity';
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 import { UserStatus } from 'src/iam/domain/enums/user.enum';

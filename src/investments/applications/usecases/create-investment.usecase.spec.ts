@@ -4,8 +4,8 @@ import { InvestmentEntity } from 'src/investments/infrastructure/persistences/en
 import { EcheanceEntity } from 'src/investments/infrastructure/persistences/entities/echeance.entity';
 import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/wallet.entity';
 import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entities/transaction.entity';
-import { ProjectEntity } from 'src/projects/infrastructure/persistences/entities/project.entity';
-import { ProjectStatus } from 'src/projects/domains/enums/project-status.enum';
+import { ProjectEntity } from 'src/catalog/infrastructure/persistence/entities/project.entity';
+import { ProjectStatus } from 'src/catalog/domain/enums/project-status.enum';
 
 /**
  * Vérifie l'atomicité de la création d'investissement (correctif de survente /

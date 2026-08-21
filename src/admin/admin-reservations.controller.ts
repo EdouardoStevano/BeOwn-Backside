@@ -27,7 +27,7 @@ import { CurrentUser } from 'src/iam/presentation/decorators/current-user.decora
 import type { ActiveUser } from 'src/iam/presentation/decorators/current-user.decorator';
 import { formatEur } from 'src/shared/money/format-eur';
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
-import { ProjectEntity } from 'src/projects/infrastructure/persistences/entities/project.entity';
+import { ProjectEntity } from 'src/catalog/infrastructure/persistence/entities/project.entity';
 import { ReservationEntity } from 'src/reservations/infrastructure/persistences/entities/reservation.entity';
 import { ReservationStatus } from 'src/reservations/domains/enums/reservation-status.enum';
 import { NotificationService } from 'src/notifications/applications/notification.service';

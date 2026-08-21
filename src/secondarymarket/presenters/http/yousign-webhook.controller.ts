@@ -18,7 +18,7 @@ import { SignatureEntity } from 'src/signatures/infrastructure/persistences/enti
 import { SignatureStatus } from 'src/signatures/domains/enums/signature-status.enum';
 import { InvestmentEntity } from 'src/investments/infrastructure/persistences/entities/investment.entity';
 import { EcheanceEntity } from 'src/investments/infrastructure/persistences/entities/echeance.entity';
-import { ProjectEntity } from 'src/projects/infrastructure/persistences/entities/project.entity';
+import { ProjectEntity } from 'src/catalog/infrastructure/persistence/entities/project.entity';
 import { OrdreMarcheEntity } from 'src/secondarymarket/infrastructure/persistences/entities/ordre-marche.entity';
 import { DocumentEntity } from 'src/documents/infrastructure/persistences/entities/document.entity';
 import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/wallet.entity';
@@ -35,7 +35,7 @@ import {
   TransactionType,
   WalletType,
 } from 'src/wallets/domains/enums/wallet.enum';
-import { ProjectStatus } from 'src/projects/domains/enums/project-status.enum';
+import { ProjectStatus } from 'src/catalog/domain/enums/project-status.enum';
 import { YouSignService } from 'src/common/yousign/yousign.service';
 import { CloudStorageService } from 'src/shared/cloud-storage/cloud-storage.service';
 import { NotificationService } from 'src/notifications/applications/notification.service';

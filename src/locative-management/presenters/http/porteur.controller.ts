@@ -50,7 +50,7 @@ import { StatutBail } from '../../domains/enums/statut-bail.enum';
 import {
   PROJECT_REPOSITORY,
   type ProjectRepository,
-} from 'src/projects/applications/ports/repositories/project.repository';
+} from 'src/catalog/domain/repositories/project.repository';
 
 @ApiTags('Porteur — Gestion locative')
 @ApiBearerAuth()

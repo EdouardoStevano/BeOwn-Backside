@@ -11,7 +11,7 @@ import { ContractGeneratorService } from 'src/investments/applications/usecases/
 import { InitiateBuyUseCase } from './usecases/initiate-buy.usecase';
 import { CancelInitiationUseCase } from './usecases/cancel-initiation.usecase';
 import { KycModule } from 'src/compliance/application/kyc.module';
-import { ProjectEntity } from 'src/projects/infrastructure/persistences/entities/project.entity';
+import { ProjectEntity } from 'src/catalog/infrastructure/persistence/entities/project.entity';
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 import { InvestmentEntity } from 'src/investments/infrastructure/persistences/entities/investment.entity';
 import { UsersModule } from 'src/iam/application/users.module';
