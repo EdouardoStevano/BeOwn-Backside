@@ -2,8 +2,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import {
   SessionRefresh,
   SessionStore,
-} from 'src/iam/applications/ports/session-store.port';
-import { TypeOrmSessionStore } from 'src/iam/infrastructure/persistence/repositories/typeorm-session-store.repository';
+} from 'src/iam/application/ports/session-store.port';
+import { TypeOrmSessionStore } from 'src/iam/infrastructure/repositories/typeorm-session-store.repository';
 import { CacheSessionStore } from './cache-session-store.adapter';
 
 /**

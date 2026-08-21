@@ -1,10 +1,10 @@
 import { Module } from '@nestjs/common';
 import { APP_FILTER } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
-import { IamErrorFilter } from './presenters/http/filters/iam-error.filter';
+import { IamErrorFilter } from './presentation/http/filters/iam-error.filter';
 import { IamInfrastructureModule } from './infrastructure/iam-infrastructure.module';
-import { AuthenticationModule } from './applications/authentication.module';
-import { UsersModule } from './applications/users.module';
+import { AuthenticationModule } from './application/authentication.module';
+import { UsersModule } from './application/users.module';
 
 /**
  * Façade du Bounded Context IAM : agrège ses features et ne réexporte que le

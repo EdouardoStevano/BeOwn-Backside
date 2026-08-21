@@ -6,8 +6,8 @@ import {
   createHash,
   randomBytes,
 } from 'crypto';
-import { SecretCipher } from 'src/iam/applications/ports/secret-cipher.port';
-import { InvalidTotpSecretError } from 'src/iam/domains/errors';
+import { SecretCipher } from 'src/iam/application/ports/secret-cipher.port';
+import { InvalidTotpSecretError } from 'src/iam/domain/errors';
 
 const ENCRYPTION_PREFIX = 'enc:v1';
 

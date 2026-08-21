@@ -6,7 +6,7 @@
  * manuelle ») ; c'est la couche présentation — `KycErrorFilter` — qui traduit
  * en réponse HTTP.
  *
- * Les contextes Profiles (`ProfilesError`) et IAM (`IamError`) portent le même
+ * Les contextes Profiles (`IamError`) et IAM (`IamError`) portent le même
  * socle. Ce doublon est assumé, et pour la raison que `profiles.error.ts`
  * énonce déjà : partager une classe de base obligerait chaque Bounded Context à
  * dépendre d'un module commun qui grossirait à chaque nouveau besoin —

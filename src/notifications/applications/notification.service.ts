@@ -8,7 +8,7 @@ import {
 } from '../infrastructure/persistences/entities/notification.entity';
 import { NotificationGateway } from '../presenters/ws/notification.gateway';
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
-import { UserRole } from 'src/iam/domains/enums/user.enum';
+import { UserRole } from 'src/iam/domain/enums/user.enum';
 
 export interface PushNotificationOptions {
   utilisateurId: number;

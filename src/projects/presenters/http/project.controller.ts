@@ -19,12 +19,12 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { CreateAvisDto } from 'src/avis/presenters/dto/avis.dto';
-import { CurrentUser } from 'src/common/auth/current-user.decorator';
-import type { ActiveUser } from 'src/common/auth/current-user.decorator';
-import { Public } from 'src/common/auth/public.decorator';
-import { RequirePermission } from 'src/common/auth/require-permission.decorator';
-import { Roles } from 'src/common/auth/roles.decorator';
-import { UserRole } from 'src/iam/domains/enums/user.enum';
+import { CurrentUser } from 'src/iam/presentation/decorators/current-user.decorator';
+import type { ActiveUser } from 'src/iam/presentation/decorators/current-user.decorator';
+import { Public } from 'src/iam/presentation/decorators/public.decorator';
+import { RequirePermission } from 'src/iam/presentation/decorators/require-permission.decorator';
+import { Roles } from 'src/iam/presentation/decorators/roles.decorator';
+import { UserRole } from 'src/iam/domain/enums/user.enum';
 import { ConsultAvisProjetUseCase } from 'src/projects/applications/usecases/avis/consult-avis-projet.usecase';
 import { ConsultProjectUseCase } from 'src/projects/applications/usecases/project/consult-project.usecase';
 import { CreateProjectUseCase } from 'src/projects/applications/usecases/project/create-project.usecase';

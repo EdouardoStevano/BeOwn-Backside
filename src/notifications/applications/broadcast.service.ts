@@ -14,11 +14,11 @@ import {
 } from 'src/shared/email/email.service';
 import { EmailTemplateService } from 'src/shared/email/email-template.service';
 import { SMS_SERVICE, type SmsService } from 'src/shared/sms/sms.service';
-import { TokenService } from 'src/iam/applications/services/token/token.service';
+import { TokenService } from 'src/iam/application/services/token/token.service';
 import { ProjectEntity } from 'src/projects/infrastructure/persistences/entities/project.entity';
-import { UserPreferencesEntity } from 'src/preferences/infrastructure/persistences/entities/user-preferences.entity';
+import { UserPreferencesEntity } from 'src/iam/infrastructure/persistence/entities/user-preferences.entity';
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
-import { UserStatus } from 'src/iam/domains/enums/user.enum';
+import { UserStatus } from 'src/iam/domain/enums/user.enum';
 import { NotificationType } from '../infrastructure/persistences/entities/notification.entity';
 import { AuditLogService } from './audit-log.service';
 import { NotificationService } from './notification.service';

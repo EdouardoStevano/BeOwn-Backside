@@ -11,7 +11,7 @@ import {
   WalletType,
 } from 'src/wallets/domains/enums/wallet.enum';
 import { formatEur } from 'src/shared/money/format-eur';
-import type { ActiveUser } from 'src/common/auth/current-user.decorator';
+import type { ActiveUser } from 'src/iam/presentation/decorators/current-user.decorator';
 import { CreateRetraitDto } from '../../presenters/dto/payment.dto';
 import {
   StripeConnectService,
@@ -19,7 +19,7 @@ import {
 } from '../../infrastructure/stripe-connect.service';
 import { NotificationService } from 'src/notifications/applications/notification.service';
 import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
-import { UserRole } from 'src/iam/domains/enums/user.enum';
+import { UserRole } from 'src/iam/domain/enums/user.enum';
 
 /**
  * Cas d'usage « demande de retrait » (extrait de PaymentController — SRP).

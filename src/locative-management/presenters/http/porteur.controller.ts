@@ -15,11 +15,11 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
-import { Roles } from 'src/common/auth/roles.decorator';
-import { CurrentUser } from 'src/common/auth/current-user.decorator';
-import type { ActiveUser } from 'src/common/auth/current-user.decorator';
-import { UserRole } from 'src/iam/domains/enums/user.enum';
+import { JwtAuthGuard } from 'src/iam/presentation/guards/jwt-auth.guard';
+import { Roles } from 'src/iam/presentation/decorators/roles.decorator';
+import { CurrentUser } from 'src/iam/presentation/decorators/current-user.decorator';
+import type { ActiveUser } from 'src/iam/presentation/decorators/current-user.decorator';
+import { UserRole } from 'src/iam/domain/enums/user.enum';
 import { CloudStorageService } from 'src/shared/cloud-storage/cloud-storage.service';
 import { AddUniteLouableUseCase } from '../../applications/usecases/add-unite-louable.usecase';
 import { CreateBailUseCase } from '../../applications/usecases/create-bail.usecase';

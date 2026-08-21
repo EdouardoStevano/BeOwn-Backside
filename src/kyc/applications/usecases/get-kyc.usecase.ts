@@ -3,8 +3,8 @@ import { Inject } from '@nestjs/common';
 import {
   USER_REPOSITORY,
   type UserRepository,
-} from 'src/iam/domains/ports/user.repository';
-import type { User } from 'src/iam/domains/models/user';
+} from 'src/iam/domain/repositories/user.repository';
+import type { User } from 'src/iam/domain/aggregates/user';
 import {
   KYC_REPOSITORY,
   type KycRepository,

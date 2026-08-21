@@ -4,7 +4,7 @@ import { Repository, DataSource } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
-import { UserRole, UserStatus } from 'src/iam/domains/enums/user.enum';
+import { UserRole, UserStatus } from 'src/iam/domain/enums/user.enum';
 import { UserEmailEntity } from 'src/iam/infrastructure/persistence/entities/user-email.entity';
 import { SpvEntity } from 'src/projects/infrastructure/persistences/entities/spv.entity';
 import { ProjectEntity } from 'src/projects/infrastructure/persistences/entities/project.entity';
@@ -29,11 +29,11 @@ import {
 import { EcheanceEntity } from 'src/investments/infrastructure/persistences/entities/echeance.entity';
 import { ReservationEntity } from 'src/reservations/infrastructure/persistences/entities/reservation.entity';
 import { ReservationStatus } from 'src/reservations/domains/enums/reservation-status.enum';
-import { ProfilPPEntity } from 'src/profiles/infrastructure/persistences/entities/profil-pp.entity';
-import { ProfilPMEntity } from 'src/profiles/infrastructure/persistences/entities/profil-pm.entity';
+import { ProfilPPEntity } from 'src/iam/infrastructure/persistence/entities/profil-pp.entity';
+import { ProfilPMEntity } from 'src/iam/infrastructure/persistence/entities/profil-pm.entity';
 import { KycEntity } from 'src/kyc/infrastructure/persistences/entities/kyc.entity';
 import { KycStatus, KycNiveau } from 'src/kyc/domains/enums/kyc-status.enum';
-import { CategoriePsfp } from 'src/profiles/domains/enums/categorie-psfp.enum';
+import { CategoriePsfp } from 'src/iam/domain/enums/categorie-psfp.enum';
 import {
   NotificationEntity,
   NotificationCanal,

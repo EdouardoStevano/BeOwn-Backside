@@ -9,7 +9,7 @@ import { InvestmentStatus } from 'src/investments/domains/enums/investment-statu
 import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/wallet.entity';
 import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entities/transaction.entity';
 import { TransactionStatus, WalletType } from 'src/wallets/domains/enums/wallet.enum';
-import { UserRole } from 'src/iam/domains/enums/user.enum';
+import { UserRole } from 'src/iam/domain/enums/user.enum';
 
 /**
  * Ordre EXECUTE typique : 100 fractions vendues au total en DEUX fills

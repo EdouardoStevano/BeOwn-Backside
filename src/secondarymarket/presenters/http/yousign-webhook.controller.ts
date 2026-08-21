@@ -13,7 +13,7 @@ import { ApiExcludeController } from '@nestjs/swagger';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, Repository } from 'typeorm';
 import { SkipThrottle } from '@nestjs/throttler';
-import { Public } from 'src/common/auth/public.decorator';
+import { Public } from 'src/iam/presentation/decorators/public.decorator';
 import { SignatureEntity } from 'src/signatures/infrastructure/persistences/entities/signature.entity';
 import { SignatureStatus } from 'src/signatures/domains/enums/signature-status.enum';
 import { InvestmentEntity } from 'src/investments/infrastructure/persistences/entities/investment.entity';
@@ -40,10 +40,10 @@ import { YouSignService } from 'src/common/yousign/yousign.service';
 import { CloudStorageService } from 'src/shared/cloud-storage/cloud-storage.service';
 import { NotificationService } from 'src/notifications/applications/notification.service';
 import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
-import { UserRole } from 'src/iam/domains/enums/user.enum';
+import { UserRole } from 'src/iam/domain/enums/user.enum';
 import { NotificationEventService } from 'src/notifications/applications/notification-event.service';
-import type { UserRepository } from 'src/iam/domains/ports/user.repository';
-import { USER_REPOSITORY } from 'src/iam/domains/ports/user.repository';
+import type { UserRepository } from 'src/iam/domain/repositories/user.repository';
+import { USER_REPOSITORY } from 'src/iam/domain/repositories/user.repository';
 
 /**
  * Résultat de l'exécution atomique d'une signature `signature_request.done`.

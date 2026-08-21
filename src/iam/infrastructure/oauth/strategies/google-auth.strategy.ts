@@ -1,8 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { Strategy, VerifyCallback } from 'passport-google-oauth20';
-import { Social } from 'src/iam/applications/models/social-provider';
-import { SocialProfile } from 'src/iam/applications/models/social-profile';
+import { Social } from 'src/iam/application/dto/social-provider';
+import { SocialProfile } from 'src/iam/application/dto/social-profile';
 import { CookieOAuthStateStore } from '../cookie-oauth-state.store';
 
 @Injectable()

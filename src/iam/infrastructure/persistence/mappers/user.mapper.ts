@@ -1,9 +1,9 @@
-import { User } from 'src/iam/domains/models/user';
-import { MfaMethod } from 'src/iam/domains/models/mfa-method';
+import { User } from 'src/iam/domain/aggregates/user';
+import { MfaMethod } from 'src/iam/domain/entities/mfa-method';
 // Aliasé : le domaine a lui aussi un `UserMapper`, qui traduit entre l'entité
 // et ses représentations. Celui-ci ne fait que la moitié ORM du chemin et
 // délègue l'autre.
-import { UserMapper as UserDomainMapper } from 'src/iam/domains/mappers/user.mapper';
+import { UserMapper as UserDomainMapper } from 'src/iam/domain/mappers/user.mapper';
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 import { UserEmailEntity } from 'src/iam/infrastructure/persistence/entities/user-email.entity';
 
@@ -41,6 +41,8 @@ export class UserMapper {
       emailVerified: entity.userEmail?.isVerified ?? false,
       emailVerifiedDate: entity.userEmail?.verifiedDate ?? null,
       facteurs,
+      cgpId: entity.cgpId,
+      codeParrainageCgp: entity.cgpReferralCode,
     });
   }
 
@@ -64,6 +66,14 @@ export class UserMapper {
     // `null` est une valeur ici — effacer son numéro doit s'écrire — donc pas
     // de garde `if` : seul `undefined` laisserait TypeORM ignorer la colonne.
     entity.telephone = snapshot.telephone;
+    // Le rattachement au conseiller et le code publié. Sans ces deux lignes,
+    // `rattacherAu()` et `publierCodeParrainage()` ne laisseraient aucune trace
+    // en base — c'est exactement le sort qu'avait `declarerType()` avant que le
+    // mapping ne soit ajouté (voir plus haut). Ils font l'aller-retour complet :
+    // `toDomain` les lit, donc un compte enregistré pour une autre raison les
+    // réécrit à l'identique plutôt que de les effacer.
+    entity.cgpId = snapshot.cgpId;
+    entity.cgpReferralCode = snapshot.codeParrainageCgp;
 
     if (snapshot.email !== null) {
       const emailEntity = new UserEmailEntity();

@@ -3,7 +3,7 @@ import { KycController } from './kyc.controller';
 import type { DecideKycManualReviewUseCase } from 'src/kyc/applications/usecases/decide-kyc-manual-review.usecase';
 import { KycNiveau, KycStatus } from 'src/kyc/domains/enums/kyc-status.enum';
 import { KycMapper } from 'src/kyc/domains/mappers/kyc.mapper';
-import { UserRole } from 'src/iam/domains/enums/user.enum';
+import { UserRole } from 'src/iam/domain/enums/user.enum';
 
 /**
  * Ce qui reste de `PATCH /kyc/:userId/status` côté présentation : qui a le

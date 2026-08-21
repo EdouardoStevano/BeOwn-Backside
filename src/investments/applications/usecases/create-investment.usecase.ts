@@ -15,13 +15,13 @@ import type { WalletRepository } from 'src/wallets/applications/ports/repositori
 import { WALLET_REPOSITORY } from 'src/wallets/applications/ports/repositories/wallet.repository';
 import type { DocumentRepository } from 'src/documents/applications/ports/repositories/document.repository';
 import { DOCUMENT_REPOSITORY } from 'src/documents/applications/ports/repositories/document.repository';
-import type { UserRepository } from 'src/iam/domains/ports/user.repository';
-import { USER_REPOSITORY } from 'src/iam/domains/ports/user.repository';
+import type { UserRepository } from 'src/iam/domain/repositories/user.repository';
+import { USER_REPOSITORY } from 'src/iam/domain/repositories/user.repository';
 import {
   PROFIL_PP_REPOSITORY,
   type ProfilPPRepository,
-} from 'src/profiles/domains/ports/profil-pp.repository';
-import { PLANCHER_PLAFOND_NON_AVERTI } from 'src/profiles/domains/services/plafond-psfp.domain-service';
+} from 'src/iam/domain/repositories/profil-pp.repository';
+import { PLANCHER_PLAFOND_NON_AVERTI } from 'src/iam/domain/domain-services/plafond-psfp.domain-service';
 import { Investment } from 'src/investments/domains/investment';
 import { Echeance } from 'src/investments/domains/echeance';
 import {

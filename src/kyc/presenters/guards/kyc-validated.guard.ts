@@ -11,7 +11,7 @@ import {
   type KycRepository,
 } from 'src/kyc/domains/ports/kyc.repository';
 import { KycStatus } from 'src/kyc/domains/enums/kyc-status.enum';
-import type { ActiveUser } from 'src/common/auth/current-user.decorator';
+import type { ActiveUser } from 'src/iam/presentation/decorators/current-user.decorator';
 
 /** Code d'erreur stable consommé par le front pour distinguer ce refus d'un 403 générique. */
 export const KYC_NOT_VALIDATED_CODE = 'KYC_NOT_VALIDATED';

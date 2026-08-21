@@ -35,15 +35,15 @@ import {
   UpdateInvestmentStatusDto,
 } from '../dto/investment.dto';
 import { TopUpInvestmentUseCase } from 'src/investments/applications/usecases/top-up-investment.usecase';
-import { CurrentUser } from 'src/common/auth/current-user.decorator';
-import type { ActiveUser } from 'src/common/auth/current-user.decorator';
+import { CurrentUser } from 'src/iam/presentation/decorators/current-user.decorator';
+import type { ActiveUser } from 'src/iam/presentation/decorators/current-user.decorator';
 import { UseGuards } from '@nestjs/common';
-import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
+import { JwtAuthGuard } from 'src/iam/presentation/guards/jwt-auth.guard';
 import { KycValidatedGuard } from 'src/kyc/presenters/guards/kyc-validated.guard';
-import { Roles } from 'src/common/auth/roles.decorator';
-import { RequirePermission } from 'src/common/auth/require-permission.decorator';
-import { hasPermission } from 'src/common/auth/permissions.constants';
-import { UserRole } from 'src/iam/domains/enums/user.enum';
+import { Roles } from 'src/iam/presentation/decorators/roles.decorator';
+import { RequirePermission } from 'src/iam/presentation/decorators/require-permission.decorator';
+import { hasPermission } from 'src/iam/domain/policies/role-permissions.policy';
+import { UserRole } from 'src/iam/domain/enums/user.enum';
 import { SkipThrottle } from '@nestjs/throttler';
 import { EcheanceEntity } from 'src/investments/infrastructure/persistences/entities/echeance.entity';
 import { EcheanceStatus } from 'src/investments/domains/enums/investment-status.enum';

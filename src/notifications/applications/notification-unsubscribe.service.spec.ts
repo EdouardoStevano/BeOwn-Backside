@@ -1,6 +1,6 @@
 import { UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { TokenService } from 'src/iam/applications/services/token/token.service';
+import { TokenService } from 'src/iam/application/services/token/token.service';
 import { JwtTokenSignerAdapter } from 'src/shared/token/infrastructure/jwt-token-signer.adapter';
 import { NotificationUnsubscribeService } from './notification-unsubscribe.service';
 import { PublicUnsubscribeController } from '../presenters/http/public-unsubscribe.controller';

@@ -18,15 +18,15 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import {
   USER_REPOSITORY,
   type UserRepository,
-} from 'src/iam/domains/ports/user.repository';
-import { CurrentUser } from 'src/common/auth/current-user.decorator';
-import type { ActiveUser } from 'src/common/auth/current-user.decorator';
-import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
-import { RequirePermission } from 'src/common/auth/require-permission.decorator';
+} from 'src/iam/domain/repositories/user.repository';
+import { CurrentUser } from 'src/iam/presentation/decorators/current-user.decorator';
+import type { ActiveUser } from 'src/iam/presentation/decorators/current-user.decorator';
+import { JwtAuthGuard } from 'src/iam/presentation/guards/jwt-auth.guard';
+import { RequirePermission } from 'src/iam/presentation/decorators/require-permission.decorator';
 import {
   hasPermission,
   rolesWithPermission,
-} from 'src/common/auth/permissions.constants';
+} from 'src/iam/domain/policies/role-permissions.policy';
 import { CreateKycUseCase } from 'src/kyc/applications/usecases/create-kyc.usecase';
 import { GetKycUseCase } from 'src/kyc/applications/usecases/get-kyc.usecase';
 import { GetKycImagesUseCase } from 'src/kyc/applications/usecases/get-kyc-images.usecase';

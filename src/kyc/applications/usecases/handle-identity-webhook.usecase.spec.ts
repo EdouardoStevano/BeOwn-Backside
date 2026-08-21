@@ -1,7 +1,7 @@
 import { HandleIdentityWebhookUseCase } from './handle-identity-webhook.usecase';
 import { KycStatus } from 'src/kyc/domains/enums/kyc-status.enum';
 import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
-import { UserRole } from 'src/iam/domains/enums/user.enum';
+import { UserRole } from 'src/iam/domain/enums/user.enum';
 
 /**
  * KYC validé AUTOMATIQUEMENT par Stripe Identity.

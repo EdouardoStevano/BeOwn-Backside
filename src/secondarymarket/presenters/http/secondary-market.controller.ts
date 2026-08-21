@@ -31,11 +31,11 @@ import {
   OrdreMarcheSens,
 } from 'src/secondarymarket/domains/ordre-marche';
 import { InvestmentStatus } from 'src/investments/domains/enums/investment-status.enum';
-import { CurrentUser } from 'src/common/auth/current-user.decorator';
-import type { ActiveUser } from 'src/common/auth/current-user.decorator';
-import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
+import { CurrentUser } from 'src/iam/presentation/decorators/current-user.decorator';
+import type { ActiveUser } from 'src/iam/presentation/decorators/current-user.decorator';
+import { JwtAuthGuard } from 'src/iam/presentation/guards/jwt-auth.guard';
 import { KycValidatedGuard } from 'src/kyc/presenters/guards/kyc-validated.guard';
-import { Public } from 'src/common/auth/public.decorator';
+import { Public } from 'src/iam/presentation/decorators/public.decorator';
 import { NotificationService } from 'src/notifications/applications/notification.service';
 import { NotificationEventService } from 'src/notifications/applications/notification-event.service';
 import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';

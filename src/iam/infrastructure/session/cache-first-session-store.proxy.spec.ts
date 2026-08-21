@@ -1,6 +1,6 @@
 import { CacheFirstSessionStoreProxy } from './cache-first-session-store.proxy';
 import type { CacheSessionStore } from './cache-session-store.adapter';
-import type { TypeOrmSessionStore } from 'src/iam/infrastructure/persistence/repositories/typeorm-session-store.repository';
+import type { TypeOrmSessionStore } from 'src/iam/infrastructure/repositories/typeorm-session-store.repository';
 
 const UTILISATEUR = 42;
 const SESSION = 'refresh-token-id';

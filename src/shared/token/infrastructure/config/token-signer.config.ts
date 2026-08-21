@@ -4,7 +4,7 @@ import { registerAs } from '@nestjs/config';
  * Réglages du **driver** de signature, et rien de plus : secret, émetteur,
  * audience par défaut. Les durées de vie des tokens métier (accès,
  * rafraîchissement, email, désinscription) restent dans le contexte qui les
- * émet — `src/iam/infrastructure/config/jwt.config.ts` — parce que ce sont
+ * émet — `src/iam/infrastructure/configuration/jwt.config.ts` — parce que ce sont
  * des règles de sécurité applicative, pas des paramètres du driver (CRP, §5).
  *
  * Les noms de variables d'environnement sont inchangés : rien à modifier au

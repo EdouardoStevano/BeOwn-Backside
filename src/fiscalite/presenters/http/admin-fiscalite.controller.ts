@@ -6,8 +6,8 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
-import { RequirePermission } from 'src/common/auth/require-permission.decorator';
+import { JwtAuthGuard } from 'src/iam/presentation/guards/jwt-auth.guard';
+import { RequirePermission } from 'src/iam/presentation/decorators/require-permission.decorator';
 import { IfuCronService } from '../../applications/ifu-cron.service';
 import { GenerateInvestisseurIfuUseCase } from '../../applications/usecases/generate-investisseur-ifu.usecase';
 

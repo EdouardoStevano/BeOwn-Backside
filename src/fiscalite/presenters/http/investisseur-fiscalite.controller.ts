@@ -10,11 +10,11 @@ import {
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
-import { Roles } from 'src/common/auth/roles.decorator';
-import { CurrentUser } from 'src/common/auth/current-user.decorator';
-import type { ActiveUser } from 'src/common/auth/current-user.decorator';
-import { UserRole } from 'src/iam/domains/enums/user.enum';
+import { JwtAuthGuard } from 'src/iam/presentation/guards/jwt-auth.guard';
+import { Roles } from 'src/iam/presentation/decorators/roles.decorator';
+import { CurrentUser } from 'src/iam/presentation/decorators/current-user.decorator';
+import type { ActiveUser } from 'src/iam/presentation/decorators/current-user.decorator';
+import { UserRole } from 'src/iam/domain/enums/user.enum';
 import {
   DOCUMENT_FISCAL_REPOSITORY,
   type DocumentFiscalRepository,
@@ -24,7 +24,7 @@ import { IfuPdfService } from '../../applications/ifu-pdf.service';
 import {
   USER_REPOSITORY,
   type UserRepository,
-} from 'src/iam/domains/ports/user.repository';
+} from 'src/iam/domain/repositories/user.repository';
 
 @ApiTags('Investisseur — Documents fiscaux')
 @ApiBearerAuth()
