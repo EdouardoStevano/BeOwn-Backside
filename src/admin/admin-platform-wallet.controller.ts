@@ -8,11 +8,11 @@ import { rolesWithPermission } from 'src/iam/domain/policies/role-permissions.po
 import { CurrentUser } from 'src/iam/presentation/decorators/current-user.decorator';
 import type { ActiveUser } from 'src/iam/presentation/decorators/current-user.decorator';
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
-import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/wallet.entity';
-import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entities/transaction.entity';
+import { WalletEntity } from 'src/treasury/infrastructure/persistence/entities/wallet.entity';
+import { TransactionEntity } from 'src/treasury/infrastructure/persistence/entities/transaction.entity';
 import { InvestmentEntity } from 'src/subscription/infrastructure/persistence/entities/investment.entity';
 import { ProjectEntity } from 'src/catalog/infrastructure/persistence/entities/project.entity';
-import { WalletType, TransactionStatus } from 'src/wallets/domains/enums/wallet.enum';
+import { WalletType, TransactionStatus } from 'src/treasury/domain/enums/wallet.enum';
 
 const ADMIN_ROLES: string[] = rolesWithPermission('platform:wallet');
 

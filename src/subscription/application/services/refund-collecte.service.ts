@@ -4,14 +4,14 @@ import { ProjectEntity } from 'src/catalog/infrastructure/persistence/entities/p
 import { InvestmentEntity } from 'src/subscription/infrastructure/persistence/entities/investment.entity';
 import { EcheanceEntity } from 'src/subscription/infrastructure/persistence/entities/echeance.entity';
 import { InvestmentStatus, EcheanceStatus } from 'src/subscription/domain/enums/investment-status.enum';
-import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/wallet.entity';
-import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entities/transaction.entity';
+import { WalletEntity } from 'src/treasury/infrastructure/persistence/entities/wallet.entity';
+import { TransactionEntity } from 'src/treasury/infrastructure/persistence/entities/transaction.entity';
 import {
   TransactionFournisseur,
   TransactionStatus,
   TransactionType,
   WalletType,
-} from 'src/wallets/domains/enums/wallet.enum';
+} from 'src/treasury/domain/enums/wallet.enum';
 import { NotificationService } from 'src/notifications/applications/notification.service';
 import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
 import { formatEur } from 'src/shared/money/format-eur';

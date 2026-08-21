@@ -13,14 +13,14 @@ import {
   ProjectType,
   ProjectInstrument,
 } from 'src/catalog/domain/enums/project-status.enum';
-import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/wallet.entity';
+import { WalletEntity } from 'src/treasury/infrastructure/persistence/entities/wallet.entity';
 import {
   WalletType,
   TransactionType,
   TransactionStatus,
   TransactionFournisseur,
-} from 'src/wallets/domains/enums/wallet.enum';
-import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entities/transaction.entity';
+} from 'src/treasury/domain/enums/wallet.enum';
+import { TransactionEntity } from 'src/treasury/infrastructure/persistence/entities/transaction.entity';
 import { InvestmentEntity } from 'src/subscription/infrastructure/persistence/entities/investment.entity';
 import {
   InvestmentStatus,

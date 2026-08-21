@@ -48,7 +48,7 @@ import { ListSpvUseCase } from './application/usecases/spv/list-spv.usecase';
  *
  * Le module ne déclare aucune table : `TypeOrmModule.forFeature` y
  * enregistrait `WalletEntity`, `TransactionEntity`, `ProjectEntity` et
- * `ProjectViewEntity` — les deux premières appartenant au contexte Wallets, et
+ * `ProjectViewEntity` — les deux premières appartenant au contexte Treasury, et
  * les quatre servant à des use cases et à un contrôleur qui accédaient à la
  * base sans passer par un repository (§12.3, §12.9). Toutes vivent
  * derrière les ports de `CatalogInfrastructureModule`.

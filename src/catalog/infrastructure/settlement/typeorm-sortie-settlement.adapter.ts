@@ -11,9 +11,9 @@ import {
   TransactionStatus,
   TransactionType,
   WalletType,
-} from 'src/wallets/domains/enums/wallet.enum';
-import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entities/transaction.entity';
-import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/wallet.entity';
+} from 'src/treasury/domain/enums/wallet.enum';
+import { TransactionEntity } from 'src/treasury/infrastructure/persistence/entities/transaction.entity';
+import { WalletEntity } from 'src/treasury/infrastructure/persistence/entities/wallet.entity';
 
 const DEVISE_PAR_DEFAUT = 'EUR';
 
@@ -22,7 +22,7 @@ const DEVISE_PAR_DEFAUT = 'EUR';
  *
  * Ces deux cent cinquante lignes vivaient dans `ExecuteSortieUseCase` — donc
  * dans la couche applicative, avec une `DataSource` et deux repositories
- * TypeORM injectés (§12.3) et la connaissance des tables du contexte Wallets.
+ * TypeORM injectés (§12.3) et la connaissance des tables du contexte Treasury.
  * Elles sont ici, derrière `SORTIE_SETTLEMENT_PORT` : c'est le rôle d'un
  * adapter de sortie, et le seul endroit du contexte Catalog qui ait le droit
  * de connaître `WalletEntity` et `TransactionEntity`.

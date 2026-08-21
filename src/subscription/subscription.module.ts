@@ -4,7 +4,7 @@ import { CqrsModule } from '@nestjs/cqrs';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { SubscriptionInfrastructureModule } from './infrastructure/subscription-infrastructure.module';
 import { CatalogInfrastructureModule } from 'src/catalog/infrastructure/catalog-infrastructure.module';
-import { WalletsInfrastructureModule } from 'src/wallets/infrastructure/wallets-infrastructure.module';
+import { TreasuryInfrastructureModule } from 'src/treasury/infrastructure/treasury-infrastructure.module';
 import { DocumentsInfrastructureModule } from 'src/documents/infrastructure/documents-infrastructure.module';
 import { UsersInfrastructureModule } from 'src/iam/infrastructure/users-infrastructure.module';
 import { ProfilesInfrastructureModule } from 'src/compliance/infrastructure/profiles-infrastructure.module';
@@ -23,7 +23,7 @@ import { ProjectEntity } from 'src/catalog/infrastructure/persistence/entities/p
 import { InvestmentEntity } from 'src/subscription/infrastructure/persistence/entities/investment.entity';
 import { DocumentEntity } from 'src/documents/infrastructure/persistences/entities/document.entity';
 import { SignatureEntity } from 'src/signatures/infrastructure/persistences/entities/signature.entity';
-import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/wallet.entity';
+import { WalletEntity } from 'src/treasury/infrastructure/persistence/entities/wallet.entity';
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 import { UserEmailEntity } from 'src/iam/infrastructure/persistence/entities/user-email.entity';
 import { KycModule } from 'src/compliance/application/kyc.module';
@@ -34,7 +34,7 @@ import { PayEcheanceUseCase } from './application/usecases/pay-echeance.usecase'
 import { ProjectScheduleGeneratorService } from './application/services/project-schedule-generator.service';
 import { CollecteCloseCronService } from './application/services/collecte-close-cron.service';
 import { RefundCollecteService } from './application/services/refund-collecte.service';
-import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entities/transaction.entity';
+import { TransactionEntity } from 'src/treasury/infrastructure/persistence/entities/transaction.entity';
 
 /**
  * Bounded Context **Subscription** (§3.2, M6) : la souscription obligataire —
@@ -88,7 +88,7 @@ import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entit
     SubscriptionInfrastructureModule,
     IamInfrastructureModule,
     CatalogInfrastructureModule,
-    WalletsInfrastructureModule,
+    TreasuryInfrastructureModule,
     DocumentsInfrastructureModule,
     UsersInfrastructureModule,
     ProfilesInfrastructureModule,

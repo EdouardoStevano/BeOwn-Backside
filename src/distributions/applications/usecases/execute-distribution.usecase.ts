@@ -21,14 +21,14 @@ import {
   INVESTMENT_REPOSITORY,
   type InvestmentRepository,
 } from 'src/subscription/domain/repositories/investment.repository';
-import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/wallet.entity';
-import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entities/transaction.entity';
+import { WalletEntity } from 'src/treasury/infrastructure/persistence/entities/wallet.entity';
+import { TransactionEntity } from 'src/treasury/infrastructure/persistence/entities/transaction.entity';
 import {
   TransactionFournisseur,
   TransactionStatus,
   TransactionType,
   WalletType,
-} from 'src/wallets/domains/enums/wallet.enum';
+} from 'src/treasury/domain/enums/wallet.enum';
 import { AuditLogService } from 'src/notifications/applications/audit-log.service';
 import { UserRole } from 'src/iam/domain/enums/user.enum';
 import { AmlMonitorService } from 'src/common/aml/aml-monitor.service';

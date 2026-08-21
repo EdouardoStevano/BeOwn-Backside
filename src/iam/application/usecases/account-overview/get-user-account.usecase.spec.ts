@@ -7,7 +7,7 @@ import {
 import { buildUser } from 'src/iam/domain/aggregates/user.fixture';
 import type { UserRepository } from 'src/iam/domain/repositories/user.repository';
 import type { KycRepository } from 'src/compliance/domain/repositories/kyc.repository';
-import type { WalletRepository } from 'src/wallets/applications/ports/repositories/wallet.repository';
+import type { WalletRepository } from 'src/treasury/domain/repositories/wallet.repository';
 
 const CIBLE = 7;
 const APPELANT = 42;

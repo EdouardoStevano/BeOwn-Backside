@@ -37,7 +37,7 @@ export interface ResultatReglementSortie {
  * `ExecuteSortieUseCase` faisait tout cela lui-même, en injectant une
  * `DataSource`, un `Repository<WalletEntity>` et un `Repository<TransactionEntity>`
  * dans la couche applicative : de l'accès base de données hors repository
- * (§12.3), et la connaissance des tables d'un autre Bounded Context (Wallets)
+ * (§12.3), et la connaissance des tables d'un autre Bounded Context (Treasury)
  * remontée jusqu'à un use case de Projects. Deux cent cinquante lignes
  * d'`em.save(...)` autour desquelles il était impossible d'éprouver le calcul
  * de la distribution.

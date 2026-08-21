@@ -10,11 +10,11 @@ import {
 } from 'src/iam/domain/repositories/user.repository';
 import { GetPreferencesUseCase } from 'src/iam/application/usecases/preferences/get-preferences.usecase';
 import { GetOnboardingStatusUseCase } from 'src/compliance/application/usecases/profiles/get-onboarding-status.usecase';
-import { WalletType } from 'src/wallets/domains/enums/wallet.enum';
+import { WalletType } from 'src/treasury/domain/enums/wallet.enum';
 import {
   WALLET_REPOSITORY,
   type WalletRepository,
-} from 'src/wallets/applications/ports/repositories/wallet.repository';
+} from 'src/treasury/domain/repositories/wallet.repository';
 
 /**
  * Vue d'ensemble du compte du titulaire : qui il est, où en est son dossier,
@@ -31,7 +31,7 @@ import {
  * à quatre autres contextes (§2, §12.9). Elle a ensuite quitté IAM lui-même :
  * y rester obligeait le contexte le plus **amont** de l'application — celui
  * dont une vingtaine de modules dépendent pour l'identité — à dépendre en
- * retour de Profiles, Preferences, Documents et Wallets. Le cycle de paquets
+ * retour de Profiles, Preferences, Documents et Treasury. Le cycle de paquets
  * `iam ↔ profiles` venait de là, et de là seulement pour la lecture.
  *
  * `account-overview` est en **aval de tout le monde** et n'est importé par

@@ -1,7 +1,7 @@
 import { CreateInvestmentUseCase } from './create-investment.usecase';
 import { InvestmentEntity } from 'src/subscription/infrastructure/persistence/entities/investment.entity';
-import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/wallet.entity';
-import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entities/transaction.entity';
+import { WalletEntity } from 'src/treasury/infrastructure/persistence/entities/wallet.entity';
+import { TransactionEntity } from 'src/treasury/infrastructure/persistence/entities/transaction.entity';
 import { ProjectEntity } from 'src/catalog/infrastructure/persistence/entities/project.entity';
 import { ProjectStatus } from 'src/catalog/domain/enums/project-status.enum';
 import { InvestmentStatus } from 'src/subscription/domain/enums/investment-status.enum';

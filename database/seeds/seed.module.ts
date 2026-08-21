@@ -6,8 +6,8 @@ import { UserEmailEntity } from 'src/iam/infrastructure/persistence/entities/use
 import { MfaMethodEntity } from 'src/iam/infrastructure/persistence/entities/mfa-method.entity';
 import { SpvEntity } from 'src/catalog/infrastructure/persistence/entities/spv.entity';
 import { ProjectEntity } from 'src/catalog/infrastructure/persistence/entities/project.entity';
-import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/wallet.entity';
-import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entities/transaction.entity';
+import { WalletEntity } from 'src/treasury/infrastructure/persistence/entities/wallet.entity';
+import { TransactionEntity } from 'src/treasury/infrastructure/persistence/entities/transaction.entity';
 import { InvestmentEntity } from 'src/subscription/infrastructure/persistence/entities/investment.entity';
 import { EcheanceEntity } from 'src/subscription/infrastructure/persistence/entities/echeance.entity';
 import { ReservationEntity } from 'src/reservation/infrastructure/persistence/entities/reservation.entity';

@@ -6,8 +6,8 @@ import type { InvestmentRepository } from '../../domain/repositories/investment.
 import { INVESTMENT_REPOSITORY } from '../../domain/repositories/investment.repository';
 import type { ProjectRepository } from 'src/catalog/domain/repositories/project.repository';
 import { PROJECT_REPOSITORY } from 'src/catalog/domain/repositories/project.repository';
-import type { WalletRepository } from 'src/wallets/applications/ports/repositories/wallet.repository';
-import { WALLET_REPOSITORY } from 'src/wallets/applications/ports/repositories/wallet.repository';
+import type { WalletRepository } from 'src/treasury/domain/repositories/wallet.repository';
+import { WALLET_REPOSITORY } from 'src/treasury/domain/repositories/wallet.repository';
 import type { DocumentRepository } from 'src/documents/applications/ports/repositories/document.repository';
 import { DOCUMENT_REPOSITORY } from 'src/documents/applications/ports/repositories/document.repository';
 import type { UserRepository } from 'src/iam/domain/repositories/user.repository';
@@ -33,13 +33,13 @@ import { InvestmentFactory } from 'src/subscription/domain/factories/investment.
 import type { ProjetSouscriptible } from 'src/subscription/domain/value-objects/projet-souscriptible';
 import { CreateInvestmentDto } from 'src/subscription/presentation/http/dto/investment.dto';
 import { ProjectStatus } from 'src/catalog/domain/enums/project-status.enum';
-import { WalletType } from 'src/wallets/domains/enums/wallet.enum';
-import { Transaction } from 'src/wallets/domains/transaction';
+import { WalletType } from 'src/treasury/domain/enums/wallet.enum';
+import { Transaction } from 'src/treasury/domain/aggregates/transaction';
 import {
   TransactionFournisseur,
   TransactionStatus,
   TransactionType,
-} from 'src/wallets/domains/enums/wallet.enum';
+} from 'src/treasury/domain/enums/wallet.enum';
 import { ContractGeneratorService } from '../services/contract-generator.service';
 import { CloudStorageService } from 'src/shared/cloud-storage/cloud-storage.service';
 import { Document } from 'src/documents/domains/document';
@@ -52,9 +52,9 @@ import { InvestmentEntity } from 'src/subscription/infrastructure/persistence/en
 import { EcheanceEntity } from 'src/subscription/infrastructure/persistence/entities/echeance.entity';
 import { InvestmentOrmMapper } from 'src/subscription/infrastructure/persistence/mappers/investment.orm-mapper';
 import { ProjectEntity } from 'src/catalog/infrastructure/persistence/entities/project.entity';
-import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/wallet.entity';
-import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entities/transaction.entity';
-import { WalletMapper } from 'src/wallets/infrastructure/persistences/mappers/wallet.mapper';
+import { WalletEntity } from 'src/treasury/infrastructure/persistence/entities/wallet.entity';
+import { TransactionEntity } from 'src/treasury/infrastructure/persistence/entities/transaction.entity';
+import { WalletOrmMapper } from 'src/treasury/infrastructure/persistence/mappers/wallet.orm-mapper';
 import { EligibilitePsfpTranslator } from '../acl/eligibilite-psfp.translator';
 import { ProjetSouscriptibleTranslator } from '../acl/projet-souscriptible.translator';
 
@@ -195,7 +195,7 @@ export class CreateInvestmentUseCase {
       // 7. Écriture de la transaction ledger (clé d'idempotence conservée).
       await manager.save(
         TransactionEntity,
-        WalletMapper.txToEntity(
+        WalletOrmMapper.txToEntity(
           this.tracerSouscription(investment, wallet, userId, dto),
         ),
       );

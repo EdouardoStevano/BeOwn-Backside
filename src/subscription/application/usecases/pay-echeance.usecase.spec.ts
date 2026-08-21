@@ -1,8 +1,8 @@
 import { PayEcheanceUseCase } from './pay-echeance.usecase';
 import { EcheanceStatus } from '../../domain/enums/investment-status.enum';
 import { EcheanceEntity } from '../../infrastructure/persistence/entities/echeance.entity';
-import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/wallet.entity';
-import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entities/transaction.entity';
+import { WalletEntity } from 'src/treasury/infrastructure/persistence/entities/wallet.entity';
+import { TransactionEntity } from 'src/treasury/infrastructure/persistence/entities/transaction.entity';
 import { UserRole } from 'src/iam/domain/enums/user.enum';
 
 /**
