@@ -10,7 +10,7 @@ import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/w
 import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entities/transaction.entity';
 import { InvestmentEntity } from 'src/investments/infrastructure/persistences/entities/investment.entity';
 import { EcheanceEntity } from 'src/investments/infrastructure/persistences/entities/echeance.entity';
-import { ReservationEntity } from 'src/reservations/infrastructure/persistences/entities/reservation.entity';
+import { ReservationEntity } from 'src/reservation/infrastructure/persistence/entities/reservation.entity';
 import { ProfilPPEntity } from 'src/compliance/infrastructure/persistence/entities/profil-pp.entity';
 import { ProfilPMEntity } from 'src/compliance/infrastructure/persistence/entities/profil-pm.entity';
 import { KycEntity } from 'src/compliance/infrastructure/persistence/entities/kyc.entity';

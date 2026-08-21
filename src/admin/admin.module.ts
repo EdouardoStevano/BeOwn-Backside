@@ -20,7 +20,7 @@ import { KycEntity } from 'src/compliance/infrastructure/persistence/entities/ky
 import { OrdreMarcheEntity } from 'src/secondarymarket/infrastructure/persistences/entities/ordre-marche.entity';
 import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/wallet.entity';
 import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entities/transaction.entity';
-import { ReservationEntity } from 'src/reservations/infrastructure/persistences/entities/reservation.entity';
+import { ReservationEntity } from 'src/reservation/infrastructure/persistence/entities/reservation.entity';
 import { AdminSettingsEntity } from './entities/admin-settings.entity';
 import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructure.module';
 import { NotificationsModule } from 'src/notifications/notifications.module';
