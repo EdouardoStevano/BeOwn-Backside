@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { APP_FILTER } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { TreasuryInfrastructureModule } from './infrastructure/treasury-infrastructure.module';
@@ -8,6 +9,7 @@ import { RequestRetraitUseCase } from './application/usecases/request-retrait.us
 import { PAYMENT_GATEWAY } from './application/ports/payment.gateway';
 import { StripePaymentAdapter } from './infrastructure/external-services/stripe-payment.adapter';
 import { StripeConnectAdapter } from './infrastructure/external-services/stripe-connect.adapter';
+import { TreasuryErrorFilter } from './presentation/http/filters/treasury-error.filter';
 import { WalletEntity } from './infrastructure/persistence/entities/wallet.entity';
 import { TransactionEntity } from './infrastructure/persistence/entities/transaction.entity';
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
@@ -73,6 +75,9 @@ import { NotificationsModule } from 'src/notifications/notifications.module';
     StripePaymentAdapter,
     StripeConnectAdapter,
     RequestRetraitUseCase,
+    // Traduit les erreurs métier du contexte en réponses HTTP : le domaine ne
+    // connaît aucun statut (§21), la présentation s'en charge.
+    { provide: APP_FILTER, useClass: TreasuryErrorFilter },
   ],
   exports: [PAYMENT_GATEWAY, StripeConnectAdapter],
 })

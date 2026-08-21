@@ -111,7 +111,7 @@ export class TopUpInvestmentUseCase {
     }
     const projet = ProjetSouscriptibleTranslator.traduire(projetCatalogue);
 
-    const wallet = await this.walletRepository.findWalletByUser(
+    const wallet = await this.walletRepository.findByUser(
       userId,
       WalletType.INVESTISSEUR,
     );

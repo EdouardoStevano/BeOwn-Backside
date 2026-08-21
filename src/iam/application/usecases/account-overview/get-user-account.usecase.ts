@@ -58,7 +58,7 @@ export class GetUserAccountUseCase {
     const [kyc, wallet] = await Promise.all([
       this.kycRepository.findByUserId(cible).catch(() => null),
       this.walletRepository
-        .findWalletByUser(cible, WalletType.INVESTISSEUR)
+        .findByUser(cible, WalletType.INVESTISSEUR)
         .catch(() => null),
     ]);
 

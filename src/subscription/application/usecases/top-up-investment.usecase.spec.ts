@@ -101,7 +101,7 @@ describe('TopUpInvestmentUseCase — atomicité', () => {
       findProjectById: jest.fn().mockResolvedValue(baseProject()),
     };
     walletRepository = {
-      findWalletByUser: jest
+      findByUser: jest
         .fn()
         .mockResolvedValue({ id: 'w1', solde: 1000, devise: 'EUR' }),
     };

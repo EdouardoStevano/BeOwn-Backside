@@ -8,6 +8,8 @@ import type { ProjectRepository } from 'src/catalog/domain/repositories/project.
 import { PROJECT_REPOSITORY } from 'src/catalog/domain/repositories/project.repository';
 import type { WalletRepository } from 'src/treasury/domain/repositories/wallet.repository';
 import { WALLET_REPOSITORY } from 'src/treasury/domain/repositories/wallet.repository';
+import type { TransactionRepository } from 'src/treasury/domain/repositories/transaction.repository';
+import { TRANSACTION_REPOSITORY } from 'src/treasury/domain/repositories/transaction.repository';
 import type { DocumentRepository } from 'src/documents/applications/ports/repositories/document.repository';
 import { DOCUMENT_REPOSITORY } from 'src/documents/applications/ports/repositories/document.repository';
 import type { UserRepository } from 'src/iam/domain/repositories/user.repository';
@@ -103,6 +105,8 @@ export class CreateInvestmentUseCase {
     private readonly projectRepository: ProjectRepository,
     @Inject(WALLET_REPOSITORY)
     private readonly walletRepository: WalletRepository,
+    @Inject(TRANSACTION_REPOSITORY)
+    private readonly transactionRepository: TransactionRepository,
     @Inject(DOCUMENT_REPOSITORY)
     private readonly documentRepository: DocumentRepository,
     @Inject(USER_REPOSITORY)
@@ -133,7 +137,7 @@ export class CreateInvestmentUseCase {
 
     // Le wallet est relu sous verrou dans la transaction ; cette lecture ne
     // sert qu'à en connaître l'identité et la devise.
-    const wallet = await this.walletRepository.findWalletByUser(
+    const wallet = await this.walletRepository.findByUser(
       userId,
       WalletType.INVESTISSEUR,
     );
@@ -239,10 +243,9 @@ export class CreateInvestmentUseCase {
   ): Promise<Investment | null> {
     if (!dto.idempotencyKey) return null;
 
-    const precedente =
-      await this.walletRepository.findTransactionByIdempotencyKey(
-        cleDIdempotence(userId, dto.idempotencyKey),
-      );
+    const precedente = await this.transactionRepository.findByIdempotencyKey(
+      cleDIdempotence(userId, dto.idempotencyKey),
+    );
     if (!precedente?.investissementId) return null;
 
     return this.investmentRepository.findById(precedente.investissementId);

@@ -67,7 +67,7 @@ export class GetMyAccountUseCase {
       }),
       this.documentRepository.findByUserId(userId).catch(() => []),
       this.walletRepository
-        .findWalletByUser(userId, WalletType.INVESTISSEUR)
+        .findByUser(userId, WalletType.INVESTISSEUR)
         .catch(() => null),
       this.getPreferences.execute(userId).catch(() => null),
     ]);

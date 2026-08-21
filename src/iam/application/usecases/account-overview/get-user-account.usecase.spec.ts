@@ -27,7 +27,7 @@ function monter(roleAppelant: UserRole = UserRole.INVESTISSEUR) {
   const useCase = new GetUserAccountUseCase(
     { findById: mocks.findById } as unknown as UserRepository,
     { findByUserId: mocks.findKyc } as unknown as KycRepository,
-    { findWalletByUser: mocks.findWallet } as unknown as WalletRepository,
+    { findByUser: mocks.findWallet } as unknown as WalletRepository,
   );
 
   return { useCase, mocks };

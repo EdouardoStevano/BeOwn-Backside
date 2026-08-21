@@ -116,7 +116,7 @@ export class InitiateInvestmentUseCase {
     );
 
     // Le solde est vérifié sans être débité : le débit suit la signature.
-    const wallet = await this.walletRepository.findWalletByUser(
+    const wallet = await this.walletRepository.findByUser(
       userId,
       WalletType.INVESTISSEUR,
     );
