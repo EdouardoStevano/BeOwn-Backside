@@ -27,8 +27,8 @@ import {
   EcheanceStatus,
 } from 'src/investments/domains/enums/investment-status.enum';
 import { EcheanceEntity } from 'src/investments/infrastructure/persistences/entities/echeance.entity';
-import { ReservationEntity } from 'src/reservations/infrastructure/persistences/entities/reservation.entity';
-import { ReservationStatus } from 'src/reservations/domains/enums/reservation-status.enum';
+import { ReservationEntity } from 'src/reservation/infrastructure/persistence/entities/reservation.entity';
+import { ReservationStatus } from 'src/reservation/domain/enums/reservation-status.enum';
 import { ProfilPPEntity } from 'src/compliance/infrastructure/persistence/entities/profil-pp.entity';
 import { ProfilPMEntity } from 'src/compliance/infrastructure/persistence/entities/profil-pm.entity';
 import { KycEntity } from 'src/compliance/infrastructure/persistence/entities/kyc.entity';

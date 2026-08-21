@@ -28,8 +28,8 @@ import type { ActiveUser } from 'src/iam/presentation/decorators/current-user.de
 import { formatEur } from 'src/shared/money/format-eur';
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 import { ProjectEntity } from 'src/catalog/infrastructure/persistence/entities/project.entity';
-import { ReservationEntity } from 'src/reservations/infrastructure/persistences/entities/reservation.entity';
-import { ReservationStatus } from 'src/reservations/domains/enums/reservation-status.enum';
+import { ReservationEntity } from 'src/reservation/infrastructure/persistence/entities/reservation.entity';
+import { ReservationStatus } from 'src/reservation/domain/enums/reservation-status.enum';
 import { NotificationService } from 'src/notifications/applications/notification.service';
 import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
 
