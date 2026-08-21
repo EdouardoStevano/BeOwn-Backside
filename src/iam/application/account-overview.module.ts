@@ -4,8 +4,8 @@ import { GetUserAccountUseCase } from './usecases/account-overview/get-user-acco
 import { AccountOverviewController } from '../presentation/http/account-overview.controller';
 import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructure.module';
 import { UsersInfrastructureModule } from 'src/iam/infrastructure/users-infrastructure.module';
-import { ProfilesModule } from 'src/iam/application/profiles.module';
-import { KycInfrastructureModule } from 'src/kyc/infrastructure/kyc-infrastructure.module';
+import { ProfilesModule } from 'src/compliance/application/profiles.module';
+import { KycInfrastructureModule } from 'src/compliance/infrastructure/kyc-infrastructure.module';
 import { PreferencesModule } from 'src/iam/application/preferences.module';
 import { DocumentsInfrastructureModule } from 'src/documents/infrastructure/documents-infrastructure.module';
 import { WalletsInfrastructureModule } from 'src/wallets/infrastructure/wallets-infrastructure.module';

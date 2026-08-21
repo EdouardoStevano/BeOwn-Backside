@@ -29,11 +29,11 @@ import {
 import { EcheanceEntity } from 'src/investments/infrastructure/persistences/entities/echeance.entity';
 import { ReservationEntity } from 'src/reservations/infrastructure/persistences/entities/reservation.entity';
 import { ReservationStatus } from 'src/reservations/domains/enums/reservation-status.enum';
-import { ProfilPPEntity } from 'src/iam/infrastructure/persistence/entities/profil-pp.entity';
-import { ProfilPMEntity } from 'src/iam/infrastructure/persistence/entities/profil-pm.entity';
-import { KycEntity } from 'src/kyc/infrastructure/persistences/entities/kyc.entity';
-import { KycStatus, KycNiveau } from 'src/kyc/domains/enums/kyc-status.enum';
-import { CategoriePsfp } from 'src/iam/domain/enums/categorie-psfp.enum';
+import { ProfilPPEntity } from 'src/compliance/infrastructure/persistence/entities/profil-pp.entity';
+import { ProfilPMEntity } from 'src/compliance/infrastructure/persistence/entities/profil-pm.entity';
+import { KycEntity } from 'src/compliance/infrastructure/persistence/entities/kyc.entity';
+import { KycStatus, KycNiveau } from 'src/compliance/domain/enums/kyc-status.enum';
+import { CategoriePsfp } from 'src/compliance/domain/enums/categorie-psfp.enum';
 import {
   NotificationEntity,
   NotificationCanal,

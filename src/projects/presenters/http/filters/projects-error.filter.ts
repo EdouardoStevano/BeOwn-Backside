@@ -33,7 +33,7 @@ const ERROR_LABEL: Record<number, string> = {
  * contrôleurs, erreurs inattendues — continue vers le traitement par défaut de
  * Nest. Ce filtre n'intercepte que le vocabulaire de ce domaine.
  *
- * Jumeau de `KycErrorFilter`. Les statuts rendus sont ceux que les
+ * Jumeau de `ComplianceErrorFilter`. Les statuts rendus sont ceux que les
  * `NotFoundException`, `BadRequestException` et `ConflictException` remplacées
  * rendaient déjà, à une exception documentée près — les routes
  * `/admin/sorties/:id/mark-actee` et `/cancel`, qui répondaient 400 sur une

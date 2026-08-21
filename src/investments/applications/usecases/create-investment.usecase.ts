@@ -20,8 +20,8 @@ import { USER_REPOSITORY } from 'src/iam/domain/repositories/user.repository';
 import {
   PROFIL_PP_REPOSITORY,
   type ProfilPPRepository,
-} from 'src/iam/domain/repositories/profil-pp.repository';
-import { PLANCHER_PLAFOND_NON_AVERTI } from 'src/iam/domain/domain-services/plafond-psfp.domain-service';
+} from 'src/compliance/domain/repositories/profil-pp.repository';
+import { PLANCHER_PLAFOND_NON_AVERTI } from 'src/compliance/domain/domain-services/plafond-psfp.domain-service';
 import { Investment } from 'src/investments/domains/investment';
 import { Echeance } from 'src/investments/domains/echeance';
 import {
