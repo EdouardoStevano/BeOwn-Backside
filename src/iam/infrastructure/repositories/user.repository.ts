@@ -6,6 +6,7 @@ import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.ent
 import { In, Repository } from 'typeorm';
 import { User } from 'src/iam/domain/aggregates/user';
 import { MfaMethod } from 'src/iam/domain/entities/mfa-method';
+import { UserRole } from 'src/iam/domain/enums/user.enum';
 import { UserMapper } from 'src/iam/infrastructure/persistence/mappers/user.mapper';
 
 @Injectable()
@@ -119,6 +120,24 @@ export class UserTypeOrmRepository implements UserRepository {
       .getOne();
 
     return entity ? UserMapper.toDomain(entity) : null;
+  }
+
+  async findCgpByCodeParrainage(code: string): Promise<User | null> {
+    const entity = await this.usersRepository.findOne({
+      where: { cgpReferralCode: code, role: UserRole.CGP },
+      relations: ['userEmail'],
+    });
+
+    return entity ? UserMapper.toDomain(entity) : null;
+  }
+
+  async findClientsDuCgp(cgpId: number): Promise<User[]> {
+    const entities = await this.usersRepository.find({
+      where: { cgpId },
+      relations: ['userEmail'],
+    });
+
+    return entities.map((entity) => UserMapper.toDomain(entity));
   }
 
   /**

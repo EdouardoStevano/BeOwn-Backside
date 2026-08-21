@@ -18,6 +18,12 @@ import {
 } from 'src/iam/domain/errors/user-administration.errors';
 import { FacteursMfaNonChargesError } from 'src/iam/domain/errors/mfa.errors';
 import {
+  AccesReserveAuCgpError,
+  DejaRattacheAUnCgpError,
+  RattachementASoiMemeError,
+} from 'src/iam/domain/errors/cgp.errors';
+import { CodeParrainageCgp } from 'src/iam/domain/value-objects/code-parrainage-cgp.vo';
+import {
   UserMapper,
   type PublicUser,
   type PublicUserMfa,
@@ -71,6 +77,9 @@ export interface UserSnapshot {
    * prendre ici. Absentes quand la lecture ne les a pas chargées.
    */
   facteurs?: MfaMethod[];
+  /** Conseiller de rattachement, et code publié quand le titulaire en est un. */
+  cgpId: number | null;
+  codeParrainageCgp: string | null;
 }
 
 /**
@@ -100,6 +109,8 @@ export interface UserState {
   emailVerifiedDate: Date | null;
   /** Absents quand la lecture ne les a pas chargés — voir `User._facteurs`. */
   facteurs?: MfaMethod[] | null;
+  cgpId: number | null;
+  codeParrainageCgp: CodeParrainageCgp | null;
 }
 
 export interface RegisterUserProps {
@@ -184,6 +195,18 @@ export class User extends AggregateRoot {
    * se modifie pas).
    */
   private _facteurs: MfaMethod[] | null;
+  /**
+   * Conseiller auquel ce titulaire est rattaché, et code que ce titulaire
+   * publie s'il est lui-même conseiller.
+   *
+   * Les deux colonnes existaient depuis toujours et n'étaient écrites que par
+   * `CgpController`, qui les posait sur `UserEntity` en direct : l'agrégat ne
+   * les connaissait pas, donc aucune règle ne les protégeait. On pouvait se
+   * rattacher à soi-même, et un compte déjà rattaché voyait son conseiller
+   * remplacé sans que rien ne s'y oppose sur la route d'administration.
+   */
+  private _cgpId: number | null;
+  private _codeParrainageCgp: CodeParrainageCgp | null;
 
   /**
    * @internal Réservé à `User.register` et à `UserMapper`.
@@ -213,6 +236,8 @@ export class User extends AggregateRoot {
     this._emailVerified = state.emailVerified;
     this._emailVerifiedDate = state.emailVerifiedDate;
     this._facteurs = state.facteurs ?? null;
+    this._cgpId = state.cgpId;
+    this._codeParrainageCgp = state.codeParrainageCgp;
   }
 
   /** Nouveau compte : statut CREE, identifiants non encore vérifiés. */
@@ -247,6 +272,10 @@ export class User extends AggregateRoot {
       // fournisseur : la date de vérification est celle de l'inscription.
       emailVerified: props.emailVerified === true,
       emailVerifiedDate: props.emailVerified === true ? new Date() : null,
+      // Personne ne s'inscrit déjà parrainé : le rattachement se demande
+      // ensuite, code en main (`rattacherAu`).
+      cgpId: null,
+      codeParrainageCgp: null,
     });
   }
 
@@ -289,6 +318,14 @@ export class User extends AggregateRoot {
   }
   get updatedAt(): Date {
     return this._updatedAt;
+  }
+  /** Conseiller de rattachement, `null` quand le titulaire n'en a pas. */
+  get cgpId(): number | null {
+    return this._cgpId;
+  }
+  /** Le VO reste interne : les appelants lisent une chaîne, comme ailleurs. */
+  get codeParrainageCgp(): string | null {
+    return this._codeParrainageCgp?.valeur ?? null;
   }
   /** Raccourci de lecture — l'adresse est toujours présente en pratique. */
   get email(): string {
@@ -593,6 +630,62 @@ export class User extends AggregateRoot {
 
   markAsDeleted(): void {
     this._status = UserStatus.SUPPRIME;
+  }
+
+  // ── Rattachement à un conseiller (CGP) ────────────────────────────────────
+
+  /** Ce titulaire distribue-t-il des offres pour le compte d'investisseurs ? */
+  estCgp(): boolean {
+    return this._role === UserRole.CGP;
+  }
+
+  /**
+   * Publie — ou renouvelle — le code que les investisseurs saisiront pour se
+   * rattacher à ce conseiller.
+   *
+   * Renouveler est permis et invalide le précédent : c'est ce que fait déjà
+   * `PATCH /cgp/me/referral-code`, et c'est le seul recours quand un code a
+   * fuité. En revanche seul un CGP en publie un — la route le vérifiait, mais
+   * rien n'empêchait un autre appelant d'écrire la colonne.
+   *
+   * @throws AccesReserveAuCgpError si le titulaire n'a pas le rôle CGP.
+   */
+  publierCodeParrainage(code: CodeParrainageCgp): void {
+    if (!this.estCgp()) {
+      throw new AccesReserveAuCgpError();
+    }
+    this._codeParrainageCgp = code;
+  }
+
+  /**
+   * Rattache ce titulaire à un conseiller.
+   *
+   * Deux règles, dont aucune n'existait vraiment :
+   *
+   * - **un seul conseiller à la fois.** `PATCH /cgp/join/:code` refusait bien
+   *   un second rattachement, mais `PATCH /cgp/clients/:id/link` — la route
+   *   d'administration — écrasait le conseiller en place sans rien dire. Le
+   *   refus vit maintenant dans l'agrégat, donc il vaut pour les deux chemins ;
+   * - **on n'est pas son propre conseiller.** Rien ne l'interdisait : un CGP
+   *   qui saisissait son propre code se rattachait à lui-même, et apparaissait
+   *   ensuite dans sa propre liste de clients.
+   *
+   * @returns `true` si le rattachement a changé quelque chose — un titulaire
+   *   déjà rattaché **au même** conseiller n'est pas une erreur, c'est un
+   *   rejeu.
+   * @throws RattachementASoiMemeError, DejaRattacheAUnCgpError
+   */
+  rattacherAu(cgpId: number): boolean {
+    if (cgpId === this._userId) {
+      throw new RattachementASoiMemeError();
+    }
+    if (this._cgpId === cgpId) return false;
+    if (this._cgpId !== null) {
+      throw new DejaRattacheAUnCgpError();
+    }
+
+    this._cgpId = cgpId;
+    return true;
   }
 
   // ── Sérialisation ─────────────────────────────────────────────────────────

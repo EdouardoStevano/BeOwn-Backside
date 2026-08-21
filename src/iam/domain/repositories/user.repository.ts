@@ -35,6 +35,16 @@ export interface UserRepository {
    */
   findByIdWithFacteurs(userId: number): Promise<User | null>;
   findByEmail(email: string): Promise<User | null>;
+  /**
+   * Le conseiller qui publie ce code, s'il existe et a toujours le rôle CGP.
+   *
+   * Le filtre sur le rôle appartient au port, et non à l'appelant : un code
+   * publié par un compte qui n'est plus conseiller ne doit plus rattacher
+   * personne, et c'est vrai de tout appelant présent ou à venir.
+   */
+  findCgpByCodeParrainage(code: string): Promise<User | null>;
+  /** Les titulaires rattachés à ce conseiller. */
+  findClientsDuCgp(cgpId: number): Promise<User[]>;
   update(user: User): Promise<User>;
   findOneBySocialId(socialId: string): Promise<User | null>;
 }

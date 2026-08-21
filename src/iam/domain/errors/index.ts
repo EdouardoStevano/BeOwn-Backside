@@ -4,6 +4,7 @@ export * from './authentication.errors';
 export * from './email-verification.errors';
 export * from './otp.errors';
 export * from './mfa.errors';
+export * from './cgp.errors';
 export * from './preferences.errors';
 export * from './profile.errors';
 export * from './user-administration.errors';

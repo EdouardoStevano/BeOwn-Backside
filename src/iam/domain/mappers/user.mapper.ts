@@ -7,6 +7,7 @@ import {
 import { UserRole, UserStatus } from 'src/iam/domain/enums/user.enum';
 import { MfaMethodType } from 'src/iam/domain/enums/mfa-method.enum';
 import { User, type UserSnapshot } from 'src/iam/domain/aggregates/user';
+import { CodeParrainageCgp } from 'src/iam/domain/value-objects/code-parrainage-cgp.vo';
 
 /**
  * État du second facteur, tel qu'on l'expose à son titulaire.
@@ -128,6 +129,10 @@ export class UserMapper {
       emailVerified: snapshot.emailVerified,
       emailVerifiedDate: snapshot.emailVerifiedDate,
       facteurs: snapshot.facteurs,
+      cgpId: snapshot.cgpId,
+      // `restore` et non `of`, comme les noms et l'adresse : les codes déjà
+      // publiés l'ont été avant que le format n'existe comme règle.
+      codeParrainageCgp: CodeParrainageCgp.restore(snapshot.codeParrainageCgp),
     });
   }
 
@@ -158,6 +163,8 @@ export class UserMapper {
       email: user.emailOrNull,
       emailVerified: user.isEmailVerified(),
       emailVerifiedDate: user.emailVerifiedDate,
+      cgpId: user.cgpId,
+      codeParrainageCgp: user.codeParrainageCgp,
     };
   }
 

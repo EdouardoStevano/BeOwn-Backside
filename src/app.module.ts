@@ -28,7 +28,7 @@ import { PreferencesModule } from 'src/iam/application/preferences.module';
 import { DocumentsModule } from './documents/applications/documents.module';
 import { NotificationTestModule } from './common/test/notification-test.module';
 import { AdminModule } from './admin/admin.module';
-import { CgpModule } from './cgp/cgp.module';
+import { CgpModule } from './iam/application/cgp.module';
 import { AvisModule } from './avis/applications/avis.module';
 import { NewsModule } from './news/news.module';
 import { KpiModule } from './kpi/kpi.module';

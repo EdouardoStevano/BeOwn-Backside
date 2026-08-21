@@ -40,6 +40,8 @@ export const buildUser = (
     email,
     emailVerified,
     emailVerifiedDate: emailVerified ? new Date('2026-01-01T00:00:00Z') : null,
+    cgpId: null,
+    codeParrainageCgp: null,
     ...snapshot,
   });
 };

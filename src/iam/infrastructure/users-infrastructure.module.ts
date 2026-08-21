@@ -10,8 +10,8 @@ import { UserTypeOrmRepository } from 'src/iam/infrastructure/repositories/user.
 // désormais déclarées par AuthenticationModule, en une seule classe.
 @Module({
   imports: [
-    // `UserPreferencesEntity` est partie avec le contexte Preferences : les
-    // réglages du titulaire ne sont pas de l'identité (§5 — CCP).
+    // `UserPreferencesEntity` a son propre module d'infrastructure — même
+    // contexte, autre feature (CRP, §24).
     //
     // `MfaMethodEntity` est arrivée en sens inverse : l'adresse email et les
     // facteurs d'authentification sont des **entités de l'agrégat `User`**,
