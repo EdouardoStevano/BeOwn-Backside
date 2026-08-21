@@ -23,11 +23,11 @@ import {
 import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entities/transaction.entity';
 import { InvestmentEntity } from 'src/investments/infrastructure/persistences/entities/investment.entity';
 import { InvestmentStatus } from 'src/investments/domains/enums/investment-status.enum';
-import { ProfilPPEntity } from 'src/profiles/infrastructure/persistences/entities/profil-pp.entity';
-import { ProfilPMEntity } from 'src/profiles/infrastructure/persistences/entities/profil-pm.entity';
+import { ProfilPPEntity } from 'src/iam/infrastructure/persistence/entities/profil-pp.entity';
+import { ProfilPMEntity } from 'src/iam/infrastructure/persistence/entities/profil-pm.entity';
 import { KycEntity } from 'src/kyc/infrastructure/persistences/entities/kyc.entity';
 import { KycStatus, KycNiveau } from 'src/kyc/domains/enums/kyc-status.enum';
-import { CategoriePsfp } from 'src/profiles/domains/enums/categorie-psfp.enum';
+import { CategoriePsfp } from 'src/iam/domain/enums/categorie-psfp.enum';
 import {
   NotificationEntity,
   NotificationCanal,

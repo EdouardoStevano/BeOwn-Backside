@@ -5,7 +5,7 @@ import { ProjectsInfrastructureModule } from 'src/projects/infrastructure/projec
 import { WalletsInfrastructureModule } from 'src/wallets/infrastructure/wallets-infrastructure.module';
 import { DocumentsInfrastructureModule } from 'src/documents/infrastructure/documents-infrastructure.module';
 import { UsersInfrastructureModule } from 'src/iam/infrastructure/users-infrastructure.module';
-import { ProfilesInfrastructureModule } from 'src/profiles/infrastructure/profiles-infrastructure.module';
+import { ProfilesInfrastructureModule } from 'src/iam/infrastructure/profiles-infrastructure.module';
 import { CloudStorageModule } from 'src/shared/cloud-storage/cloud-storage.module';
 import { YouSignModule } from 'src/common/yousign/yousign.module';
 import { CreateInvestmentUseCase } from './usecases/create-investment.usecase';

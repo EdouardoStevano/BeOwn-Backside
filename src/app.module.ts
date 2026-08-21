@@ -15,7 +15,7 @@ import { RolesGuard } from 'src/iam/presentation/guards/roles.guard';
 import { PermissionsGuard } from 'src/iam/presentation/guards/permissions.guard';
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 import { AuditInterceptor } from './common/audit/audit.interceptor';
-import { ProfilesModule } from './profiles/applications/profiles.module';
+import { ProfilesModule } from './iam/application/profiles.module';
 import { KycModule } from './kyc/applications/kyc.module';
 import { ProjectsModule } from './projects/applications/projects.module';
 import { ReservationsModule } from './reservations/applications/reservations.module';
