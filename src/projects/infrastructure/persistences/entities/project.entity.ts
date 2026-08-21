@@ -15,60 +15,14 @@ import {
   ProjectType,
 } from 'src/projects/domains/enums/project-status.enum';
 import { ModeleEconomique } from 'src/projects/domains/enums/modele-economique.enum';
-
-export interface PrevisionnelFinancier {
-  operation: {
-    acquisition: number;
-    fraisNotaire: number;
-    travaux: number;
-    sequestre: number;
-    fraisHypotheque: number;
-    fraisFinanciers: number;
-    autresCharges?: number;
-  };
-  financement: {
-    apport: number;
-    financementBancaire: number;
-    montantInvestisseurs: number;
-  };
-  resultat: {
-    montantRevente: number;
-    coutOperation: number;
-  };
-}
-
-export interface EtapeChronologie {
-  etape: string;
-  date: string;
-  statut: 'done' | 'in_progress' | 'pending';
-  description?: string;
-}
-
-export interface Garantie {
-  type: string;
-  description?: string;
-  rang?: number;
-}
-
-/**
- * Borrower-side schedule defined by admin on the project itself. Investor-side
- * schedules (EcheanceEntity) are derived from this on a per-investment prorata.
- */
-export interface EcheanceEmprunteur {
-  id?: string;
-  numero: number;
-  datePrevue: string; // ISO date (YYYY-MM-DD)
-  montantCapital: number;
-  montantInterets: number;
-  montantFraisPlateforme: number;
-  montantFraisRetard: number;
-  tauxInteretsAnnuel: number;
-  tauxRetardAnnuel: number;
-  capitalRestantAvant?: number;
-  capitalRestantApres?: number;
-  montantTotal?: number;
-  statut: 'a_venir' | 'verifiee' | 'en_paiement' | 'payee' | 'retard';
-}
+// Les formes des colonnes `jsonb` étaient déclarées ici, et le domaine les
+// importait depuis cette entité — la flèche de dépendance allait à l'envers
+// (§1). Elles vivent maintenant sous `domains/value-objects/`, et c'est
+// l'infrastructure qui les emprunte pour typer ses colonnes.
+import type { EcheanceEmprunteur } from 'src/projects/domains/value-objects/echeance-emprunteur.vo';
+import type { EtapeChronologie } from 'src/projects/domains/value-objects/chronologie.vo';
+import type { Garantie } from 'src/projects/domains/value-objects/garantie.vo';
+import type { PrevisionnelFinancier } from 'src/projects/domains/value-objects/previsionnel-financier.vo';
 
 @Entity('projet')
 export class ProjectEntity {

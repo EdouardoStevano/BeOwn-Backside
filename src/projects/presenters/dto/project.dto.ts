@@ -16,15 +16,24 @@ import {
   Min,
   Max,
   IsInt,
+  IsIn,
+  IsObject,
 } from 'class-validator';
 import { Type, Transform } from 'class-transformer';
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import {
+  ApiProperty,
+  ApiPropertyOptional,
+  OmitType,
+  PartialType,
+} from '@nestjs/swagger';
 import {
   ProjectInstrument,
   ProjectStatus,
   ProjectType,
 } from 'src/projects/domains/enums/project-status.enum';
 import { RegimeFiscal } from 'src/projects/domains/enums/regime-fiscal.enum';
+import { ProjectFactory } from 'src/projects/domains/factories/project.factory';
+import type { PrevisionnelFinancier } from 'src/projects/domains/value-objects/previsionnel-financier.vo';
 
 // Helper: coerce string → number (sent by multipart or form)
 const toNumber = () =>
@@ -143,7 +152,8 @@ export class CreateProjectDto {
 
   @ApiPropertyOptional({
     example: 3,
-    description: 'Échelle de risque du projet : 1 (très faible) à 5 (très élevé)',
+    description:
+      'Échelle de risque du projet : 1 (très faible) à 5 (très élevé)',
   })
   @IsOptional()
   @toNumber()
@@ -164,12 +174,19 @@ export class CreateProjectDto {
   @IsEnum(ProjectInstrument)
   instrument: ProjectInstrument;
 
+  /**
+   * Statut initial. Restreint aux deux premières cases du cycle de vie : un
+   * projet ne naît pas `finance` (une collecte réussie qui n'a jamais eu lieu)
+   * ni `cloture` (mort-né dans un état terminal). La règle appartient à
+   * `ProjectFactory` ; elle est reprise ici pour que Swagger et le message de
+   * validation la disent aussi.
+   */
   @ApiPropertyOptional({
-    enum: ProjectStatus,
+    enum: ProjectFactory.STATUTS_INITIAUX,
     description: 'Statut initial (défaut : brouillon)',
   })
   @IsOptional()
-  @IsEnum(ProjectStatus)
+  @IsIn([...ProjectFactory.STATUTS_INITIAUX])
   statut?: ProjectStatus;
 
   @ApiPropertyOptional({ description: 'Date de publication ISO 8601' })
@@ -249,7 +266,8 @@ export class CreateProjectDto {
     description: 'Prévisionnel financier (objet JSON libre)',
   })
   @IsOptional()
-  previsionnel?: any;
+  @IsObject()
+  previsionnel?: PrevisionnelFinancier;
 
   @ApiPropertyOptional({
     description: 'Chronologie du projet',
@@ -271,6 +289,20 @@ export class CreateProjectDto {
   @Type(() => GarantieDto)
   garanties?: GarantieDto[];
 }
+
+/**
+ * Mise à jour partielle d'un projet.
+ *
+ * Le contrôleur recevait un `Partial<CreateProjectDto>` **non validé** :
+ * typé comme tel, mais jamais transformé ni éprouvé par le `ValidationPipe`,
+ * qui ne travaille que sur des classes. Un `PATCH` pouvait donc poser
+ * `capitalCible: "beaucoup"`, ou un `statut` arbitraire — court-circuitant la
+ * table des transitions. `statut` est retiré du contrat : un changement d'état
+ * se demande à `PATCH /projects/:id/status`.
+ */
+export class UpdateProjectDto extends PartialType(
+  OmitType(CreateProjectDto, ['statut'] as const),
+) {}
 
 export class UpdateProjectStatusDto {
   @ApiProperty({ enum: ProjectStatus })

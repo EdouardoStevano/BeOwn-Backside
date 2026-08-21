@@ -6,7 +6,7 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { StatutSortie } from '../../../domains/sortie-projet';
+import { StatutSortie } from 'src/projects/domains/enums/statut-sortie.enum';
 
 @Entity('sortie_projet')
 export class SortieProjetEntity {
