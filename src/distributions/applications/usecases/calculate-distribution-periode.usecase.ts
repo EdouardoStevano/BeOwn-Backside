@@ -28,13 +28,13 @@ import {
 import {
   PROJECT_REPOSITORY,
   type ProjectRepository,
-} from 'src/projects/applications/ports/repositories/project.repository';
+} from 'src/catalog/domain/repositories/project.repository';
 import {
   INVESTMENT_REPOSITORY,
   type InvestmentRepository,
 } from 'src/investments/applications/ports/repositories/investment.repository';
-import { ModeleEconomique } from 'src/projects/domains/enums/modele-economique.enum';
-import { ProjectStatus } from 'src/projects/domains/enums/project-status.enum';
+import { ModeleEconomique } from 'src/catalog/domain/enums/modele-economique.enum';
+import { ProjectStatus } from 'src/catalog/domain/enums/project-status.enum';
 import { InvestmentStatus } from 'src/investments/domains/enums/investment-status.enum';
 import { PlatformFeesService } from 'src/common/platform-fees/platform-fees.service';
 

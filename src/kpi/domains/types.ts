@@ -1,4 +1,4 @@
-import type { ProjectInstrument, ProjectStatus } from 'src/projects/domains/enums/project-status.enum';
+import type { ProjectInstrument, ProjectStatus } from 'src/catalog/domain/enums/project-status.enum';
 
 export interface Cashflow {
   date: Date;

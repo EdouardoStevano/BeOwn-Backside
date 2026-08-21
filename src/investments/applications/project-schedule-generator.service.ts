@@ -7,7 +7,7 @@ import {
   EcheanceStatus,
   InvestmentStatus,
 } from 'src/investments/domains/enums/investment-status.enum';
-import { ProjectEntity } from 'src/projects/infrastructure/persistences/entities/project.entity';
+import { ProjectEntity } from 'src/catalog/infrastructure/persistence/entities/project.entity';
 
 /**
  * Generates a unified borrower schedule shared by all investors of a project.

@@ -3,10 +3,10 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { NotFoundException } from '@nestjs/common';
 import { ProjectKpiService } from './project-kpi.service';
-import { ProjectEntity } from 'src/projects/infrastructure/persistences/entities/project.entity';
+import { ProjectEntity } from 'src/catalog/infrastructure/persistence/entities/project.entity';
 import { InvestmentEntity } from 'src/investments/infrastructure/persistences/entities/investment.entity';
 import { EcheanceStatus, InvestmentStatus } from 'src/investments/domains/enums/investment-status.enum';
-import { ProjectStatus } from 'src/projects/domains/enums/project-status.enum';
+import { ProjectStatus } from 'src/catalog/domain/enums/project-status.enum';
 
 describe('ProjectKpiService', () => {
   let service: ProjectKpiService;

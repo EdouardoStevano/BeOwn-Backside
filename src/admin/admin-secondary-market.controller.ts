@@ -43,7 +43,7 @@ import {
 import { NotificationService } from 'src/notifications/applications/notification.service';
 import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
 import { NotificationEventService } from 'src/notifications/applications/notification-event.service';
-import { ProjectEntity } from 'src/projects/infrastructure/persistences/entities/project.entity';
+import { ProjectEntity } from 'src/catalog/infrastructure/persistence/entities/project.entity';
 
 const ADMIN_ROLES = rolesWithPermission('market:manage');
 

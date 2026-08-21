@@ -3,7 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { OrdreMarcheEntity } from './persistences/entities/ordre-marche.entity';
 import { InvestmentEntity } from 'src/investments/infrastructure/persistences/entities/investment.entity';
 import { EcheanceEntity } from 'src/investments/infrastructure/persistences/entities/echeance.entity';
-import { ProjectEntity } from 'src/projects/infrastructure/persistences/entities/project.entity';
+import { ProjectEntity } from 'src/catalog/infrastructure/persistence/entities/project.entity';
 import { DocumentEntity } from 'src/documents/infrastructure/persistences/entities/document.entity';
 import { SignatureEntity } from 'src/signatures/infrastructure/persistences/entities/signature.entity';
 import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/wallet.entity';

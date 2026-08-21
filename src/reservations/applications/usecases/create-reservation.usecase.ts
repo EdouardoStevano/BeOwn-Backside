@@ -6,12 +6,12 @@ import {
 } from '@nestjs/common';
 import type { ReservationRepository } from '../ports/repositories/reservation.repository';
 import { RESERVATION_REPOSITORY } from '../ports/repositories/reservation.repository';
-import type { ProjectRepository } from 'src/projects/applications/ports/repositories/project.repository';
-import { PROJECT_REPOSITORY } from 'src/projects/applications/ports/repositories/project.repository';
+import type { ProjectRepository } from 'src/catalog/domain/repositories/project.repository';
+import { PROJECT_REPOSITORY } from 'src/catalog/domain/repositories/project.repository';
 import { Reservation } from 'src/reservations/domains/reservation';
 import { ReservationStatus } from 'src/reservations/domains/enums/reservation-status.enum';
 import { CreateReservationDto } from 'src/reservations/presenters/dto/reservation.dto';
-import { ProjectStatus } from 'src/projects/domains/enums/project-status.enum';
+import { ProjectStatus } from 'src/catalog/domain/enums/project-status.enum';
 
 @Injectable()
 export class CreateReservationUseCase {

@@ -43,7 +43,7 @@ export enum UserType {
 
 /**
  * Régime fiscal de l'investisseur (personne). À ne pas confondre avec
- * `projects/domains/enums/regime-fiscal.enum.ts` (IR/IS), qui qualifie le
+ * `catalog/domain/enums/regime-fiscal.enum.ts` (IR/IS), qui qualifie le
  * projet — même nom, deux contextes, deux concepts.
  */
 export enum RegimeFiscal {

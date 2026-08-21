@@ -9,8 +9,8 @@ import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import type { InvestmentRepository } from '../ports/repositories/investment.repository';
 import { INVESTMENT_REPOSITORY } from '../ports/repositories/investment.repository';
-import type { ProjectRepository } from 'src/projects/applications/ports/repositories/project.repository';
-import { PROJECT_REPOSITORY } from 'src/projects/applications/ports/repositories/project.repository';
+import type { ProjectRepository } from 'src/catalog/domain/repositories/project.repository';
+import { PROJECT_REPOSITORY } from 'src/catalog/domain/repositories/project.repository';
 import type { WalletRepository } from 'src/wallets/applications/ports/repositories/wallet.repository';
 import { WALLET_REPOSITORY } from 'src/wallets/applications/ports/repositories/wallet.repository';
 import type { DocumentRepository } from 'src/documents/applications/ports/repositories/document.repository';
@@ -30,7 +30,7 @@ import {
   RemboursementMode,
 } from 'src/investments/domains/enums/investment-status.enum';
 import { CreateInvestmentDto } from 'src/investments/presenters/dto/investment.dto';
-import { ProjectStatus } from 'src/projects/domains/enums/project-status.enum';
+import { ProjectStatus } from 'src/catalog/domain/enums/project-status.enum';
 import { WalletType } from 'src/wallets/domains/enums/wallet.enum';
 import { Transaction } from 'src/wallets/domains/transaction';
 import {
@@ -52,7 +52,7 @@ import { NotificationEventService } from 'src/notifications/applications/notific
 import { InvestmentEntity } from 'src/investments/infrastructure/persistences/entities/investment.entity';
 import { EcheanceEntity } from 'src/investments/infrastructure/persistences/entities/echeance.entity';
 import { InvestmentMapper } from 'src/investments/infrastructure/persistences/mappers/investment.mapper';
-import { ProjectEntity } from 'src/projects/infrastructure/persistences/entities/project.entity';
+import { ProjectEntity } from 'src/catalog/infrastructure/persistence/entities/project.entity';
 import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/wallet.entity';
 import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entities/transaction.entity';
 import { WalletMapper } from 'src/wallets/infrastructure/persistences/mappers/wallet.mapper';

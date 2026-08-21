@@ -27,8 +27,8 @@ import type { ActiveUser } from 'src/iam/presentation/decorators/current-user.de
 import { formatEur } from 'src/shared/money/format-eur';
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 import { UserRole } from 'src/iam/domain/enums/user.enum';
-import { ProjectEntity } from 'src/projects/infrastructure/persistences/entities/project.entity';
-import { ProjectStatus } from 'src/projects/domains/enums/project-status.enum';
+import { ProjectEntity } from 'src/catalog/infrastructure/persistence/entities/project.entity';
+import { ProjectStatus } from 'src/catalog/domain/enums/project-status.enum';
 import { InvestmentEntity } from 'src/investments/infrastructure/persistences/entities/investment.entity';
 import { InvestmentStatus } from 'src/investments/domains/enums/investment-status.enum';
 import { RefundCollecteService } from 'src/investments/applications/refund-collecte.service';

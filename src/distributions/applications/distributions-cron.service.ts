@@ -4,9 +4,9 @@ import { CalculateDistributionPeriodeUseCase } from './usecases/calculate-distri
 import {
   PROJECT_REPOSITORY,
   type ProjectRepository,
-} from 'src/projects/applications/ports/repositories/project.repository';
-import { ModeleEconomique } from 'src/projects/domains/enums/modele-economique.enum';
-import { ProjectStatus } from 'src/projects/domains/enums/project-status.enum';
+} from 'src/catalog/domain/repositories/project.repository';
+import { ModeleEconomique } from 'src/catalog/domain/enums/modele-economique.enum';
+import { ProjectStatus } from 'src/catalog/domain/enums/project-status.enum';
 
 /**
  * Cron mensuel — calcule la distribution du mois précédent pour tous les
