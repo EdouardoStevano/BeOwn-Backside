@@ -1,79 +1,88 @@
 import {
-  BadRequestException,
   Body,
   Controller,
   Get,
   HttpCode,
   HttpStatus,
-  Inject,
-  NotFoundException,
   Param,
   Patch,
   Post,
   Query,
 } from '@nestjs/common';
-import { createHash } from 'crypto';
 import {
-  ApiTags,
-  ApiOperation,
-  ApiResponse,
   ApiBearerAuth,
-  ApiQuery,
-  ApiParam,
   ApiBody,
+  ApiOperation,
+  ApiParam,
+  ApiQuery,
+  ApiResponse,
+  ApiTags,
 } from '@nestjs/swagger';
-import { CreateProjectUseCase } from 'src/projects/applications/usecases/create-project.usecase';
-import { UpdateProjectUseCase } from 'src/projects/applications/usecases/update-project.usecase';
-import { UpdateProjectStatusUseCase } from 'src/projects/applications/usecases/update-project-status.usecase';
-import { GetProjectsUseCase } from 'src/projects/applications/usecases/get-projects.usecase';
-import { ProjectReadModelService } from 'src/projects/applications/project-read-model.service';
-import {
-  CreateProjectDto,
-  CreateSpvDto,
-  UpdateProjectStatusDto,
-} from '../dto/project.dto';
-import {
-  ProjectStatus,
-  ProjectType,
-} from 'src/projects/domains/enums/project-status.enum';
-import type { ProjectRepository } from 'src/projects/applications/ports/repositories/project.repository';
-import { PROJECT_REPOSITORY } from 'src/projects/applications/ports/repositories/project.repository';
-import { Spv } from 'src/projects/domains/spv';
-import { RegimeFiscal } from 'src/projects/domains/enums/regime-fiscal.enum';
-import { AVIS_REPOSITORY } from 'src/avis/applications/ports/repositories/avis.repository';
-import type { AvisRepository } from 'src/avis/applications/ports/repositories/avis.repository';
-import { Avis } from 'src/avis/domains/avis';
 import { CreateAvisDto } from 'src/avis/presenters/dto/avis.dto';
 import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
 import { Public } from 'src/common/auth/public.decorator';
-import { Roles } from 'src/common/auth/roles.decorator';
 import { RequirePermission } from 'src/common/auth/require-permission.decorator';
+import { Roles } from 'src/common/auth/roles.decorator';
 import { UserRole } from 'src/iam/domains/enums/user.enum';
-import { NotificationService } from 'src/notifications/applications/notification.service';
-import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { ProjectViewEntity } from '../../infrastructure/persistences/entities/project-view.entity';
+import { ConsultAvisProjetUseCase } from 'src/projects/applications/usecases/avis/consult-avis-projet.usecase';
+import { ConsultProjectUseCase } from 'src/projects/applications/usecases/project/consult-project.usecase';
+import { CreateProjectUseCase } from 'src/projects/applications/usecases/project/create-project.usecase';
+import { GetProjectShareLinkUseCase } from 'src/projects/applications/usecases/project/get-project-share-link.usecase';
+import { ListProjectsUseCase } from 'src/projects/applications/usecases/project/list-projects.usecase';
+import { SubmitProjectUseCase } from 'src/projects/applications/usecases/project/submit-project.usecase';
+import { UpdateProjectStatusUseCase } from 'src/projects/applications/usecases/project/update-project-status.usecase';
+import { UpdateProjectUseCase } from 'src/projects/applications/usecases/project/update-project.usecase';
+import { CreateSpvUseCase } from 'src/projects/applications/usecases/spv/create-spv.usecase';
+import { ListSpvUseCase } from 'src/projects/applications/usecases/spv/list-spv.usecase';
+import {
+  ProjectStatus,
+  ProjectType,
+} from 'src/projects/domains/enums/project-status.enum';
+import {
+  CreateProjectDto,
+  CreateSpvDto,
+  UpdateProjectDto,
+  UpdateProjectStatusDto,
+} from '../dto/project.dto';
+import {
+  versModificationProjet,
+  versPropsDeCreation,
+} from './project.presenter';
 
+/**
+ * Catalogue des projets.
+ *
+ * Le contrôleur ne fait plus que ce que la couche présentation doit faire :
+ * valider l'entrée, traduire la requête en appel de use case, rendre la
+ * réponse (§12.5). Il injectait auparavant `PROJECT_REPOSITORY`,
+ * `AVIS_REPOSITORY` et un `Repository<ProjectViewEntity>` TypeORM — trois
+ * adapters de sortie atteints directement depuis un adapter d'entrée (§12.9) —
+ * et portait une méthode privée de traçage, la composition de deux
+ * notifications, la construction d'un agrégat `Spv`, celle d'un agrégat `Avis`
+ * d'un autre contexte, et deux implémentations du jeton de partage.
+ *
+ * Les erreurs métier remontent telles quelles : `ProjectsErrorFilter` les
+ * traduit en statuts HTTP.
+ */
 @ApiTags('Projects')
 @ApiBearerAuth()
 @Controller('projects')
 export class ProjectController {
   constructor(
     private readonly createProject: CreateProjectUseCase,
+    private readonly submitProject: SubmitProjectUseCase,
     private readonly updateProject: UpdateProjectUseCase,
     private readonly updateStatus: UpdateProjectStatusUseCase,
-    private readonly getProjects: GetProjectsUseCase,
-    @Inject(PROJECT_REPOSITORY)
-    private readonly projectRepository: ProjectRepository,
-    @Inject(AVIS_REPOSITORY)
-    private readonly avisRepository: AvisRepository,
-    private readonly notificationService: NotificationService,
-    @InjectRepository(ProjectViewEntity)
-    private readonly projectViewRepo: Repository<ProjectViewEntity>,
-    private readonly projectReadModel: ProjectReadModelService,
+    private readonly listProjects: ListProjectsUseCase,
+    private readonly consultProject: ConsultProjectUseCase,
+    private readonly shareLink: GetProjectShareLinkUseCase,
+    private readonly createSpv: CreateSpvUseCase,
+    private readonly listSpv: ListSpvUseCase,
+    private readonly avis: ConsultAvisProjetUseCase,
   ) {}
+
+  // ─── Catalogue ─────────────────────────────────────────────────────────────
 
   @ApiOperation({
     summary:
@@ -87,25 +96,15 @@ export class ProjectController {
   @ApiQuery({ name: 'limit', type: Number, required: false, example: 20 })
   @Public()
   @Get('public')
-  async listPublic(
+  listPublic(
     @Query('type') type?: ProjectType,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
   ) {
-    const result = await this.getProjects.execute({
-      statuts: [
-        ProjectStatus.ANNONCE,
-        ProjectStatus.PRE_INVESTISSEMENT,
-        ProjectStatus.EN_COLLECTE,
-        ProjectStatus.FINANCE,
-      ],
+    return this.listProjects.executePublic({
       type,
-      page: page ? parseInt(page) : 1,
-      limit: limit ? parseInt(limit) : 20,
+      ...pagination(page, limit),
     });
-    const enriched = await this.projectReadModel.enrichFractions(result.data);
-    const withImages = await this.projectReadModel.enrichImages(enriched);
-    return { ...result, data: withImages };
   }
 
   @ApiOperation({ summary: 'Lister les projets (admin)' })
@@ -116,20 +115,63 @@ export class ProjectController {
   @ApiQuery({ name: 'limit', type: Number, required: false })
   @Get()
   @RequirePermission('projects:read')
-  async list(
+  list(
     @Query('statut') statut?: ProjectStatus,
     @Query('type') type?: ProjectType,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
   ) {
-    const result = await this.getProjects.execute({
+    return this.listProjects.executeAdmin({
       statut,
       type,
-      page: page ? parseInt(page) : 1,
-      limit: limit ? parseInt(limit) : 20,
+      ...pagination(page, limit),
     });
-    return { ...result, data: await this.projectReadModel.enrichFractions(result.data) };
   }
+
+  // ─── SPV ───────────────────────────────────────────────────────────────────
+  //
+  // Déclarées avant les routes paramétrées : `spv/list` doit être appariée
+  // avant `:id`, sinon Nest la résout comme un projet d'identifiant « spv ».
+
+  @ApiOperation({ summary: 'Créer une SPV' })
+  @ApiResponse({ status: 201, description: 'SPV créée' })
+  @RequirePermission('projects:manage', 'spv:manage')
+  @Post('spv')
+  createSpvEndpoint(@Body() dto: CreateSpvDto) {
+    return this.createSpv.execute(dto);
+  }
+
+  @ApiOperation({ summary: 'Lister les SPV' })
+  @Get('spv/list')
+  listSpvEndpoint() {
+    return this.listSpv.execute();
+  }
+
+  // ─── Partage ───────────────────────────────────────────────────────────────
+
+  @ApiOperation({
+    summary: 'Obtenir un projet via son token de partage (accès public)',
+  })
+  @ApiParam({ name: 'token', description: 'Token de partage (16 caractères)' })
+  @ApiResponse({ status: 200, description: 'Données publiques du projet' })
+  @ApiResponse({ status: 404, description: 'Projet introuvable' })
+  @Public()
+  @Get('shared/:token')
+  findByShareToken(@Param('token') token: string) {
+    return this.consultProject.executeParJetonDePartage(token);
+  }
+
+  @ApiOperation({ summary: 'Obtenir un projet complet par slug' })
+  @ApiParam({ name: 'slug', description: 'Slug lisible du projet' })
+  @ApiResponse({ status: 200, description: 'Projet complet' })
+  @ApiResponse({ status: 404, description: 'Projet introuvable' })
+  @Public()
+  @Get('slug/:slug')
+  findBySlug(@Param('slug') slug: string) {
+    return this.consultProject.executeParSlug(slug);
+  }
+
+  // ─── Fiche projet ──────────────────────────────────────────────────────────
 
   @ApiOperation({
     summary:
@@ -140,8 +182,8 @@ export class ProjectController {
   @ApiResponse({ status: 404, description: 'Projet introuvable' })
   @Get(':id')
   @RequirePermission('projects:read')
-  async findOne(@Param('id') id: string) {
-    return this.projectReadModel.buildProjectDetail(id, false);
+  findOne(@Param('id') id: string) {
+    return this.consultProject.executePourAdmin(id);
   }
 
   @ApiOperation({
@@ -154,136 +196,43 @@ export class ProjectController {
   @ApiResponse({ status: 200, description: 'Détail projet (vue investisseur)' })
   @ApiResponse({ status: 404, description: 'Projet introuvable ou brouillon' })
   @Get(':id/investor-view')
-  async investorView(
-    @Param('id') id: string,
-    @CurrentUser() user: ActiveUser,
-  ) {
-    const project = await this.getProjects.executeOne(id);
-    if (!project || project.statut === ProjectStatus.BROUILLON) {
-      throw new NotFoundException('Projet introuvable.');
-    }
-    await this.recordProjectView(user.userId, id, project.titre);
-    return this.projectReadModel.buildProjectDetail(id, true);
+  investorView(@Param('id') id: string, @CurrentUser() user: ActiveUser) {
+    return this.consultProject.executePourInvestisseur(id, user.userId);
   }
 
-  /**
-   * Enregistre une consultation et notifie le chargé de relation au passage à
-   * la 2ᵉ consultation distincte du même projet par le même utilisateur (une
-   * seule fois). Entièrement non bloquant : n'interrompt jamais le chargement
-   * du détail en cas d'erreur.
-   */
-  private async recordProjectView(
-    userId: number,
-    projetId: string,
-    projetTitre: string,
-  ): Promise<void> {
-    try {
-      await this.projectViewRepo.save(
-        this.projectViewRepo.create({ userId, projetId }),
-      );
-      const count = await this.projectViewRepo.count({
-        where: { userId, projetId },
-      });
-      if (count === 2) {
-        await this.notificationService.pushToAdmins({
-          type: NotificationType.PROJET_CONSULTE_2X,
-          titre: 'Projet consulté 2 fois',
-          message: `Un investisseur a consulté ce projet (« ${projetTitre} ») une 2ᵉ fois — opportunité de contact.`,
-          roles: [UserRole.CHARGE_RELATION_INVESTISSEUR, UserRole.SUPER_ADMIN],
-          metadata: { userId, projetId },
-        });
-      }
-    } catch {
-      // Traçage best-effort : ne bloque pas la consultation.
-    }
-  }
-
-  @ApiOperation({ summary: 'Obtenir un projet complet par slug' })
-  @ApiParam({ name: 'slug', description: 'Slug lisible du projet' })
-  @ApiResponse({ status: 200, description: 'Projet complet' })
+  @ApiOperation({ summary: "Obtenir le lien de partage d'un projet" })
+  @ApiParam({ name: 'id', description: 'UUID du projet' })
+  @ApiResponse({ status: 200, description: 'Token de partage retourné' })
   @ApiResponse({ status: 404, description: 'Projet introuvable' })
-  @Public()
-  @Get('slug/:slug')
-  async findBySlug(@Param('slug') slug: string) {
-    const project = await this.getProjects.executeBySlug(slug);
-    // Un brouillon (soumis par un porteur, pas encore validé/publié par un
-    // admin) ne doit pas être exposé sur le site public via son slug — celui-ci
-    // est dérivé du titre, donc devinable. L'admin et le porteur consultent le
-    // dossier par id (UUID non devinable) ou via leurs espaces dédiés.
-    if (!project || project.statut === ProjectStatus.BROUILLON)
-      throw new NotFoundException('Projet introuvable.');
-    return this.projectReadModel.buildProjectDetail(project.id, true);
+  @Get(':id/share')
+  @RequirePermission('projects:read')
+  getShareToken(@Param('id') id: string) {
+    return this.shareLink.execute(id);
   }
+
+  // ─── Écriture ──────────────────────────────────────────────────────────────
 
   @ApiOperation({ summary: 'Créer un nouveau projet (admin)' })
   @ApiResponse({ status: 201, description: 'Projet créé' })
   @RequirePermission('projects:manage')
   @Post()
-  async create(@Body() dto: CreateProjectDto) {
-    const project = await this.createProject.execute(dto);
-
-    // Broadcast temps réel à tous les investisseurs — sauf si brouillon (non visible)
-    if (project.statut !== ProjectStatus.BROUILLON) {
-      const lieu = [project.ville, project.pays].filter(Boolean).join(', ');
-      this.notificationService
-        .pushToInvestors({
-          type: NotificationType.NOUVEAU_PROJET,
-          titre: 'Nouveau projet disponible',
-          message: lieu
-            ? `Découvrez « ${project.titre} » à ${lieu}. Consultez les détails et investissez dès maintenant.`
-            : `Découvrez le nouveau projet « ${project.titre} ». Consultez les détails et investissez dès maintenant.`,
-          metadata: {
-            projectId: project.id,
-            slug: project.slug,
-            statut: project.statut,
-            ville: project.ville,
-            type: project.type,
-          },
-        })
-        .catch(() => {});
-    }
-
-    return project;
+  create(@Body() dto: CreateProjectDto) {
+    return this.createProject.execute(versPropsDeCreation(dto));
   }
 
   @ApiOperation({
     summary: 'Soumettre un projet pour revue (porteur)',
     description:
-      "Le porteur soumet son projet : il est créé en BROUILLON, rattaché à son compte, et les administrateurs sont notifiés pour due diligence avant publication. Le porteur ne peut pas auto-publier.",
+      'Le porteur soumet son projet : il est créé en BROUILLON, rattaché à son compte, et les administrateurs sont notifiés pour due diligence avant publication. Le porteur ne peut pas auto-publier.',
   })
   @ApiResponse({ status: 201, description: 'Projet soumis pour revue' })
   @Roles(UserRole.PORTEUR)
   @Post('submit')
-  async submitByPorteur(
+  submitByPorteur(
     @Body() dto: CreateProjectDto,
     @CurrentUser() user: ActiveUser,
   ) {
-    // Le porteur ne contrôle ni le statut ni la visibilité : toujours brouillon
-    const project = await this.createProject.execute(
-      { ...dto, statut: ProjectStatus.BROUILLON },
-      user.userId,
-    );
-
-    const lieu = [project.ville, project.pays].filter(Boolean).join(', ');
-    this.notificationService
-      .pushToAdmins({
-        type: NotificationType.NOUVEAU_PROJET,
-        titre: 'Nouveau projet soumis par un porteur',
-        message: lieu
-          ? `« ${project.titre} » (${lieu}) a été soumis pour revue. Vérifiez le dossier avant publication.`
-          : `« ${project.titre} » a été soumis pour revue. Vérifiez le dossier avant publication.`,
-        roles: [UserRole.SUPER_ADMIN, UserRole.COMPLIANCE, UserRole.FINANCIER],
-        metadata: {
-          projectId: project.id,
-          slug: project.slug,
-          porteurId: user.userId,
-          type: project.type,
-          ville: project.ville,
-        },
-      })
-      .catch(() => {});
-
-    return project;
+    return this.submitProject.execute(versPropsDeCreation(dto), user.userId);
   }
 
   @ApiOperation({ summary: "Mettre à jour les champs d'un projet (admin)" })
@@ -293,8 +242,8 @@ export class ProjectController {
   @HttpCode(HttpStatus.OK)
   @RequirePermission('projects:manage')
   @Patch(':id')
-  update(@Param('id') id: string, @Body() dto: Partial<CreateProjectDto>) {
-    return this.updateProject.execute(id, dto);
+  update(@Param('id') id: string, @Body() dto: UpdateProjectDto) {
+    return this.updateProject.execute(id, versModificationProjet(dto));
   }
 
   @ApiOperation({ summary: "Mettre à jour le statut d'un projet (admin)" })
@@ -310,99 +259,9 @@ export class ProjectController {
     @Body() dto: UpdateProjectStatusDto,
     @CurrentUser() user: ActiveUser,
   ) {
-    // user.userId sert de déclencheur audité de la diffusion « nouveau projet »
-    // quand la transition ouvre la collecte.
+    // `user.userId` sert de déclencheur audité de la diffusion quand la
+    // transition ouvre l'annonce ou la collecte.
     return this.updateStatus.execute(id, dto.statut, user.userId);
-  }
-
-  @ApiOperation({ summary: 'Créer une SPV' })
-  @ApiResponse({ status: 201, description: 'SPV créée' })
-  @RequirePermission('projects:manage', 'spv:manage')
-  @Post('spv')
-  async createSpv(@Body() dto: CreateSpvDto): Promise<Spv> {
-    const spv = new Spv();
-    spv.raisonSociale = dto.raisonSociale;
-    spv.siren = dto.siren ?? null;
-    spv.forme = dto.forme ?? null;
-    spv.capitalSocial = dto.capitalSocial ?? null;
-    spv.siegeAdresse = dto.siegeAdresse ?? null;
-    spv.iban = null;
-    // Equity-locatif fields (optional)
-    spv.dateConstitution = dto.dateConstitution
-      ? new Date(dto.dateConstitution)
-      : null;
-    spv.statutsPdfUrl = dto.statutsPdfUrl ?? null;
-    spv.regimeFiscal = dto.regimeFiscal ?? RegimeFiscal.IS;
-    spv.gestionnaireUserId = dto.gestionnaireUserId ?? null;
-    return this.projectRepository.saveSpv(spv);
-  }
-
-  @ApiOperation({ summary: 'Lister les SPV' })
-  @Get('spv/list')
-  listSpv() {
-    return this.projectRepository.findAllSpv();
-  }
-
-  // ─── Partage ───────────────────────────────────────────────────────────────
-
-  @ApiOperation({ summary: "Obtenir le lien de partage d'un projet" })
-  @ApiParam({ name: 'id', description: 'UUID du projet' })
-  @ApiResponse({ status: 200, description: 'Token de partage retourné' })
-  @ApiResponse({ status: 404, description: 'Projet introuvable' })
-  @Get(':id/share')
-  @RequirePermission('projects:read')
-  async getShareToken(@Param('id') id: string) {
-    const project = await this.projectRepository.findProjectById(id);
-    if (!project) throw new NotFoundException('Projet introuvable.');
-    const secret = process.env.PROJECT_SHARE_SECRET;
-    if (!secret) {
-      throw new Error('PROJECT_SHARE_SECRET is not configured.');
-    }
-    const token = createHash('sha256')
-      .update(`${id}${secret}`)
-      .digest('hex')
-      .substring(0, 16);
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
-    return {
-      shareToken: token,
-      shareUrl: `${frontendUrl}/p/${token}`,
-    };
-  }
-
-  @ApiOperation({
-    summary: 'Obtenir un projet via son token de partage (accès public)',
-  })
-  @ApiParam({ name: 'token', description: 'Token de partage (16 caractères)' })
-  @ApiResponse({ status: 200, description: 'Données publiques du projet' })
-  @ApiResponse({ status: 404, description: 'Projet introuvable' })
-  @Public()
-  @Get('shared/:token')
-  async findByShareToken(@Param('token') token: string) {
-    const secret = process.env.PROJECT_SHARE_SECRET;
-    if (!secret) {
-      throw new Error('PROJECT_SHARE_SECRET is not configured.');
-    }
-    const allProjects = await this.getProjects.execute({
-      statuts: [
-        ProjectStatus.EN_COLLECTE,
-        ProjectStatus.PRE_INVESTISSEMENT,
-        ProjectStatus.FINANCE,
-      ],
-      page: 1,
-      limit: 1000,
-    });
-    const project = allProjects.data.find((p) => {
-      const expected = createHash('sha256')
-        .update(`${p.id}${secret}`)
-        .digest('hex')
-        .substring(0, 16);
-      return expected === token;
-    });
-    if (!project)
-      throw new NotFoundException(
-        'Lien de partage invalide ou projet introuvable.',
-      );
-    return this.projectReadModel.buildProjectDetail(project.id, true);
   }
 
   // ─── Avis ──────────────────────────────────────────────────────────────────
@@ -412,21 +271,8 @@ export class ProjectController {
   @ApiResponse({ status: 200, description: 'Liste des avis' })
   @Public()
   @Get(':id/avis')
-  async listAvis(@Param('id') id: string) {
-    const project = await this.projectRepository.findProjectById(id);
-    if (!project) throw new NotFoundException('Projet introuvable.');
-    if (![
-      ProjectStatus.EN_COLLECTE,
-      ProjectStatus.PRE_INVESTISSEMENT,
-      ProjectStatus.FINANCE,
-    ].includes(project.statut)) {
-      throw new NotFoundException('Projet introuvable.');
-    }
-    const [avis, stats] = await Promise.all([
-      this.avisRepository.findByProjetId(id),
-      this.avisRepository.getStats(id),
-    ]);
-    return { ...stats, avis };
+  listAvis(@Param('id') id: string) {
+    return this.avis.lister(id);
   }
 
   @ApiOperation({
@@ -441,31 +287,24 @@ export class ProjectController {
   })
   @ApiResponse({ status: 404, description: 'Projet introuvable' })
   @Post(':id/avis')
-  async createAvis(
+  createAvis(
     @Param('id') id: string,
     @Body() dto: CreateAvisDto,
     @CurrentUser() user: ActiveUser,
   ) {
-    const project = await this.projectRepository.findProjectById(id);
-    if (!project) throw new NotFoundException('Projet introuvable.');
-
-    const existing = await this.avisRepository.findByUserAndProjet(
-      user.userId,
-      id,
-    );
-    if (existing) {
-      throw new BadRequestException(
-        'Vous avez déjà soumis un avis pour ce projet.',
-      );
-    }
-
-    const avis = new Avis();
-    avis.projetId = id;
-    avis.userId = user.userId;
-    avis.note = dto.note;
-    avis.commentaire = dto.commentaire ?? null;
-
-    return this.avisRepository.save(avis);
+    return this.avis.soumettre({
+      projetId: id,
+      utilisateurId: user.userId,
+      note: dto.note,
+      commentaire: dto.commentaire,
+    });
   }
+}
 
+/** Défauts historiques de la pagination : première page, vingt éléments. */
+function pagination(page?: string, limit?: string) {
+  return {
+    page: page ? parseInt(page, 10) : 1,
+    limit: limit ? parseInt(limit, 10) : 20,
+  };
 }
