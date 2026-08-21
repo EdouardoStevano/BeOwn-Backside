@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { QuestionnaireAdequationRepository } from 'src/compliance/domain/repositories/questionnaire-adequation.repository';
-import { QuestionnaireAdequation } from 'src/compliance/domain/aggregates/questionnaire-adequation';
+import { AdequacyAssessment } from 'src/compliance/domain/entities/adequacy-assessment';
 import { QuestionnaireAdequationEntity } from '../persistence/entities/questionnaire-adequation.entity';
 import { ProfilMapper } from '../persistence/mappers/profil.mapper';
 
@@ -13,7 +13,7 @@ export class QuestionnaireAdequationTypeOrmRepository implements QuestionnaireAd
     private readonly questionnaireRepo: Repository<QuestionnaireAdequationEntity>,
   ) {}
 
-  async findByUserId(userId: number): Promise<QuestionnaireAdequation | null> {
+  async findByUserId(userId: number): Promise<AdequacyAssessment | null> {
     const entity = await this.questionnaireRepo.findOne({
       where: { utilisateurId: userId },
     });
@@ -26,8 +26,8 @@ export class QuestionnaireAdequationTypeOrmRepository implements QuestionnaireAd
    * ait à distinguer les deux.
    */
   async save(
-    questionnaire: QuestionnaireAdequation,
-  ): Promise<QuestionnaireAdequation> {
+    questionnaire: AdequacyAssessment,
+  ): Promise<AdequacyAssessment> {
     const entity = ProfilMapper.questionnaireToEntity(questionnaire);
     const saved = await this.questionnaireRepo.save(entity);
     return ProfilMapper.questionnaireToDomain(saved);

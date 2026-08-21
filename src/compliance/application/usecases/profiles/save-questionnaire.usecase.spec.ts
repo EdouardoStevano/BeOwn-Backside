@@ -3,8 +3,9 @@ import { CategoriePsfp } from 'src/compliance/domain/enums/categorie-psfp.enum';
 import { ChampProfilInvalideError } from 'src/compliance/domain/errors';
 import { QuestionnaireAdequationFactory } from 'src/compliance/domain/factories/questionnaire-adequation.factory';
 import type { ProfilPPRepository } from 'src/compliance/domain/repositories/profil-pp.repository';
-import type { QuestionnaireAdequationRepository } from 'src/compliance/domain/repositories/questionnaire-adequation.repository';
-import { QuestionnaireAdequation } from 'src/compliance/domain/aggregates/questionnaire-adequation';
+import type { InvestorComplianceProfileRepository } from 'src/compliance/domain/repositories/investor-compliance-profile.repository';
+import { InvestorComplianceProfile } from 'src/compliance/domain/aggregates/investor-compliance-profile';
+import { AdequacyAssessment } from 'src/compliance/domain/entities/adequacy-assessment';
 import { SaveQuestionnaireDto } from 'src/compliance/presentation/http/dto/questionnaire.dto';
 import type { RiskScoringService } from '../../services/risk-scoring.service';
 
@@ -27,20 +28,26 @@ const DTO_PROFESSIONNEL = {
   portfolioOver500k: true,
 } as SaveQuestionnaireDto;
 
-function monter(existant: QuestionnaireAdequation | null = null) {
+function monter(existant: AdequacyAssessment | null = null) {
   const mocks = {
-    findByUserId: jest.fn().mockResolvedValue(existant),
+    findByInvestorId: jest.fn().mockResolvedValue(
+      new InvestorComplianceProfile({
+        investorId: 42,
+        kycCase: null,
+        adequacy: existant,
+      }),
+    ),
     // Le repository rend ce qu'il a reçu : la persistance n'est pas le sujet.
-    save: jest.fn((q: QuestionnaireAdequation) => Promise.resolve(q)),
+    save: jest.fn((p: InvestorComplianceProfile) => Promise.resolve(p)),
     enregistrerClassementPsfp: jest.fn().mockResolvedValue(undefined),
     computeAndStore: jest.fn().mockResolvedValue(undefined),
   };
 
   const useCase = new SaveQuestionnaireUseCase(
     {
-      findByUserId: mocks.findByUserId,
+      findByInvestorId: mocks.findByInvestorId,
       save: mocks.save,
-    } as QuestionnaireAdequationRepository,
+    } as InvestorComplianceProfileRepository,
     {
       enregistrerClassementPsfp: mocks.enregistrerClassementPsfp,
     } as unknown as ProfilPPRepository,
@@ -74,7 +81,10 @@ describe('SaveQuestionnaireUseCase', () => {
 
     expect(questionnaire).toBe(existant);
     expect(questionnaire.categoriePsfp).toBe(CategoriePsfp.NON_AVERTI);
-    expect(mocks.save).toHaveBeenCalledWith(existant);
+    // La racine est enregistrée d'un bloc, en portant le questionnaire relu et
+    // non un second exemplaire.
+    expect(mocks.save).toHaveBeenCalledTimes(1);
+    expect(mocks.save.mock.calls[0][0].adequacy).toBe(existant);
   });
 
   it('reporte le classement sur le profil', async () => {

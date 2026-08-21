@@ -3,7 +3,7 @@ import {
   KYC_REPOSITORY,
   type KycRepository,
 } from 'src/compliance/domain/repositories/kyc.repository';
-import { Kyc } from 'src/compliance/domain/aggregates/kyc';
+import { KycCase } from 'src/compliance/domain/entities/kyc-case';
 import { KycStatus } from 'src/compliance/domain/enums/kyc-status.enum';
 
 @Injectable()
@@ -17,7 +17,7 @@ export class UpdateKycStatusUseCase {
     userId: number,
     status: KycStatus,
     motifRefus?: string,
-  ): Promise<Kyc> {
+  ): Promise<KycCase> {
     const kyc = await this.kycRepository.findByUserId(userId);
     if (!kyc) throw new NotFoundException('KYC introuvable.');
 

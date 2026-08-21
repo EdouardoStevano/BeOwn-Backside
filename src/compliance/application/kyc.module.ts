@@ -4,6 +4,7 @@ import { CqrsModule } from '@nestjs/cqrs';
 import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructure.module';
 import { UsersInfrastructureModule } from 'src/iam/infrastructure/users-infrastructure.module';
 import { NotificationsModule } from 'src/notifications/notifications.module';
+import { ComplianceInfrastructureModule } from '../infrastructure/compliance-infrastructure.module';
 import { KycInfrastructureModule } from '../infrastructure/kyc-infrastructure.module';
 import { CreateKycUseCase } from './usecases/kyc/create-kyc.usecase';
 import { GetKycUseCase } from './usecases/kyc/get-kyc.usecase';
@@ -48,6 +49,9 @@ import { ComplianceErrorFilter } from '../presentation/http/filters/compliance-e
     // `applications/events/` s'y abonnent (§8).
     CqrsModule,
     KycInfrastructureModule,
+    // `INVESTOR_COMPLIANCE_PROFILE_REPOSITORY` : `KycValidatedGuard` demande à
+    // la racine si le titulaire peut opérer, il ne lit plus le dossier seul.
+    ComplianceInfrastructureModule,
     // `TokenService` pour le JwtAuthGuard monté par les contrôleurs.
     IamInfrastructureModule,
     // `USER_REPOSITORY` : la liste d'administration affiche le titulaire de

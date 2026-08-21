@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { CqrsModule } from '@nestjs/cqrs';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ProfilesInfrastructureModule } from '../infrastructure/profiles-infrastructure.module';
+import { ComplianceInfrastructureModule } from '../infrastructure/compliance-infrastructure.module';
 import { CreateProfilPPUseCase } from './usecases/profiles/create-profil-pp.usecase';
 import { TelephoneDeclareEventHandler } from './handlers/telephone-declare.event-handler';
 import { ProfileController } from '../presentation/http/profile.controller';
@@ -55,6 +56,9 @@ import { BeneficiaireEffectifController } from '../presentation/http/beneficiair
     // au fait métier levé par la complétion du profil (§8).
     CqrsModule,
     ProfilesInfrastructureModule,
+    // `INVESTOR_COMPLIANCE_PROFILE_REPOSITORY` : le passage du questionnaire
+    // s'enregistre par la racine, qui dit ce que le classement impose.
+    ComplianceInfrastructureModule,
     // `IamInfrastructureModule` pour `TokenService` (JwtAuthGuard),
     // `UsersInfrastructureModule` pour le seul `USER_REPOSITORY` : le contexte
     // Profiles lit l'identité du compte par le port d'IAM, plus par son entité

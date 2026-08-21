@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { KycFactory } from 'src/compliance/domain/factories/kyc.factory';
-import { Kyc } from 'src/compliance/domain/aggregates/kyc';
+import { KycCase } from 'src/compliance/domain/entities/kyc-case';
 import {
   KYC_REPOSITORY,
   type KycRepository,
@@ -31,7 +31,7 @@ export class CreateKycUseCase {
     private readonly kycRepository: KycRepository,
   ) {}
 
-  async execute(userId: number): Promise<Kyc> {
+  async execute(userId: number): Promise<KycCase> {
     const existant = await this.kycRepository.findByUserId(userId);
     if (existant) return existant;
 

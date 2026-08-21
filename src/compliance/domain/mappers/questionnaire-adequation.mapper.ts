@@ -1,8 +1,8 @@
 import {
-  QuestionnaireAdequation,
-  QuestionnaireAdequationSnapshot,
-  QuestionnaireAdequationSnapshotBrut,
-} from 'src/compliance/domain/aggregates/questionnaire-adequation';
+  AdequacyAssessment,
+  AdequacyAssessmentSnapshot,
+  AdequacyAssessmentSnapshotBrut,
+} from 'src/compliance/domain/entities/adequacy-assessment';
 import { CapaciteDePerte } from 'src/compliance/domain/value-objects/capacite-de-perte.vo';
 import { PreQualificationPsfp } from 'src/compliance/domain/value-objects/pre-qualification-psfp.vo';
 import { QualificationPsfp } from 'src/compliance/domain/value-objects/qualification-psfp.vo';
@@ -10,7 +10,7 @@ import { ResultatAdequation } from 'src/compliance/domain/value-objects/resultat
 
 /**
  * Traductions entre le questionnaire et sa représentation de persistance
- * (`QuestionnaireAdequationSnapshot`, faite de primitives et à plat).
+ * (`AdequacyAssessmentSnapshot`, faite de primitives et à plat).
  *
  * Même rôle et mêmes raisons que `ProfilPPMapper` : changer la forme de
  * stockage ou ajouter une projection ne doit pas rouvrir l'agrégat (§4 — SRP).
@@ -24,12 +24,12 @@ export class QuestionnaireAdequationMapper {
    * gardé en base est la décision telle qu'elle a été prise — voir
    * `ResultatAdequation.restore`. La validation s'applique là où une réponse
    * **entre** : `QuestionnaireAdequationFactory.repondre` et
-   * `QuestionnaireAdequation.repondre`.
+   * `AdequacyAssessment.repondre`.
    */
   static restore(
-    snapshot: QuestionnaireAdequationSnapshotBrut,
-  ): QuestionnaireAdequation {
-    return new QuestionnaireAdequation({
+    snapshot: AdequacyAssessmentSnapshotBrut,
+  ): AdequacyAssessment {
+    return new AdequacyAssessment({
       entete: {
         id: snapshot.id,
         utilisateurId: snapshot.utilisateurId,
@@ -49,12 +49,12 @@ export class QuestionnaireAdequationMapper {
    *
    * Assemblé depuis le snapshot de chaque bloc : le découpage interne n'a donc
    * aucun effet sur le contrat de persistance ni sur le JSON renvoyé, et le
-   * compilateur le garantit — `QuestionnaireAdequationSnapshot` est lui-même
+   * compilateur le garantit — `AdequacyAssessmentSnapshot` est lui-même
    * composé des snapshots de blocs.
    */
   static toSnapshot(
-    questionnaire: QuestionnaireAdequation,
-  ): QuestionnaireAdequationSnapshot {
+    questionnaire: AdequacyAssessment,
+  ): AdequacyAssessmentSnapshot {
     return {
       id: questionnaire.id,
       utilisateurId: questionnaire.utilisateurId,

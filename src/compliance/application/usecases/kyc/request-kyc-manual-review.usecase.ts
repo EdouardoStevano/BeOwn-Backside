@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { EventBus } from '@nestjs/cqrs';
 import { KycStatus } from 'src/compliance/domain/enums/kyc-status.enum';
 import { KycRevueManuelleDemandeeDomainEvent } from 'src/compliance/domain/events/kyc-revue-manuelle-demandee.domain-event';
-import { Kyc } from 'src/compliance/domain/aggregates/kyc';
+import { KycCase } from 'src/compliance/domain/entities/kyc-case';
 import { UpdateKycStatusUseCase } from './update-kyc-status.usecase';
 
 /**
@@ -47,7 +47,7 @@ export class RequestKycManualReviewUseCase {
     private readonly eventBus: EventBus,
   ) {}
 
-  async execute(userId: number): Promise<Kyc> {
+  async execute(userId: number): Promise<KycCase> {
     const kyc = await this.updateKycStatus.execute(
       userId,
       KycStatus.EN_REVUE,

@@ -1,4 +1,4 @@
-import { QuestionnaireAdequation } from 'src/compliance/domain/aggregates/questionnaire-adequation';
+import { AdequacyAssessment } from 'src/compliance/domain/entities/adequacy-assessment';
 
 export const QUESTIONNAIRE_ADEQUATION_REPOSITORY = Symbol(
   'QUESTIONNAIRE_ADEQUATION_REPOSITORY',
@@ -19,7 +19,7 @@ export const QUESTIONNAIRE_ADEQUATION_REPOSITORY = Symbol(
  */
 export interface QuestionnaireAdequationRepository {
   /** `null` tant que le titulaire n'a jamais répondu. */
-  findByUserId(userId: number): Promise<QuestionnaireAdequation | null>;
+  findByUserId(userId: number): Promise<AdequacyAssessment | null>;
 
   /**
    * Crée ou remplace le questionnaire du compte. `utilisateurId` porte un index
@@ -27,6 +27,6 @@ export interface QuestionnaireAdequationRepository {
    * passage.
    */
   save(
-    questionnaire: QuestionnaireAdequation,
-  ): Promise<QuestionnaireAdequation>;
+    questionnaire: AdequacyAssessment,
+  ): Promise<AdequacyAssessment>;
 }

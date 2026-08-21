@@ -1,15 +1,17 @@
-import { CategoriePsfp } from 'src/compliance/domain/enums/categorie-psfp.enum';
 import { NiveauRisque } from 'src/compliance/domain/enums/niveau-risque.enum';
 import { ProfilPP } from 'src/compliance/domain/aggregates/profil-pp';
+import type { ClassementPsfp } from 'src/compliance/domain/aggregates/investor-compliance-profile';
 
 export const PROFIL_PP_REPOSITORY = Symbol('PROFIL_PP_REPOSITORY');
 
-/** Ce que le questionnaire d'adéquation reporte sur le profil. */
-export interface ClassementPsfp {
-  categoriePsfp: CategoriePsfp;
-  patrimoineDeclare: number | null;
-  montantMaxConseille: number | null;
-}
+/**
+ * Ce que le questionnaire d'adéquation reporte sur le profil.
+ *
+ * Le type est défini par la racine — c'est elle qui décide de ce que le
+ * classement impose (§3.2, RG-KYC-13) — et réexporté ici pour les appelants qui
+ * ne connaissent que ce port.
+ */
+export type { ClassementPsfp };
 
 /** Ce que le calcul de risque reporte sur le profil. */
 export interface SuiviRisque {

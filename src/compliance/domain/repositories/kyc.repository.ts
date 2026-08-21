@@ -1,4 +1,4 @@
-import { Kyc, KycIdentiteExtrait } from 'src/compliance/domain/aggregates/kyc';
+import { KycCase, KycIdentiteExtrait } from 'src/compliance/domain/entities/kyc-case';
 import { KycStatus } from 'src/compliance/domain/enums/kyc-status.enum';
 
 export const KYC_REPOSITORY = Symbol('KYC_REPOSITORY');
@@ -13,30 +13,30 @@ export const KYC_REPOSITORY = Symbol('KYC_REPOSITORY');
  * profil n'en dépend — c'est ce qui a motivé le découpage.
  */
 export interface KycRepository {
-  save(kyc: Kyc): Promise<Kyc>;
-  findByUserId(userId: number): Promise<Kyc | null>;
+  save(kyc: KycCase): Promise<KycCase>;
+  findByUserId(userId: number): Promise<KycCase | null>;
   findAll(params?: {
     page?: number;
     limit?: number;
-  }): Promise<{ items: Kyc[]; total: number }>;
+  }): Promise<{ items: KycCase[]; total: number }>;
 
   updateStatus(
     kycId: string,
     status: KycStatus,
     motifRefus?: string,
-  ): Promise<Kyc>;
+  ): Promise<KycCase>;
 
   /** Rattache la session Stripe Identity ouverte pour ce dossier. */
   updateSession(
     kycId: string,
     sessionId: string,
     status: KycStatus,
-  ): Promise<Kyc>;
+  ): Promise<KycCase>;
 
   /** Enregistre le rapport de vérification et l'identité qu'il a extraite. */
   updateReportData(
     kycId: string,
     reportId: string,
     identiteExtrait: KycIdentiteExtrait,
-  ): Promise<Kyc>;
+  ): Promise<KycCase>;
 }

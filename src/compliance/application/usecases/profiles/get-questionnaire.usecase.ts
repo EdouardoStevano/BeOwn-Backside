@@ -3,7 +3,7 @@ import {
   QUESTIONNAIRE_ADEQUATION_REPOSITORY,
   type QuestionnaireAdequationRepository,
 } from 'src/compliance/domain/repositories/questionnaire-adequation.repository';
-import { QuestionnaireAdequation } from 'src/compliance/domain/aggregates/questionnaire-adequation';
+import { AdequacyAssessment } from 'src/compliance/domain/entities/adequacy-assessment';
 
 /**
  * Lecture du questionnaire d'adéquation du titulaire.
@@ -25,7 +25,7 @@ export class GetQuestionnaireUseCase {
     private readonly questionnaireRepository: QuestionnaireAdequationRepository,
   ) {}
 
-  execute(userId: number): Promise<QuestionnaireAdequation | null> {
+  execute(userId: number): Promise<AdequacyAssessment | null> {
     return this.questionnaireRepository.findByUserId(userId);
   }
 }

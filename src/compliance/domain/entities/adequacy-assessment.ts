@@ -57,7 +57,7 @@ export interface EnteteQuestionnaire {
  * clés sont celles publiées avant le découpage — `GET /profiles/questionnaire/me`
  * renvoie le même JSON, aux décimaux près (voir {@link toJSON}).
  */
-export interface QuestionnaireAdequationSnapshot
+export interface AdequacyAssessmentSnapshot
   extends
     EnteteQuestionnaire,
     PreQualificationSnapshot,
@@ -69,7 +69,7 @@ export interface QuestionnaireAdequationSnapshot
  * Ce que `restore` accepte : le snapshot, mais tolérant sur les formes que rend
  * réellement le driver Postgres — chaîne pour une colonne `decimal`.
  */
-export interface QuestionnaireAdequationSnapshotBrut
+export interface AdequacyAssessmentSnapshotBrut
   extends
     EnteteQuestionnaire,
     PreQualificationSnapshot,
@@ -103,7 +103,7 @@ export interface QuestionnaireAdequationSnapshotBrut
  * c'est voulu — un formulaire d'adéquation partiellement resoumis donnerait un
  * classement issu d'un mélange de deux passages.
  */
-export class QuestionnaireAdequation {
+export class AdequacyAssessment {
   private readonly _id: string;
   private readonly _utilisateurId: number;
   private _preQualification: PreQualificationPsfp;
@@ -241,7 +241,7 @@ export class QuestionnaireAdequation {
    * rendait les `decimal` en chaînes — c'est déjà la forme que `GET
    * /profiles/pp/me` publie pour le patrimoine déclaré.
    */
-  toJSON(): QuestionnaireAdequationSnapshot {
+  toJSON(): AdequacyAssessmentSnapshot {
     return QuestionnaireAdequationMapper.toSnapshot(this);
   }
 }

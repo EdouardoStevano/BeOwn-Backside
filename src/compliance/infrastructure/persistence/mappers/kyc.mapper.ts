@@ -2,11 +2,11 @@
 // l'agrégat et son snapshot. Celui-ci ne fait que la moitié ORM du chemin et
 // délègue l'autre.
 import { KycMapper as KycDomainMapper } from 'src/compliance/domain/mappers/kyc.mapper';
-import { Kyc } from 'src/compliance/domain/aggregates/kyc';
+import { KycCase } from 'src/compliance/domain/entities/kyc-case';
 import { KycEntity } from '../entities/kyc.entity';
 
 /**
- * Traductions entre l'agrégat `Kyc` et sa ligne TypeORM.
+ * Traductions entre l'agrégat `KycCase` et sa ligne TypeORM.
  *
  * Ces deux méthodes étaient les deux dernières de `ProfilMapper`, le mapper ORM
  * du contexte Profiles, à côté des profils PP, PM et du questionnaire
@@ -14,7 +14,7 @@ import { KycEntity } from '../entities/kyc.entity';
  * ni raison de changer (§5 — CCP).
  */
 export class KycOrmMapper {
-  static toDomain(entity: KycEntity): Kyc {
+  static toDomain(entity: KycEntity): KycCase {
     return KycDomainMapper.restore({
       id: entity.id,
       utilisateurId: entity.utilisateurId,
@@ -42,7 +42,7 @@ export class KycOrmMapper {
    * celui-ci vient d'écrire. Les laisser `undefined` dit à TypeORM de ne pas
    * toucher à la colonne.
    */
-  static toEntity(domain: Kyc): KycEntity {
+  static toEntity(domain: KycCase): KycEntity {
     const snapshot = KycDomainMapper.toSnapshot(domain);
     const entity = new KycEntity();
     // Absent d'un dossier qui vient de naître : l'uuid est généré en base.

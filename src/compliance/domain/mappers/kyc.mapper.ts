@@ -1,9 +1,9 @@
-import { Kyc, KycSnapshot, KycSnapshotBrut } from 'src/compliance/domain/aggregates/kyc';
+import { KycCase, KycCaseSnapshot, KycCaseSnapshotBrut } from 'src/compliance/domain/entities/kyc-case';
 import { DecisionKyc } from 'src/compliance/domain/value-objects/decision-kyc.vo';
 
 /**
  * Traductions entre le dossier KYC et sa représentation de persistance
- * (`KycSnapshot`, faite de primitives et à plat).
+ * (`KycCaseSnapshot`, faite de primitives et à plat).
  *
  * Même rôle et mêmes raisons que `ProfilPPMapper` : changer la forme de
  * stockage ou ajouter une projection ne doit pas rouvrir l'agrégat (§4 — SRP).
@@ -22,8 +22,8 @@ export class KycMapper {
    * donnée fautive. La validation s'applique là où une valeur **entre**, c'est
    * à dire dans `KycFactory.creer`.
    */
-  static restore(snapshot: KycSnapshotBrut): Kyc {
-    return new Kyc({
+  static restore(snapshot: KycCaseSnapshotBrut): KycCase {
+    return new KycCase({
       entete: {
         id: snapshot.id,
         utilisateurId: snapshot.utilisateurId,
@@ -52,7 +52,7 @@ export class KycMapper {
    * liste d'administration affiche à côté, est ajouté par-dessus au moment de
    * répondre (`GetKycUseCase.executeAll`) — il appartient à IAM.
    */
-  static toSnapshot(kyc: Kyc): KycSnapshot {
+  static toSnapshot(kyc: KycCase): KycCaseSnapshot {
     return {
       id: kyc.id,
       utilisateurId: kyc.utilisateurId,

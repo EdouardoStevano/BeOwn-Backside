@@ -1,7 +1,7 @@
 import {
-  QuestionnaireAdequation,
+  AdequacyAssessment,
   ReponsesQuestionnaire,
-} from 'src/compliance/domain/aggregates/questionnaire-adequation';
+} from 'src/compliance/domain/entities/adequacy-assessment';
 import { CapaciteDePerte } from 'src/compliance/domain/value-objects/capacite-de-perte.vo';
 import { eprouverUtilisateurId } from 'src/compliance/domain/value-objects/identifiant-utilisateur';
 import { PreQualificationPsfp } from 'src/compliance/domain/value-objects/pre-qualification-psfp.vo';
@@ -23,7 +23,7 @@ export interface RepondreQuestionnaireProps extends ReponsesQuestionnaire {
  * point (§4 — Open/Closed sur la règle réglementaire).
  *
  * Les passages suivants ne repassent pas par ici : le questionnaire existant
- * est relu, puis `QuestionnaireAdequation.repondre` lui donne les nouvelles
+ * est relu, puis `AdequacyAssessment.repondre` lui donne les nouvelles
  * réponses. Les deux chemins construisent les mêmes blocs et appliquent le même
  * classement, la fabrique ajoutant seulement ce qui n'a de sens qu'une fois —
  * la clé.
@@ -33,12 +33,12 @@ export interface RepondreQuestionnaireProps extends ReponsesQuestionnaire {
  * framework que rien ne justifie (§12.1).
  */
 export class QuestionnaireAdequationFactory {
-  static repondre(props: RepondreQuestionnaireProps): QuestionnaireAdequation {
+  static repondre(props: RepondreQuestionnaireProps): AdequacyAssessment {
     const preQualification = PreQualificationPsfp.declarer(props);
     const qualification = QualificationPsfp.declarer(props);
     const capacite = CapaciteDePerte.declarer(props);
 
-    return new QuestionnaireAdequation({
+    return new AdequacyAssessment({
       entete: {
         utilisateurId: eprouverUtilisateurId(props.utilisateurId),
         // Attribués par la persistance — l'`id` est un uuid généré en base.

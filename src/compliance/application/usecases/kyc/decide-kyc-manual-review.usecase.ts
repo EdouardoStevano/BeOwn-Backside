@@ -4,7 +4,7 @@ import { KycStatus } from 'src/compliance/domain/enums/kyc-status.enum';
 import { KycPasEnRevueManuelleError } from 'src/compliance/domain/errors';
 import { KycRefuseDomainEvent } from 'src/compliance/domain/events/kyc-refuse.domain-event';
 import { KycValideDomainEvent } from 'src/compliance/domain/events/kyc-valide.domain-event';
-import { Kyc } from 'src/compliance/domain/aggregates/kyc';
+import { KycCase } from 'src/compliance/domain/entities/kyc-case';
 import { GetKycUseCase } from './get-kyc.usecase';
 import { UpdateKycStatusUseCase } from './update-kyc-status.usecase';
 
@@ -57,7 +57,7 @@ export class DecideKycManualReviewUseCase {
     private readonly eventBus: EventBus,
   ) {}
 
-  async execute(decision: DecisionKycManuelle): Promise<Kyc> {
+  async execute(decision: DecisionKycManuelle): Promise<KycCase> {
     const dossier = await this.getKyc.execute(decision.utilisateurId);
     if (!dossier.estEnRevueManuelle()) {
       throw new KycPasEnRevueManuelleError();
@@ -82,7 +82,7 @@ export class DecideKycManualReviewUseCase {
    * acceptait déjà sans notifier personne, et il n'y a pas de fait métier à
    * annoncer quand un admin repositionne un dossier en cours d'examen.
    */
-  private annoncer(kyc: Kyc, decision: DecisionKycManuelle): void {
+  private annoncer(kyc: KycCase, decision: DecisionKycManuelle): void {
     if (decision.decision === KycStatus.VALIDE) {
       this.eventBus.publish(
         new KycValideDomainEvent(

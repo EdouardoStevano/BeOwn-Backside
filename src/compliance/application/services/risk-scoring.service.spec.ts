@@ -4,14 +4,14 @@ import { QuestionnaireAdequationFactory } from 'src/compliance/domain/factories/
 import type { ProfilPPRepository } from 'src/compliance/domain/repositories/profil-pp.repository';
 import type { QuestionnaireAdequationRepository } from 'src/compliance/domain/repositories/questionnaire-adequation.repository';
 import {
-  QuestionnaireAdequation,
+  AdequacyAssessment,
   ReponsesQuestionnaire,
-} from 'src/compliance/domain/aggregates/questionnaire-adequation';
+} from 'src/compliance/domain/entities/adequacy-assessment';
 
 const repondre = (reponses: ReponsesQuestionnaire) =>
   QuestionnaireAdequationFactory.repondre({ utilisateurId: 42, ...reponses });
 
-function monter(questionnaire: QuestionnaireAdequation | null) {
+function monter(questionnaire: AdequacyAssessment | null) {
   const mocks = {
     findByUserId: jest.fn().mockResolvedValue(questionnaire),
     enregistrerSuiviRisque: jest.fn().mockResolvedValue(undefined),

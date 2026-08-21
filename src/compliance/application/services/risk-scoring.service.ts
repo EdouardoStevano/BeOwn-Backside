@@ -20,7 +20,7 @@ const MAX_CONTACTS_DUS = 500;
  * avec chaque investisseur, et qui est à contacter maintenant.
  *
  * Le service ne porte plus aucune règle. Le **niveau de risque** est déduit des
- * réponses par `QuestionnaireAdequation.niveauRisque()` — il comparait ici
+ * réponses par `AdequacyAssessment.niveauRisque()` — il comparait ici
  * `resultCategorie` à des chaînes nues — et la **cadence de contact** par
  * `prochainContactApres`, où le niveau inconnu ne retombe plus silencieusement
  * sur le suivi le plus lâche. Il ne reste ici que l'orchestration : lire,

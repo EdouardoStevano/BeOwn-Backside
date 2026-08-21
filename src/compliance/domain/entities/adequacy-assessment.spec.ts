@@ -3,7 +3,7 @@ import { NiveauRisque } from '../enums/niveau-risque.enum';
 import { ChampProfilInvalideError } from '../errors';
 import { QuestionnaireAdequationFactory } from '../factories/questionnaire-adequation.factory';
 import { QuestionnaireAdequationMapper } from '../mappers/questionnaire-adequation.mapper';
-import { ReponsesQuestionnaire } from './questionnaire-adequation';
+import { ReponsesQuestionnaire } from './adequacy-assessment';
 
 const repondre = (reponses: ReponsesQuestionnaire = {}) =>
   QuestionnaireAdequationFactory.repondre({ utilisateurId: 42, ...reponses });
@@ -60,7 +60,7 @@ describe('QuestionnaireAdequationFactory.repondre', () => {
   });
 });
 
-describe('QuestionnaireAdequation.repondre', () => {
+describe('AdequacyAssessment.repondre', () => {
   it('remplace les réponses et recalcule le classement', () => {
     const questionnaire = repondre(REPONSES_PROFESSIONNEL);
 
@@ -85,7 +85,7 @@ describe('QuestionnaireAdequation.repondre', () => {
   });
 });
 
-describe('QuestionnaireAdequation.niveauRisque', () => {
+describe('AdequacyAssessment.niveauRisque', () => {
   it('suit le professionnel au rythme le plus espacé', () => {
     expect(repondre(REPONSES_PROFESSIONNEL).niveauRisque()).toBe(
       NiveauRisque.QUALIFIE,
@@ -110,7 +110,7 @@ describe('QuestionnaireAdequation.niveauRisque', () => {
   });
 });
 
-describe('QuestionnaireAdequation — sérialisation', () => {
+describe('AdequacyAssessment — sérialisation', () => {
   const LIGNE = {
     id: 'q-1',
     utilisateurId: 42,

@@ -1,5 +1,5 @@
 import { KycNiveau } from 'src/compliance/domain/enums/kyc-status.enum';
-import { Kyc } from 'src/compliance/domain/aggregates/kyc';
+import { KycCase } from 'src/compliance/domain/entities/kyc-case';
 import { DecisionKyc } from 'src/compliance/domain/value-objects/decision-kyc.vo';
 import { eprouverUtilisateurIdDuDossierKyc } from 'src/compliance/domain/value-objects/identifiant-utilisateur';
 import { NomFournisseur } from 'src/compliance/domain/value-objects/nom-fournisseur.vo';
@@ -56,8 +56,8 @@ export interface CreerKycProps {
  * framework que rien ne justifie (§12.1).
  */
 export class KycFactory {
-  static creer(props: CreerKycProps): Kyc {
-    return new Kyc({
+  static creer(props: CreerKycProps): KycCase {
+    return new KycCase({
       entete: {
         utilisateurId: eprouverUtilisateurIdDuDossierKyc(props.utilisateurId),
         // Attribués par la persistance — l'`id` est un uuid généré en base.

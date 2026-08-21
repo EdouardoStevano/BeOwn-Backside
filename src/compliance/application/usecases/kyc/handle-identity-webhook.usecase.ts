@@ -1,6 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { KycStatus } from 'src/compliance/domain/enums/kyc-status.enum';
-import { Kyc } from 'src/compliance/domain/aggregates/kyc';
+import { KycCase } from 'src/compliance/domain/entities/kyc-case';
 import {
   KYC_REPOSITORY,
   type KycRepository,
@@ -149,7 +149,7 @@ export class HandleIdentityWebhookUseCase {
    */
   private async resolveKyc(
     session: any,
-  ): Promise<{ userId: number; kyc: Kyc } | null> {
+  ): Promise<{ userId: number; kyc: KycCase } | null> {
     const userId = parseInt(session?.metadata?.userId, 10);
     if (isNaN(userId)) {
       this.logger.warn(
@@ -248,7 +248,7 @@ export class HandleIdentityWebhookUseCase {
    */
   private async enregistrerRapport(
     session: any,
-    kyc: Kyc,
+    kyc: KycCase,
     userId: number,
   ): Promise<void> {
     const reportData = await this.identity.extractReportData(session.id);

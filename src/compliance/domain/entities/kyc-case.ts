@@ -31,7 +31,7 @@ export interface KycIdentiteExtrait {
 // JSON rendu par `GET /kyc/all` est inchangé.
 
 /** Ce que le dossier ajoute à son bloc : sa clé, le compte rattaché, ses dates. */
-export interface EnteteKyc {
+export interface EnteteKycCase {
   id: string;
   utilisateurId: number;
   createdAt: Date;
@@ -46,7 +46,7 @@ export interface EnteteKyc {
  * clés sont exactement celles publiées avant le découpage — `GET /kyc/me`,
  * `GET /kyc/all` et `GET /users/me` renvoient le même JSON.
  */
-export interface KycSnapshot extends EnteteKyc, DecisionKycSnapshot {
+export interface KycCaseSnapshot extends EnteteKycCase, DecisionKycSnapshot {
   niveau: KycNiveau;
   scoreRisque: number | null;
   fournisseur: string;
@@ -60,10 +60,10 @@ export interface KycSnapshot extends EnteteKyc, DecisionKycSnapshot {
  * `save()` ne relit pas — TypeORM rend l'entité qu'on lui a passée, donc sans
  * les colonnes qu'elle n'a pas écrites.
  */
-export interface KycSnapshotBrut
+export interface KycCaseSnapshotBrut
   extends
     Omit<
-      KycSnapshot,
+      KycCaseSnapshot,
       | keyof DecisionKycSnapshot
       | 'scoreRisque'
       | 'fournisseurRef'
@@ -81,7 +81,7 @@ export interface KycSnapshotBrut
  * Dossier de vérification d'identité — un par compte.
  *
  * L'agrégat était une classe à treize attributs publics et mutables, sans
- * constructeur : on le faisait naître en écrivant `new Kyc()` puis huit
+ * constructeur : on le faisait naître en écrivant `new KycCase()` puis huit
  * affectations, recopiées à l'identique dans `CreateKycUseCase` et dans
  * la couche présentation de Payments. Deux naissances, donc deux occasions de
  * diverger — et rien n'empêchait la troisième d'ouvrir un dossier directement
@@ -104,7 +104,7 @@ export interface KycSnapshotBrut
  * que du code mort. Tous les attributs sont donc `readonly` : l'agrégat est
  * exact sur ce qu'il garantit — un dossier ne change pas d'état par lui-même.
  */
-export class Kyc {
+export class KycCase {
   private readonly _id: string;
   private readonly _utilisateurId: number;
   private readonly _decision: DecisionKyc;
@@ -127,7 +127,7 @@ export class Kyc {
    * l'autre assume de ne pas rejouer.
    */
   constructor(etat: {
-    entete: EnteteKyc;
+    entete: EnteteKycCase;
     decision: DecisionKyc;
     niveau: KycNiveau;
     scoreRisque: number | null;
@@ -215,12 +215,12 @@ export class Kyc {
    *
    * La mise en forme appartient à {@link KycMapper} ; seul le point d'accroche
    * reste ici, et il doit y rester : `res.json()` appelle automatiquement
-   * `toJSON()`, ce qui protège aussi les chemins indirects — un `Kyc` glissé
+   * `toJSON()`, ce qui protège aussi les chemins indirects — un `KycCase` glissé
    * dans une réponse sans appel explicite, comme le fait `GET /users/me`. Sans
    * cette méthode, il ressortirait avec ses clés privées `_decision`,
    * `_fournisseurRef`…
    */
-  toJSON(): KycSnapshot {
+  toJSON(): KycCaseSnapshot {
     return KycMapper.toSnapshot(this);
   }
 }

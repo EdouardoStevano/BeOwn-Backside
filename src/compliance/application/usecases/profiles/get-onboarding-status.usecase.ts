@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { KycStatus } from 'src/compliance/domain/enums/kyc-status.enum';
-import { Kyc } from 'src/compliance/domain/aggregates/kyc';
+import { KycCase } from 'src/compliance/domain/entities/kyc-case';
 import {
   KYC_REPOSITORY,
   type KycRepository,
@@ -38,7 +38,7 @@ export interface OnboardingStatus {
   userType: TypeInvestisseur | null;
   profilPP: ProfilPP | null;
   profilPM: ProfilPM | null;
-  kyc: Kyc | null;
+  kyc: KycCase | null;
   completionStep: number;
   completionSteps: EtapeOnboarding[];
   completionProgress: number;

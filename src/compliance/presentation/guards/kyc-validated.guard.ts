@@ -7,10 +7,9 @@ import {
   Injectable,
 } from '@nestjs/common';
 import {
-  KYC_REPOSITORY,
-  type KycRepository,
-} from 'src/compliance/domain/repositories/kyc.repository';
-import { KycStatus } from 'src/compliance/domain/enums/kyc-status.enum';
+  INVESTOR_COMPLIANCE_PROFILE_REPOSITORY,
+  type InvestorComplianceProfileRepository,
+} from 'src/compliance/domain/repositories/investor-compliance-profile.repository';
 import type { ActiveUser } from 'src/iam/presentation/decorators/current-user.decorator';
 
 /** Code d'erreur stable consommé par le front pour distinguer ce refus d'un 403 générique. */
@@ -41,15 +40,19 @@ const kycNotValidatedException = (): ForbiddenException =>
  * c'est-à-dire connaître la table d'un autre contexte pour poser un garde
  * (§12.9). Ils importent désormais `KycModule`, qui l'exporte.
  *
- * Il reste un adapter d'entrée — d'où sa place dans `presenters/guards/` (§2) —
- * mais il appartient à ce contexte : la règle qu'il applique est celle du
- * dossier, pas celle de l'authentification.
+ * **Et il ne décide plus.** Il portait la règle d'aptitude en trois `if`
+ * successifs — dossier présent, statut `VALIDE`, échéance non dépassée — c'est
+ *-à-dire une règle métier écrite dans un adapter d'entrée, invisible depuis le
+ * domaine et depuis les quatre contextes qui la subissaient (§14). Elle est
+ * revenue à `InvestorComplianceProfile.peutOperer()`, où elle s'éprouve sans
+ * simuler une requête HTTP. Ce qui reste ici est ce qu'un garde doit faire :
+ * poser la question, et traduire un « non » en 403.
  */
 @Injectable()
 export class KycValidatedGuard implements CanActivate {
   constructor(
-    @Inject(KYC_REPOSITORY)
-    private readonly kycRepository: KycRepository,
+    @Inject(INVESTOR_COMPLIANCE_PROFILE_REPOSITORY)
+    private readonly profils: InvestorComplianceProfileRepository,
   ) {}
 
   async canActivate(ctx: ExecutionContext): Promise<boolean> {
@@ -59,17 +62,8 @@ export class KycValidatedGuard implements CanActivate {
       throw new ForbiddenException('Authentification requise');
     }
 
-    const kyc = await this.kycRepository.findByUserId(user.userId);
-
-    if (!kyc) {
-      throw kycNotValidatedException();
-    }
-
-    if (kyc.statut !== KycStatus.VALIDE) {
-      throw kycNotValidatedException();
-    }
-
-    if (kyc.valideJusquAu && new Date(kyc.valideJusquAu) < new Date()) {
+    const profil = await this.profils.findByInvestorId(user.userId);
+    if (!profil.peutOperer()) {
       throw kycNotValidatedException();
     }
 

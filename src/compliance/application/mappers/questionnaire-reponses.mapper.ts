@@ -1,4 +1,4 @@
-import { ReponsesQuestionnaire } from 'src/compliance/domain/aggregates/questionnaire-adequation';
+import { ReponsesQuestionnaire } from 'src/compliance/domain/entities/adequacy-assessment';
 import { SaveQuestionnaireDto } from 'src/compliance/presentation/http/dto/questionnaire.dto';
 
 /**

@@ -3,7 +3,7 @@ import {
   KYC_REPOSITORY,
   type KycRepository,
 } from 'src/compliance/domain/repositories/kyc.repository';
-import type { KycIdentiteExtrait } from 'src/compliance/domain/aggregates/kyc';
+import type { KycIdentiteExtrait } from 'src/compliance/domain/entities/kyc-case';
 import {
   IDENTITY_VERIFICATION_PORT,
   type IdentityVerificationPort,

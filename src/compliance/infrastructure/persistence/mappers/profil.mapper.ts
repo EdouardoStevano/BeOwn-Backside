@@ -5,7 +5,7 @@ import { ProfilPP } from 'src/compliance/domain/aggregates/profil-pp';
 import { ProfilPPMapper as ProfilPPDomainMapper } from 'src/compliance/domain/mappers/profil-pp.mapper';
 import { ProfilPMMapper as ProfilPMDomainMapper } from 'src/compliance/domain/mappers/profil-pm.mapper';
 import { QuestionnaireAdequationMapper as QuestionnaireAdequationDomainMapper } from 'src/compliance/domain/mappers/questionnaire-adequation.mapper';
-import { QuestionnaireAdequation } from 'src/compliance/domain/aggregates/questionnaire-adequation';
+import { AdequacyAssessment } from 'src/compliance/domain/entities/adequacy-assessment';
 import { ProfilPM } from 'src/compliance/domain/aggregates/profil-pm';
 import { ProfilPPEntity } from '../entities/profil-pp.entity';
 import { ProfilPMEntity } from '../entities/profil-pm.entity';
@@ -122,7 +122,7 @@ export class ProfilMapper {
 
   static questionnaireToDomain(
     entity: QuestionnaireAdequationEntity,
-  ): QuestionnaireAdequation {
+  ): AdequacyAssessment {
     return QuestionnaireAdequationDomainMapper.restore({
       id: entity.id,
       utilisateurId: entity.utilisateurId,
@@ -155,7 +155,7 @@ export class ProfilMapper {
    * ensuite sur le profil, via `enregistrerClassementPsfp`.
    */
   static questionnaireToEntity(
-    domain: QuestionnaireAdequation,
+    domain: AdequacyAssessment,
   ): QuestionnaireAdequationEntity {
     const snapshot = QuestionnaireAdequationDomainMapper.toSnapshot(domain);
     const entity = new QuestionnaireAdequationEntity();

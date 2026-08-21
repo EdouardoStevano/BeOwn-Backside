@@ -9,14 +9,14 @@ import {
   KYC_REPOSITORY,
   type KycRepository,
 } from 'src/compliance/domain/repositories/kyc.repository';
-import type { KycSnapshot } from 'src/compliance/domain/aggregates/kyc';
+import type { KycCaseSnapshot } from 'src/compliance/domain/entities/kyc-case';
 
 /**
  * Le titulaire d'un dossier, tel que la liste d'administration l'affiche.
  *
  * Une **projection de présentation**, pas un morceau du dossier : rien ici
  * n'est écrit et aucune règle du contexte Profiles ne s'en sert. Elle vivait
- * dans l'agrégat `Kyc`, remplie par une jointure ORM vers `UserEntity` ; elle
+ * dans l'agrégat `KycCase`, remplie par une jointure ORM vers `UserEntity` ; elle
  * est maintenant composée ici, à partir du port d'IAM. La forme du JSON est
  * identique — `GET /kyc/all` rend les mêmes clés qu'avant.
  */
@@ -31,7 +31,7 @@ export interface TitulaireKyc {
 }
 
 /** Une ligne de la liste admin : le dossier, plus qui il concerne. */
-export type LigneKycAdmin = KycSnapshot & { utilisateur?: TitulaireKyc };
+export type LigneKycAdmin = KycCaseSnapshot & { utilisateur?: TitulaireKyc };
 
 @Injectable()
 export class GetKycUseCase {

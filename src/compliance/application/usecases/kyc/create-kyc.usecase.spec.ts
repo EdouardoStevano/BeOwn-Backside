@@ -1,17 +1,17 @@
 import { CreateKycUseCase } from './create-kyc.usecase';
 import { KycNiveau, KycStatus } from 'src/compliance/domain/enums/kyc-status.enum';
 import { ChampKycInvalideError } from 'src/compliance/domain/errors';
-import { Kyc } from 'src/compliance/domain/aggregates/kyc';
+import { KycCase } from 'src/compliance/domain/entities/kyc-case';
 import { KycMapper } from 'src/compliance/domain/mappers/kyc.mapper';
 import type { KycRepository } from 'src/compliance/domain/repositories/kyc.repository';
 
-function monter(existant: Kyc | null = null) {
+function monter(existant: KycCase | null = null) {
   // Les mocks sont tenus à part plutôt que relus sur le port : lire une méthode
   // d'interface pour l'inspecter la détache de son objet.
   const mocks = {
     findByUserId: jest.fn().mockResolvedValue(existant),
     // Le repository rend ce qu'il a reçu : la persistance n'est pas le sujet.
-    save: jest.fn((kyc: Kyc) => Promise.resolve(kyc)),
+    save: jest.fn((kyc: KycCase) => Promise.resolve(kyc)),
     findAll: jest.fn(),
     updateStatus: jest.fn(),
     updateSession: jest.fn(),
