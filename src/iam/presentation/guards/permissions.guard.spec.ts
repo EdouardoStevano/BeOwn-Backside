@@ -2,8 +2,8 @@ import { ExecutionContext, ForbiddenException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { PermissionsGuard } from './permissions.guard';
 import { UserRole } from 'src/iam/domain/enums/user.enum';
-import { IS_PUBLIC_KEY } from './public.decorator';
-import type { Permission } from './permissions.constants';
+import { IS_PUBLIC_KEY } from 'src/iam/presentation/decorators/public.decorator';
+import type { Permission } from 'src/iam/domain/policies/role-permissions.policy';
 
 const ctx = (role?: string): ExecutionContext =>
   ({

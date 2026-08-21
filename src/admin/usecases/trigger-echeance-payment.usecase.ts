@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository, InjectDataSource } from '@nestjs/typeorm';
 import { DataSource, In, Repository } from 'typeorm';
-import type { ActiveUser } from 'src/common/auth/current-user.decorator';
+import type { ActiveUser } from 'src/iam/presentation/decorators/current-user.decorator';
 import { formatEur } from 'src/shared/money/format-eur';
 import { UserRole } from 'src/iam/domain/enums/user.enum';
 import { EcheanceEntity } from 'src/investments/infrastructure/persistences/entities/echeance.entity';

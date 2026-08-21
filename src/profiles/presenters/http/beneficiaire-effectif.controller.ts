@@ -16,9 +16,9 @@ import {
 } from '@nestjs/swagger';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
-import { CurrentUser } from 'src/common/auth/current-user.decorator';
-import type { ActiveUser } from 'src/common/auth/current-user.decorator';
+import { JwtAuthGuard } from 'src/iam/presentation/guards/jwt-auth.guard';
+import { CurrentUser } from 'src/iam/presentation/decorators/current-user.decorator';
+import type { ActiveUser } from 'src/iam/presentation/decorators/current-user.decorator';
 import { BeneficiaireEffectifEntity } from '../../infrastructure/persistences/entities/beneficiaire-effectif.entity';
 import { ProfilPMEntity } from '../../infrastructure/persistences/entities/profil-pm.entity';
 import { CreateBeneficiaireEffectifDto } from '../dto/beneficiaire-effectif.dto';

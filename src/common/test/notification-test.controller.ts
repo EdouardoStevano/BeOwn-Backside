@@ -4,7 +4,7 @@ import { EMAIL_SERVICE } from 'src/shared/email/email.service';
 import type { EmailService } from 'src/shared/email/email.service';
 import { SMS_SERVICE } from 'src/shared/sms/sms.service';
 import type { SmsService } from 'src/shared/sms/sms.service';
-import { Public } from '../auth/public.decorator';
+import { Public } from 'src/iam/presentation/decorators/public.decorator';
 
 @ApiTags('Dev – Notifications Test')
 @Controller('test')

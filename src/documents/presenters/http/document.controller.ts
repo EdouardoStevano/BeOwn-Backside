@@ -31,11 +31,11 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
-import { CurrentUser } from 'src/common/auth/current-user.decorator';
-import type { ActiveUser } from 'src/common/auth/current-user.decorator';
-import { Public } from 'src/common/auth/public.decorator';
-import { hasPermission } from 'src/common/auth/permissions.constants';
+import { JwtAuthGuard } from 'src/iam/presentation/guards/jwt-auth.guard';
+import { CurrentUser } from 'src/iam/presentation/decorators/current-user.decorator';
+import type { ActiveUser } from 'src/iam/presentation/decorators/current-user.decorator';
+import { Public } from 'src/iam/presentation/decorators/public.decorator';
+import { hasPermission } from 'src/iam/domain/policies/role-permissions.policy';
 import { DOCUMENT_REPOSITORY } from 'src/documents/applications/ports/repositories/document.repository';
 import type { DocumentRepository } from 'src/documents/applications/ports/repositories/document.repository';
 import { Document } from 'src/documents/domains/document';

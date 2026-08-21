@@ -13,7 +13,7 @@ import { ApiExcludeController } from '@nestjs/swagger';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, Repository } from 'typeorm';
 import { SkipThrottle } from '@nestjs/throttler';
-import { Public } from 'src/common/auth/public.decorator';
+import { Public } from 'src/iam/presentation/decorators/public.decorator';
 import { SignatureEntity } from 'src/signatures/infrastructure/persistences/entities/signature.entity';
 import { SignatureStatus } from 'src/signatures/domains/enums/signature-status.enum';
 import { InvestmentEntity } from 'src/investments/infrastructure/persistences/entities/investment.entity';

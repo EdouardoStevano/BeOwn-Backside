@@ -11,9 +11,9 @@ import {
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
-import { CurrentUser } from 'src/common/auth/current-user.decorator';
-import type { ActiveUser } from 'src/common/auth/current-user.decorator';
+import { JwtAuthGuard } from 'src/iam/presentation/guards/jwt-auth.guard';
+import { CurrentUser } from 'src/iam/presentation/decorators/current-user.decorator';
+import type { ActiveUser } from 'src/iam/presentation/decorators/current-user.decorator';
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 import { UserRole } from 'src/iam/domain/enums/user.enum';
 import { InvestmentEntity } from 'src/investments/infrastructure/persistences/entities/investment.entity';

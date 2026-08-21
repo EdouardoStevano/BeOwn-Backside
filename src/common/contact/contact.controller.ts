@@ -14,7 +14,7 @@ import {
   IsString,
   MaxLength,
 } from 'class-validator';
-import { Public } from 'src/common/auth/public.decorator';
+import { Public } from 'src/iam/presentation/decorators/public.decorator';
 import { EMAIL_SERVICE, type EmailService } from 'src/shared/email/email.service';
 import { PlatformSettingsService } from 'src/common/platform-settings/platform-settings.service';
 

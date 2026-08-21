@@ -1,6 +1,6 @@
 import { Controller, Get } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import { Public } from 'src/common/auth/public.decorator';
+import { Public } from 'src/iam/presentation/decorators/public.decorator';
 import { PlatformFeesService } from './platform-fees.service';
 
 /**

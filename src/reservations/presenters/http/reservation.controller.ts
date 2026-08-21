@@ -26,14 +26,14 @@ import {
 import { Inject } from '@nestjs/common';
 import { RESERVATION_REPOSITORY } from 'src/reservations/applications/ports/repositories/reservation.repository';
 import type { ReservationRepository } from 'src/reservations/applications/ports/repositories/reservation.repository';
-import { CurrentUser } from 'src/common/auth/current-user.decorator';
-import type { ActiveUser } from 'src/common/auth/current-user.decorator';
+import { CurrentUser } from 'src/iam/presentation/decorators/current-user.decorator';
+import type { ActiveUser } from 'src/iam/presentation/decorators/current-user.decorator';
 import { UseGuards } from '@nestjs/common';
-import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
+import { JwtAuthGuard } from 'src/iam/presentation/guards/jwt-auth.guard';
 import { KycValidatedGuard } from 'src/kyc/presenters/guards/kyc-validated.guard';
-import { RequirePermission } from 'src/common/auth/require-permission.decorator';
-import { hasPermission } from 'src/common/auth/permissions.constants';
-import { Roles } from 'src/common/auth/roles.decorator';
+import { RequirePermission } from 'src/iam/presentation/decorators/require-permission.decorator';
+import { hasPermission } from 'src/iam/domain/policies/role-permissions.policy';
+import { Roles } from 'src/iam/presentation/decorators/roles.decorator';
 import { UserRole } from 'src/iam/domain/enums/user.enum';
 
 @ApiTags('Reservations (Pré-investissement)')

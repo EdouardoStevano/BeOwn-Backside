@@ -3,7 +3,7 @@ import { AdminEcheancesController } from './admin-echeances.controller';
 import { TriggerEcheancePaymentUseCase } from './usecases/trigger-echeance-payment.usecase';
 import { GetAggregatedScheduleUseCase } from './usecases/get-aggregated-schedule.usecase';
 import { PatchAggregatedEcheanceUseCase } from './usecases/patch-aggregated-echeance.usecase';
-import { rolesWithPermission } from 'src/common/auth/permissions.constants';
+import { rolesWithPermission } from 'src/iam/domain/policies/role-permissions.policy';
 import {
   EcheanceStatus,
   InvestmentStatus,

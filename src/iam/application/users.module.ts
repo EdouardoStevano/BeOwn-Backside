@@ -10,8 +10,8 @@ import {
 } from 'src/iam/application/usecases/account/update-my-account.usecase';
 import { UpdateUserByAdminUseCase } from 'src/iam/application/usecases/account/update-user-by-admin.usecase';
 import { UserFactory } from '../domain/factories/user.factory';
-import { HASHING_SERVICE } from 'src/common/hashing/hashing.service';
-import { BcryptService } from 'src/common/hashing/bcrypt.service';
+import { HASHING_SERVICE } from 'src/iam/domain/ports/hashing.service';
+import { BcryptService } from 'src/iam/infrastructure/crypto/bcrypt.service';
 import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructure.module';
 import { NotificationsModule } from 'src/notifications/notifications.module';
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';

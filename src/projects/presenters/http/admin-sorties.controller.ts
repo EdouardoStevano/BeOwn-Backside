@@ -1,9 +1,9 @@
 import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { CurrentUser } from 'src/common/auth/current-user.decorator';
-import type { ActiveUser } from 'src/common/auth/current-user.decorator';
-import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
-import { RequirePermission } from 'src/common/auth/require-permission.decorator';
+import { CurrentUser } from 'src/iam/presentation/decorators/current-user.decorator';
+import type { ActiveUser } from 'src/iam/presentation/decorators/current-user.decorator';
+import { JwtAuthGuard } from 'src/iam/presentation/guards/jwt-auth.guard';
+import { RequirePermission } from 'src/iam/presentation/decorators/require-permission.decorator';
 import { DeclareSortieUseCase } from 'src/projects/applications/usecases/sortie/declare-sortie.usecase';
 import { ExecuteSortieUseCase } from 'src/projects/applications/usecases/sortie/execute-sortie.usecase';
 import { ManageSortieUseCase } from 'src/projects/applications/usecases/sortie/manage-sortie.usecase';

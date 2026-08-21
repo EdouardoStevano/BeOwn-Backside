@@ -4,7 +4,7 @@ import {
   rolesWithPermission,
   ROLE_PERMISSIONS,
   type Permission,
-} from './permissions.constants';
+} from 'src/iam/domain/policies/role-permissions.policy';
 
 describe('permissions.constants', () => {
   it('super_admin a toutes les permissions (wildcard)', () => {

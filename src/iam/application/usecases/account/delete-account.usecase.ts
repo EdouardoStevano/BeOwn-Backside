@@ -22,7 +22,7 @@ import { UserRole } from 'src/iam/domain/enums/user.enum';
 import { EmailTemplateService } from 'src/shared/email/email-template.service';
 import { EMAIL_SERVICE } from 'src/shared/email/email.service';
 import type { EmailService } from 'src/shared/email/email.service';
-import { hasPermission } from 'src/common/auth/permissions.constants';
+import { hasPermission } from 'src/iam/domain/policies/role-permissions.policy';
 import { formatEur } from 'src/shared/money/format-eur';
 import {
   AccountDeletionBlockedError,

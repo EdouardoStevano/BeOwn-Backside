@@ -7,8 +7,8 @@ import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructu
 import { UsersInfrastructureModule } from 'src/iam/infrastructure/users-infrastructure.module';
 import { UsersModule } from 'src/iam/application/users.module';
 import { NotificationsModule } from 'src/notifications/notifications.module';
-import { HASHING_SERVICE } from 'src/common/hashing/hashing.service';
-import { BcryptService } from 'src/common/hashing/bcrypt.service';
+import { HASHING_SERVICE } from 'src/iam/domain/ports/hashing.service';
+import { BcryptService } from 'src/iam/infrastructure/crypto/bcrypt.service';
 import { RecaptchaService } from 'src/common/recaptcha/recaptcha.service';
 import { OTP_RECORD_STORE } from 'src/iam/application/ports/otp-record-store.port';
 import { TOTP_GENERATOR } from 'src/iam/application/ports/totp-generator.port';

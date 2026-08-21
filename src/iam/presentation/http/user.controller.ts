@@ -18,10 +18,10 @@ import {
 } from '@nestjs/swagger';
 import { IsNotEmpty, IsString } from 'class-validator';
 import { SkipThrottle } from '@nestjs/throttler';
-import { CurrentUser } from 'src/common/auth/current-user.decorator';
-import type { ActiveUser } from 'src/common/auth/current-user.decorator';
-import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
-import { RequirePermission } from 'src/common/auth/require-permission.decorator';
+import { CurrentUser } from 'src/iam/presentation/decorators/current-user.decorator';
+import type { ActiveUser } from 'src/iam/presentation/decorators/current-user.decorator';
+import { JwtAuthGuard } from 'src/iam/presentation/guards/jwt-auth.guard';
+import { RequirePermission } from 'src/iam/presentation/decorators/require-permission.decorator';
 import { DeleteMyAccountUseCase } from 'src/iam/application/usecases/account/delete-my-account.usecase';
 import {
   DeclareUserTypeUseCase,

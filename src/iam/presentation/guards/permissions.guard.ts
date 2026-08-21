@@ -5,9 +5,9 @@ import {
   Injectable,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { PERMISSIONS_KEY } from './require-permission.decorator';
-import { IS_PUBLIC_KEY } from './public.decorator';
-import { hasPermission, Permission } from './permissions.constants';
+import { PERMISSIONS_KEY } from 'src/iam/presentation/decorators/require-permission.decorator';
+import { IS_PUBLIC_KEY } from 'src/iam/presentation/decorators/public.decorator';
+import { hasPermission, Permission } from 'src/iam/domain/policies/role-permissions.policy';
 
 @Injectable()
 export class PermissionsGuard implements CanActivate {

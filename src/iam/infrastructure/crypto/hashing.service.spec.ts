@@ -1,5 +1,5 @@
 import { BcryptService } from './bcrypt.service';
-import { HashingService } from './hashing.service';
+import { HashingService } from 'src/iam/domain/ports/hashing.service';
 
 describe('HashingService', () => {
   let service: HashingService;

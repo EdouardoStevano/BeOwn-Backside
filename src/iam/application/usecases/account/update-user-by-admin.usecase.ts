@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { rolesWithPermission } from 'src/common/auth/permissions.constants';
+import { rolesWithPermission } from 'src/iam/domain/policies/role-permissions.policy';
 import { UserStatus } from 'src/iam/domain/enums/user.enum';
 import {
   AccesCompteRefuseError,

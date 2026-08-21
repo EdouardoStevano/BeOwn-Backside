@@ -1,6 +1,6 @@
 import { Test } from '@nestjs/testing';
 import { Reflector } from '@nestjs/core';
-import { IS_PUBLIC_KEY } from 'src/common/auth/public.decorator';
+import { IS_PUBLIC_KEY } from 'src/iam/presentation/decorators/public.decorator';
 import { PublicFeesController } from './public-fees.controller';
 import {
   DEFAULT_FEE_RATES,

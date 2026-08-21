@@ -10,10 +10,10 @@ import {
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
-import { Roles } from 'src/common/auth/roles.decorator';
-import { CurrentUser } from 'src/common/auth/current-user.decorator';
-import type { ActiveUser } from 'src/common/auth/current-user.decorator';
+import { JwtAuthGuard } from 'src/iam/presentation/guards/jwt-auth.guard';
+import { Roles } from 'src/iam/presentation/decorators/roles.decorator';
+import { CurrentUser } from 'src/iam/presentation/decorators/current-user.decorator';
+import type { ActiveUser } from 'src/iam/presentation/decorators/current-user.decorator';
 import { UserRole } from 'src/iam/domain/enums/user.enum';
 import {
   DOCUMENT_FISCAL_REPOSITORY,

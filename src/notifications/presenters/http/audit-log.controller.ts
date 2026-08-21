@@ -1,6 +1,6 @@
 import { Controller, Get, Query } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
-import { RequirePermission } from 'src/common/auth/require-permission.decorator';
+import { RequirePermission } from 'src/iam/presentation/decorators/require-permission.decorator';
 import { AuditLogService } from '../../applications/audit-log.service';
 
 @ApiTags('Audit Logs (Admin)')

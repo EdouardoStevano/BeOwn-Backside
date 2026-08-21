@@ -1,5 +1,5 @@
 import { DeleteMyAccountUseCase } from './delete-my-account.usecase';
-import type { HashingService } from 'src/common/hashing/hashing.service';
+import type { HashingService } from 'src/iam/domain/ports/hashing.service';
 import {
   ConfirmationParMotDePasseImpossibleError,
   MotDePasseIncorrectError,

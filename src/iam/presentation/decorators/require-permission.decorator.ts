@@ -1,5 +1,5 @@
 import { SetMetadata } from '@nestjs/common';
-import { Permission } from './permissions.constants';
+import { Permission } from 'src/iam/domain/policies/role-permissions.policy';
 
 export const PERMISSIONS_KEY = 'permissions';
 

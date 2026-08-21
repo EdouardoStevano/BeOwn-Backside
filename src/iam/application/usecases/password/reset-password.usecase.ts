@@ -15,7 +15,7 @@ import {
 import {
   HASHING_SERVICE,
   type HashingService,
-} from 'src/common/hashing/hashing.service';
+} from 'src/iam/domain/ports/hashing.service';
 import { InvalidPasswordResetTokenError } from 'src/iam/domain/errors';
 
 export interface ResetPasswordCommand {

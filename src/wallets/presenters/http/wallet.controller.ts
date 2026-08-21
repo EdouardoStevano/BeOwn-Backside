@@ -20,10 +20,10 @@ import { WALLET_REPOSITORY } from 'src/wallets/applications/ports/repositories/w
 import type { WalletRepository } from 'src/wallets/applications/ports/repositories/wallet.repository';
 import { Wallet } from 'src/wallets/domains/wallet';
 import { Transaction } from 'src/wallets/domains/transaction';
-import { CurrentUser } from 'src/common/auth/current-user.decorator';
-import type { ActiveUser } from 'src/common/auth/current-user.decorator';
-import { RequirePermission } from 'src/common/auth/require-permission.decorator';
-import { hasPermission } from 'src/common/auth/permissions.constants';
+import { CurrentUser } from 'src/iam/presentation/decorators/current-user.decorator';
+import type { ActiveUser } from 'src/iam/presentation/decorators/current-user.decorator';
+import { RequirePermission } from 'src/iam/presentation/decorators/require-permission.decorator';
+import { hasPermission } from 'src/iam/domain/policies/role-permissions.policy';
 import {
   TransactionFournisseur,
   TransactionStatus,

@@ -2,7 +2,7 @@ import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { ApiOperation, ApiProperty, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { IsNotEmpty, IsString } from 'class-validator';
-import { Public } from 'src/common/auth/public.decorator';
+import { Public } from 'src/iam/presentation/decorators/public.decorator';
 import { NotificationUnsubscribeService } from 'src/notifications/applications/notification-unsubscribe.service';
 
 export class UnsubscribeDto {

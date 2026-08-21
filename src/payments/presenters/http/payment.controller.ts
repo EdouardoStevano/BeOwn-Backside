@@ -40,12 +40,12 @@ import {
   TransactionType,
   WalletType,
 } from 'src/wallets/domains/enums/wallet.enum';
-import { Public } from 'src/common/auth/public.decorator';
+import { Public } from 'src/iam/presentation/decorators/public.decorator';
 import { formatEur } from 'src/shared/money/format-eur';
-import { CurrentUser } from 'src/common/auth/current-user.decorator';
-import type { ActiveUser } from 'src/common/auth/current-user.decorator';
+import { CurrentUser } from 'src/iam/presentation/decorators/current-user.decorator';
+import type { ActiveUser } from 'src/iam/presentation/decorators/current-user.decorator';
 import { UseGuards } from '@nestjs/common';
-import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
+import { JwtAuthGuard } from 'src/iam/presentation/guards/jwt-auth.guard';
 import { KycValidatedGuard } from 'src/kyc/presenters/guards/kyc-validated.guard';
 import { SkipThrottle } from '@nestjs/throttler';
 import { NotificationService } from 'src/notifications/applications/notification.service';

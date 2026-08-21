@@ -5,9 +5,9 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import { CurrentUser } from 'src/common/auth/current-user.decorator';
-import type { ActiveUser } from 'src/common/auth/current-user.decorator';
-import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
+import { CurrentUser } from 'src/iam/presentation/decorators/current-user.decorator';
+import type { ActiveUser } from 'src/iam/presentation/decorators/current-user.decorator';
+import { JwtAuthGuard } from 'src/iam/presentation/guards/jwt-auth.guard';
 import { GetPreferencesUseCase } from 'src/preferences/applications/usecases/get-preferences.usecase';
 import { UpdatePreferencesUseCase } from 'src/preferences/applications/usecases/update-preferences.usecase';
 import {

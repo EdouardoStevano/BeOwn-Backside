@@ -11,7 +11,7 @@ import {
   WalletType,
 } from 'src/wallets/domains/enums/wallet.enum';
 import { formatEur } from 'src/shared/money/format-eur';
-import type { ActiveUser } from 'src/common/auth/current-user.decorator';
+import type { ActiveUser } from 'src/iam/presentation/decorators/current-user.decorator';
 import { CreateRetraitDto } from '../../presenters/dto/payment.dto';
 import {
   StripeConnectService,

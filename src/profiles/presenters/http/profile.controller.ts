@@ -19,9 +19,9 @@ import {
   UpdateProfilPMDto,
 } from '../dto/profil.dto';
 import { SaveQuestionnaireDto } from '../dto/questionnaire.dto';
-import { CurrentUser } from 'src/common/auth/current-user.decorator';
-import type { ActiveUser } from 'src/common/auth/current-user.decorator';
-import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
+import { CurrentUser } from 'src/iam/presentation/decorators/current-user.decorator';
+import type { ActiveUser } from 'src/iam/presentation/decorators/current-user.decorator';
+import { JwtAuthGuard } from 'src/iam/presentation/guards/jwt-auth.guard';
 
 /**
  * Le profil investisseur et son questionnaire d'adéquation.
