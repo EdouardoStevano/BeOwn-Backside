@@ -2,8 +2,8 @@ import { Inject, Injectable } from '@nestjs/common';
 import {
   PREFERENCES_REPOSITORY,
   type PreferencesRepository,
-} from 'src/preferences/domains/ports/preferences.repository';
-import { Preferences } from 'src/preferences/domains/preferences';
+} from 'src/iam/domain/repositories/preferences.repository';
+import { Preferences } from 'src/iam/domain/entities/preferences';
 
 /** Réglages du titulaire — ceux par défaut s'il n'en a jamais posé. */
 @Injectable()

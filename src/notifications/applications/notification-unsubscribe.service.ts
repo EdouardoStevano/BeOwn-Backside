@@ -8,7 +8,7 @@ import {
   USER_REPOSITORY,
   type UserRepository,
 } from 'src/iam/domain/repositories/user.repository';
-import { UpdatePreferencesUseCase } from 'src/preferences/applications/usecases/update-preferences.usecase';
+import { UpdatePreferencesUseCase } from 'src/iam/application/usecases/preferences/update-preferences.usecase';
 
 /**
  * Désinscription des communications marketing depuis le lien présent dans les

@@ -1,4 +1,4 @@
-import { AccountOverviewController } from 'src/account-overview/presenters/http/account-overview.controller';
+import { AccountOverviewController } from 'src/iam/presentation/http/account-overview.controller';
 
 /**
  * Ces deux tests vivaient dans `user.controller.spec.ts` ; ils suivent les

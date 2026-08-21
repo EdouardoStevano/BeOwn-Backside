@@ -5,7 +5,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { NotificationEntity } from './infrastructure/persistences/entities/notification.entity';
 import { AuditLogEntity } from './infrastructure/persistences/entities/audit-log.entity';
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
-import { UserPreferencesEntity } from 'src/preferences/infrastructure/persistences/entities/user-preferences.entity';
+import { UserPreferencesEntity } from 'src/iam/infrastructure/persistence/entities/user-preferences.entity';
 import { ProjectEntity } from 'src/projects/infrastructure/persistences/entities/project.entity';
 import { AdminSettingsEntity } from 'src/admin/entities/admin-settings.entity';
 import { NotificationService } from './applications/notification.service';
@@ -19,7 +19,7 @@ import { BroadcastService } from './applications/broadcast.service';
 import { PublicUnsubscribeController } from './presenters/http/public-unsubscribe.controller';
 import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructure.module';
 import { UsersInfrastructureModule } from 'src/iam/infrastructure/users-infrastructure.module';
-import { PreferencesModule } from 'src/preferences/applications/preferences.module';
+import { PreferencesModule } from 'src/iam/application/preferences.module';
 
 @Module({
   imports: [

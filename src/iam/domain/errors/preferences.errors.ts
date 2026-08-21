@@ -1,42 +1,23 @@
+import { IamError, IamErrorKind } from './iam.error';
+
 /**
- * Socle des erreurs métier du contexte Preferences.
+ * Erreurs des réglages du titulaire.
  *
- * TypeScript pur : aucun import NestJS, aucune notion de statut HTTP (§12.1).
- * `PreferencesErrorFilter` traduit en réponse.
+ * Elles portaient leur propre socle — `PreferencesError`, `PreferencesErrorKind`
+ * — recopié d'`IamError` à l'époque où les préférences étaient un Bounded
+ * Context séparé. Ce doublon se justifiait alors par CRP (§5) : deux contextes
+ * distincts ne partagent pas une classe de base. Les préférences ayant rejoint
+ * `identity`, la justification tombe — un contexte n'a qu'un vocabulaire
+ * d'erreurs, et `IamErrorFilter` le traduit déjà.
  *
- * Même socle recopié que `ProfilesError` et `IamError`. Le doublon est assumé
- * pour la même raison qu'eux : une classe de base partagée obligerait chaque
- * Bounded Context à dépendre d'un module commun qui grossirait à chaque
- * besoin — précisément ce que CRP (§5) demande d'éviter.
+ * Les deux `kind` retenus se mappent sur les mêmes statuts qu'avant (409 et
+ * 400) et le corps de réponse est celui, identique, que produisait
+ * `PreferencesErrorFilter` : les appelants ne voient aucune différence.
  */
-export enum PreferencesErrorKind {
-  /** L'état actuel interdit l'opération. */
-  CONFLICT = 'CONFLICT',
-  /** L'entrée fournie est invalide au regard d'une règle métier. */
-  INVALID_INPUT = 'INVALID_INPUT',
-}
-
-export interface PreferencesErrorOptions {
-  code?: string;
-  details?: Record<string, unknown>;
-}
-
-export abstract class PreferencesError extends Error {
-  abstract readonly kind: PreferencesErrorKind;
-  readonly code?: string;
-  readonly details?: Record<string, unknown>;
-
-  constructor(message: string, options: PreferencesErrorOptions = {}) {
-    super(message);
-    this.name = new.target.name;
-    this.code = options.code;
-    this.details = options.details;
-  }
-}
 
 /** Langue hors de celles que la plateforme sert. */
-export class LangueNonSupporteeError extends PreferencesError {
-  readonly kind = PreferencesErrorKind.INVALID_INPUT;
+export class LangueNonSupporteeError extends IamError {
+  readonly kind = IamErrorKind.INVALID_INPUT;
 
   constructor(langues: readonly string[]) {
     super(`Langue non supportée : attendu ${langues.join(', ')}.`, {
@@ -62,8 +43,8 @@ export class LangueNonSupporteeError extends PreferencesError {
  * désarmer le compte. Aucune de ces deux garanties ne tient dans un `PATCH` de
  * préférence : le champ devient donc lecture seule.
  */
-export class MfaNonModifiableParPreferenceError extends PreferencesError {
-  readonly kind = PreferencesErrorKind.CONFLICT;
+export class MfaNonModifiableParPreferenceError extends IamError {
+  readonly kind = IamErrorKind.CONFLICT;
 
   constructor() {
     super(

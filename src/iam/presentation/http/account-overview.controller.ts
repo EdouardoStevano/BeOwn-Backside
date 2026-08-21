@@ -16,8 +16,8 @@ import { SkipThrottle } from '@nestjs/throttler';
 import { CurrentUser } from 'src/iam/presentation/decorators/current-user.decorator';
 import type { ActiveUser } from 'src/iam/presentation/decorators/current-user.decorator';
 import { JwtAuthGuard } from 'src/iam/presentation/guards/jwt-auth.guard';
-import { GetMyAccountUseCase } from 'src/account-overview/applications/usecases/get-my-account.usecase';
-import { GetUserAccountUseCase } from 'src/account-overview/applications/usecases/get-user-account.usecase';
+import { GetMyAccountUseCase } from 'src/iam/application/usecases/account-overview/get-my-account.usecase';
+import { GetUserAccountUseCase } from 'src/iam/application/usecases/account-overview/get-user-account.usecase';
 
 /**
  * Les deux **lectures composées** du compte : la vue d'ensemble du titulaire et

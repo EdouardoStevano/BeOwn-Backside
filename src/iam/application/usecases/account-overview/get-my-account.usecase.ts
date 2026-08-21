@@ -8,7 +8,7 @@ import {
   USER_REPOSITORY,
   type UserRepository,
 } from 'src/iam/domain/repositories/user.repository';
-import { GetPreferencesUseCase } from 'src/preferences/applications/usecases/get-preferences.usecase';
+import { GetPreferencesUseCase } from 'src/iam/application/usecases/preferences/get-preferences.usecase';
 import { GetOnboardingStatusUseCase } from 'src/profiles/applications/usecases/get-onboarding-status.usecase';
 import { WalletType } from 'src/wallets/domains/enums/wallet.enum';
 import {

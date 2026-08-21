@@ -1,4 +1,4 @@
-import { Preferences } from 'src/preferences/domains/preferences';
+import { Preferences } from 'src/iam/domain/entities/preferences';
 
 export const PREFERENCES_REPOSITORY = Symbol('PREFERENCES_REPOSITORY');
 

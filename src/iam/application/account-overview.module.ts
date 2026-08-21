@@ -1,12 +1,12 @@
 import { Module } from '@nestjs/common';
-import { GetMyAccountUseCase } from './applications/usecases/get-my-account.usecase';
-import { GetUserAccountUseCase } from './applications/usecases/get-user-account.usecase';
-import { AccountOverviewController } from './presenters/http/account-overview.controller';
+import { GetMyAccountUseCase } from './usecases/account-overview/get-my-account.usecase';
+import { GetUserAccountUseCase } from './usecases/account-overview/get-user-account.usecase';
+import { AccountOverviewController } from '../presentation/http/account-overview.controller';
 import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructure.module';
 import { UsersInfrastructureModule } from 'src/iam/infrastructure/users-infrastructure.module';
 import { ProfilesModule } from 'src/profiles/applications/profiles.module';
 import { KycInfrastructureModule } from 'src/kyc/infrastructure/kyc-infrastructure.module';
-import { PreferencesModule } from 'src/preferences/applications/preferences.module';
+import { PreferencesModule } from 'src/iam/application/preferences.module';
 import { DocumentsInfrastructureModule } from 'src/documents/infrastructure/documents-infrastructure.module';
 import { WalletsInfrastructureModule } from 'src/wallets/infrastructure/wallets-infrastructure.module';
 
@@ -18,9 +18,15 @@ import { WalletsInfrastructureModule } from 'src/wallets/infrastructure/wallets-
  * Sa règle d'existence tient en une ligne : **il importe, il n'est jamais
  * importé**. Aucun autre module ne dépend de lui, donc aucune arête ne peut
  * revenir vers ses dépendances. C'est ce qui casse le cycle `iam ↔ profiles` —
- * IAM redevient le contexte purement amont qu'il doit être, et Profiles,
- * Preferences, Documents et Wallets continuent de dépendre d'IAM dans le seul
- * sens légitime.
+ * IAM redevient le contexte purement amont qu'il doit être, et KYC, Documents
+ * et Wallets continuent de dépendre d'IAM dans le seul sens légitime.
+ *
+ * Il vit désormais dans `src/iam/` — les deux routes qu'il sert, `GET /users/me`
+ * et `GET /users/:id`, lisent le compte — mais **reste un module Nest distinct**,
+ * et n'est monté que par `AppModule`. `IamModule` ne l'importe pas : ce serait
+ * faire dépendre le contexte de tout ce que ce module compose, et rouvrir
+ * exactement l'arête que sa règle d'existence interdit. La frontière de
+ * contexte est le dossier et le langage (§3.2), pas le graphe de modules.
  *
  * Corollaire à tenir : **rien de métier ici**. Une règle qui apparaît dans un
  * use case de ce module est le signe qu'elle appartient à l'un des contextes

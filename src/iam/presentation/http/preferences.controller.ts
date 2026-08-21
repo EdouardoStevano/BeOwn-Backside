@@ -8,8 +8,8 @@ import {
 import { CurrentUser } from 'src/iam/presentation/decorators/current-user.decorator';
 import type { ActiveUser } from 'src/iam/presentation/decorators/current-user.decorator';
 import { JwtAuthGuard } from 'src/iam/presentation/guards/jwt-auth.guard';
-import { GetPreferencesUseCase } from 'src/preferences/applications/usecases/get-preferences.usecase';
-import { UpdatePreferencesUseCase } from 'src/preferences/applications/usecases/update-preferences.usecase';
+import { GetPreferencesUseCase } from 'src/iam/application/usecases/preferences/get-preferences.usecase';
+import { UpdatePreferencesUseCase } from 'src/iam/application/usecases/preferences/update-preferences.usecase';
 import {
   LangueValueDto,
   ToggleValueDto,

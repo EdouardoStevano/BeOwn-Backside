@@ -1,8 +1,8 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { PREFERENCES_REPOSITORY } from '../domains/ports/preferences.repository';
-import { UserPreferencesEntity } from './persistences/entities/user-preferences.entity';
-import { PreferencesTypeOrmRepository } from './persistences/repositories/preferences.repository';
+import { PREFERENCES_REPOSITORY } from '../domain/repositories/preferences.repository';
+import { UserPreferencesEntity } from './persistence/entities/user-preferences.entity';
+import { PreferencesTypeOrmRepository } from './repositories/preferences.repository';
 
 /**
  * Adapter de sortie du contexte Preferences (§4 — DIP).

@@ -1,7 +1,7 @@
 import {
   LangueNonSupporteeError,
   MfaNonModifiableParPreferenceError,
-} from './errors/preferences.error';
+} from '../errors/preferences.errors';
 import { Preferences } from './preferences';
 
 describe('Preferences.defaut', () => {

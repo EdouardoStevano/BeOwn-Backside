@@ -1,7 +1,7 @@
 import {
   LangueNonSupporteeError,
   MfaNonModifiableParPreferenceError,
-} from './errors/preferences.error';
+} from '../errors/preferences.errors';
 
 /** Langues servies par la plateforme. */
 export const LANGUES_SUPPORTEES = ['fr', 'en', 'ar'] as const;

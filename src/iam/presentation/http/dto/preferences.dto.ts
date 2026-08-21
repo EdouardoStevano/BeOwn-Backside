@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsBoolean, IsIn, IsOptional, IsString } from 'class-validator';
-import { LANGUES_SUPPORTEES } from 'src/preferences/domains/preferences';
+import { LANGUES_SUPPORTEES } from 'src/iam/domain/entities/preferences';
 
 /** Mise à jour groupée — le corps que le formulaire de réglages envoie. */
 export class UpdatePreferencesDto {
