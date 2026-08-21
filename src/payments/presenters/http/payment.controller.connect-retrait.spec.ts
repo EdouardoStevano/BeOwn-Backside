@@ -1,5 +1,7 @@
 import { PaymentController } from './payment.controller';
 import { RequestRetraitUseCase } from '../../applications/usecases/request-retrait.usecase';
+import { PayoutDestinationResolver } from '../../applications/services/payout-destination.resolver';
+import { InMemoryPayoutMethodsAdapter } from '../../infrastructure/in-memory-payout-methods.adapter';
 import {
   TransactionStatus,
   TransactionType,
@@ -26,6 +28,7 @@ describe('PaymentController — retrait Stripe Connect (E3, sécurité argent)',
   let walletRepo: any;
   let txRepo: any;
   let dataSource: any;
+  let metricsPort: any;
 
   const user = { userId: 42, email: 'a@b.c', role: 'INVESTISSEUR' } as any;
 
@@ -66,14 +69,24 @@ describe('PaymentController — retrait Stripe Connect (E3, sécurité argent)',
       save: jest.fn(async (x: any) => x),
     };
     dataSource = { transaction: jest.fn() };
+    metricsPort = {
+      incrementCounter: jest.fn(),
+      observeHistogram: jest.fn(),
+      setGauge: jest.fn(),
+    };
 
     // Le usecase porte désormais la logique retrait/recrédit (SRP) ; on l'instancie
     // avec les mêmes mocks puis on l'injecte dans le contrôleur.
+    // Lot 4a — résolveur de destination adossé à l'adaptateur EN MÉMOIRE : sans
+    // `payoutMethodId` ni `method`, il renvoie le parcours historique, de sorte
+    // que ces tests continuent de vérifier exactement le comportement d'origine.
     requestRetrait = new RequestRetraitUseCase(
       txRepo,
       stripeConnect,
       notificationService,
       dataSource,
+      metricsPort,
+      new PayoutDestinationResolver(new InMemoryPayoutMethodsAdapter()),
     );
 
     controller = new PaymentController(
@@ -89,6 +102,7 @@ describe('PaymentController — retrait Stripe Connect (E3, sécurité argent)',
       txRepo,
       dataSource,
       requestRetrait,
+      metricsPort,
     );
   });
 

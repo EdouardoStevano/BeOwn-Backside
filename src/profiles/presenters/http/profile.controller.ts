@@ -16,6 +16,7 @@ import {
 import {
   ApiTags,
   ApiOperation,
+  ApiBody,
   ApiResponse,
   ApiBearerAuth,
 } from '@nestjs/swagger';
@@ -34,9 +35,14 @@ import { QuestionnaireAdequationEntity } from 'src/profiles/infrastructure/persi
 import {
   CreateProfilPPDto,
   UpdateKycStatusDto,
+  UpdateProfilPPDto,
   CreateProfilPMDto,
 } from '../dto/profil.dto';
-import { SaveQuestionnaireDto } from '../dto/questionnaire.dto';
+import {
+  SaveQuestionnaireDto,
+  SaveTestConnaissancesDto,
+} from '../dto/questionnaire.dto';
+import { SaveTestConnaissancesUseCase } from 'src/profiles/applications/usecases/save-test-connaissances.usecase';
 import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
 import { UseGuards } from '@nestjs/common';
@@ -50,6 +56,9 @@ import { NotificationService } from 'src/notifications/applications/notification
 import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
 import { NotificationEventService } from 'src/notifications/applications/notification-event.service';
 import { KycStatus } from 'src/profiles/domains/enums/kyc-status.enum';
+import { PROFIL_REPOSITORY, type ProfilRepository } from 'src/profiles/applications/ports/repositories/profil.repository';
+import { MetricsPort } from 'src/observability/metrics/metrics.port';
+import { METRIC } from 'src/observability/metrics/metric-names';
 
 /** Rôles détenant `kyc:validate` — Compliance (+ super_admin via wildcard). */
 const KYC_REVIEWER_ROLES: string[] = rolesWithPermission('kyc:validate');
@@ -86,7 +95,26 @@ export class ProfileController {
     private readonly userRepo: Repository<UserEntity>,
     private readonly notifications: NotificationService,
     private readonly notificationEvents: NotificationEventService,
+    @Inject(PROFIL_REPOSITORY)
+    private readonly profilRepository: ProfilRepository,
+    private readonly metrics: MetricsPort,
+    // Ajouté en DERNIÈRE position : les specs existantes instancient le
+    // contrôleur positionnellement, un insert en milieu de liste les casserait.
+    private readonly saveTestConnaissancesUseCase: SaveTestConnaissancesUseCase,
   ) {}
+
+  /**
+   * Rafraîchit la jauge `kyc_manual_review_pending` (backlog de dossiers
+   * EN_REVUE). Pas de CRON dédié : recalculée à chaque transition qui fait
+   * entrer/sortir un dossier de EN_REVUE — reste juste avec un coût minime
+   * (COUNT indexé), jamais périmée de plus d'une requête.
+   */
+  private refreshKycManualReviewGauge(): void {
+    this.profilRepository
+      .countKycByStatus(KycStatus.EN_REVUE)
+      .then((count) => this.metrics.setGauge(METRIC.KYC_MANUAL_REVIEW_PENDING, count))
+      .catch(() => {});
+  }
 
   /** Défense en profondeur : mutation KYC réservée à `kyc:validate` (Compliance + super_admin). */
   private async assertKycReviewer(user: ActiveUser): Promise<void> {
@@ -152,6 +180,11 @@ export class ProfileController {
       KycStatus.EN_REVUE,
       'Dépôt manuel de documents — revue requise',
     );
+    this.metrics.incrementCounter(METRIC.KYC_TRANSITIONS_TOTAL, {
+      to_status: 'en_revue',
+      mode: 'manual',
+    });
+    this.refreshKycManualReviewGauge();
     this.notifications
       .pushToAdmins({
         type: NotificationType.KYC_REVUE_MANUELLE,
@@ -195,6 +228,11 @@ export class ProfileController {
     }
 
     const updated = await this.updateKycStatus.execute(userId, dto.status, dto.motifRefus);
+    this.metrics.incrementCounter(METRIC.KYC_TRANSITIONS_TOTAL, {
+      to_status: dto.status,
+      mode: 'manual',
+    });
+    this.refreshKycManualReviewGauge();
 
     if (dto.status === KycStatus.VALIDE) {
       this.notifications
@@ -234,11 +272,13 @@ export class ProfileController {
   }
 
   @ApiOperation({ summary: 'Mettre à jour mon profil PP' })
+  @ApiBody({ type: UpdateProfilPPDto })
   @ApiResponse({ status: 200, description: 'Profil PP mis à jour' })
+  @ApiResponse({ status: 400, description: 'Champ inconnu ou valeur invalide' })
   @Patch('pp/me')
   updateMyProfilePP(
     @CurrentUser() user: ActiveUser,
-    @Body() dto: Partial<CreateProfilPPDto>,
+    @Body() dto: UpdateProfilPPDto,
   ) {
     return this.updateProfilPP.execute(user.userId, dto);
   }
@@ -279,6 +319,32 @@ export class ProfileController {
     @Body() dto: SaveQuestionnaireDto,
   ) {
     return this.saveQuestionnaireUseCase.execute(user.userId, dto);
+  }
+
+  /**
+   * Test de connaissances — art. 21(1) à 21(4) du règlement (UE) 2020/1503.
+   *
+   * Soumission indépendante de l'évaluation patrimoniale : l'art. 21(2) impose
+   * un réexamen tous les deux ans et l'investisseur doit pouvoir repasser le
+   * test sans resaisir sa situation financière. Les mêmes champs peuvent aussi
+   * être joints à `POST /profiles/questionnaire` pour un envoi unique.
+   *
+   * Un échec N'INTERDIT PAS d'investir (art. 21(4)) : il rend dû
+   * l'avertissement sur le risque de perte totale, renvoyé dans la réponse.
+   */
+  @ApiOperation({ summary: 'Soumettre le test de connaissances (art. 21)' })
+  @ApiResponse({
+    status: 201,
+    description:
+      'Résultat évalué et persisté : { score, total, ratio, adequat, avertissementRequis, domainesManquants, avertissement }',
+  })
+  @ApiResponse({ status: 400, description: 'Score hors bornes' })
+  @Post('questionnaire/test-connaissances')
+  saveTestConnaissances(
+    @CurrentUser() user: ActiveUser,
+    @Body() dto: SaveTestConnaissancesDto,
+  ) {
+    return this.saveTestConnaissancesUseCase.execute(user.userId, dto);
   }
 
   @ApiOperation({ summary: "Obtenir mon questionnaire d'adéquation" })

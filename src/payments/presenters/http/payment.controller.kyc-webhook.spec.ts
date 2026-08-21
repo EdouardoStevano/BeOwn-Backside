@@ -34,6 +34,7 @@ describe('PaymentController — webhook Stripe Identity (KYC auto + fallback rev
   let walletRepo: any;
   let txRepo: any;
   let dataSource: any;
+  let metricsPort: any;
 
   const req = (body: any) => ({ rawBody: Buffer.from(JSON.stringify(body)) }) as any;
 
@@ -71,6 +72,11 @@ describe('PaymentController — webhook Stripe Identity (KYC auto + fallback rev
     walletRepo = {};
     txRepo = { findOne: jest.fn() };
     dataSource = { transaction: jest.fn() };
+    metricsPort = {
+      incrementCounter: jest.fn(),
+      observeHistogram: jest.fn(),
+      setGauge: jest.fn(),
+    };
 
     controller = new PaymentController(
       stripeService,
@@ -84,6 +90,8 @@ describe('PaymentController — webhook Stripe Identity (KYC auto + fallback rev
       walletRepo,
       txRepo,
       dataSource,
+      /* requestRetrait */ {} as any,
+      metricsPort,
     );
   });
 

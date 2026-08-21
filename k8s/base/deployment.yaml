@@ -56,14 +56,14 @@ spec:
                 name: beown-backend-secrets
           livenessProbe:
             httpGet:
-              path: /health
+              path: /health/live
               port: 8080
             initialDelaySeconds: 30
             periodSeconds: 15
             failureThreshold: 3
           readinessProbe:
             httpGet:
-              path: /health
+              path: /health/ready
               port: 8080
             initialDelaySeconds: 10
             periodSeconds: 5

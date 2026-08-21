@@ -9,6 +9,8 @@ export class Wallet {
   fournisseurRef: string;
   devise: string;
   solde: number;
+  /** Fonds engagés sous délai de réflexion (art. 22 ECSPR), indisponibles. */
+  soldeBloque: number;
   statut: string;
   createdAt: Date;
 }

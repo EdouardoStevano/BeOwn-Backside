@@ -26,8 +26,10 @@ export enum DocumentKycType {
   AUTRE = 'autre',
 }
 
-export enum CategoriePsfp {
-  NON_AVERTI = 'non_averti',
-  AVERTI = 'averti',
-  PROFESSIONNEL = 'professionnel',
-}
+/**
+ * Le règlement (UE) 2020/1503 ne connaît que deux catégories d'investisseur.
+ * La catégorie « professionnel » qui existait ici n'a pas de fondement dans le
+ * règlement : un investisseur professionnel au sens de MiFID est simplement
+ * réputé averti. Voir `src/profiles/domains/investor-classification.ts`.
+ */
+export { CategorieInvestisseur } from '../investor-classification';

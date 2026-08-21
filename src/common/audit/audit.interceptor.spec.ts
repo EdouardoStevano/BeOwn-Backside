@@ -80,6 +80,64 @@ describe('AuditInterceptor', () => {
     expect(auditLogService.create).toHaveBeenCalled();
   });
 
+  /**
+   * Le journal d'activité était noyé par une ligne à chaque notification lue
+   * ou supprimée, masquant les décisions réellement traçables. Ces routes de
+   * confort sont exclues — mais les diffusions admin restent auditées.
+   */
+  describe('exclusion des notifications', () => {
+    const ctxForRoute = (path: string, method = 'POST') =>
+      ({
+        switchToHttp: () => ({
+          getRequest: () => ({
+            method,
+            user: { userId: 7, role: 'investisseur' },
+            route: { path },
+            url: path,
+            params: {},
+            ip: '10.0.0.1',
+            headers: { 'user-agent': 'jest' },
+            body: {},
+          }),
+          getResponse: () => ({ statusCode: 200 }),
+        }),
+      }) as any;
+
+    it.each([
+      '/notifications/:id/read',
+      '/notifications/me/read-all',
+      '/notifications/:id',
+      '/notifications/me/all',
+    ])("n'audite pas %s", async (path) => {
+      await lastValueFrom(
+        interceptor.intercept(ctxForRoute(path), {
+          handle: () => of({ ok: true }),
+        } as any),
+      );
+      await new Promise(process.nextTick);
+      expect(auditLogService.create).not.toHaveBeenCalled();
+    });
+
+    it('audite toujours les diffusions /admin/notifications', async () => {
+      await lastValueFrom(
+        interceptor.intercept(ctxForRoute('/admin/notifications/broadcast'), {
+          handle: () => of({ ok: true }),
+        } as any),
+      );
+      await new Promise(process.nextTick);
+      expect(auditLogService.create).toHaveBeenCalled();
+    });
+
+    it('laisse passer la requête sans la modifier', async () => {
+      const result = await lastValueFrom(
+        interceptor.intercept(ctxForRoute('/notifications/:id/read'), {
+          handle: () => of({ ok: true }),
+        } as any),
+      );
+      expect(result).toEqual({ ok: true });
+    });
+  });
+
   it('sanitizeBody masque les champs sensibles et tronque', () => {
     const out = sanitizeBody({ password: 'x', iban: 'FR76', note: 'ok' });
     expect(out).toEqual({ password: '[MASQUE]', iban: '[MASQUE]', note: 'ok' });

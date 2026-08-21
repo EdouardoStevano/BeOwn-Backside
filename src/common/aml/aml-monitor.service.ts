@@ -3,6 +3,8 @@ import { AuditLogService } from 'src/notifications/applications/audit-log.servic
 import { NotificationService } from 'src/notifications/applications/notification.service';
 import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
 import { UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
+import { MetricsPort } from 'src/observability/metrics/metrics.port';
+import { METRIC } from 'src/observability/metrics/metric-names';
 
 /**
  * Phase 10 — AML monitoring (stub).
@@ -38,6 +40,7 @@ export class AmlMonitorService {
   constructor(
     @Inject(AuditLogService) private readonly auditLog: AuditLogService,
     private readonly notificationService: NotificationService,
+    private readonly metrics: MetricsPort,
   ) {}
 
   /**
@@ -62,6 +65,15 @@ export class AmlMonitorService {
     this.logger.warn(
       `AML threshold exceeded for user=${ctx.userId} amount=${ctx.amount} ctx=${ctx.context} alerts=[${motif}]`,
     );
+
+    // Une émission par règle déclenchée (single/monthly) — jamais l'userId ni
+    // le montant en label (cardinalité, cf. metric-names.ts).
+    for (const alert of alerts) {
+      this.metrics.incrementCounter(METRIC.AML_THRESHOLD_EXCEEDED_TOTAL, {
+        context: ctx.context,
+        rule: alert.startsWith('single') ? 'single' : 'monthly',
+      });
+    }
 
     await this.auditLog
       .create(

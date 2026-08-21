@@ -60,7 +60,7 @@ describe('computeWal', () => {
   });
 
   it('returns ~1 year for linear monthly amortization over 24 months', () => {
-    const futures = [];
+    const futures: Array<{ datePrevue: Date; montantCapital: number }> = [];
     for (let m = 1; m <= 24; m++) {
       const d = new Date('2025-01-01');
       d.setMonth(d.getMonth() + m);

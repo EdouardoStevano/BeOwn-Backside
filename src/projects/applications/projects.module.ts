@@ -1,4 +1,7 @@
 import { Module } from '@nestjs/common';
+import { UserEntity } from 'src/users/infrastructure/persistences/entities/user.entity';
+import { ProfilPPEntity } from 'src/profiles/infrastructure/persistences/entities/profil-pp.entity';
+import { ConflitsInteretsService } from './conflits-interets.service';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ProjectsInfrastructureModule } from '../infrastructure/projects-infrastructure.module';
 import { InvestmentsInfrastructureModule } from 'src/investments/infrastructure/investments-infrastructure.module';
@@ -36,10 +39,13 @@ import { ProjectTimelineCronService } from './project-timeline-cron.service';
       TransactionEntity,
       ProjectEntity,
       ProjectViewEntity,
+      UserEntity,
+      ProfilPPEntity,
     ]),
   ],
   providers: [
     CreateProjectUseCase,
+    ConflitsInteretsService,
     UpdateProjectUseCase,
     UpdateProjectStatusUseCase,
     GetProjectsUseCase,

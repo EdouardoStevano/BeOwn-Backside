@@ -106,7 +106,7 @@ describe('ResetPasswordUseCase', () => {
   it('rejette (401) un token émis avant le correctif (sans claim type)', async () => {
     const { usecase, tokenService } = makeUsecase();
     const legacyPayload = buildPayload();
-    delete (legacyPayload as Record<string, unknown>).type;
+    delete (legacyPayload as unknown as Record<string, unknown>).type;
     tokenService.verifyEmailToken.mockResolvedValue(legacyPayload);
 
     await expect(

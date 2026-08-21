@@ -4,14 +4,15 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { UserEntity } from 'src/users/infrastructure/persistences/entities/user.entity';
 import { StripePaymentService } from './stripe-payment.service';
+import {
+  ConnectAccountReader,
+  type ConnectAccountStatus,
+} from '../applications/ports/connect-account.port';
 
-export interface ConnectAccountStatus {
-  connected: boolean;
-  accountId: string | null;
-  detailsSubmitted: boolean;
-  chargesEnabled: boolean;
-  payoutsEnabled: boolean;
-}
+// `ConnectAccountStatus` est désormais déclaré dans le port (couche
+// application) et ré-exporté ici : les importeurs historiques de ce fichier
+// (payment.controller, request-retrait.usecase) restent inchangés.
+export type { ConnectAccountStatus };
 
 export interface CreateTransferParams {
   amountMajor: number;
@@ -27,6 +28,16 @@ export interface CreatePayoutParams {
   connectedAccountId: string;
   idempotencyKey: string;
   metadata?: Record<string, string>;
+  /**
+   * Lot 4a — mode de versement demandé. Omis = comportement historique
+   * (Stripe applique `standard`).
+   */
+  method?: 'instant' | 'standard';
+  /**
+   * Lot 4a — external account destinataire (carte ou IBAN). Omis = destination
+   * par défaut du compte connecté, comme avant.
+   */
+  destination?: string;
 }
 
 /**
@@ -44,7 +55,7 @@ export interface CreatePayoutParams {
  * (clés configurées à un seul endroit — pas de reconfiguration ici).
  */
 @Injectable()
-export class StripeConnectService {
+export class StripeConnectService implements ConnectAccountReader {
   private readonly logger = new Logger(StripeConnectService.name);
 
   constructor(
@@ -181,6 +192,10 @@ export class StripeConnectService {
    * comptes Express), cet appel peut échouer — l'appelant doit alors se
    * reposer sur le payout automatique. `metadata.retraitTxId` permet de
    * remonter au retrait lors des webhooks payout.*.
+   *
+   * Lot 4a — `method` et `destination` sont ajoutés à la requête UNIQUEMENT
+   * s'ils sont fournis : sans eux, la requête envoyée à Stripe est strictement
+   * identique à celle d'avant (rétrocompatibilité du parcours historique).
    */
   async createPayoutOnConnectedAccount(params: CreatePayoutParams): Promise<string> {
     const payout = await this.stripe.payouts.create(
@@ -188,6 +203,8 @@ export class StripeConnectService {
         amount: Math.round(params.amountMajor * 100),
         currency: params.currency.toLowerCase(),
         metadata: params.metadata ?? {},
+        ...(params.method ? { method: params.method } : {}),
+        ...(params.destination ? { destination: params.destination } : {}),
       },
       {
         idempotencyKey: params.idempotencyKey,

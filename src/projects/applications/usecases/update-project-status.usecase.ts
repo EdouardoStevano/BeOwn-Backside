@@ -10,6 +10,7 @@ import type { ProjectRepository } from '../ports/repositories/project.repository
 import { Project } from 'src/projects/domains/project';
 import { ProjectStatus } from 'src/projects/domains/enums/project-status.enum';
 import { BroadcastService } from 'src/notifications/applications/broadcast.service';
+import { decrireVerdict, verifierFici } from 'src/projects/domains/fici';
 
 const ALLOWED_TRANSITIONS: Record<ProjectStatus, ProjectStatus[]> = {
   [ProjectStatus.BROUILLON]: [ProjectStatus.ANNONCE, ProjectStatus.ANNULE],
@@ -58,6 +59,8 @@ export class UpdateProjectStatusUseCase {
       );
     }
 
+    this.assertFiciPubliable(project, newStatus);
+
     const updated = await this.projectRepository.updateProjectStatus(
       projectId,
       newStatus,
@@ -94,5 +97,34 @@ export class UpdateProjectStatusUseCase {
     }
 
     return updated;
+  }
+
+  /**
+   * Art. 23 : la fiche d'informations clés est mise à disposition des
+   * investisseurs potentiels AVANT qu'ils puissent s'engager. Le contrôle
+   * couvre donc aussi le pré-investissement : une réservation est un
+   * engagement, même si la collecte n'est pas formellement ouverte.
+   */
+  private assertFiciPubliable(project: Project, newStatus: ProjectStatus): void {
+    const statutsExigeantFici: ProjectStatus[] = [
+      ProjectStatus.PRE_INVESTISSEMENT,
+      ProjectStatus.EN_COLLECTE,
+    ];
+    if (!statutsExigeantFici.includes(newStatus)) return;
+
+    if (!project.fici) {
+      throw new BadRequestException(
+        "Aucune fiche d'informations clés sur l'investissement n'est renseignée pour " +
+          "ce projet. L'article 23 du règlement (UE) 2020/1503 impose de la mettre à " +
+          "disposition des investisseurs avant toute possibilité d'engagement.",
+      );
+    }
+
+    const verdict = verifierFici(project.fici);
+    if (!verdict.valide) {
+      throw new BadRequestException(
+        `Fiche d'informations clés incomplète. ${decrireVerdict(verdict)}`,
+      );
+    }
   }
 }

@@ -11,6 +11,10 @@ export class ProjectMapper {
     domain.slug = entity.slug;
     domain.titre = entity.titre;
     domain.spvId = entity.spvId;
+    // Projection en lecture seule : renseignée uniquement quand la relation
+    // `spv` a été jointe par le repository (jamais de requête supplémentaire ici,
+    // ce qui provoquerait un N+1 sur les listes).
+    domain.societeSupportNom = entity.spv?.raisonSociale ?? null;
     domain.porteurId = entity.porteurId;
     domain.type = entity.type;
     domain.ville = entity.ville;
@@ -44,6 +48,7 @@ export class ProjectMapper {
     domain.dateCloturePrevue = entity.dateCloturePrevue;
     domain.descriptionMd = entity.descriptionMd;
     domain.avertissementMd = entity.avertissementMd;
+    domain.fici = entity.fici ?? null;
     domain.previsionnel = entity.previsionnel ?? null;
     domain.chronologie = entity.chronologie ?? [];
     domain.garanties = entity.garanties ?? [];
@@ -90,6 +95,7 @@ export class ProjectMapper {
     entity.dateCloturePrevue = domain.dateCloturePrevue;
     entity.descriptionMd = domain.descriptionMd;
     entity.avertissementMd = domain.avertissementMd;
+    entity.fici = domain.fici ?? null;
     entity.previsionnel = domain.previsionnel;
     entity.chronologie = domain.chronologie ?? [];
     entity.garanties = domain.garanties ?? [];

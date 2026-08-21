@@ -16,6 +16,7 @@ export interface ProfilRepository {
   saveKyc(kyc: Kyc): Promise<Kyc>;
   findKycByUserId(userId: number): Promise<Kyc | null>;
   findAllKyc(params?: { page?: number; limit?: number }): Promise<{ items: Kyc[]; total: number }>;
+  countKycByStatus(status: KycStatus): Promise<number>;
   updateKycStatus(
     kycId: string,
     status: KycStatus,

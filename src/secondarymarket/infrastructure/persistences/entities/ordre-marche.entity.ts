@@ -53,6 +53,13 @@ export class OrdreMarcheEntity {
   @Column({ type: 'varchar', default: OrdreMarcheStatus.EN_CARNET })
   statut: OrdreMarcheStatus;
 
+  /** Quantité sur laquelle porte l'intérêt exprimé par l'acheteur (art. 25). */
+  @Column({ type: 'integer', nullable: true })
+  interetNbFractions: number | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  interetExprimeLe: Date | null;
+
   @Column({ type: 'date', nullable: true })
   valideJusquAu: Date | null;
 

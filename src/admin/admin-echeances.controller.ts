@@ -56,7 +56,14 @@ import { TriggerEcheancePaymentUseCase } from './usecases/trigger-echeance-payme
 import { GetAggregatedScheduleUseCase } from './usecases/get-aggregated-schedule.usecase';
 import { PatchAggregatedEcheanceUseCase } from './usecases/patch-aggregated-echeance.usecase';
 
+/** Rôles autorisés à CONSULTER l'échéancier (inclut rcci, rôle de contrôle). */
 const ADMIN_ROLES = rolesWithPermission('echeancier:read');
+/**
+ * Rôles autorisés à MODIFIER l'échéancier. Distinct de `ADMIN_ROLES` : une
+ * permission de lecture ne doit pas ouvrir l'écriture — rcci consulte, il ne
+ * réécrit pas un échéancier qu'il a mission d'auditer.
+ */
+const MANAGE_ROLES = rolesWithPermission('echeancier:manage');
 const PAY_ROLES: string[] = rolesWithPermission('echeancier:pay');
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -104,6 +111,20 @@ export class AdminEcheancesController {
     const u = await this.userRepo.findOne({ where: { userId: user.userId } });
     if (!u || !ADMIN_ROLES.includes(u.role as UserRole)) {
       throw new ForbiddenException("Accès réservé à l'équipe finance/admin");
+    }
+  }
+
+  /**
+   * Contrôle en base (défense en profondeur) du droit de MUTATION, doublant le
+   * `@RequirePermission('echeancier:manage')` porté par la route : le rôle du
+   * JWT peut être périmé, celui de la base fait foi.
+   */
+  private async assertManage(user: ActiveUser): Promise<void> {
+    const u = await this.userRepo.findOne({ where: { userId: user.userId } });
+    if (!u || !MANAGE_ROLES.includes(u.role as UserRole)) {
+      throw new ForbiddenException(
+        "Modification de l'échéancier réservée à l'équipe finance.",
+      );
     }
   }
 
@@ -247,6 +268,8 @@ export class AdminEcheancesController {
   })
   @ApiParam({ name: 'projectId', description: 'UUID du projet' })
   @ApiParam({ name: 'numero', description: "Numéro d'échéance (1-based)" })
+  @ApiResponse({ status: 403, description: 'Permission echeancier:manage requise' })
+  @RequirePermission('echeancier:manage')
   @Patch(':numero')
   async patchAggregated(
     @Param('projectId') projectId: string,
@@ -254,7 +277,7 @@ export class AdminEcheancesController {
     @Body() dto: UpdateAggregatedEcheanceDto,
     @CurrentUser() admin: ActiveUser,
   ): Promise<{ updated: number }> {
-    await this.assertAdmin(admin);
+    await this.assertManage(admin);
     return this.patchAggregatedEcheance.execute(projectId, numero, dto);
   }
 
@@ -265,14 +288,16 @@ export class AdminEcheancesController {
   })
   @ApiParam({ name: 'projectId', description: 'UUID du projet' })
   @ApiParam({ name: 'numero', description: "Numéro d'échéance (1-based)" })
+  @ApiResponse({ status: 403, description: 'Permission echeancier:manage requise' })
   @HttpCode(HttpStatus.OK)
+  @RequirePermission('echeancier:manage')
   @Delete(':numero')
   async deleteAggregated(
     @Param('projectId') projectId: string,
     @Param('numero', ParseIntPipe) numero: number,
     @CurrentUser() admin: ActiveUser,
   ): Promise<{ deleted: number; renumbered: number }> {
-    await this.assertAdmin(admin);
+    await this.assertManage(admin);
     const investments = await this.investRepo.find({
       where: { projetId: projectId },
     });
@@ -318,14 +343,16 @@ export class AdminEcheancesController {
       "Crée les EcheanceEntity pour tous les investissements actifs du projet : N lignes mensuelles (= dureeMois) ancrées sur dateDebut, montants pré-calculés au prorata des fractions détenues. In-fine : intérêts mensuels constants, capital à la dernière échéance. Refusé si un échéancier existe déjà.",
   })
   @ApiParam({ name: 'projectId', description: 'UUID du projet' })
+  @ApiResponse({ status: 403, description: 'Permission echeancier:manage requise' })
   @HttpCode(HttpStatus.OK)
+  @RequirePermission('echeancier:manage')
   @Post('initialize')
   async initialize(
     @Param('projectId') projectId: string,
     @Body() dto: InitializeScheduleDto,
     @CurrentUser() admin: ActiveUser,
   ): Promise<{ investmentsProcessed: number; echeancesGenerated: number }> {
-    await this.assertAdmin(admin);
+    await this.assertManage(admin);
     try {
       return await this.scheduleGenerator.initializeForProject(
         projectId,
@@ -343,14 +370,16 @@ export class AdminEcheancesController {
   })
   @ApiParam({ name: 'projectId', description: 'UUID du projet' })
   @ApiResponse({ status: 200, description: "Résumé : nb investissements + nb générées + nb supprimées" })
+  @ApiResponse({ status: 403, description: 'Permission echeancier:manage requise' })
   @HttpCode(HttpStatus.OK)
+  @RequirePermission('echeancier:manage')
   @Post('recompute')
   async recompute(
     @Param('projectId') projectId: string,
     @Body() dto: InitializeScheduleDto,
     @CurrentUser() admin: ActiveUser,
   ): Promise<{ investmentsProcessed: number; echeancesGenerated: number; echeancesDeleted: number }> {
-    await this.assertAdmin(admin);
+    await this.assertManage(admin);
     return this.scheduleGenerator.regenerateForProject(
       projectId,
       new Date(dto.dateDebut),
@@ -369,10 +398,13 @@ export class AdminEcheancesItemController {
     @InjectRepository(EcheanceEntity) private readonly echeanceRepo: Repository<EcheanceEntity>,
   ) {}
 
-  private async assertAdmin(user: ActiveUser): Promise<void> {
+  /** Défense en profondeur du droit de MUTATION (cf. AdminEcheancesController). */
+  private async assertManage(user: ActiveUser): Promise<void> {
     const u = await this.userRepo.findOne({ where: { userId: user.userId } });
-    if (!u || !ADMIN_ROLES.includes(u.role as UserRole)) {
-      throw new ForbiddenException("Accès réservé à l'équipe finance/admin");
+    if (!u || !MANAGE_ROLES.includes(u.role as UserRole)) {
+      throw new ForbiddenException(
+        "Modification de l'échéancier réservée à l'équipe finance.",
+      );
     }
   }
 
@@ -414,10 +446,12 @@ export class AdminEcheancesItemController {
 
   @ApiOperation({ summary: "Supprimer une échéance (uniquement si non payée)" })
   @ApiParam({ name: 'id', description: "UUID de l'échéance" })
+  @ApiResponse({ status: 403, description: 'Permission echeancier:manage requise' })
   @HttpCode(HttpStatus.NO_CONTENT)
+  @RequirePermission('echeancier:manage')
   @Delete(':id')
   async remove(@Param('id') id: string, @CurrentUser() user: ActiveUser): Promise<void> {
-    await this.assertAdmin(user);
+    await this.assertManage(user);
     const ech = await this.echeanceRepo.findOne({ where: { id } });
     if (!ech) throw new NotFoundException('Échéance introuvable.');
     if (ech.statut === EcheanceStatus.PAYE) {

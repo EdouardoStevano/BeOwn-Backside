@@ -24,11 +24,17 @@ describe('EcheancesCronService', () => {
     notifications = {
       pushToAdmins: jest.fn().mockResolvedValue([]),
     };
+    const metrics: any = {
+      incrementCounter: jest.fn(),
+      observeHistogram: jest.fn(),
+      setGauge: jest.fn(),
+    };
     service = new EcheancesCronService(
       echeanceRepo,
       notificationEvents,
       payEcheance,
       notifications,
+      metrics,
     );
   });
 
@@ -93,7 +99,7 @@ describe('EcheancesCronService', () => {
       await service.autoPayVerifiedDue();
 
       expect(payEcheance.execute).toHaveBeenCalledTimes(2);
-      expect(payEcheance.execute).toHaveBeenNthCalledWith(1, 'v1', 0, 'super_admin');
+      expect(payEcheance.execute).toHaveBeenNthCalledWith(1, 'v1', 0, 'super_admin', 'cron');
       expect(notifications.pushToAdmins).not.toHaveBeenCalled();
     });
 

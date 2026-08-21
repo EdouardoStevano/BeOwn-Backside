@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Body,
+  ConflictException,
   Controller,
   ForbiddenException,
   Get,
@@ -62,6 +63,8 @@ import { NotificationService } from 'src/notifications/applications/notification
 import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
 import { UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
 import { AuditLogService } from 'src/notifications/applications/audit-log.service';
+import { MetricsPort } from 'src/observability/metrics/metrics.port';
+import { METRIC } from 'src/observability/metrics/metric-names';
 
 @ApiTags('Payments & KYC')
 @ApiBearerAuth()
@@ -87,6 +90,7 @@ export class PaymentController {
     @InjectDataSource()
     private readonly dataSource: DataSource,
     private readonly requestRetrait: RequestRetraitUseCase,
+    private readonly metrics: MetricsPort,
   ) {}
 
   private async assertCanAccessKycSession(
@@ -99,6 +103,22 @@ export class PaymentController {
     if (kyc?.fournisseurRef === sessionId) return;
 
     throw new ForbiddenException('Acces refuse.');
+  }
+
+  /**
+   * Devise unique acceptée sur le chemin de dépôt (correctif C-2). BeOwn est un
+   * PSFP français mono-devise : le crédit du wallet est TOUJOURS libellé en EUR
+   * (`intent.amount / 100`, `devise: 'EUR'` codé en dur dans creditDepositAtomic).
+   * Un PaymentIntent dans une autre devise (unité mineure différente) créditerait
+   * donc le même nombre d'EUR pour une fraction du coût réel. Source de vérité
+   * unique du contrôle, partagée par `confirmDepot` et le webhook.
+   */
+  private static readonly DEVISE_DEPOT_ACCEPTEE = 'eur';
+
+  private isDeviseDepotAcceptee(currency?: string | null): boolean {
+    return (
+      (currency ?? '').toLowerCase() === PaymentController.DEVISE_DEPOT_ACCEPTEE
+    );
   }
 
   // ─── Dépôt ───────────────────────────────────────────────────────────────
@@ -154,8 +174,32 @@ export class PaymentController {
         `Tentative de confirmation de dépôt non autorisée: appelant=${user.userId} ` +
         `propriétaire PaymentIntent=${intent.metadata?.userId ?? 'inconnu'} pi=${dto.paymentIntentId}`,
       );
+      this.metrics.incrementCounter(METRIC.DEPOSIT_REJECTED_TOTAL, {
+        reason: 'bola_ownership_mismatch',
+        source: 'confirm',
+      });
       throw new ForbiddenException(
         'Ce paiement n\'appartient pas à votre compte.',
+      );
+    }
+
+    // ── Garde anti-confusion de devise (C-2) ─────────────────────────────────
+    // Le crédit ci-dessous est libellé en EUR (`amount / 100`). On refuse tout
+    // PaymentIntent d'une autre devise, sinon un dépôt en devise faible (ex.
+    // HUF : 50 000 fillér ≈ 1,3 €) créditerait 500 € pour ~1,3 € réellement
+    // payés. Un appel légitime du front est toujours en EUR (verrou DTO en
+    // amont) ; cette garde protège l'appel API direct.
+    if (!this.isDeviseDepotAcceptee(intent.currency)) {
+      this.logger.error(
+        `Dépôt refusé (C-2): devise "${intent.currency ?? 'inconnue'}" ≠ EUR ` +
+        `pi=${dto.paymentIntentId} userId=${user.userId}`,
+      );
+      this.metrics.incrementCounter(METRIC.DEPOSIT_REJECTED_TOTAL, {
+        reason: 'currency_not_eur',
+        source: 'confirm',
+      });
+      throw new BadRequestException(
+        'Devise de dépôt non supportée : seule la devise EUR est acceptée.',
       );
     }
 
@@ -167,7 +211,14 @@ export class PaymentController {
       dto.paymentIntentId,
       amountMajor,
     );
+    this.metrics.incrementCounter(METRIC.DEPOSITS_TOTAL, {
+      source: 'confirm',
+      outcome: credited ? 'credited' : 'already_processed',
+    });
     if (!credited) return { success: true, alreadyProcessed: true };
+    this.metrics.observeHistogram(METRIC.DEPOSIT_AMOUNT_EUR, amountMajor, {
+      source: 'confirm',
+    });
 
     this.notificationService.push({
       utilisateurId: user.userId,
@@ -278,6 +329,9 @@ export class PaymentController {
       refreshUrl,
       user.email,
     );
+    this.metrics.incrementCounter(METRIC.CONNECT_ONBOARDING_TOTAL, {
+      event: 'link_created',
+    });
     return { url };
   }
 
@@ -313,6 +367,10 @@ export class PaymentController {
 
   @ApiOperation({ summary: 'Démarrer une session KYC Stripe Identity' })
   @ApiResponse({ status: 201, description: 'Session KYC créée — rediriger vers url' })
+  @ApiResponse({
+    status: 409,
+    description: 'Dossier déjà tranché (validé ou refusé) — aucune session ouverte',
+  })
   @Post('kyc/start')
   async startKyc(@CurrentUser() user: ActiveUser) {
     // Find or create KYC record
@@ -328,6 +386,13 @@ export class PaymentController {
       newKyc.valideJusquAu = null;
       newKyc.motifRefus = null;
       kyc = await this.profilRepository.saveKyc(newKyc);
+    } else if (PaymentController.KYC_START_BLOCKED.has(kyc.statut)) {
+      // Dossier déjà tranché : ne rien rouvrir. Cf. KYC_START_BLOCKED.
+      throw new ConflictException(
+        kyc.statut === KycStatus.VALIDE
+          ? 'Votre identité est déjà vérifiée.'
+          : 'Votre dossier a été refusé — contactez le support.',
+      );
     }
 
     // Create Stripe Identity session
@@ -336,11 +401,15 @@ export class PaymentController {
       user.email,
     );
 
-    // Persist session ID — status stays NON_DEMARRE until Stripe confirms photo capture (processing event)
+    // Ouvrir une session n'est PAS une décision sur le dossier : on enregistre
+    // la référence et on conserve le statut courant. Forcer NON_DEMARRE ici
+    // effaçait une validation acquise (et, depuis EN_REVUE, le fallback manuel
+    // en cours côté admin). Seuls les webhooks Identity et l'admin font
+    // évoluer le statut.
     await this.profilRepository.updateKycSession(
       kyc.id,
       session.sessionId,
-      KycStatus.NON_DEMARRE,
+      kyc.statut,
     );
 
     this.logger.log(`KYC session créée: userId=${user.userId} sessionId=${session.sessionId}`);
@@ -456,35 +525,16 @@ export class PaymentController {
       event = this.stripeService.constructWebhookEvent(rawBody, signature);
     } catch (err) {
       this.logger.error(`Webhook signature failed: ${err.message}`);
+      this.metrics.incrementCounter(METRIC.WEBHOOK_SIGNATURE_INVALID_TOTAL, {
+        provider: 'stripe',
+      });
       throw new BadRequestException(`Webhook signature invalide: ${err.message}`);
     }
 
     this.logger.log(`Stripe webhook: type=${event.type}, id=${event.id}`);
 
     if (event.type === 'payment_intent.succeeded') {
-      const intent = event.data.object as any;
-      const userId = parseInt(intent.metadata?.userId, 10);
-      const operationType = intent.metadata?.operationType ?? 'depot';
-
-      if (!isNaN(userId) && operationType === 'depot') {
-        const amountMajor = Number(intent.amount) / 100;
-        // Crédit atomique + idempotent partagé avec confirmDepot (H-A).
-        const { credited } = await this.creditDepositAtomic(
-          userId,
-          intent.id,
-          amountMajor,
-        );
-        if (credited) {
-          this.logger.log(`Wallet crédité: userId=${userId}, montant=${amountMajor}`);
-          this.notificationService.push({
-            utilisateurId: userId,
-            type: NotificationType.DEPOT_CONFIRME,
-            titre: 'Dépôt confirmé',
-            message: `Votre dépôt de ${formatEur(amountMajor)} a été crédité sur votre wallet.`,
-            metadata: { paymentIntentId: intent.id, montant: amountMajor },
-          }).catch(() => {});
-        }
-      }
+      await this.handlePaymentIntentSucceeded(event);
     } else if (event.type === 'identity.verification_session.verified') {
       await this.handleIdentityVerified(event);
     } else if (event.type === 'identity.verification_session.processing') {
@@ -503,6 +553,74 @@ export class PaymentController {
     }
 
     return { received: true, type: event.type, eventId: event.id };
+  }
+
+  // ─── Dépôt — helper webhook (crédit du wallet) ─────────────────────────────
+
+  /**
+   * `payment_intent.succeeded` — crédite le wallet du déposant, de façon
+   * atomique et idempotente (H-A, cf. creditDepositAtomic). Deux gardes avant
+   * tout crédit :
+   *  1. Opération : seuls les intents `operationType=depot` (avec un userId
+   *     exploitable) sont crédités ici.
+   *  2. Devise (C-2) : le crédit est TOUJOURS libellé en EUR (`amount / 100`) ;
+   *     un intent en devise ≠ EUR sur-créditerait le wallet. On NE throw PAS
+   *     (Stripe rejouerait le webhook indéfiniment jusqu'à ~3 j) : on journalise
+   *     en erreur, on escalade aux admins Finance, et on n'écrit rien.
+   */
+  private async handlePaymentIntentSucceeded(event: any): Promise<void> {
+    const intent = event.data.object as any;
+    const userId = parseInt(intent.metadata?.userId, 10);
+    const operationType = intent.metadata?.operationType ?? 'depot';
+
+    if (isNaN(userId) || operationType !== 'depot') return;
+
+    if (!this.isDeviseDepotAcceptee(intent.currency)) {
+      this.logger.error(
+        `Webhook payment_intent.succeeded refusé (C-2): devise "${intent.currency ?? 'inconnue'}" ` +
+        `≠ EUR pi=${intent.id} userId=${userId} — wallet NON crédité.`,
+      );
+      this.notificationService
+        .pushToAdmins({
+          type: NotificationType.DEPOT_CONFIRME,
+          titre: 'Dépôt en devise non-EUR bloqué — vérification requise',
+          message:
+            `Le PaymentIntent ${intent.id} a réussi en devise "${intent.currency}" (≠ EUR) ` +
+            `pour l'utilisateur #${userId}. Le wallet n'a PAS été crédité (protection C-2). ` +
+            `Vérifier / rembourser côté Stripe.`,
+          roles: [UserRole.SUPER_ADMIN, UserRole.FINANCIER],
+          metadata: { userId, paymentIntentId: intent.id, currency: intent.currency },
+        })
+        .catch(() => {});
+      this.metrics.incrementCounter(METRIC.DEPOSIT_REJECTED_TOTAL, {
+        reason: 'currency_not_eur',
+        source: 'webhook',
+      });
+      return;
+    }
+
+    const amountMajor = Number(intent.amount) / 100;
+    // Crédit atomique + idempotent partagé avec confirmDepot (H-A).
+    const { credited } = await this.creditDepositAtomic(userId, intent.id, amountMajor);
+    this.metrics.incrementCounter(METRIC.DEPOSITS_TOTAL, {
+      source: 'webhook',
+      outcome: credited ? 'credited' : 'already_processed',
+    });
+    if (credited) {
+      this.metrics.observeHistogram(METRIC.DEPOSIT_AMOUNT_EUR, amountMajor, {
+        source: 'webhook',
+      });
+      this.logger.log(`Wallet crédité: userId=${userId}, montant=${amountMajor}`);
+      this.notificationService
+        .push({
+          utilisateurId: userId,
+          type: NotificationType.DEPOT_CONFIRME,
+          titre: 'Dépôt confirmé',
+          message: `Votre dépôt de ${formatEur(amountMajor)} a été crédité sur votre wallet.`,
+          metadata: { paymentIntentId: intent.id, montant: amountMajor },
+        })
+        .catch(() => {});
+    }
   }
 
   // ─── Stripe Identity — helpers webhook (validation auto + fallback revue manuelle) ──
@@ -532,6 +650,18 @@ export class PaymentController {
    * les exclure — les exclure bloquerait silencieusement le futur parcours
    * de renouvellement le jour où il sera branché.
    */
+  /**
+   * Statuts terminaux : `kyc/start` refuse d'ouvrir une session depuis ceux-ci.
+   * Cohérent avec la machine à états ci-dessous — ni VALIDE ni REFUSE ne figure
+   * dans un `*_ALLOWED_FROM`, donc aucun event Identity ultérieur ne pourrait
+   * leur être appliqué : ouvrir une session n'aurait servi qu'à faire refaire
+   * le parcours à l'utilisateur pour rien.
+   */
+  private static readonly KYC_START_BLOCKED = new Set<KycStatus>([
+    KycStatus.VALIDE,
+    KycStatus.REFUSE,
+  ]);
+
   private static readonly VERIFIED_ALLOWED_FROM = new Set<KycStatus>([
     KycStatus.NON_DEMARRE,
     KycStatus.EN_COURS,
@@ -571,6 +701,9 @@ export class PaymentController {
       `non autorisé pour cet event (event=${event.id} userId=${userId}). ` +
       'Probable event Stripe redélivré/tardif après une décision manuelle — no-op.',
     );
+    this.metrics.incrementCounter(METRIC.KYC_WEBHOOK_IGNORED_TOTAL, {
+      event: eventLabel,
+    });
     return false;
   }
 
@@ -633,6 +766,10 @@ export class PaymentController {
     }
 
     await this.updateKycStatus.execute(userId, KycStatus.VALIDE);
+    this.metrics.incrementCounter(METRIC.KYC_TRANSITIONS_TOTAL, {
+      to_status: 'valide',
+      mode: 'auto',
+    });
     this.logger.log(`KYC validé automatiquement via Stripe Identity: userId=${userId}`);
 
     this.notificationService.push({
@@ -725,6 +862,10 @@ export class PaymentController {
     }
 
     await this.updateKycStatus.execute(userId, KycStatus.EN_COURS);
+    this.metrics.incrementCounter(METRIC.KYC_TRANSITIONS_TOTAL, {
+      to_status: 'en_cours',
+      mode: 'auto',
+    });
     this.logger.log(`KYC en cours (photos reçues) via Stripe Identity: userId=${userId}`);
   }
 
@@ -768,6 +909,10 @@ export class PaymentController {
       'Vérification en attente de révision manuelle';
 
     await this.updateKycStatus.execute(userId, KycStatus.EN_REVUE, motif);
+    this.metrics.incrementCounter(METRIC.KYC_TRANSITIONS_TOTAL, {
+      to_status: 'en_revue',
+      mode: 'auto',
+    });
     this.logger.log(
       `KYC en revue manuelle (Stripe Identity n'a pas pu valider automatiquement): userId=${userId} motif=${motif}`,
     );
@@ -818,12 +963,19 @@ export class PaymentController {
       await this.stripeConnect.syncAccountFromWebhook(account);
     if (!found) return;
 
+    this.metrics.incrementCounter(METRIC.CONNECT_ONBOARDING_TOTAL, {
+      event: 'account_updated',
+    });
+
     this.logger.log(
       `account.updated: compte=${account.id} payouts_enabled=${!!account.payouts_enabled} ` +
       `details_submitted=${!!account.details_submitted}`,
     );
 
     if (payoutsJustEnabled) {
+      this.metrics.incrementCounter(METRIC.CONNECT_ONBOARDING_TOTAL, {
+        event: 'payouts_enabled',
+      });
       const user = await this.stripeConnect.findUserByConnectAccountId(account.id);
       if (user) {
         this.notificationService
@@ -873,6 +1025,10 @@ export class PaymentController {
 
     tx.statut = TransactionStatus.REUSSI;
     await this.txRepo.save(tx);
+    this.metrics.incrementCounter(METRIC.WITHDRAWAL_PAYOUT_TOTAL, {
+      outcome: 'paid',
+      reversal: 'false',
+    });
     this.logger.log(`Retrait finalisé (payout.paid): tx=${tx.id} payout=${payout?.id}`);
 
     const userId = meta.userId as number | undefined;
@@ -917,6 +1073,10 @@ export class PaymentController {
           metadata: { payoutId: payout?.id, accountId },
         })
         .catch(() => {});
+      this.metrics.incrementCounter(METRIC.WITHDRAWAL_PAYOUT_TOTAL, {
+        outcome: 'failed',
+        reversal: 'no_reference',
+      });
       return;
     }
 
@@ -949,6 +1109,10 @@ export class PaymentController {
             metadata: { transactionId: tx.id, transferId, payoutId: payout?.id },
           })
           .catch(() => {});
+        this.metrics.incrementCounter(METRIC.WITHDRAWAL_PAYOUT_TOTAL, {
+          outcome: 'failed',
+          reversal: 'reversal_failed',
+        });
         return;
       }
     }
@@ -958,7 +1122,14 @@ export class PaymentController {
       `Payout Stripe échoué (payout=${payout?.id ?? 'inconnu'})`,
       TransactionStatus.ECHOUE,
     );
+    this.metrics.incrementCounter(METRIC.WITHDRAWAL_PAYOUT_TOTAL, {
+      outcome: 'failed',
+      reversal: 'reversal_ok',
+    });
     if (outcome === 'recredited') {
+      this.metrics.incrementCounter(METRIC.WITHDRAWAL_RECREDITED_TOTAL, {
+        trigger: 'payout_failed',
+      });
       this.logger.log(`Retrait recrédité (payout.failed): tx=${tx.id}`);
       const userId = meta.userId as number | undefined;
       if (userId) {

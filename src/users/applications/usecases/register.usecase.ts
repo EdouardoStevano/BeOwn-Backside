@@ -1,4 +1,14 @@
-import { ConflictException, Inject, Injectable, Logger } from '@nestjs/common';
+import {
+  ConflictException,
+  HttpStatus,
+  Inject,
+  Injectable,
+  Logger,
+} from '@nestjs/common';
+import {
+  asUniqueViolation,
+  isEmailUniqueViolation,
+} from 'src/common/persistence/unique-violation';
 import { UserFactory } from 'src/users/domains/factories/user.factory';
 import {
   USER_REPOSITORY,
@@ -35,7 +45,7 @@ export class RegisterUseCase {
       socialId: null,
     });
 
-    const savedUser = await this.userRepository.save(user);
+    const savedUser = await this.saveOrTranslateConflict(user, registerDto.email);
 
     const fullUser = await this.userRepository.findById(savedUser.userId);
     if (fullUser) this.notificationEvents.userRegistered(fullUser);
@@ -54,5 +64,57 @@ export class RegisterUseCase {
     }
 
     return savedUser;
+  }
+
+  /**
+   * ANO-01 — enregistre l'utilisateur en traduisant toute violation de
+   * contrainte d'unicité en réponse exploitable.
+   *
+   * Deux causes distinctes, deux messages :
+   *  - l'adresse e-mail est déjà prise : la vérification préalable
+   *    (`findByEmail`) laisse passer les inscriptions CONCURRENTES sur la même
+   *    adresse ; seule la contrainte en base tranche. Même message que la
+   *    vérification préalable, pour ne pas exposer deux formulations ;
+   *  - une autre contrainte saute — typiquement la clé primaire de
+   *    `user_emails` quand la séquence Postgres a été désynchronisée par un
+   *    insert SQL manuel (cause racine constatée en QA). Ce n'est pas une
+   *    erreur de saisie : l'utilisateur reçoit une invitation à réessayer, et
+   *    l'exploitation reçoit un log d'erreur NOMMANT la contrainte.
+   *
+   * Dans les deux cas, ni le SQL, ni le `detail` Postgres (qui contient la
+   * valeur en conflit) ne sortent vers le client.
+   */
+  private async saveOrTranslateConflict(
+    user: User,
+    email: string,
+  ): Promise<User> {
+    try {
+      return await this.userRepository.save(user);
+    } catch (err) {
+      const violation = asUniqueViolation(err);
+      if (!violation) throw err;
+
+      if (isEmailUniqueViolation(violation)) {
+        throw new ConflictException({
+          statusCode: HttpStatus.CONFLICT,
+          code: 'EMAIL_ALREADY_USED',
+          message: 'Un compte avec cette email existe déjà.',
+        });
+      }
+
+      this.logger.error(
+        `Inscription impossible : violation d'unicité inattendue sur la contrainte ` +
+          `"${violation.constraint ?? 'inconnue'}". Cause probable : séquence Postgres ` +
+          `désynchronisée après un insert SQL manuel — réaligner avec setval (cf. ` +
+          `docs/testing/environnement-local.md, section Reset).`,
+        err instanceof Error ? err.stack : String(err),
+      );
+      throw new ConflictException({
+        statusCode: HttpStatus.CONFLICT,
+        code: 'REGISTRATION_CONFLICT',
+        message:
+          "Votre inscription n'a pas pu être enregistrée. Merci de réessayer dans quelques instants.",
+      });
+    }
   }
 }

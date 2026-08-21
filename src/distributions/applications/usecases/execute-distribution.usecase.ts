@@ -32,6 +32,8 @@ import {
 import { AuditLogService } from 'src/notifications/applications/audit-log.service';
 import { UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
 import { AmlMonitorService } from 'src/common/aml/aml-monitor.service';
+import { MetricsPort } from 'src/observability/metrics/metrics.port';
+import { METRIC } from 'src/observability/metrics/metric-names';
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -86,6 +88,7 @@ export class ExecuteDistributionUseCase {
     private readonly dataSource: DataSource,
     private readonly auditLog: AuditLogService,
     private readonly amlMonitor: AmlMonitorService,
+    private readonly metrics: MetricsPort,
   ) {}
 
   async execute(
@@ -380,6 +383,36 @@ export class ExecuteDistributionUseCase {
     this.logger.log(
       `Distribution exécutée : période=${periodeId} payées=${nbPartsPayees} skipped=${nbPartsSkipped} net=${result.totalNetVerse}`,
     );
+
+    if (nbPartsPayees > 0) {
+      this.metrics.incrementCounter(
+        METRIC.DISTRIBUTION_PARTS_TOTAL,
+        { outcome: 'paid' },
+        nbPartsPayees,
+      );
+    }
+    if (nbPartsSkipped > 0) {
+      this.metrics.incrementCounter(
+        METRIC.DISTRIBUTION_PARTS_TOTAL,
+        { outcome: 'skipped' },
+        nbPartsSkipped,
+      );
+    }
+    if (result.totalNetVerse > 0) {
+      this.metrics.observeHistogram(METRIC.DISTRIBUTION_AMOUNT_EUR, result.totalNetVerse, {
+        component: 'net',
+      });
+    }
+    if (result.totalIR > 0) {
+      this.metrics.observeHistogram(METRIC.DISTRIBUTION_AMOUNT_EUR, result.totalIR, {
+        component: 'ir',
+      });
+    }
+    if (result.totalCSG > 0) {
+      this.metrics.observeHistogram(METRIC.DISTRIBUTION_AMOUNT_EUR, result.totalCSG, {
+        component: 'csg',
+      });
+    }
 
     // Audit log — Phase 10 (traçabilité réglementaire pour mouvements de fonds)
     if (adminUserId != null) {

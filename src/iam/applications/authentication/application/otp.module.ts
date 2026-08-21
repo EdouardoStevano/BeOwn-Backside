@@ -18,5 +18,8 @@ import { TOTPMethodEntity } from 'src/users/infrastructure/persistences/entities
   ],
   providers: [CreateEmailOtpUseCase, CreateTotpUseCase, CreateSmsOtpUseCase],
   controllers: [OtpController],
+  // Exportés pour l'échange 2FA du sign-in (VerifyTwoFactorUseCase), qui
+  // réutilise la vérification de code plutôt que de la réimplémenter.
+  exports: [CreateEmailOtpUseCase, CreateTotpUseCase, CreateSmsOtpUseCase],
 })
 export class OtpModule {}

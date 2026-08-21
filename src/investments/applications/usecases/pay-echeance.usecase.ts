@@ -14,6 +14,8 @@ import {
 import { NotificationEventService } from 'src/notifications/applications/notification-event.service';
 import { AuditLogService } from 'src/notifications/applications/audit-log.service';
 import { UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
+import { MetricsPort } from 'src/observability/metrics/metrics.port';
+import { METRIC } from 'src/observability/metrics/metric-names';
 
 /** Statuts d'échéance depuis lesquels un paiement est légitime. */
 const PAYABLE_STATUSES: EcheanceStatus[] = [
@@ -31,6 +33,7 @@ export class PayEcheanceUseCase {
     private readonly dataSource: DataSource,
     private readonly notificationEvents: NotificationEventService,
     private readonly auditLog: AuditLogService,
+    private readonly metrics: MetricsPort,
   ) {}
 
   /**
@@ -55,6 +58,10 @@ export class PayEcheanceUseCase {
     echeanceId: string,
     adminId: number,
     adminRole?: string,
+    // Origine du règlement, pour le label `source` de `echeance_settlements_total`.
+    // Optionnel et rétrocompatible : les appelants existants (route admin
+    // `/pay`) restent en "admin" par défaut.
+    source: 'admin' | 'cron' | 'trigger_masse' = 'admin',
   ): Promise<EcheanceEntity> {
     const settled = await this.dataSource.transaction(async (em) => {
       const echeance = await em.findOne(EcheanceEntity, {
@@ -205,6 +212,23 @@ export class PayEcheanceUseCase {
         },
       )
       .catch(() => undefined);
+
+    this.metrics.incrementCounter(METRIC.ECHEANCE_SETTLEMENTS_TOTAL, { source });
+    this.metrics.observeHistogram(
+      METRIC.ECHEANCE_SETTLEMENT_AMOUNT_EUR,
+      Number(settled.echeance.montantTotal),
+      { component: 'brut' },
+    );
+    this.metrics.observeHistogram(
+      METRIC.ECHEANCE_SETTLEMENT_AMOUNT_EUR,
+      settled.montantNet,
+      { component: 'net' },
+    );
+    this.metrics.observeHistogram(
+      METRIC.ECHEANCE_SETTLEMENT_AMOUNT_EUR,
+      settled.prelevementIR + settled.prelevementCSG,
+      { component: 'pfu' },
+    );
 
     return settled.echeance;
   }

@@ -15,6 +15,7 @@ import {
   ProjectType,
 } from 'src/projects/domains/enums/project-status.enum';
 import { ModeleEconomique } from 'src/projects/domains/enums/modele-economique.enum';
+import type { ContenuFici } from 'src/projects/domains/fici';
 
 export interface PrevisionnelFinancier {
   operation: {
@@ -172,6 +173,14 @@ export class ProjectEntity {
 
   @Column({ type: 'text', nullable: true })
   avertissementMd: string | null;
+
+  /**
+   * Fiche d'informations clés sur l'investissement (art. 23 du règlement
+   * (UE) 2020/1503). Rédigée par le porteur, sous sa responsabilité. Aucune
+   * collecte ne peut s'ouvrir tant qu'elle est incomplète.
+   */
+  @Column({ type: 'jsonb', nullable: true })
+  fici: ContenuFici | null;
 
   @Column({ type: 'jsonb', nullable: true })
   previsionnel: PrevisionnelFinancier | null;

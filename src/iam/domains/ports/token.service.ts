@@ -1,15 +1,51 @@
 export const TOKEN_SERVICE = Symbol('TOKEN_SERVICE');
 
+/**
+ * Type claim porté par les refresh tokens. Access et refresh étaient
+ * auparavant indiscernables (même secret, même audience, même issuer, seul
+ * `refreshTokenId` les distinguait) : un refresh token présenté en
+ * `Authorization: Bearer` passait donc `verifyAccessToken`, ce qui rendait la
+ * révocation de session inopérante — l'invalidation Redis faite au reset de
+ * mot de passe ne coupe que la rotation, pas l'usage direct du token.
+ * Le claim rend les refresh tokens structurellement inacceptables comme
+ * access tokens (`verifyAccessToken` rejette tout token typé).
+ */
+export const REFRESH_TOKEN_TYPE = 'refresh';
+
 export interface TokenPayload {
   sub: number;
   email: string;
   role?: string;
   refreshTokenId: string | null;
+  /** Présent uniquement sur les refresh tokens. Les access tokens n'en portent jamais. */
+  type?: typeof REFRESH_TOKEN_TYPE;
 }
 
 export interface AuthTokens {
   accessToken: string;
   refreshToken: string;
+}
+
+/**
+ * Type claim des tokens « pré-authentifiés » émis par le sign-in d'un compte
+ * dont la double authentification est active.
+ *
+ * Ils ne confèrent AUCUN droit : `verifyAccessToken` rejette tout token portant
+ * un claim `type`, donc le JwtAuthGuard les refuse comme n'importe quel token
+ * typé. Ils attestent uniquement que le mot de passe a déjà été validé, le
+ * temps que l'utilisateur saisisse son code, et s'échangent contre de vrais
+ * tokens via `POST /auth/2fa/verify`.
+ *
+ * Avant ce mécanisme, le sign-in délivrait directement un access token et la
+ * 2FA n'était qu'un écran React masquant l'interface : le jeton était déjà
+ * valide et l'API restait accessible sans jamais fournir de code.
+ */
+export const PRE_AUTH_TOKEN_TYPE = 'pre_auth';
+
+export interface PreAuthTokenPayload {
+  sub: number;
+  email: string;
+  type: typeof PRE_AUTH_TOKEN_TYPE;
 }
 
 /**
@@ -49,6 +85,13 @@ export interface TokenService {
   generateTokens(payload: TokenPayload): Promise<AuthTokens>;
   refreshTokens(token: string): Promise<AuthTokens>;
   verifyAccessToken(token: string): Promise<TokenPayload>;
+  /**
+   * Jeton court (5 min) attestant d'un mot de passe déjà validé, en attente du
+   * second facteur. Ne donne accès à rien — voir PRE_AUTH_TOKEN_TYPE.
+   */
+  generatePreAuthToken(userId: number, email: string): Promise<string>;
+  /** Rejette tout token dont le claim `type` n'est pas `pre_auth`. */
+  verifyPreAuthToken(token: string): Promise<PreAuthTokenPayload>;
   generateEmailToken(
     payload: Omit<EmailTokenPayload, 'type'>,
     purpose: EmailTokenPurpose,

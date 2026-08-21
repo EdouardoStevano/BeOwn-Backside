@@ -81,7 +81,12 @@ describe('PayEcheanceUseCase (atomique — H-C)', () => {
     dataSource = { transaction: jest.fn(async (cb: any) => cb(mockEm)) };
     notificationEvents = { echeancePaid: jest.fn().mockResolvedValue(undefined) };
     auditLog = { create: jest.fn().mockResolvedValue(undefined) };
-    return new PayEcheanceUseCase(dataSource, notificationEvents, auditLog);
+    const metrics: any = {
+      incrementCounter: jest.fn(),
+      observeHistogram: jest.fn(),
+      setGauge: jest.fn(),
+    };
+    return new PayEcheanceUseCase(dataSource, notificationEvents, auditLog, metrics);
   };
 
   it('crédite le net (après PFU 30%), stocke les prélèvements et passe PAYE', async () => {

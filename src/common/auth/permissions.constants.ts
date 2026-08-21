@@ -20,6 +20,7 @@ export type Permission =
   | 'funds:disburse'
   | 'funds:refund'
   | 'echeancier:read'
+  | 'echeancier:manage'
   | 'echeancier:pay'
   | 'retraits:manage'
   | 'distributions:execute'
@@ -35,6 +36,7 @@ export type Permission =
   | 'settings:manage'
   | 'platform:wallet'
   | 'audit:read'
+  | 'reclamations:manage'
   | 'spv:manage'
   | 'relations:manage';
 
@@ -52,6 +54,13 @@ const CIO_PERMISSIONS: Permission[] = [
   'locatif:manage',
   'market:manage',
   'echeancier:read',
+  // `echeancier:manage` — MUTATION de l'échéancier (création, régénération,
+  // modification et suppression d'échéances). Séparée de `echeancier:read`
+  // parce qu'une permission de LECTURE ne doit jamais autoriser une écriture :
+  // rcci, rôle de CONTRÔLE, garde `echeancier:read` (il doit pouvoir consulter)
+  // mais ne doit pas pouvoir altérer un échéancier qu'il a mission d'auditer.
+  // Le paiement effectif reste sur `echeancier:pay` (super_admin seul).
+  'echeancier:manage',
   'projects:read',
   'reports:read',
 ];
@@ -62,6 +71,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[] | [Wildcard]> = {
   [UserRole.FINANCIER]: CIO_PERMISSIONS,
   [UserRole.COMPLIANCE]: [
     'kyc:validate',
+    'reclamations:manage',
     'aml:manage',
     'users:read',
     'users:manage',
@@ -90,6 +100,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[] | [Wildcard]> = {
     'reservations:manage',
   ],
   [UserRole.SUPPORT]: [
+    'reclamations:manage',
     'users:read',
     'projects:read',
     'reservations:manage',
@@ -98,6 +109,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[] | [Wildcard]> = {
   ],
   [UserRole.RCCI]: [
     'audit:read',
+    'reclamations:manage',
     'aml:manage',
     'reports:read',
     'projects:read',

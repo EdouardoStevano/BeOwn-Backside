@@ -18,7 +18,8 @@ import {
   IsInt,
 } from 'class-validator';
 import { Type, Transform } from 'class-transformer';
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsSafeHtml } from 'src/common/validation/safe-html';
+import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import {
   ProjectInstrument,
   ProjectStatus,
@@ -108,7 +109,8 @@ export class CreateProjectDto {
   @IsNumber()
   @IsPositive()
   @Max(5_000_000, {
-    message: 'Capital cible maximum : 5 000 000 € (limite PSFP)',
+    message:
+      'Capital cible maximum : 5 000 000 €. Ce plafond est celui du PORTEUR sur douze mois glissants (art. 1(2)(c) du règlement (UE) 2020/1503) : la validation ci-dessous ne borne qu\'une offre isolée, l\'agrégation par porteur est vérifiée par CreateProjectUseCase.',
   })
   capitalCible: number;
 
@@ -199,14 +201,18 @@ export class CreateProjectDto {
   @IsDateString()
   dateCloturePrevue?: string;
 
+  // Rendus en HTML côté public via RichTextDisplay → même contrôle que les
+  // actualités (H-D).
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @IsSafeHtml()
   descriptionMd?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @IsSafeHtml()
   avertissementMd?: string;
 
   @ApiPropertyOptional({ example: '5 Rue de la Paix, Dakar' })
@@ -271,6 +277,20 @@ export class CreateProjectDto {
   @Type(() => GarantieDto)
   garanties?: GarantieDto[];
 }
+
+/**
+ * DTO de mise à jour partielle d'un projet (`PATCH /projects/:id`).
+ *
+ * Correctif L-4 — l'ancien handler typait le body `Partial<CreateProjectDto>`,
+ * un type TypeScript qui s'efface en `Object` au runtime : le `ValidationPipe`
+ * global (whitelist + forbidNonWhitelisted) ne valide pas les métatypes natifs
+ * et laissait donc passer des champs arbitraires jusqu'au use case. En héritant
+ * de `CreateProjectDto` via `PartialType`, on obtient une VRAIE classe qui
+ * conserve toutes les contraintes de validation (rendues optionnelles), ce qui
+ * réactive la whitelist : les champs inconnus sont rejetés (400), les champs
+ * fournis sont validés, les champs absents sont ignorés.
+ */
+export class UpdateProjectDto extends PartialType(CreateProjectDto) {}
 
 export class UpdateProjectStatusDto {
   @ApiProperty({ enum: ProjectStatus })

@@ -41,7 +41,10 @@ describe('RegistrationOtpService', () => {
 
     expect(code).toMatch(/^\d{6}$/);
     expect(hashingService.hash).toHaveBeenCalledWith(code);
-    const [key, record] = cacheManager.set.mock.calls[0];
+    const [key, record] = cacheManager.set.mock.calls[0] as [
+      string,
+      { codeHash: string },
+    ];
     expect(key).toBe('registration-otp-user@example.com');
     expect(record.codeHash).toBe(`hashed:${code}`);
     expect(record).not.toHaveProperty('code');

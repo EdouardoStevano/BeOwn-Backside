@@ -17,6 +17,14 @@ data:
   REDIS_HOST: 'redis-service'
   REDIS_PORT: '6379'
 
+  # Nombre de proxys de confiance devant l'application (M-5). Sans cela,
+  # `req.ip` vaut l'IP de l'ingress pour TOUS les clients : la limitation de
+  # débit devient un seau commun et n'isole plus l'attaquant.
+  # 1 = un seul ingress. À augmenter si une couche supplémentaire (CDN, LB L7)
+  # ajoute un saut à X-Forwarded-For — jamais à mettre plus haut que le nombre
+  # réel de proxys, sous peine de laisser un client falsifier son IP.
+  TRUST_PROXY_HOPS: '1'
+
   # JWT (les URLs audience/issuer sont dans l'overlay)
   JWT_ACCESS_TOKEN_TTL: '3600'
   JWT_REFRESH_TOKEN_TTL: '86400'
@@ -58,3 +66,12 @@ data:
   # PSFP / Régulation
   PLAFOND_INVESTISSEMENT_NON_AVERTI_EUR: '1000'
   PLAFOND_INVESTISSEMENT_AVERTI_EUR: '100000'
+
+  # Observabilité (monitoring managé — Grafana Cloud EU / Sentry EU). Valeurs
+  # communes ; SENTRY_ENVIRONMENT/OTEL_DEPLOYMENT_ENVIRONMENT sont surchargées
+  # par overlay (voir overlays/<env>/configmap-patch.yaml). SENTRY_DSN et
+  # METRICS_TOKEN sont des secrets (beown-backend-secrets), jamais ici.
+  LOG_LEVEL: 'info'
+  OTEL_EXPORTER_OTLP_ENDPOINT: 'http://alloy.monitoring.svc.cluster.local:4317'
+  OTEL_SERVICE_NAME: 'beown-api'
+  SENTRY_TRACES_SAMPLE_RATE: '0.1'

@@ -79,6 +79,10 @@ export class ProfilTypeOrmRepository implements ProfilRepository {
     return { items: entities.map(ProfilMapper.kycToDomain), total };
   }
 
+  async countKycByStatus(status: KycStatus): Promise<number> {
+    return this.kycRepo.count({ where: { statut: status } });
+  }
+
   async updateKycStatus(
     kycId: string,
     status: KycStatus,

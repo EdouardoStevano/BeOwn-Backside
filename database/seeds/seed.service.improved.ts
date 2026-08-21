@@ -38,7 +38,7 @@ import { KycEntity } from 'src/profiles/infrastructure/persistences/entities/kyc
 import {
   KycStatus,
   KycNiveau,
-  CategoriePsfp,
+  CategorieInvestisseur,
 } from 'src/profiles/domains/enums/kyc-status.enum';
 import {
   NotificationEntity,
@@ -572,9 +572,9 @@ export class SeedService {
           ? `NIF${Math.floor(Math.random() * 900000000) + 100000000}`
           : undefined,
       categoriePsfp: [
-        CategoriePsfp.NON_AVERTI,
-        CategoriePsfp.AVERTI,
-        CategoriePsfp.PROFESSIONNEL,
+        CategorieInvestisseur.NON_AVERTI,
+        CategorieInvestisseur.AVERTI,
+        CategorieInvestisseur.AVERTI,
       ][Math.floor(Math.random() * 3)],
     });
 

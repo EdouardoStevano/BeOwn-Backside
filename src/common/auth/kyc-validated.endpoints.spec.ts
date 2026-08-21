@@ -7,6 +7,7 @@
 import { GUARDS_METADATA } from '@nestjs/common/constants';
 import { KycValidatedGuard } from './kyc-validated.guard';
 import { PaymentController } from 'src/payments/presenters/http/payment.controller';
+import { PayoutMethodsController } from 'src/payments/presenters/http/payout-methods.controller';
 import { InvestmentController } from 'src/investments/presenters/http/investment.controller';
 import { SecondaryMarketController } from 'src/secondarymarket/presenters/http/secondary-market.controller';
 
@@ -41,6 +42,16 @@ describe('KycValidatedGuard — application aux actions financières', () => {
     });
   });
 
+  describe('PayoutMethodsController', () => {
+    it('gate TOUTES les routes au niveau de la classe (destinations de retrait)', () => {
+      // Gérer une destination de retrait est une action financière : le garde
+      // est posé sur la classe, donc appliqué à chacune des cinq routes.
+      const guards =
+        Reflect.getMetadata(GUARDS_METADATA, PayoutMethodsController) ?? [];
+      expect(guards).toContain(KycValidatedGuard);
+    });
+  });
+
   describe('InvestmentController', () => {
     it.each([
       ['create', 'POST /investments'],
@@ -71,7 +82,11 @@ describe('KycValidatedGuard — application aux actions financières', () => {
     it.each([
       ['createOrder', 'POST /secondary-market/orders'],
       ['executeOrder', 'POST /secondary-market/orders/:id/execute'],
-      ['initiateBuy', 'POST /secondary-market/orders/:id/initiate-buy'],
+      // Art. 25 : l'achat sur le tableau d'affichage passe par une marque
+      // d'intérêt puis l'acceptation du vendeur — les deux sont des actions
+      // financières et restent donc gatées par le KYC.
+      ['exprimerInteret', 'POST /secondary-market/orders/:id/interet'],
+      ['accepterInteret', 'POST /secondary-market/orders/:id/interet/acceptation'],
     ])('gate %s (%s)', (method) => {
       expect(hasKycGuard(SecondaryMarketController, method)).toBe(true);
     });

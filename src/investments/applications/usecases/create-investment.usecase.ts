@@ -50,6 +50,15 @@ import { ProjectEntity } from 'src/projects/infrastructure/persistences/entities
 import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/wallet.entity';
 import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entities/transaction.entity';
 import { WalletMapper } from 'src/wallets/infrastructure/persistences/mappers/wallet.mapper';
+import { MetricsPort } from 'src/observability/metrics/metrics.port';
+import { METRIC } from 'src/observability/metrics/metric-names';
+import {
+  CategorieInvestisseur,
+  SEUIL_AVERTISSEMENT_PLANCHER_EUR,
+  calculerSeuilAvertissement,
+  evaluationExpiree,
+} from 'src/profiles/domains/investor-classification';
+import { DELAI_RETRACTATION_JOURS } from 'src/investments/domains/retractation';
 
 @Injectable()
 export class CreateInvestmentUseCase {
@@ -74,6 +83,7 @@ export class CreateInvestmentUseCase {
     private readonly notificationEvents: NotificationEventService,
     @InjectDataSource()
     private readonly dataSource: DataSource,
+    private readonly metrics: MetricsPort,
   ) {}
 
   async execute(userId: number, dto: CreateInvestmentDto): Promise<Investment> {
@@ -91,9 +101,17 @@ export class CreateInvestmentUseCase {
     const project = await this.projectRepository.findProjectById(dto.projetId);
     if (!project) throw new NotFoundException('Projet introuvable.');
 
-    // Get investor profile to check PSFP category
+    // ── Catégorie de l'investisseur — règlement (UE) 2020/1503 ────────────────
+    // Le défaut protecteur est « non averti » : un profil absent, incomplet ou
+    // dont l'évaluation a expiré (art. 21(2), réexamen tous les deux ans) est
+    // traité comme non averti, jamais l'inverse.
     const profilPP = await this.profilRepository.findProfilPPByUserId(userId);
-    const isNonAverti = profilPP?.categoriePsfp === 'non_averti';
+    const evaluationValide = !evaluationExpiree(
+      profilPP?.evaluationExpireLe ?? null,
+      new Date(),
+    );
+    const isNonAverti =
+      profilPP?.categoriePsfp !== CategorieInvestisseur.AVERTI || !evaluationValide;
 
     if (project.statut !== ProjectStatus.EN_COLLECTE) {
       throw new BadRequestException(
@@ -150,16 +168,28 @@ export class CreateInvestmentUseCase {
       );
     }
 
-    // ── PSFP limit check for non-averti investors ─────────────────────────────
+    // ── Art. 21(7) — seuil d'avertissement de l'investisseur non averti ───────
+    // Ce n'est pas un plafond : au-delà du plus élevé entre 1 000 € et 5 % du
+    // patrimoine net, l'investisseur reçoit un avertissement et doit consentir
+    // explicitement. Le seuil est celui calculé lors de l'évaluation ; à défaut
+    // d'évaluation exploitable, on retombe sur le plancher légal de 1 000 €.
     if (isNonAverti) {
-      const patrimoine = Number(profilPP?.patrimoineDeclare ?? 0);
-      const limit5Percent = patrimoine * 0.05;
-      const recommendedCap = Math.max(1000, limit5Percent);
-      if (montant > recommendedCap && !dto.consentementDepassementLimite) {
+      const patrimoineNet = Number(profilPP?.patrimoineNetCalcule ?? 0);
+      const seuil = evaluationValide
+        ? Number(profilPP?.seuilAvertissementCalcule ?? SEUIL_AVERTISSEMENT_PLANCHER_EUR)
+        : calculerSeuilAvertissement(patrimoineNet);
+
+      if (montant > seuil && !dto.consentementDepassementLimite) {
+        this.metrics.incrementCounter(METRIC.INVESTMENT_PSFP_CAP_BLOCKED_TOTAL, {
+          reason: 'non_averti_cap_exceeded',
+        });
         throw new BadRequestException(
-          `Votre statut "non averti" recommande de ne pas dépasser ${formatEur(recommendedCap)} par investissement ` +
-          `(max entre ${formatEur(1000)} et 5% de votre patrimoine déclaré de ${formatEur(patrimoine)}). ` +
-          `Pour passer outre, cochez la case de consentement explicite "consentementDepassementLimite": true.`,
+          `Ce montant dépasse le seuil d'avertissement de ${formatEur(seuil)} applicable ` +
+          `aux investisseurs non avertis (le plus élevé entre ${formatEur(SEUIL_AVERTISSEMENT_PLANCHER_EUR)} ` +
+          `et 5 % de votre patrimoine net de ${formatEur(patrimoineNet)}). ` +
+          `Vous pouvez investir davantage, mais vous devez d'abord prendre connaissance de ` +
+          `l'avertissement sur les risques et donner un consentement explicite ` +
+          `("consentementDepassementLimite": true).`,
         );
       }
     }
@@ -171,14 +201,22 @@ export class CreateInvestmentUseCase {
     investment.instrument = project.instrument;
     investment.nbTitres = dto.nbFractions;
     investment.valeurTitre = prixFraction;
-    investment.statut = InvestmentStatus.CONFIRME;
-    // PSFP: set 4-day retraction delay for non-averti investors
+    // ── Art. 22 — délai de réflexion précontractuel ───────────────────────────
+    // Pour un investisseur non averti, l'engagement n'est pas définitif pendant
+    // quatre jours calendaires. L'investissement reste donc en attente et les
+    // fonds sont bloqués, pas transférés : ni échéancier, ni bascule du projet
+    // en FINANCE tant que le délai court. La confirmation est faite par
+    // `ConfirmRetractationCronService` une fois le délai expiré.
     if (isNonAverti) {
       const retractationDate = new Date();
-      retractationDate.setDate(retractationDate.getDate() + 4);
+      retractationDate.setDate(
+        retractationDate.getDate() + DELAI_RETRACTATION_JOURS,
+      );
       investment.delaiRetractationJusquAu = retractationDate;
+      investment.statut = InvestmentStatus.EN_DELAI_RETRACTATION;
     } else {
       investment.delaiRetractationJusquAu = null;
+      investment.statut = InvestmentStatus.CONFIRME;
     }
     investment.bulletinDocId = null;
     investment.signatureId = null;
@@ -254,15 +292,23 @@ export class CreateInvestmentUseCase {
       const savedDomain = InvestmentMapper.toDomain(savedEntity);
 
       // 5. Débit du wallet SOUS VERROU (source de vérité du débit, indépendant
-      //    de la garde updateSolde qui vit hors transaction).
+      //    de la garde updateSolde qui vit hors transaction). Pour un
+      //    investisseur non averti, le montant n'est pas dépensé mais BLOQUÉ :
+      //    il quitte le solde disponible sans être mis à disposition du
+      //    porteur, le temps du délai de réflexion (art. 22).
       walletRow.solde = Number(walletRow.solde) - montant;
+      if (isNonAverti) {
+        walletRow.soldeBloque = Number(walletRow.soldeBloque ?? 0) + montant;
+      }
       await manager.save(WalletEntity, walletRow);
 
       // 6. Écriture de la transaction ledger (clé d'idempotence conservée).
       const tx = new Transaction();
       tx.walletSource = wallet.id;
       tx.walletDestination = null;
-      tx.type = TransactionType.SOUSCRIPTION;
+      tx.type = isNonAverti
+        ? TransactionType.ESCROW_LOCK
+        : TransactionType.SOUSCRIPTION;
       tx.montant = montant;
       tx.devise = wallet.devise;
       tx.statut = TransactionStatus.REUSSI;
@@ -281,28 +327,48 @@ export class CreateInvestmentUseCase {
       tx.motifEchec = null;
       await manager.save(TransactionEntity, WalletMapper.txToEntity(tx));
 
-      // 7. Génération + persistance des échéances.
-      const echeances = this.generateEcheances(
-        savedDomain.id,
-        montant,
-        project.triCible ?? 0,
-        project.dureeMois,
-        dto.modeRemboursement ?? RemboursementMode.IN_FINE,
-      );
-      await manager.save(
-        EcheanceEntity,
-        echeances.map(InvestmentMapper.echeanceToEntity),
-      );
+      // 7. Génération + persistance des échéances — uniquement pour un
+      //    engagement définitif. Un investissement encore sous délai de
+      //    réflexion n'a pas d'échéancier : il serait à annuler en cas de
+      //    rétractation. C'est `ConfirmRetractationCronService` qui le génère
+      //    à l'expiration du délai.
+      if (!isNonAverti) {
+        const echeances = this.generateEcheances(
+          savedDomain.id,
+          montant,
+          project.triCible ?? 0,
+          project.dureeMois,
+          dto.modeRemboursement ?? RemboursementMode.IN_FINE,
+        );
+        await manager.save(
+          EcheanceEntity,
+          echeances.map(InvestmentMapper.echeanceToEntity),
+        );
+      }
 
       // 8. Auto-transition vers FINANCE si toutes les fractions sont vendues —
-      //    sûr car on détient le verrou sur la ligne projet.
+      //    sûr car on détient le verrou sur la ligne projet. La bascule est
+      //    refusée tant qu'un investissement reste sous délai de réflexion :
+      //    le financement n'est pas acquis si une rétractation peut encore
+      //    libérer des fractions.
       if (fractionsVenduesLocked + dto.nbFractions >= nbFractionsTotal) {
-        projectRow.statut = ProjectStatus.FINANCE;
-        await manager.save(ProjectEntity, projectRow);
+        const enAttente = await manager.count(InvestmentEntity, {
+          where: {
+            projetId: dto.projetId,
+            statut: InvestmentStatus.EN_DELAI_RETRACTATION,
+          },
+        });
+        if (enAttente === 0) {
+          projectRow.statut = ProjectStatus.FINANCE;
+          await manager.save(ProjectEntity, projectRow);
+        }
       }
 
       return savedDomain;
     });
+
+    this.metrics.incrementCounter(METRIC.INVESTMENT_CREATED_TOTAL, { flow: 'direct' });
+    this.metrics.observeHistogram(METRIC.INVESTMENT_AMOUNT_EUR, montant, { flow: 'direct' });
 
     // ── Generate & upload bulletin de souscription ────────────────────────────
     this.generateAndStoreBulletin(saved, project, userId).catch((err) =>

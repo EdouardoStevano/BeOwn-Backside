@@ -13,3 +13,5 @@ data:
   GOOGLE_CALLBACK_URL: 'https://api.beown.fr/auth/google/callback'
   FACEBOOK_CALLBACK_URL: 'https://api.beown.fr/auth/facebook/callback'
   LINKEDIN_CALLBACK_URL: 'https://api.beown.fr/auth/linkedin/callback'
+  SENTRY_ENVIRONMENT: 'production'
+  OTEL_DEPLOYMENT_ENVIRONMENT: 'production'

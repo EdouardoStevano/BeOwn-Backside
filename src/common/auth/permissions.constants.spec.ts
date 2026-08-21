@@ -56,6 +56,43 @@ describe('permissions.constants', () => {
     expect(roles).not.toContain(UserRole.MARKETING);
   });
 
+  describe('échéancier : lecture, mutation et paiement sont trois droits distincts', () => {
+    it('rcci consulte l\'échéancier mais ne peut pas le modifier', () => {
+      // rcci est un rôle de CONTRÔLE : il doit voir l'échéancier qu'il audite,
+      // jamais le réécrire. C'est le cœur du correctif — auparavant les routes
+      // de mutation n'exigeaient que `echeancier:read`.
+      expect(hasPermission(UserRole.RCCI, 'echeancier:read')).toBe(true);
+      expect(hasPermission(UserRole.RCCI, 'echeancier:manage')).toBe(false);
+      expect(hasPermission(UserRole.RCCI, 'echeancier:pay')).toBe(false);
+    });
+
+    it.each([UserRole.CIO, UserRole.FINANCIER, UserRole.SUPER_ADMIN])(
+      '%s gère l\'échéancier',
+      (role) => {
+        expect(hasPermission(role, 'echeancier:manage')).toBe(true);
+      },
+    );
+
+    it('le paiement reste exclusif au super_admin', () => {
+      expect(hasPermission(UserRole.CIO, 'echeancier:pay')).toBe(false);
+      expect(hasPermission(UserRole.FINANCIER, 'echeancier:pay')).toBe(false);
+      expect(hasPermission(UserRole.SUPER_ADMIN, 'echeancier:pay')).toBe(true);
+    });
+
+    it('aucun rôle sans périmètre financier n\'obtient echeancier:manage', () => {
+      for (const role of [
+        UserRole.ANALYSTE_FINANCIER,
+        UserRole.COMPLIANCE,
+        UserRole.MARKETING,
+        UserRole.SUPPORT,
+        UserRole.DPO,
+        UserRole.INVESTISSEUR,
+      ]) {
+        expect(hasPermission(role, 'echeancier:manage')).toBe(false);
+      }
+    });
+  });
+
   it('la matrice couvre tous les rôles (snapshot anti-régression)', () => {
     expect(ROLE_PERMISSIONS).toMatchSnapshot();
   });
@@ -73,7 +110,7 @@ describe('permissions.constants', () => {
       'platform:wallet',
       'settings:manage',
       'users:delete',
-    ];
+    ] as const;
     for (const perm of wildcardOnly) expect(explicit.has(perm)).toBe(false);
   });
 

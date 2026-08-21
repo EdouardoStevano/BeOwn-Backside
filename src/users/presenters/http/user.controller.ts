@@ -36,7 +36,15 @@ import {
   ApiBearerAuth,
 } from '@nestjs/swagger';
 import { UsersService } from 'src/users/applications/users.service';
-import { RegisterDto, UpdateUserDto, UpdateUserAdminDto, UpdatePreferencesDto } from '../dto/user.dto';
+import {
+  RegisterDto,
+  UpdateUserDto,
+  UpdateUserAdminDto,
+  UpdatePreferencesDto,
+  PreferenceBooleanDto,
+  PreferenceLangueDto,
+  SetUserTypeDto,
+} from '../dto/user.dto';
 import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
 import { RequirePermission } from 'src/common/auth/require-permission.decorator';
 import { rolesWithPermission } from 'src/common/auth/permissions.constants';
@@ -90,9 +98,28 @@ export class UserController {
 
   // ─── Endpoints ────────────────────────────────────────────────────────────
 
-  @ApiOperation({ summary: 'Créer un nouveau compte utilisateur' })
+  /**
+   * Création de compte par le back-office.
+   *
+   * SÉCURITÉ — cette route n'était protégée que par `JwtAuthGuard` : n'importe
+   * quel utilisateur authentifié (donc n'importe quel investisseur) pouvait
+   * créer des comptes en contournant l'OTP, le captcha et la vérification
+   * d'e-mail de `POST /auth/sign-up`.
+   *
+   * Aucun appelant légitime n'existe : le Frontside s'inscrit via
+   * `/auth/sign-up` et l'Admin crée les comptes via `POST /admin/users`
+   * (`ENDPOINTS.users.adminCreate`). La route est conservée mais réservée aux
+   * rôles habilités à gérer les comptes (`users:manage` : super_admin,
+   * compliance).
+   */
+  @ApiOperation({ summary: 'Créer un nouveau compte utilisateur (back-office)' })
   @ApiResponse({ status: 201, description: 'Utilisateur créé avec succès' })
   @ApiResponse({ status: 400, description: 'Données invalides' })
+  @ApiResponse({
+    status: 403,
+    description: 'Permission users:manage requise — l\'inscription publique passe par /auth/sign-up',
+  })
+  @RequirePermission('users:manage')
   @Post()
   register(@Body() dto: RegisterDto) {
     return this.usersService.create(dto);
@@ -238,7 +265,7 @@ export class UserController {
   @Patch('me/preferences/langue')
   async updateLangue(
     @CurrentUser() user: ActiveUser,
-    @Body() body: { value: string },
+    @Body() body: PreferenceLangueDto,
   ) {
     return this.userRepository.savePreferences(user.userId, { langue: body.value });
   }
@@ -247,7 +274,7 @@ export class UserController {
   @Patch('me/preferences/masquer-montants')
   async toggleMasquerMontants(
     @CurrentUser() user: ActiveUser,
-    @Body() body: { value: boolean },
+    @Body() body: PreferenceBooleanDto,
   ) {
     return this.userRepository.savePreferences(user.userId, { masquerMontants: body.value });
   }
@@ -256,7 +283,7 @@ export class UserController {
   @Patch('me/preferences/notif-email')
   async toggleNotifEmail(
     @CurrentUser() user: ActiveUser,
-    @Body() body: { value: boolean },
+    @Body() body: PreferenceBooleanDto,
   ) {
     return this.userRepository.savePreferences(user.userId, { notifEmail: body.value });
   }
@@ -265,7 +292,7 @@ export class UserController {
   @Patch('me/preferences/notif-sms')
   async toggleNotifSms(
     @CurrentUser() user: ActiveUser,
-    @Body() body: { value: boolean },
+    @Body() body: PreferenceBooleanDto,
   ) {
     return this.userRepository.savePreferences(user.userId, { notifSms: body.value });
   }
@@ -274,7 +301,7 @@ export class UserController {
   @Patch('me/preferences/notif-marketing')
   async toggleNotifMarketing(
     @CurrentUser() user: ActiveUser,
-    @Body() body: { value: boolean },
+    @Body() body: PreferenceBooleanDto,
   ) {
     return this.userRepository.savePreferences(user.userId, { notifMarketing: body.value });
   }
@@ -283,7 +310,7 @@ export class UserController {
   @Patch('me/preferences/tfa')
   async toggleTfa(
     @CurrentUser() user: ActiveUser,
-    @Body() body: { value: boolean },
+    @Body() body: PreferenceBooleanDto,
   ) {
     return this.userRepository.savePreferences(user.userId, { twoFactorEnabled: body.value });
   }
@@ -293,9 +320,11 @@ export class UserController {
   @Patch('me/type')
   async setUserType(
     @CurrentUser() user: ActiveUser,
-    @Body() body: { userType: UserType },
+    @Body() body: SetUserTypeDto,
   ) {
-    if (!Object.values(UserType).includes(body.userType)) {
+    // Le DTO valide déjà l'appartenance à ['PP','PM'] ; ce contrôle reste en
+    // défense en profondeur si le use case était appelé par un autre chemin.
+    if (!Object.values(UserType).includes(body.userType as UserType)) {
       throw new BadRequestException('Type invalide : PP ou PM attendu.');
     }
     const found = await this.userRepository.findById(user.userId);

@@ -38,8 +38,17 @@ export class WalletEntity {
   @Column({ type: 'char', length: 3, default: 'EUR' })
   devise: string;
 
+  /** Solde disponible, immédiatement utilisable par le titulaire. */
   @Column({ type: 'decimal', precision: 18, scale: 2, default: 0 })
   solde: number;
+
+  /**
+   * Fonds engagés mais non définitifs : souscriptions encore couvertes par le
+   * délai de réflexion de l'art. 22 du règlement (UE) 2020/1503. Ils ne sont ni
+   * disponibles pour l'investisseur, ni mis à disposition du porteur de projet.
+   */
+  @Column({ type: 'decimal', precision: 18, scale: 2, default: 0 })
+  soldeBloque: number;
 
   @Column({ type: 'varchar', default: 'actif' })
   statut: string;

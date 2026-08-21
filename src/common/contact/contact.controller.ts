@@ -14,6 +14,7 @@ import {
   IsString,
   MaxLength,
 } from 'class-validator';
+import { Throttle } from '@nestjs/throttler';
 import { Public } from 'src/common/auth/public.decorator';
 import { EMAIL_SERVICE, type EmailService } from 'src/common/email/email.service';
 import { PlatformSettingsService } from 'src/common/platform-settings/platform-settings.service';
@@ -57,6 +58,10 @@ export class ContactController {
     summary: 'Envoyer un message depuis le formulaire de contact public',
   })
   @ApiResponse({ status: 200, description: 'Message transmis' })
+  @ApiResponse({ status: 429, description: 'Trop de messages — réessayez plus tard' })
+  // M-5 / L-6 — formulaire public sans captcha : sans palier dédié, la boîte
+  // de contact et le quota d'envoi du fournisseur mail sont épuisables.
+  @Throttle({ short: { ttl: 60_000, limit: 3 }, auth: { ttl: 3_600_000, limit: 20 } })
   @Public()
   @HttpCode(HttpStatus.OK)
   @Post()

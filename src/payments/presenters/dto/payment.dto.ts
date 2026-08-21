@@ -1,14 +1,15 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsIn, IsInt, IsNotEmpty, IsOptional, IsPositive, IsString, Min } from 'class-validator';
+import { IsEnum, IsIn, IsInt, IsNotEmpty, IsOptional, IsPositive, IsString, Matches, Max, Min } from 'class-validator';
 
 export class CreatePaymentIntentDto {
-  @ApiProperty({ example: 500, description: 'Montant en EUR' })
+  @ApiProperty({ example: 500, description: 'Montant en EUR (plafond de sécurité : 1 000 000 €)' })
   @IsPositive()
+  @Max(1_000_000, { message: 'Le montant du dépôt dépasse le plafond autorisé.' })
   amount: number;
 
-  @ApiProperty({ example: 'EUR', description: 'Code devise ISO 4217' })
+  @ApiProperty({ example: 'EUR', description: "Code devise ISO 4217 (seule la devise EUR est acceptée)" })
   @IsString()
-  @IsNotEmpty()
+  @IsIn(['EUR'], { message: 'Seule la devise EUR est acceptée.' })
   currency: string;
 
   @ApiPropertyOptional({ example: 'souscription', description: 'Type operation' })
@@ -67,6 +68,54 @@ export class CreateRetraitDto {
   @IsString()
   @IsNotEmpty()
   idempotencyKey?: string;
+
+  @ApiPropertyOptional({
+    example: 'card_1Nxxxx',
+    description:
+      "Destination de retrait (external account Stripe) choisie par l'investisseur. " +
+      'Optionnel : sans cette valeur ni `method`, le retrait conserve son comportement ' +
+      "historique. L'appartenance de la destination au compte connecté de l'appelant " +
+      'est vérifiée avant tout débit du wallet.',
+  })
+  @IsOptional()
+  @IsString()
+  @Matches(/^(card|ba)_[A-Za-z0-9]+$/, {
+    message: 'Destination de retrait invalide.',
+  })
+  payoutMethodId?: string;
+
+  @ApiPropertyOptional({
+    example: 'instant',
+    enum: ['instant', 'standard'],
+    description:
+      'Mode de versement. `instant` exige une destination éligible au virement instantané ' +
+      'et un montant compris entre 10 € et 9 999 €.',
+  })
+  @IsOptional()
+  @IsIn(['instant', 'standard'], {
+    message: 'Mode de versement invalide (attendu : instant ou standard).',
+  })
+  method?: 'instant' | 'standard';
+}
+
+/**
+ * Ajout d'une destination de retrait. Le backend n'accepte QU'UN TOKEN Stripe.js
+ * (`tok_...`) : aucun numéro de carte ni cryptogramme ne doit transiter par
+ * l'API BeOwn — le format est verrouillé ici, à la frontière.
+ */
+export class AttachPayoutMethodDto {
+  @ApiProperty({
+    example: 'tok_1Nxxxx',
+    description:
+      'Token Stripe.js de la carte de débit. JAMAIS de PAN ni de CVC : la tokenisation ' +
+      'est faite côté navigateur par Stripe.js.',
+  })
+  @IsString()
+  @IsNotEmpty()
+  @Matches(/^tok_[A-Za-z0-9_]+$/, {
+    message: 'Token de carte invalide.',
+  })
+  token: string;
 }
 
 export class ConnectOnboardingDto {

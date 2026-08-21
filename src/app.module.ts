@@ -2,7 +2,8 @@ import { Module } from '@nestjs/common';
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule } from '@nestjs/config';
-import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { ThrottlerModule } from '@nestjs/throttler';
+import { MetricsThrottlerGuard } from './common/throttler/metrics-throttler.guard';
 import { ScheduleModule } from '@nestjs/schedule';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { UsersModule } from './users/applications/users.module';
@@ -25,9 +26,11 @@ import { SecondaryMarketModule } from './secondarymarket/applications/secondary-
 import { NotificationsModule } from './notifications/notifications.module';
 import { DocumentsModule } from './documents/applications/documents.module';
 import { NotificationTestModule } from './common/test/notification-test.module';
+import { areTestEndpointsEnabled } from './common/test/test-endpoints.policy';
 import { AdminModule } from './admin/admin.module';
 import { CgpModule } from './cgp/cgp.module';
 import { AvisModule } from './avis/applications/avis.module';
+import { ReclamationsModule } from './reclamations/reclamations.module';
 import { NewsModule } from './news/news.module';
 import { KpiModule } from './kpi/kpi.module';
 import { LocativeManagementModule } from './locative-management/applications/locative-management.module';
@@ -37,13 +40,18 @@ import { AmlModule } from './common/aml/aml.module';
 import { PlatformFeesModule } from './common/platform-fees/platform-fees.module';
 import { PlatformSettingsModule } from './common/platform-settings/platform-settings.module';
 import { ContactModule } from './common/contact/contact.module';
+import { ThrottlerStorageModule } from './common/throttler/throttler-storage.module';
+import { RedisThrottlerStorage } from './common/throttler/redis-throttler.storage';
 import { SmsModule } from './common/sms/sms.module';
 import { EmailModule } from './common/email/email.module';
 import { MailerModule } from '@nestjs-modules/mailer';
 import { HandlebarsAdapter } from '@nestjs-modules/mailer/adapters/handlebars.adapter';
 import { join } from 'path';
 import { CacheModule } from '@nestjs/cache-manager';
-import * as redisStore from 'cache-manager-ioredis';
+import { buildCacheModuleOptions } from './common/redis/cache.config';
+import { LoggerModule } from 'nestjs-pino';
+import { loggerConfig } from './observability/logging/logger.config';
+import { MetricsModule } from './observability/metrics/metrics.module';
 
 function requireEnv(name: string): string {
   throw new Error(`Required environment variable ${name} is not set.`);
@@ -51,18 +59,36 @@ function requireEnv(name: string): string {
 
 @Module({
   imports: [
-    CacheModule.register({
+    LoggerModule.forRoot(loggerConfig),
+    MetricsModule,
+    // ANO-13 — le magasin déclaré n'était pas honoré : `store: redisStore`
+    // (cache-manager-ioredis, API cache-manager v3/v4) n'existe plus dans
+    // cache-manager v7 / @nestjs/cache-manager v3, qui attendent `stores` avec
+    // des instances Keyv. L'option inconnue était ignorée SANS ERREUR et le
+    // cache retombait en mémoire de processus : les OTP d'inscription et les
+    // codes OAuth n'étaient ni partagés entre réplicas ni conservés au
+    // redémarrage — violation directe de la règle « stateless ».
+    CacheModule.registerAsync({
       isGlobal: true,
-      store: redisStore,
-      host: process.env.REDIS_HOST,
-      port: Number(process.env.REDIS_PORT),
+      useFactory: buildCacheModuleOptions,
     }),
 
-    ThrottlerModule.forRoot([
-      { name: 'short', ttl: 1000, limit: 500 },
-      { name: 'medium', ttl: 60_000, limit: 2000 },
-      { name: 'auth', ttl: 900_000, limit: 500 },
-    ]),
+    // M-5 — les compteurs vivent dans Redis, pas dans la mémoire du processus :
+    // partagés par tous les réplicas et conservés au redéploiement. Les trois
+    // paliers nommés s'appliquent TOUS à chaque route ; les routes sensibles
+    // les resserrent via `@Throttle({ <palier>: { … } })`.
+    ThrottlerModule.forRootAsync({
+      imports: [ThrottlerStorageModule],
+      inject: [RedisThrottlerStorage],
+      useFactory: (storage: RedisThrottlerStorage) => ({
+        throttlers: [
+          { name: 'short', ttl: 1000, limit: 500 },
+          { name: 'medium', ttl: 60_000, limit: 2000 },
+          { name: 'auth', ttl: 900_000, limit: 500 },
+        ],
+        storage,
+      }),
+    }),
     ConfigModule.forRoot({ isGlobal: true }),
     ScheduleModule.forRoot(),
     EventEmitterModule.forRoot({
@@ -124,6 +150,7 @@ function requireEnv(name: string): string {
     NotificationsModule,
     DocumentsModule,
     AvisModule,
+    ReclamationsModule,
     NewsModule,
     KpiModule,
     AdminModule,
@@ -135,13 +162,14 @@ function requireEnv(name: string): string {
     PlatformFeesModule,
     PlatformSettingsModule,
     ContactModule,
-    ...(process.env.ENABLE_TEST_ENDPOINTS === 'true'
-      ? [NotificationTestModule]
-      : []),
+    // Endpoints de test d'e-mail/SMS : publics et déclenchant des envois réels.
+    // Exposés uniquement hors production/staging ET sur opt-in explicite
+    // (cf. areTestEndpointsEnabled).
+    ...(areTestEndpointsEnabled() ? [NotificationTestModule] : []),
   ],
   controllers: [HealthController],
   providers: [
-    { provide: APP_GUARD, useClass: ThrottlerGuard },
+    { provide: APP_GUARD, useClass: MetricsThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: AccountStatusGuard },
     { provide: APP_GUARD, useClass: RolesGuard },

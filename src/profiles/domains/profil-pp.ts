@@ -1,4 +1,4 @@
-import { CategoriePsfp } from './enums/kyc-status.enum';
+import { CategorieInvestisseur } from './investor-classification';
 
 export class ProfilPP {
   utilisateurId: number;
@@ -21,9 +21,13 @@ export class ProfilPP {
   pep: boolean;
   residenceFiscale: string | null;
   nif: string | null;
-  categoriePsfp: CategoriePsfp;
-  patrimoineDeclare: number | null;
-  montantMaxConseille: number | null;
+  categoriePsfp: CategorieInvestisseur;
+  /** Patrimoine net au sens de l'art. 21(5) du règlement (UE) 2020/1503. */
+  patrimoineNetCalcule: number | null;
+  /** max(1 000 €, 5 % du patrimoine net) — art. 21(7). */
+  seuilAvertissementCalcule: number | null;
+  /** Art. 21(2) : échéance de réexamen de l'évaluation. */
+  evaluationExpireLe: Date | null = null;
   niveauRisque: string | null = null;
   dernierContactAdmin: Date | null = null;
   prochainContactDu: Date | null = null;

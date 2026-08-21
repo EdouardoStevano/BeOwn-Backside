@@ -1,4 +1,15 @@
-import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { formatEur } from 'src/common/money/format-eur';
+import {
+  PLAFOND_PORTEUR_12_MOIS_EUR,
+  debutFenetreGlissante,
+  verifierPlafondPorteur,
+} from 'src/projects/domains/plafond-porteur';
 import { PROJECT_REPOSITORY } from '../ports/repositories/project.repository';
 import type { ProjectRepository } from '../ports/repositories/project.repository';
 import { CreateProjectDto } from 'src/projects/presenters/dto/project.dto';
@@ -24,7 +35,27 @@ export class UpdateProjectUseCase {
     if (dto.ville !== undefined) project.ville = dto.ville ?? null;
     if (dto.region !== undefined) project.region = dto.region ?? null;
     if (dto.pays !== undefined) project.pays = dto.pays ?? 'CI';
-    if (dto.capitalCible !== undefined) project.capitalCible = dto.capitalCible;
+    if (dto.capitalCible !== undefined) {
+      // Art. 1(2)(c) : relever le capital cible d'une offre consomme le
+      // plafond du porteur au même titre qu'en ouvrir une nouvelle.
+      if (project.porteurId && dto.capitalCible > Number(project.capitalCible)) {
+        const offres = await this.projectRepository.findOffresPorteurDepuis(
+          project.porteurId,
+          debutFenetreGlissante(new Date()),
+          project.id,
+        );
+        const resultat = verifierPlafondPorteur(offres, dto.capitalCible);
+        if (!resultat.autorise) {
+          throw new BadRequestException(
+            `Plafond de financement participatif dépassé : ce porteur a déjà ouvert ` +
+              `${formatEur(resultat.dejaCollecte)} d'offres sur les douze derniers mois. ` +
+              `Le plafond réglementaire est de ${formatEur(PLAFOND_PORTEUR_12_MOIS_EUR)} ` +
+              `par porteur sur douze mois glissants. Marge restante : ${formatEur(resultat.disponible)}.`,
+          );
+        }
+      }
+      project.capitalCible = dto.capitalCible;
+    }
     if (dto.capitalMinimum !== undefined)
       project.capitalMinimum = dto.capitalMinimum;
     if (dto.ticketMinimum !== undefined)

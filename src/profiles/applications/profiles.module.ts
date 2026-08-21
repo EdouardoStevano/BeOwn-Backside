@@ -10,6 +10,7 @@ import { UpdateProfilPPUseCase } from './usecases/update-profil-pp.usecase';
 import { CreateProfilPMUseCase } from './usecases/create-profil-pm.usecase';
 import { GetKycUseCase } from './usecases/get-kyc.usecase';
 import { SaveQuestionnaireUseCase } from './usecases/save-questionnaire.usecase';
+import { SaveTestConnaissancesUseCase } from './usecases/save-test-connaissances.usecase';
 import { QuestionnaireAdequationEntity } from '../infrastructure/persistences/entities/questionnaire-adequation.entity';
 import { ProfilPPEntity } from '../infrastructure/persistences/entities/profil-pp.entity';
 import { UserEntity } from 'src/users/infrastructure/persistences/entities/user.entity';
@@ -36,6 +37,7 @@ import { BeneficiaireEffectifController } from '../presenters/http/beneficiaire-
     CreateProfilPMUseCase,
     GetKycUseCase,
     SaveQuestionnaireUseCase,
+    SaveTestConnaissancesUseCase,
     RiskScoringService,
   ],
   controllers: [ProfileController, BeneficiaireEffectifController],

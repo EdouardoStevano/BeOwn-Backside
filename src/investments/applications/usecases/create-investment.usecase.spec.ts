@@ -117,6 +117,9 @@ describe('CreateInvestmentUseCase — atomicité', () => {
       }),
       update: jest.fn().mockResolvedValue({ affected: 1 }),
       delete: jest.fn().mockResolvedValue({ affected: 1 }),
+      // Aucune souscription sous délai de réflexion par défaut : la bascule
+      // FINANCE reste possible (art. 22 — cf. create-investment.usecase.ts).
+      count: jest.fn().mockResolvedValue(0),
     };
     dataSource = {
       transaction: jest.fn(async (cb: any) => cb(manager)),
@@ -134,6 +137,11 @@ describe('CreateInvestmentUseCase — atomicité', () => {
       notificationService,
       notificationEvents,
       dataSource,
+      {
+        incrementCounter: jest.fn(),
+        observeHistogram: jest.fn(),
+        setGauge: jest.fn(),
+      } as any,
     );
   });
 

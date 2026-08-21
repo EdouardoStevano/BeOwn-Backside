@@ -41,6 +41,11 @@ describe('ExecuteDistributionUseCase — audit role', () => {
       }),
     };
     const amlMonitor: any = { check: jest.fn() };
+    const metrics: any = {
+      incrementCounter: jest.fn(),
+      observeHistogram: jest.fn(),
+      setGauge: jest.fn(),
+    };
 
     useCase = new ExecuteDistributionUseCase(
       periodeRepo,
@@ -51,6 +56,7 @@ describe('ExecuteDistributionUseCase — audit role', () => {
       dataSource,
       auditLog,
       amlMonitor,
+      metrics,
     );
   });
 
@@ -148,6 +154,11 @@ describe('ExecuteDistributionUseCase — encaissement des frais plateforme', () 
       dataSource,
       { create: jest.fn().mockResolvedValue(undefined) } as any,
       { check: jest.fn() } as any,
+      {
+        incrementCounter: jest.fn(),
+        observeHistogram: jest.fn(),
+        setGauge: jest.fn(),
+      } as any,
     );
   });
 

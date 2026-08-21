@@ -19,8 +19,6 @@ import { SignInDto } from './dto/sign-in.dto';
 import { ExchangeCodeDto, RefreshTokenDto } from './dto/refresh-token.dto';
 import { RefreshTokenUseCase } from '../../applications/authentication/application/usecases/refresh-token.usecase';
 import { SocialAuthUseCase } from '../../applications/authentication/application/usecases/social-auth.usecase';
-import { FacebookAuthGuard } from '../../applications/authentication/infrastructures/guards/facebook-auth.guard';
-import { FacebookCallbackGuard } from '../../applications/authentication/infrastructures/guards/facebook-callback.guard';
 import { GoogleAuthGuard } from '../../applications/authentication/infrastructures/guards/google-auth.guard';
 import { GoogleCallbackGuard } from '../../applications/authentication/infrastructures/guards/google-callback.guard';
 import { LinkedinAuthGuard } from '../../applications/authentication/infrastructures/guards/linkedin-auth.guard';
@@ -46,6 +44,11 @@ import {
 } from 'src/iam/domains/ports/cahe-manager.service';
 import { VerifyRegistrationOtpUseCase } from '../../applications/authentication/application/usecases/verify-registration-otp.usecase';
 import { ResendRegistrationOtpUseCase } from '../../applications/authentication/application/usecases/resend-registration-otp.usecase';
+import {
+  SendTwoFactorCodeDto,
+  VerifyTwoFactorDto,
+  VerifyTwoFactorUseCase,
+} from '../../applications/authentication/application/usecases/verify-two-factor.usecase';
 
 @ApiTags('Authentication')
 @Controller('auth')
@@ -60,6 +63,7 @@ export class AuthenticationController {
     private readonly recaptchaService: RecaptchaService,
     private readonly verifyRegistrationOtpUseCase: VerifyRegistrationOtpUseCase,
     private readonly resendRegistrationOtpUseCase: ResendRegistrationOtpUseCase,
+    private readonly verifyTwoFactorUseCase: VerifyTwoFactorUseCase,
     @Inject(CACHE_MANAGER_SERVICE)
     private readonly cacheManagerService: CacheManagerService,
   ) {}
@@ -88,20 +92,6 @@ export class AuthenticationController {
   @Post('refresh-tokens')
   refreshToken(@Body() refreshTokenDto: RefreshTokenDto) {
     return this.refreshTokenUseCase.refreshToken(refreshTokenDto);
-  }
-
-  @ApiOperation({ summary: 'Authentification via Facebook' })
-  @Public()
-  @Get('facebook')
-  @UseGuards(FacebookAuthGuard)
-  facebookAuthenticate() {}
-
-  @ApiOperation({ summary: 'Callback Facebook OAuth' })
-  @Public()
-  @Get('facebook/callback')
-  @UseGuards(FacebookCallbackGuard)
-  async facebookCallback(@Req() req: Request, @Res() res: Response) {
-    return this.redirectWithTokens(res, req.user);
   }
 
   @ApiOperation({ summary: 'Authentification via Google' })
@@ -137,6 +127,9 @@ export class AuthenticationController {
   })
   @ApiResponse({ status: 200, description: 'Tokens retournés' })
   @ApiResponse({ status: 401, description: 'Code invalide ou expiré' })
+  // M-5 — le code d'échange est un UUID v4 (non devinable), mais la route
+  // reste un oracle public : on la borne comme les autres routes d'auth.
+  @Throttle({ short: { ttl: 60_000, limit: 20 }, auth: { ttl: 900_000, limit: 60 } })
   @Public()
   @HttpCode(HttpStatus.OK)
   @Post('exchange')
@@ -146,6 +139,35 @@ export class AuthenticationController {
     );
     if (!tokens) throw new UnauthorizedException('Code invalide ou expiré');
     return tokens;
+  }
+
+  @ApiOperation({
+    summary: 'Envoyer le code de double authentification (jeton pré-auth)',
+  })
+  @ApiResponse({ status: 204, description: 'Code envoyé par email' })
+  @ApiResponse({ status: 401, description: 'Jeton pré-auth invalide ou expiré' })
+  @Throttle({ short: { ttl: 60_000, limit: 3 }, auth: { ttl: 900_000, limit: 20 } })
+  @Public()
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Post('2fa/send')
+  async sendTwoFactorCode(@Body() dto: SendTwoFactorCodeDto) {
+    await this.verifyTwoFactorUseCase.sendCode(dto);
+  }
+
+  @ApiOperation({
+    summary:
+      'Échanger un jeton pré-authentifié contre des tokens, après vérification du second facteur',
+  })
+  @ApiResponse({ status: 200, description: 'Tokens délivrés' })
+  @ApiResponse({ status: 401, description: 'Code invalide, ou jeton expiré' })
+  // Seul moyen d'obtenir un token pour un compte 2FA : cible naturelle d'une
+  // force brute sur 6 chiffres, d'où le palier dédié.
+  @Throttle({ short: { ttl: 60_000, limit: 10 }, auth: { ttl: 900_000, limit: 30 } })
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @Post('2fa/verify')
+  async verifyTwoFactor(@Body() dto: VerifyTwoFactorDto) {
+    return this.verifyTwoFactorUseCase.verify(dto);
   }
 
   private async redirectWithTokens(res: Response, user: any) {
@@ -238,6 +260,11 @@ export class AuthenticationController {
     status: 200,
     description: 'Mot de passe réinitialisé avec succès',
   })
+  @ApiResponse({ status: 429, description: 'Trop de tentatives' })
+  // M-5 — sans palier dédié, cette route publique héritait des seuils globaux
+  // (500 req/s), soit aucune protection contre le martèlement d'un jeton de
+  // réinitialisation.
+  @Throttle({ short: { ttl: 60_000, limit: 10 }, auth: { ttl: 900_000, limit: 20 } })
   @Public()
   @Post('reset-password')
   resetPassword(@Body() dto: ResetPasswordDto) {

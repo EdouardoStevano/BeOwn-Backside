@@ -22,6 +22,8 @@ import {
   OTP_REQUIRED_CODE,
   OTP_REQUIRED_MESSAGE,
 } from 'src/common/auth/account-status.guard';
+import { MetricsPort } from 'src/observability/metrics/metrics.port';
+import { METRIC } from 'src/observability/metrics/metric-names';
 
 @Injectable()
 export class SignInUsecase {
@@ -29,12 +31,17 @@ export class SignInUsecase {
     @Inject(HASHING_SERVICE) private readonly hashingService: HashingService,
     @Inject(TOKEN_SERVICE) private readonly tokenService: TokenService,
     @Inject(USER_REPOSITORY) private readonly usersRepository: UserRepository,
+    private readonly metrics: MetricsPort,
   ) {}
 
   async signIn(signInDto: SignInDto) {
     const user = await this.usersRepository.findByEmail(signInDto.email);
 
     if (!user) {
+      this.metrics.incrementCounter(METRIC.SIGNIN_TOTAL, {
+        outcome: 'failure',
+        reason: 'invalid_credentials',
+      });
       throw new UnauthorizedException('Adresse email ou mot de passe incorrect');
     }
 
@@ -44,6 +51,10 @@ export class SignInUsecase {
     );
 
     if (!isValidPassword) {
+      this.metrics.incrementCounter(METRIC.SIGNIN_TOTAL, {
+        outcome: 'failure',
+        reason: 'invalid_credentials',
+      });
       throw new UnauthorizedException('Adresse email ou mot de passe incorrect');
     }
 
@@ -56,6 +67,10 @@ export class SignInUsecase {
     // them behind a successful password check means this detail only
     // reaches someone who already holds valid credentials for the account.
     if (!user.userEmail.isVerified) {
+      this.metrics.incrementCounter(METRIC.SIGNIN_TOTAL, {
+        outcome: 'failure',
+        reason: 'otp_required',
+      });
       throw new UnauthorizedException({
         code: OTP_REQUIRED_CODE,
         message: OTP_REQUIRED_MESSAGE,
@@ -67,6 +82,10 @@ export class SignInUsecase {
     // contrat d'erreur (401 + code stable) que le contrôle par requête fait
     // par AccountStatusGuard, pour une expérience front cohérente.
     if (user.status === UserStatus.SUSPENDU) {
+      this.metrics.incrementCounter(METRIC.SIGNIN_TOTAL, {
+        outcome: 'failure',
+        reason: 'account_suspended',
+      });
       throw new UnauthorizedException({
         statusCode: 401,
         message: ACCOUNT_SUSPENDED_MESSAGE,
@@ -78,11 +97,36 @@ export class SignInUsecase {
       user.status === UserStatus.CLOS ||
       user.status === UserStatus.SUPPRIME
     ) {
+      this.metrics.incrementCounter(METRIC.SIGNIN_TOTAL, {
+        outcome: 'failure',
+        reason: 'account_closed',
+      });
       throw new UnauthorizedException({
         statusCode: 401,
         message: ACCOUNT_CLOSED_MESSAGE,
         code: ACCOUNT_CLOSED_CODE,
       });
+    }
+
+    // Second facteur : contrôlé ICI, et non par l'interface. Tant que le code
+    // n'est pas vérifié, aucun access token n'est émis — seul un jeton
+    // pré-authentifié sans droits est renvoyé, à échanger via /auth/2fa/verify.
+    // Placé après le mot de passe et le statut : un mot de passe erroné ne doit
+    // pas révéler que le compte a la 2FA activée (même logique anti-énumération
+    // que les codes OTP_REQUIRED / ACCOUNT_* ci-dessus).
+    const preferences = await this.usersRepository
+      .findPreferences(user.userId)
+      .catch(() => null);
+
+    if (preferences?.twoFactorEnabled) {
+      const preAuthToken = await this.tokenService.generatePreAuthToken(
+        user.userId,
+        user.userEmail.email,
+      );
+      this.metrics.incrementCounter(METRIC.SIGNIN_TOTAL, {
+        outcome: 'pending_2fa',
+      });
+      return { requires2fa: true as const, preAuthToken };
     }
 
     const tokenPayload = await this.tokenService.generateTokens({
@@ -91,6 +135,7 @@ export class SignInUsecase {
       role: user.role,
     } as TokenPayload);
 
+    this.metrics.incrementCounter(METRIC.SIGNIN_TOTAL, { outcome: 'success' });
     return { ...tokenPayload };
   }
 }

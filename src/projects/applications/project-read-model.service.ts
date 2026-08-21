@@ -105,6 +105,7 @@ export class ProjectReadModelService {
 
     const activeStatuses: InvestmentStatus[] = [
       InvestmentStatus.CONFIRME,
+      InvestmentStatus.EN_DELAI_RETRACTATION,
       InvestmentStatus.SIGNE,
       InvestmentStatus.PAYE,
       InvestmentStatus.REMBOURSE_CAPITAL,

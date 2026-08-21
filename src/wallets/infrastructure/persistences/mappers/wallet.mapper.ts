@@ -14,6 +14,7 @@ export class WalletMapper {
     d.fournisseurRef = entity.fournisseurRef;
     d.devise = entity.devise;
     d.solde = Number(entity.solde);
+    d.soldeBloque = Number(entity.soldeBloque ?? 0);
     d.statut = entity.statut;
     d.createdAt = entity.createdAt;
     return d;
@@ -29,6 +30,7 @@ export class WalletMapper {
     e.fournisseurRef = domain.fournisseurRef;
     e.devise = domain.devise;
     e.solde = domain.solde;
+    e.soldeBloque = domain.soldeBloque ?? 0;
     e.statut = domain.statut;
     return e;
   }

@@ -30,6 +30,7 @@ import { ProjectReadModelService } from 'src/projects/applications/project-read-
 import {
   CreateProjectDto,
   CreateSpvDto,
+  UpdateProjectDto,
   UpdateProjectStatusDto,
 } from '../dto/project.dto';
 import {
@@ -288,12 +289,14 @@ export class ProjectController {
 
   @ApiOperation({ summary: "Mettre à jour les champs d'un projet (admin)" })
   @ApiParam({ name: 'id', description: 'UUID du projet' })
+  @ApiBody({ type: UpdateProjectDto })
   @ApiResponse({ status: 200, description: 'Projet mis à jour' })
+  @ApiResponse({ status: 400, description: 'Corps invalide (champ inconnu ou valeur non conforme)' })
   @ApiResponse({ status: 404, description: 'Projet introuvable' })
   @HttpCode(HttpStatus.OK)
   @RequirePermission('projects:manage')
   @Patch(':id')
-  update(@Param('id') id: string, @Body() dto: Partial<CreateProjectDto>) {
+  update(@Param('id') id: string, @Body() dto: UpdateProjectDto) {
     return this.updateProject.execute(id, dto);
   }
 

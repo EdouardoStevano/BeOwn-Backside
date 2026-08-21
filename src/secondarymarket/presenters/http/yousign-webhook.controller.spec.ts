@@ -108,6 +108,11 @@ describe('YouSignWebhookController.handleSignatureDone (atomicité SIGNED)', () 
     const notificationEvents: any = { investmentCreated: jest.fn() };
     const userRepository: any = { findById: jest.fn(async () => ({ userId: 1 })) };
     const platformFees: any = { getRates: jest.fn(), computeResaleFees: jest.fn() };
+    const metrics: any = {
+      incrementCounter: jest.fn(),
+      observeHistogram: jest.fn(),
+      setGauge: jest.fn(),
+    };
 
     const controller = new YouSignWebhookController(
       signatureRepo,
@@ -125,6 +130,7 @@ describe('YouSignWebhookController.handleSignatureDone (atomicité SIGNED)', () 
       userRepository,
       notificationEvents,
       platformFees,
+      metrics,
     );
 
     return { controller, signature, lockedSignature, investment, wallet, dataSource, manager, notificationEvents };

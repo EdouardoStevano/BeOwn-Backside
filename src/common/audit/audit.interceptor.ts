@@ -12,6 +12,18 @@ const MUTATING = ['POST', 'PUT', 'PATCH', 'DELETE'];
 const SENSITIVE = /password|token|secret|otp|iban|cvv|card/i;
 const MAX_BODY_BYTES = 2048;
 
+/**
+ * Ressources dont les mutations n'ont aucune valeur d'audit. Marquer une
+ * notification comme lue, ou la supprimer, est une action de confort : une
+ * ligne par notification consultée noyait le journal d'activité sous du bruit,
+ * masquant les décisions réellement traçables (KYC, retraits, rôles).
+ *
+ * Ne concerne QUE les routes utilisateur. Les diffusions `/admin/notifications`
+ * restent auditées — elles sont d'ailleurs déjà tracées explicitement par
+ * BroadcastService.
+ */
+const AUDIT_EXCLUDED_RESOURCES = new Set(['notifications']);
+
 export function sanitizeBody(body: unknown): Record<string, unknown> | null {
   if (!body || typeof body !== 'object') return null;
   const out: Record<string, unknown> = {};
@@ -40,6 +52,17 @@ export class AuditInterceptor implements NestInterceptor {
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
     const request = context.switchToHttp().getRequest();
     if (!MUTATING.includes(request.method) || !request.user) {
+      return next.handle();
+    }
+
+    const routeSegments: string[] = (request.route?.path ?? request.url)
+      .split('/')
+      .filter(Boolean);
+    // Exclusion évaluée avant tout travail : hors périmètre admin uniquement.
+    if (
+      routeSegments[0] !== 'admin' &&
+      AUDIT_EXCLUDED_RESOURCES.has(routeSegments[0])
+    ) {
       return next.handle();
     }
 

@@ -5,7 +5,7 @@ import { PROFIL_REPOSITORY } from '../ports/repositories/profil.repository';
 import type { ProfilRepository } from '../ports/repositories/profil.repository';
 import { CreateProfilPPDto } from 'src/profiles/presenters/dto/profil.dto';
 import { ProfilPP } from 'src/profiles/domains/profil-pp';
-import { CategoriePsfp } from 'src/profiles/domains/enums/kyc-status.enum';
+import { CategorieInvestisseur } from 'src/profiles/domains/investor-classification';
 import { UserEntity } from 'src/users/infrastructure/persistences/entities/user.entity';
 
 @Injectable()
@@ -44,7 +44,7 @@ export class CreateProfilPPUseCase {
     profil.pep = dto.pep ?? false;
     profil.residenceFiscale = dto.residenceFiscale ?? null;
     profil.nif = dto.nif ?? null;
-    profil.categoriePsfp = CategoriePsfp.NON_AVERTI;
+    profil.categoriePsfp = CategorieInvestisseur.NON_AVERTI;
 
     return this.profilRepository.saveProfilPP(profil);
   }

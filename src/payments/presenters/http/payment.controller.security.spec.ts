@@ -1,6 +1,8 @@
-import { ForbiddenException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { PaymentController } from './payment.controller';
 import { RequestRetraitUseCase } from '../../applications/usecases/request-retrait.usecase';
+import { PayoutDestinationResolver } from '../../applications/services/payout-destination.resolver';
+import { InMemoryPayoutMethodsAdapter } from '../../infrastructure/in-memory-payout-methods.adapter';
 
 /**
  * Tests de non-régression des correctifs de sécurité financière (audit
@@ -21,6 +23,7 @@ describe('PaymentController — sécurité des flux monétaires (H-1 / H-2)', ()
   let walletRepo: any;
   let txRepo: any;
   let dataSource: any;
+  let metricsPort: any;
 
   /** Query builder chaînable dont `.execute()` renvoie `result`. */
   const chainableQB = (result: any) => {
@@ -36,7 +39,10 @@ describe('PaymentController — sécurité des flux monétaires (H-1 / H-2)', ()
   const user = { userId: 42, email: 'a@b.c', role: 'INVESTISSEUR' } as any;
 
   beforeEach(() => {
-    stripeService = { retrievePaymentIntent: jest.fn() };
+    stripeService = {
+      retrievePaymentIntent: jest.fn(),
+      constructWebhookEvent: jest.fn(),
+    };
     // Compte Connect non configuré → createRetrait retombe sur le flux legacy
     // (IBAN + traitement manuel), comportement historiquement testé ici.
     stripeConnect = {
@@ -64,14 +70,25 @@ describe('PaymentController — sécurité des flux monétaires (H-1 / H-2)', ()
       save: jest.fn(async (x: any) => ({ id: 'tx1', ...x })),
     };
     dataSource = { transaction: jest.fn() };
+    metricsPort = {
+      incrementCounter: jest.fn(),
+      observeHistogram: jest.fn(),
+      setGauge: jest.fn(),
+    };
 
     // H-2 (débit atomique conditionnel + idempotence L-2) vit désormais dans le
     // usecase retrait ; on l'instancie avec les mêmes mocks et on l'injecte.
+    // Lot 4a — le usecase reçoit en plus le résolveur de destination. Il est
+    // adossé à l'adaptateur EN MÉMOIRE (pas un mock) : sans `payoutMethodId` ni
+    // `method` dans le DTO, il renvoie le parcours historique, ce qui garantit
+    // que ces tests vérifient toujours le comportement d'origine.
     requestRetrait = new RequestRetraitUseCase(
       txRepo,
       stripeConnect,
       notificationService,
       dataSource,
+      metricsPort,
+      new PayoutDestinationResolver(new InMemoryPayoutMethodsAdapter()),
     );
 
     controller = new PaymentController(
@@ -87,6 +104,7 @@ describe('PaymentController — sécurité des flux monétaires (H-1 / H-2)', ()
       txRepo,
       dataSource,
       requestRetrait,
+      metricsPort,
     );
   });
 
@@ -124,6 +142,7 @@ describe('PaymentController — sécurité des flux monétaires (H-1 / H-2)', ()
       stripeService.retrievePaymentIntent.mockResolvedValue({
         status: 'succeeded',
         amount: 100_00,
+        currency: 'eur',
         metadata: { userId: '42' },
       });
       walletRepo.findOne.mockResolvedValue({ id: 'w1', devise: 'EUR' });
@@ -153,6 +172,7 @@ describe('PaymentController — sécurité des flux monétaires (H-1 / H-2)', ()
       stripeService.retrievePaymentIntent.mockResolvedValue({
         status: 'succeeded',
         amount: 100_00,
+        currency: 'eur',
         metadata: { userId: '42' },
       });
       walletRepo.findOne.mockResolvedValue({ id: 'w1', devise: 'EUR' });
@@ -172,6 +192,100 @@ describe('PaymentController — sécurité des flux monétaires (H-1 / H-2)', ()
       expect(res).toEqual({ success: true, alreadyProcessed: true });
       // Aucun incrément de solde ne doit avoir eu lieu (insert a échoué avant).
       expect(em.createQueryBuilder).not.toHaveBeenCalled();
+    });
+  });
+
+  // ── C-2 ────────────────────────────────────────────────────────────────────
+  describe('dépôt — verrouillage de la devise à l\'EUR (C-2)', () => {
+    it('confirmDepot: refuse un dépôt en devise ≠ EUR (BadRequestException, aucun crédit)', async () => {
+      // PaymentIntent facturé ~1,3 € (50 000 fillér) mais qui créditerait 500 €.
+      stripeService.retrievePaymentIntent.mockResolvedValue({
+        status: 'succeeded',
+        amount: 500_00,
+        currency: 'huf',
+        metadata: { userId: '42' }, // propriété OK (garde BOLA passée)
+      });
+
+      await expect(
+        controller.confirmDepot({ paymentIntentId: 'pi_huf' } as any, user),
+      ).rejects.toBeInstanceOf(BadRequestException);
+
+      // Aucun crédit : ni ouverture de transaction, ni wallet touché.
+      expect(walletRepo.findOne).not.toHaveBeenCalled();
+      expect(dataSource.transaction).not.toHaveBeenCalled();
+      expect(txRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('confirmDepot: refuse un dépôt sans devise (défense en profondeur)', async () => {
+      stripeService.retrievePaymentIntent.mockResolvedValue({
+        status: 'succeeded',
+        amount: 500_00,
+        metadata: { userId: '42' }, // currency absente
+      });
+
+      await expect(
+        controller.confirmDepot({ paymentIntentId: 'pi_nocur' } as any, user),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(dataSource.transaction).not.toHaveBeenCalled();
+    });
+
+    it('webhook payment_intent.succeeded: ne crédite PAS un intent ≠ EUR et escalade aux admins', async () => {
+      stripeService.constructWebhookEvent.mockReturnValue({
+        id: 'evt_huf',
+        type: 'payment_intent.succeeded',
+        data: {
+          object: {
+            id: 'pi_huf',
+            currency: 'huf',
+            amount: 500_00,
+            metadata: { userId: '42', operationType: 'depot' },
+          },
+        },
+      });
+
+      const res = await controller.handleStripeWebhook('sig', {
+        rawBody: Buffer.from('{}'),
+      } as any);
+
+      // 200 renvoyé (pas de throw → Stripe ne rejoue pas indéfiniment)…
+      expect(res).toEqual({
+        received: true,
+        type: 'payment_intent.succeeded',
+        eventId: 'evt_huf',
+      });
+      // …mais aucun crédit, et escalade admin.
+      expect(walletRepo.findOne).not.toHaveBeenCalled();
+      expect(dataSource.transaction).not.toHaveBeenCalled();
+      expect(notificationService.pushToAdmins).toHaveBeenCalled();
+    });
+
+    it('webhook payment_intent.succeeded: crédite bien un dépôt en EUR (non-régression)', async () => {
+      stripeService.constructWebhookEvent.mockReturnValue({
+        id: 'evt_eur',
+        type: 'payment_intent.succeeded',
+        data: {
+          object: {
+            id: 'pi_eur',
+            currency: 'eur',
+            amount: 100_00,
+            metadata: { userId: '42', operationType: 'depot' },
+          },
+        },
+      });
+      walletRepo.findOne.mockResolvedValue({ id: 'w1', devise: 'EUR' });
+      const em: any = {
+        insert: jest.fn().mockResolvedValue(undefined),
+        createQueryBuilder: jest.fn(() => chainableQB({ affected: 1 })),
+      };
+      dataSource.transaction.mockImplementation(async (cb: any) => cb(em));
+
+      await controller.handleStripeWebhook('sig', {
+        rawBody: Buffer.from('{}'),
+      } as any);
+
+      // Crédit atomique effectué, pas d'escalade admin (chemin nominal).
+      expect(em.insert).toHaveBeenCalled();
+      expect(notificationService.pushToAdmins).not.toHaveBeenCalled();
     });
   });
 

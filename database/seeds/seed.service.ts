@@ -33,7 +33,7 @@ import { KycEntity } from 'src/profiles/infrastructure/persistences/entities/kyc
 import {
   KycStatus,
   KycNiveau,
-  CategoriePsfp,
+  CategorieInvestisseur,
 } from 'src/profiles/domains/enums/kyc-status.enum';
 import {
   NotificationEntity,
@@ -392,19 +392,19 @@ export class SeedService {
         u: inv1,
         civilite: 'Mme',
         profession: 'Médecin',
-        cat: CategoriePsfp.AVERTI,
+        cat: CategorieInvestisseur.AVERTI,
       },
       {
         u: inv2,
         civilite: 'M.',
         profession: 'Ingénieur',
-        cat: CategoriePsfp.NON_AVERTI,
+        cat: CategorieInvestisseur.NON_AVERTI,
       },
       {
         u: inv3,
         civilite: 'Mme',
         profession: 'Cadre bancaire',
-        cat: CategoriePsfp.NON_AVERTI,
+        cat: CategorieInvestisseur.NON_AVERTI,
       },
     ];
     for (const { u, civilite, profession, cat } of ppData) {

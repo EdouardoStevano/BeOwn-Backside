@@ -1,0 +1,171 @@
+# Règles d'alerte Mimir (ruler Grafana Cloud) — voir DOC/MONITORING_SETUP.md §4.6.
+# Chargement (poste connecté / CI) :
+#   mimirtool rules load k8s/monitoring/alert-rules.yaml \
+#     --address="https://prometheus-prod-XX-prod-eu-west-N.grafana.net" \
+#     --id="<PROM_USERNAME>" --key="<GRAFANA_CLOUD_API_TOKEN>"
+#
+# Les noms de métriques référencés ici DOIVENT rester synchronisés avec
+# src/observability/metrics/metric-names.ts (source de vérité côté code).
+namespace: beown
+groups:
+  # ── Intégrité financière (money-path) ──────────────────────────
+  - name: beown-financial-integrity
+    rules:
+      - alert: WalletLedgerDiscrepancy
+        expr: abs(beown_wallet_ledger_discrepancy_eur) > 1
+        for: 10m
+        labels: { severity: critical, team: finance }
+        annotations:
+          summary: "Ecart > 1 EUR wallets<->ledger : incident d'integrite comptable. Geler les operations sensibles et instruire immediatement."
+      - alert: StripeBalanceDiscrepancy
+        expr: abs(beown_stripe_balance_discrepancy_eur) > 100
+        for: 15m
+        labels: { severity: critical, team: finance }
+        annotations:
+          summary: "Divergence > 100 EUR solde Stripe attendu vs constate (>15 min) : fuite ou erreur de flux a investiguer."
+      - alert: ReconciliationStale
+        expr: time() - max by (job) (beown_reconciliation_last_success_timestamp) > 7200
+        for: 0m
+        labels: { severity: critical, team: finance }
+        annotations:
+          summary: "Job de reconciliation ({{ $labels.job }}) sans succes depuis > 2h : plateforme aveugle sur l'integrite des fonds."
+      - alert: PayoutReversalFailedOrUnreferenced
+        expr: increase(beown_withdrawal_payout_total{outcome="failed", reversal=~"reversal_failed|no_reference"}[10m]) > 0
+        for: 0m
+        labels: { severity: critical, team: finance }
+        annotations:
+          summary: "Payout retrait echoue SANS recredit auto : fonds potentiellement bloques cote Stripe. Verification manuelle requise."
+      - alert: DepositCurrencyBlockedNonEur
+        expr: increase(beown_deposit_rejected_total{reason="currency_not_eur", source="webhook"}[15m]) > 0
+        for: 0m
+        labels: { severity: critical, team: finance }
+        annotations:
+          summary: "Depot REUSSI chez Stripe en devise != EUR, wallet NON credite : remboursement manuel Stripe a declencher."
+      - alert: WithdrawalTransferFailedSpike
+        expr: sum(increase(beown_withdrawal_transfer_failed_total[15m])) > 3
+        for: 0m
+        labels: { severity: warning, team: finance }
+        annotations:
+          summary: "Plusieurs Transfer Stripe Connect en echec/15 min (investisseurs auto-recredites) : incident Connect ou solde plateforme."
+
+  # ── Sécurité ────────────────────────────────────────────────────
+  - name: beown-security
+    rules:
+      - alert: StripeWebhookSignatureInvalid
+        expr: increase(beown_webhook_signature_invalid_total{provider="stripe"}[10m]) > 5
+        for: 0m
+        labels: { severity: warning, team: security }
+        annotations:
+          summary: "Webhooks Stripe rejetes (signature invalide). Si depots/payouts traites tombent => secret webhook casse : escalader en critical."
+      - alert: AuthThrottleBruteForce
+        expr: sum(rate(beown_throttle_blocked_total{throttler="auth"}[5m])) > 1
+        for: 10m
+        labels: { severity: warning, team: security }
+        annotations:
+          summary: "Blocages soutenus sur le palier auth : brute-force / credential stuffing probable sur /auth/sign-in."
+      - alert: SignInCredentialStuffing
+        expr: |
+          sum(rate(beown_signin_total{outcome="failed", reason="bad_credentials"}[5m])) > 5
+          and
+          (sum(rate(beown_signin_total{outcome="failed", reason="bad_credentials"}[5m]))
+           / clamp_min(sum(rate(beown_signin_total{outcome="success"}[5m])), 0.01)) > 10
+        for: 10m
+        labels: { severity: warning, team: security }
+        annotations:
+          summary: "Volume eleve d'echecs d'identifiants, ratio echec/succes > 10 : credential stuffing probable."
+
+  # ── Conformité (LCB-FT / KYC) ──────────────────────────────────
+  - name: beown-compliance
+    rules:
+      - alert: AmlThresholdExceeded
+        expr: increase(beown_aml_threshold_exceeded_total[15m]) > 0
+        for: 0m
+        labels: { severity: warning, team: compliance }
+        annotations:
+          summary: "Depassement de seuil LCB-FT (AML) sur un mouvement de fonds : dossier a instruire par la compliance/RCCI."
+      - alert: KycManualReviewBacklog
+        expr: beown_kyc_manual_review_pending > 20
+        for: 2h
+        labels: { severity: warning, team: compliance }
+        annotations:
+          summary: "> 20 dossiers KYC en revue manuelle depuis > 2h : risque de depassement du SLA reglementaire."
+      - alert: KycAutoValidationRateDrop
+        expr: |
+          sum(rate(beown_kyc_transitions_total{to_status="valide", mode="auto"}[1h]))
+          / clamp_min(sum(rate(beown_kyc_transitions_total{to_status=~"valide|en_revue", mode="auto"}[1h])), 0.001) < 0.5
+        for: 1h
+        labels: { severity: warning, team: compliance }
+        annotations:
+          summary: "Taux d'auto-validation KYC < 50% sur 1h : Stripe Identity possiblement degrade -> afflux en revue manuelle."
+
+  # ── Portefeuille / échéances ───────────────────────────────────
+  - name: beown-portfolio
+    rules:
+      - alert: EcheanceAutoPayFailures
+        expr: increase(beown_echeance_autopay_failed_total[1h]) > 0
+        for: 0m
+        labels: { severity: warning, team: finance }
+        annotations:
+          summary: "Au moins un coupon/echeance non paye automatiquement par le CRON : impact investisseur direct, rejouer."
+      - alert: EcheancesDueUnverifiedBacklog
+        expr: beown_echeances_due_unverified > 0
+        for: 6h
+        labels: { severity: warning, team: finance }
+        annotations:
+          summary: "Echeances dues non verifiees (donc non payees) depuis > 6h : argent du bloque, a solder avant fin de journee."
+      - alert: EcheanceOverdueSurge
+        expr: increase(beown_echeance_overdue_transitions_total[1d]) > 50
+        for: 0m
+        labels: { severity: info, team: portfolio }
+        annotations:
+          summary: "Bascule quotidienne en RETARD > 50 : revue portefeuille et communication investisseurs renforcee."
+
+  # ── API / disponibilité ────────────────────────────────────────
+  - name: beown-api-health
+    rules:
+      - alert: ApiHighErrorRate
+        expr: |
+          sum(rate(beown_http_requests_total{status_class="5xx"}[5m]))
+          / clamp_min(sum(rate(beown_http_requests_total[5m])), 0.001) > 0.05
+        for: 10m
+        labels: { severity: critical, team: platform }
+        annotations:
+          summary: "Taux 5xx > 5% sur 10 min : degradation majeure de l'API (potentiellement chemins argent)."
+      - alert: ApiHighLatencyP95
+        expr: histogram_quantile(0.95, sum(rate(beown_http_request_duration_seconds_bucket[5m])) by (le)) > 1
+        for: 10m
+        labels: { severity: warning, team: platform }
+        annotations:
+          summary: "Latence p95 API > 1s sur 10 min : verifier DB (verrous, N+1), Redis, saturation pods (HPA max 6)."
+      - alert: ApiDependencyDown
+        expr: min by (dependency) (beown_dependency_up) == 0
+        for: 2m
+        labels: { severity: critical, team: platform }
+        annotations:
+          summary: "Dependance critique ({{ $labels.dependency }}) down d'apres la readiness : la readiness doit sortir les pods du service."
+      - alert: ApiInstanceUnavailable
+        expr: up{job="beown-api"} == 0
+        for: 2m
+        labels: { severity: critical, team: platform }
+        annotations:
+          summary: "Instance API non scrappee depuis 2 min. Correler avec l'uptime Better Stack (indispo reelle vs incident de scrape Alloy)."
+
+  # ── SLO burn-rate (dispo 99.9 %, budget d'erreur 0.1 %) ─────────
+  - name: beown-slo-burnrate
+    rules:
+      - alert: ApiErrorBudgetFastBurn
+        expr: |
+          (sum(rate(beown_http_requests_total{status_class="5xx"}[1h])) / clamp_min(sum(rate(beown_http_requests_total[1h])),0.001) > 0.0144)
+          and
+          (sum(rate(beown_http_requests_total{status_class="5xx"}[5m])) / clamp_min(sum(rate(beown_http_requests_total[5m])),0.001) > 0.0144)
+        for: 2m
+        labels: { severity: critical, team: platform }
+        annotations: { summary: "Fast burn du budget d'erreur dispo (14.4x) : incident majeur, page l'astreinte." }
+      - alert: ApiErrorBudgetSlowBurn
+        expr: |
+          (sum(rate(beown_http_requests_total{status_class="5xx"}[6h])) / clamp_min(sum(rate(beown_http_requests_total[6h])),0.001) > 0.006)
+          and
+          (sum(rate(beown_http_requests_total{status_class="5xx"}[30m])) / clamp_min(sum(rate(beown_http_requests_total[30m])),0.001) > 0.006)
+        for: 15m
+        labels: { severity: warning, team: platform }
+        annotations: { summary: "Slow burn du budget d'erreur dispo (6x sur 6h) : ouvrir un ticket, degradation soutenue." }

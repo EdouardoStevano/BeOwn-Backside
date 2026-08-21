@@ -29,7 +29,12 @@ const buildUser = (status: UserStatus): User => {
   return user;
 };
 
-const makeUsecase = (user: User | null, passwordValid = true) => {
+const makeUsecase = (
+  user: User | null,
+  passwordValid = true,
+  /** null = aucune préférence enregistrée (cas d'un compte jamais configuré). */
+  preferences: { twoFactorEnabled: boolean } | null = null,
+) => {
   const hashingService = {
     hash: jest.fn(),
     compare: jest.fn().mockResolvedValue(passwordValid),
@@ -39,6 +44,8 @@ const makeUsecase = (user: User | null, passwordValid = true) => {
       accessToken: 'access',
       refreshToken: 'refresh',
     }),
+    generatePreAuthToken: jest.fn().mockResolvedValue('pre-auth-token'),
+    verifyPreAuthToken: jest.fn(),
     refreshTokens: jest.fn(),
     verifyAccessToken: jest.fn(),
     generateEmailToken: jest.fn(),
@@ -50,16 +57,108 @@ const makeUsecase = (user: User | null, passwordValid = true) => {
     findById: jest.fn(),
     update: jest.fn(),
     findOneBySocialId: jest.fn(),
-    findPreferences: jest.fn(),
+    findPreferences: jest.fn().mockResolvedValue(preferences),
     savePreferences: jest.fn(),
+  };
+  const metrics = {
+    incrementCounter: jest.fn(),
+    observeHistogram: jest.fn(),
+    setGauge: jest.fn(),
   };
   const usecase = new SignInUsecase(
     hashingService as any,
     tokenService as any,
     usersRepository as any,
+    metrics as any,
   );
-  return { usecase, hashingService, tokenService, usersRepository };
+  return { usecase, hashingService, tokenService, usersRepository, metrics };
 };
+
+/**
+ * Double authentification appliquée CÔTÉ SERVEUR.
+ *
+ * Auparavant le sign-in délivrait un access token complet quelles que soient
+ * les préférences : la 2FA n'était qu'un composant React masquant l'interface,
+ * contournable par un drapeau sessionStorage et sans effet sur l'API, le jeton
+ * étant déjà valide. Le mot de passe suffisait donc à obtenir un accès complet.
+ *
+ * Désormais un compte 2FA-activée reçoit un jeton pré-authentifié, sans aucun
+ * droit, échangeable contre de vrais tokens seulement après vérification du
+ * code (POST /auth/2fa/verify).
+ */
+describe('SignInUsecase — second facteur', () => {
+  it('ne délivre AUCUN token quand la 2FA est active', async () => {
+    const { usecase, tokenService } = makeUsecase(
+      buildUser(UserStatus.ACTIF),
+      true,
+      { twoFactorEnabled: true },
+    );
+
+    const res = await usecase.signIn({
+      email: 'user@example.com',
+      password: 'pw',
+    });
+
+    expect(tokenService.generateTokens).not.toHaveBeenCalled();
+    expect(res).toEqual({
+      requires2fa: true,
+      preAuthToken: 'pre-auth-token',
+    });
+  });
+
+  it('délivre les tokens normalement quand la 2FA est inactive', async () => {
+    const { usecase, tokenService } = makeUsecase(
+      buildUser(UserStatus.ACTIF),
+      true,
+      { twoFactorEnabled: false },
+    );
+
+    await expect(
+      usecase.signIn({ email: 'user@example.com', password: 'pw' }),
+    ).resolves.toEqual({ accessToken: 'access', refreshToken: 'refresh' });
+    expect(tokenService.generatePreAuthToken).not.toHaveBeenCalled();
+  });
+
+  it('ne casse pas quand aucune préférence n’est enregistrée', async () => {
+    const { usecase, tokenService } = makeUsecase(
+      buildUser(UserStatus.ACTIF),
+      true,
+      null,
+    );
+
+    await expect(
+      usecase.signIn({ email: 'user@example.com', password: 'pw' }),
+    ).resolves.toEqual({ accessToken: 'access', refreshToken: 'refresh' });
+    expect(tokenService.generatePreAuthToken).not.toHaveBeenCalled();
+  });
+
+  it('vérifie le second facteur APRÈS le mot de passe (anti-énumération)', async () => {
+    const { usecase, tokenService } = makeUsecase(
+      buildUser(UserStatus.ACTIF),
+      /* passwordValid */ false,
+      { twoFactorEnabled: true },
+    );
+
+    await expect(
+      usecase.signIn({ email: 'user@example.com', password: 'mauvais' }),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+    // Un mot de passe faux ne doit pas révéler que le compte a la 2FA activée.
+    expect(tokenService.generatePreAuthToken).not.toHaveBeenCalled();
+  });
+
+  it('refuse un compte suspendu avant même le second facteur', async () => {
+    const { usecase, tokenService } = makeUsecase(
+      buildUser(UserStatus.SUSPENDU),
+      true,
+      { twoFactorEnabled: true },
+    );
+
+    await expect(
+      usecase.signIn({ email: 'user@example.com', password: 'pw' }),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(tokenService.generatePreAuthToken).not.toHaveBeenCalled();
+  });
+});
 
 describe('SignInUsecase', () => {
   it('connecte un compte actif', async () => {

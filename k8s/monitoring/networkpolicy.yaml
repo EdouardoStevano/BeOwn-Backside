@@ -1,0 +1,45 @@
+---
+# OBS-1 (AUDIT_SECURITE_2026-08-01.md) — restreint qui peut joindre les pods
+# beown-backend sur le port 8080 (ClusterIP, jamais exposé directement à
+# Internet). Deux sources légitimes :
+#   1. l'ingress controller — trafic API public normal ;
+#   2. Grafana Alloy (namespace `monitoring`) — scrape /metrics.
+#
+# ⚠ Limite assumée : une NetworkPolicy k8s opère au niveau IP/port (L3/L4),
+# pas au niveau chemin HTTP. Le port 8080 sert À LA FOIS l'API et /metrics :
+# cette policy réduit la surface réseau (aucun autre pod du cluster ne peut
+# atteindre le port) mais NE remplace PAS le contrôle applicatif. Le contrôle
+# qui protège réellement /metrics est METRICS_TOKEN, obligatoire en
+# production (voir metrics.controller.ts::assertAuthorized).
+#
+# Adapter le namespaceSelector `ingress-nginx` au controller réellement
+# déployé si différent (ex. traefik, kong).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: beown-backend-restrict-ingress
+  namespace: beown
+spec:
+  podSelector:
+    matchLabels:
+      app: beown-backend
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 8080
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: alloy
+      ports:
+        - protocol: TCP
+          port: 8080

@@ -8,7 +8,7 @@ import {
   IsString,
   Length,
 } from 'class-validator';
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { KycStatus } from 'src/profiles/domains/enums/kyc-status.enum';
 
 export class CreateProfilPPDto {
@@ -100,6 +100,21 @@ export class CreateProfilPPDto {
   @IsNumber()
   montantMaxConseille?: number;
 }
+
+/**
+ * Mise à jour partielle du profil personne physique.
+ *
+ * Doit rester une VRAIE classe : un `Partial<CreateProfilPPDto>` est effacé à
+ * l'exécution (metatype `Object`), et le `ValidationPipe` global — pourtant
+ * configuré en `whitelist` + `forbidNonWhitelisted` — saute les metatypes
+ * natifs. Le corps arrivait donc brut jusqu'à la persistance (finding C-3) :
+ * `utilisateurId` (clé primaire → écriture sur le profil d'autrui) et
+ * `categoriePsfp` (plafond PSFP + délai de rétractation) étaient assignables
+ * par n'importe quel utilisateur authentifié. Ces deux champs n'existant pas
+ * dans `CreateProfilPPDto`, `forbidNonWhitelisted` les rejette désormais en
+ * 400 — `categoriePsfp` reste calculé par le questionnaire d'adéquation.
+ */
+export class UpdateProfilPPDto extends PartialType(CreateProfilPPDto) {}
 
 export class CreateProfilPMDto {
   @ApiProperty({ example: 'BeOwn SAS' })

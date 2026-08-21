@@ -11,6 +11,10 @@ import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/w
 import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entities/transaction.entity';
 import { InvestmentStatus } from 'src/investments/domains/enums/investment-status.enum';
 import {
+  DELAI_RETRACTATION_JOURS,
+  retractationOuverte,
+} from 'src/investments/domains/retractation';
+import {
   TransactionFournisseur,
   TransactionStatus,
   TransactionType,
@@ -55,18 +59,20 @@ export class CancelInvestmentUseCase {
           'Vous ne pouvez annuler que vos propres investissements',
         );
       }
-      if (inv.statut !== InvestmentStatus.CONFIRME) {
+      if (inv.statut !== InvestmentStatus.EN_DELAI_RETRACTATION) {
         throw new BadRequestException(
           `Investissement au statut "${inv.statut}" non annulable`,
         );
       }
       if (!inv.delaiRetractationJusquAu) {
         throw new BadRequestException(
-          "Cet investissement n'a pas de délai de rétractation (vous êtes investisseur averti ou professionnel)",
+          "Cet investissement n'a pas de délai de rétractation : il est réservé aux investisseurs non avertis (art. 22 du règlement (UE) 2020/1503).",
         );
       }
-      if (new Date() > new Date(inv.delaiRetractationJusquAu)) {
-        throw new BadRequestException('Le délai de rétractation de 4 jours est dépassé');
+      if (!retractationOuverte(inv.delaiRetractationJusquAu, new Date())) {
+        throw new BadRequestException(
+          `Le délai de rétractation de ${DELAI_RETRACTATION_JOURS} jours est dépassé`,
+        );
       }
 
       // 2. Transition d'état CONDITIONNELLE — claim atomique. Si une requête
@@ -76,9 +82,9 @@ export class CancelInvestmentUseCase {
         .createQueryBuilder()
         .update(InvestmentEntity)
         .set({ statut: InvestmentStatus.RETRACTE })
-        .where('id = :id AND statut = :confirme', {
+        .where('id = :id AND statut = :enAttente', {
           id: investmentId,
-          confirme: InvestmentStatus.CONFIRME,
+          enAttente: InvestmentStatus.EN_DELAI_RETRACTATION,
         })
         .execute();
       if (!claim.affected) {
@@ -92,10 +98,16 @@ export class CancelInvestmentUseCase {
       });
       if (!wallet) throw new NotFoundException('Wallet introuvable');
 
+      // Le montant vivait sur `soldeBloque` depuis la souscription : la
+      // rétractation le rend disponible « sans pénalité » (art. 22(3)), donc
+      // sans aucune retenue de frais.
       await manager
         .createQueryBuilder()
         .update(WalletEntity)
-        .set({ solde: () => 'solde + :montant' })
+        .set({
+          solde: () => 'solde + :montant',
+          soldeBloque: () => 'GREATEST(0, "soldeBloque" - :montant)',
+        })
         .setParameter('montant', montant)
         .where('id = :id', { id: wallet.id })
         .execute();

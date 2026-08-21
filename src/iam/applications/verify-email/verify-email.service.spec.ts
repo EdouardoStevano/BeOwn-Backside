@@ -132,7 +132,7 @@ describe('VerifyEmailService', () => {
     it('rejette (401) un token émis avant le correctif (sans claim type)', async () => {
       const { service, tokenService } = makeService(buildUser(false));
       const legacyPayload = buildPayload();
-      delete (legacyPayload as Record<string, unknown>).type;
+      delete (legacyPayload as unknown as Record<string, unknown>).type;
       tokenService.verifyEmailToken.mockResolvedValue(legacyPayload);
 
       await expect(service.confirmEmail('some-token')).rejects.toBeInstanceOf(

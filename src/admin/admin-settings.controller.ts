@@ -9,10 +9,12 @@ import {
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
+  ApiBody,
   ApiOperation,
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import { UpdateAdminSettingsDto } from './dto/update-admin-settings.dto';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
@@ -215,9 +217,11 @@ export class AdminSettingsController {
   }
 
   @ApiOperation({ summary: 'Mettre à jour les paramètres (deep merge)' })
+  @ApiBody({ type: UpdateAdminSettingsDto })
+  @ApiResponse({ status: 400, description: 'Section ou valeur non autorisée' })
   @Patch()
   async update(
-    @Body() body: Partial<AdminSettingsBlob>,
+    @Body() body: UpdateAdminSettingsDto,
     @CurrentUser() user: ActiveUser,
   ) {
     await this.ensureRole(user, ADMIN_ROLES);

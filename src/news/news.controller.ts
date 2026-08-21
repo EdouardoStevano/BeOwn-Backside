@@ -39,6 +39,7 @@ import {
 } from 'class-validator';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { IsSafeHtml } from 'src/common/validation/safe-html';
 import { Public } from 'src/common/auth/public.decorator';
 import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
 import { RequirePermission } from 'src/common/auth/require-permission.decorator';
@@ -64,11 +65,13 @@ class CreateNewsDto {
   @ApiProperty({ example: "<p>Contenu…</p>" })
   @IsString()
   @IsNotEmpty()
+  @IsSafeHtml()
   contenuFr: string;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @IsSafeHtml()
   contenuEn?: string;
 
   @ApiPropertyOptional()
@@ -128,11 +131,13 @@ class UpdateNewsDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @IsSafeHtml()
   contenuFr?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @IsSafeHtml()
   contenuEn?: string;
 
   @ApiPropertyOptional()

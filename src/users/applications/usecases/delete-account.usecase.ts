@@ -64,6 +64,7 @@ export const BLOCKING_INVESTMENT_STATUSES: InvestmentStatus[] = [
   InvestmentStatus.PAYE,
   InvestmentStatus.SIGNE,
   InvestmentStatus.CONFIRME,
+  InvestmentStatus.EN_DELAI_RETRACTATION,
   InvestmentStatus.REMBOURSE_CAPITAL,
 ];
 

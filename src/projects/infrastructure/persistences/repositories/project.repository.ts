@@ -27,13 +27,25 @@ export class ProjectTypeOrmRepository implements ProjectRepository {
     return ProjectMapper.toDomain(saved);
   }
 
+  /**
+   * La société support est jointe (`relations: { spv: true }`) : le contrat de
+   * souscription doit imprimer la dénomination de la SCI émettrice, que
+   * `spvId` seul ne fournissait pas. ManyToOne → une seule jointure, aucun
+   * appel supplémentaire. `spv.iban` est `select: false` et ne remonte donc pas.
+   */
   async findProjectById(id: string): Promise<Project | null> {
-    const entity = await this.projectRepo.findOne({ where: { id } });
+    const entity = await this.projectRepo.findOne({
+      where: { id },
+      relations: { spv: true },
+    });
     return entity ? ProjectMapper.toDomain(entity) : null;
   }
 
   async findProjectBySlug(slug: string): Promise<Project | null> {
-    const entity = await this.projectRepo.findOne({ where: { slug } });
+    const entity = await this.projectRepo.findOne({
+      where: { slug },
+      relations: { spv: true },
+    });
     return entity ? ProjectMapper.toDomain(entity) : null;
   }
 
@@ -48,6 +60,9 @@ export class ProjectTypeOrmRepository implements ProjectRepository {
     const page = filters?.page ?? 1;
     const limit = filters?.limit ?? 20;
     const qb = this.projectRepo.createQueryBuilder('p');
+    // Jointure unique pour toute la page : la dénomination de la société
+    // support est disponible en liste sans une requête par projet (N+1).
+    qb.leftJoinAndSelect('p.spv', 'spv');
     if (filters?.statuts?.length) {
       qb.andWhere('p.statut IN (:...statuts)', { statuts: filters.statuts });
     } else if (filters?.statut) {
@@ -87,6 +102,33 @@ export class ProjectTypeOrmRepository implements ProjectRepository {
     await this.projectRepo.update(id, updateData);
     const updated = await this.projectRepo.findOneOrFail({ where: { id } });
     return ProjectMapper.toDomain(updated);
+  }
+
+  async findOffresPorteurDepuis(
+    porteurId: number,
+    depuis: Date,
+    exclureProjetId?: string,
+  ): Promise<{ montant: number; ouverteLe: Date }[]> {
+    const qb = this.projectRepo
+      .createQueryBuilder('p')
+      .select(['p.capitalCible AS montant', 'p.dateOuvertureCollecte AS "ouverteLe"'])
+      .where('p.porteurId = :porteurId', { porteurId })
+      .andWhere('p.dateOuvertureCollecte IS NOT NULL')
+      .andWhere('p.dateOuvertureCollecte >= :depuis', { depuis })
+      // Une offre annulée ou en échec n'a pas mobilisé le plafond du porteur.
+      .andWhere('p.statut NOT IN (:...exclus)', {
+        exclus: [ProjectStatus.ANNULE, ProjectStatus.ECHEC],
+      });
+
+    if (exclureProjetId) {
+      qb.andWhere('p.id != :exclureProjetId', { exclureProjetId });
+    }
+
+    const rows = await qb.getRawMany<{ montant: string; ouverteLe: Date }>();
+    return rows.map((row) => ({
+      montant: Number(row.montant),
+      ouverteLe: new Date(row.ouverteLe),
+    }));
   }
 
   async saveSpv(spv: Spv): Promise<Spv> {

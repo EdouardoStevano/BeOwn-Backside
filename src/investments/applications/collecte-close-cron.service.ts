@@ -11,6 +11,8 @@ import { NotificationType } from 'src/notifications/infrastructure/persistences/
 import { UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
 import { formatEur } from 'src/common/money/format-eur';
 import { RefundCollecteService } from './refund-collecte.service';
+import { MetricsPort } from 'src/observability/metrics/metrics.port';
+import { METRIC } from 'src/observability/metrics/metric-names';
 
 /**
  * Daily cron that closes EN_COLLECTE projects whose dateCloturePrevue has
@@ -31,6 +33,7 @@ export class CollecteCloseCronService {
     private readonly investRepo: Repository<InvestmentEntity>,
     private readonly notifications: NotificationService,
     private readonly refundService: RefundCollecteService,
+    private readonly metrics: MetricsPort,
   ) {}
 
   @Cron(CronExpression.EVERY_DAY_AT_8AM)
@@ -75,6 +78,7 @@ export class CollecteCloseCronService {
             })
             .catch(() => {});
           financed++;
+          this.metrics.incrementCounter(METRIC.COLLECTE_CLOSED_TOTAL, { outcome: 'finance' });
           this.logger.log(
             `Project ${project.id} (${project.titre}) auto-FINANCE: raised ${raised} / min ${minimum}`,
           );
@@ -105,6 +109,7 @@ export class CollecteCloseCronService {
             })
             .catch(() => {});
           failed++;
+          this.metrics.incrementCounter(METRIC.COLLECTE_CLOSED_TOTAL, { outcome: 'echec' });
           this.logger.log(
             `Project ${project.id} (${project.titre}) auto-ECHEC + refund: raised ${raised} / min ${minimum}, refunded ${result.refundedAmount}`,
           );

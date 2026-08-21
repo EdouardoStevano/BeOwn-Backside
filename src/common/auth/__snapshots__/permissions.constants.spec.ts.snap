@@ -28,11 +28,13 @@ exports[`permissions.constants la matrice couvre tous les rôles (snapshot anti-
     "locatif:manage",
     "market:manage",
     "echeancier:read",
+    "echeancier:manage",
     "projects:read",
     "reports:read",
   ],
   "compliance": [
     "kyc:validate",
+    "reclamations:manage",
     "aml:manage",
     "users:read",
     "users:manage",
@@ -54,6 +56,7 @@ exports[`permissions.constants la matrice couvre tous les rôles (snapshot anti-
     "locatif:manage",
     "market:manage",
     "echeancier:read",
+    "echeancier:manage",
     "projects:read",
     "reports:read",
   ],
@@ -67,6 +70,7 @@ exports[`permissions.constants la matrice couvre tous les rôles (snapshot anti-
   "porteur": [],
   "rcci": [
     "audit:read",
+    "reclamations:manage",
     "aml:manage",
     "reports:read",
     "projects:read",
@@ -77,6 +81,7 @@ exports[`permissions.constants la matrice couvre tous les rôles (snapshot anti-
     "*",
   ],
   "support": [
+    "reclamations:manage",
     "users:read",
     "projects:read",
     "reservations:manage",

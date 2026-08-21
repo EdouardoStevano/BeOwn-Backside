@@ -1,0 +1,110 @@
+# Configuration Grafana Alloy (syntaxe River) — voir DOC/MONITORING_SETUP.md §4.4.
+# Chargée via --set-file alloy.configMap.content=k8s/monitoring/config.alloy
+# au déploiement Helm. Fichier de CONFIGURATION du collecteur, pas de code
+# applicatif.
+
+# ─────────────────────────────────────────────────────────────
+# 1) MÉTRIQUES — scrape du /metrics de l'API → remote_write Mimir
+# ─────────────────────────────────────────────────────────────
+discovery.kubernetes "beown_pods" {
+  role = "pod"
+  namespaces { names = ["beown"] }
+}
+
+discovery.relabel "beown_api" {
+  targets = discovery.kubernetes.beown_pods.targets
+  rule {
+    source_labels = ["__meta_kubernetes_pod_label_app"]
+    regex         = "beown-backend"
+    action        = "keep"
+  }
+  rule {
+    source_labels = ["__meta_kubernetes_pod_ip"]
+    target_label  = "__address__"
+    replacement   = "$1:8080"
+  }
+  rule { source_labels = ["__meta_kubernetes_namespace"]        target_label = "namespace" }
+  rule { source_labels = ["__meta_kubernetes_pod_label_app"]    target_label = "app" }
+}
+
+prometheus.scrape "beown_api" {
+  targets         = discovery.relabel.beown_api.output
+  metrics_path    = "/metrics"
+  scrape_interval = "15s"
+  job_name        = "beown-api"
+  bearer_token    = sys.env("METRICS_TOKEN")
+  forward_to      = [prometheus.remote_write.grafana_cloud.receiver]
+}
+
+prometheus.remote_write "grafana_cloud" {
+  endpoint {
+    url = sys.env("PROM_URL")
+    basic_auth {
+      username = sys.env("PROM_USERNAME")
+      password = sys.env("GRAFANA_CLOUD_API_TOKEN")
+    }
+  }
+  external_labels = { cluster = "beown-prod", env = "production" }
+}
+
+# ─────────────────────────────────────────────────────────────
+# 2) LOGS — tail des pods → scrub PII → Loki
+#    EXCLUT explicitement les logs d'audit réglementaire.
+# ─────────────────────────────────────────────────────────────
+discovery.kubernetes "log_pods" {
+  role = "pod"
+  namespaces { names = ["beown"] }
+}
+
+loki.source.kubernetes "beown_logs" {
+  targets    = discovery.kubernetes.log_pods.targets
+  forward_to = [loki.process.scrub.receiver]
+}
+
+loki.process "scrub" {
+  stage.json { expressions = { audit = "audit", level = "level", traceId = "traceId" } }
+  stage.match {
+    selector = "{app=\"beown-backend\"} |~ \"\\\"audit\\\":true\""
+    action   = "drop"
+  }
+  stage.replace { expression = "(?i)(bearer\\s+)[A-Za-z0-9._-]+"        replace = "${1}***" }
+  stage.replace { expression = "[A-Z]{2}[0-9]{2}[A-Z0-9]{10,30}"         replace = "IBAN_REDACTED" }
+  stage.replace { expression = "[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-z]{2,}" replace = "EMAIL_REDACTED" }
+  # OBS-2 : un secret single-use (token de vérification email / reset mdp)
+  # ne doit jamais transiter en clair par la télémétrie — barrière n°2 en
+  # complément du strip côté application (logger.config.ts / otel.ts).
+  stage.replace { expression = "([?&](?:token|code)=)[^&\\s\"]+"          replace = "${1}REDACTED" }
+  stage.labels { values = { traceId = "traceId", level = "level" } }
+  forward_to = [loki.write.grafana_cloud.receiver]
+}
+
+loki.write "grafana_cloud" {
+  endpoint {
+    url = sys.env("LOKI_URL")
+    basic_auth {
+      username = sys.env("LOKI_USERNAME")
+      password = sys.env("GRAFANA_CLOUD_API_TOKEN")
+    }
+  }
+  external_labels = { cluster = "beown-prod", env = "production" }
+}
+
+# ─────────────────────────────────────────────────────────────
+# 3) TRACES — réception OTLP depuis l'API → Tempo
+# ─────────────────────────────────────────────────────────────
+otelcol.receiver.otlp "in" {
+  grpc { endpoint = "0.0.0.0:4317" }
+  output { traces = [otelcol.exporter.otlp.tempo.input] }
+}
+
+otelcol.exporter.otlp "tempo" {
+  client {
+    endpoint = sys.env("TEMPO_URL")
+    auth     = otelcol.auth.basic.tempo.handler
+  }
+}
+
+otelcol.auth.basic "tempo" {
+  username = sys.env("TEMPO_USERNAME")
+  password = sys.env("GRAFANA_CLOUD_API_TOKEN")
+}

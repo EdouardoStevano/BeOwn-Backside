@@ -20,6 +20,12 @@ import {
 import { NotificationService } from 'src/notifications/applications/notification.service';
 import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
 import { UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
+import { MetricsPort } from 'src/observability/metrics/metrics.port';
+import { METRIC } from 'src/observability/metrics/metric-names';
+import {
+  PayoutDestinationResolver,
+  type ResolvedPayoutDestination,
+} from '../services/payout-destination.resolver';
 
 /**
  * Cas d'usage « demande de retrait » (extrait de PaymentController — SRP).
@@ -41,6 +47,9 @@ export class RequestRetraitUseCase {
     private readonly notificationService: NotificationService,
     @InjectDataSource()
     private readonly dataSource: DataSource,
+    private readonly metrics: MetricsPort,
+    // Lot 4a — décide et VALIDE la destination du versement avant tout débit.
+    private readonly destinationResolver: PayoutDestinationResolver,
   ) {}
 
   async execute(dto: CreateRetraitDto, user: ActiveUser) {
@@ -81,7 +90,17 @@ export class RequestRetraitUseCase {
     }
 
     if (connect.payoutsEnabled && connect.accountId) {
-      return this.executeConnectRetrait(user, dto, connect.accountId);
+      // Lot 4a — validation de la destination AVANT tout débit du wallet :
+      // appartenance de la carte au compte connecté, éligibilité au virement
+      // instantané, bornes de montant. Lève un `PayoutMethodError` typé (traduit
+      // en 4xx par PayoutMethodExceptionFilter) sans qu'aucun euro n'ait bougé.
+      const destination = await this.destinationResolver.resolve({
+        connectedAccountId: connect.accountId,
+        amount: Number(dto.amount),
+        payoutMethodId: dto.payoutMethodId,
+        method: dto.method,
+      });
+      return this.executeConnectRetrait(user, dto, connect.accountId, destination);
     }
 
     // Fallback legacy (traitement manuel admin). Nécessite un IBAN ; sinon on
@@ -216,24 +235,46 @@ export class RequestRetraitUseCase {
    * Retrait via Stripe Connect Express :
    *  1. débit atomique du wallet → transaction EN_COURS ;
    *  2. Transfer plateforme → compte connecté (idempotent) ;
-   *  3. Payout compte connecté → banque (best-effort : automatique si le
-   *     schedule du compte est géré par Stripe).
+   *  3. Payout compte connecté → destination (carte ou IBAN).
    * En cas d'échec du transfer, rollback intégral (recrédit + ECHOUE). Le
    * passage à REUSSI est finalisé par le webhook `payout.paid`.
    *
-   * ⚠ Appels Stripe NON testés ici (clés live requises) — voir checklist E3.
+   * Lot 4a — `destination` porte le choix de l'investisseur :
+   *  - `explicit = false` (parcours historique) : le payout est créé sans
+   *    `method` ni `destination` et son échec reste best-effort (le compte
+   *    Express verse automatiquement) ;
+   *  - `explicit = true` : l'échec du payout n'est PAS acceptable — les fonds
+   *    partiraient vers la mauvaise destination — donc rollback complet
+   *    (reversal du transfert + recrédit du wallet).
    */
   private async executeConnectRetrait(
     user: ActiveUser,
     dto: CreateRetraitDto,
     connectedAccountId: string,
+    destination: ResolvedPayoutDestination,
   ) {
+    const metricMethod = destination.method === 'instant'
+      ? 'stripe_connect_instant'
+      : 'stripe_connect';
+
     const opened = await this.openRetraitTransaction(user, dto, TransactionStatus.EN_COURS, {
       method: 'stripe_connect',
       connectedAccountId,
       userId: user.userId,
+      ...(destination.explicit
+        ? {
+            payoutMethodId: destination.payoutMethodId,
+            payoutMethod: destination.method,
+          }
+        : {}),
     });
     if (!opened.ok) {
+      this.metrics.incrementCounter(METRIC.WITHDRAWAL_REQUESTS_TOTAL, {
+        method: metricMethod,
+        result: 'rejected',
+      });
+      // Forme historique conservée telle quelle (INSUFFICIENT_FUNDS "existant") :
+      // `payment.controller.security.spec.ts` verrouille exactement ce contrat.
       return { success: false, message: opened.message };
     }
     const tx = opened.tx;
@@ -252,11 +293,21 @@ export class RequestRetraitUseCase {
     } catch (err) {
       // Aucun fonds n'a bougé → rollback intégral du débit wallet.
       this.logger.error(`Retrait Connect: transfer échoué tx=${tx.id}: ${err?.message}`);
-      await this.recreditRetrait(
+      this.metrics.incrementCounter(METRIC.WITHDRAWAL_TRANSFER_FAILED_TOTAL);
+      const recreditOutcome = await this.recreditRetrait(
         tx.id,
         `Transfer Stripe échoué: ${err?.message ?? 'inconnu'}`,
         TransactionStatus.ECHOUE,
       );
+      if (recreditOutcome === 'recredited') {
+        this.metrics.incrementCounter(METRIC.WITHDRAWAL_RECREDITED_TOTAL, {
+          trigger: 'transfer_failed',
+        });
+      }
+      this.metrics.incrementCounter(METRIC.WITHDRAWAL_REQUESTS_TOTAL, {
+        method: metricMethod,
+        result: 'failed',
+      });
       this.notifyRetraitEchec(user.userId, Number(dto.amount), tx.id);
       return {
         success: false,
@@ -265,10 +316,13 @@ export class RequestRetraitUseCase {
       };
     }
 
+    this.metrics.observeHistogram(METRIC.WITHDRAWAL_AMOUNT_EUR, Number(dto.amount), {
+      method: metricMethod,
+    });
     baseMeta = { ...baseMeta, transferId };
     await this.txRepo.update(tx.id, { fournisseurRef: transferId, metadata: baseMeta as any });
 
-    // 3. Payout compte connecté → banque (best-effort).
+    // 3. Payout compte connecté → destination.
     let payoutId: string | undefined;
     try {
       payoutId = await this.stripeConnect.createPayoutOnConnectedAccount({
@@ -277,17 +331,39 @@ export class RequestRetraitUseCase {
         connectedAccountId,
         idempotencyKey: `retrait-payout:${tx.id}`,
         metadata: { retraitTxId: tx.id },
+        ...(destination.explicit
+          ? {
+              method: destination.method,
+              ...(destination.payoutMethodId
+                ? { destination: destination.payoutMethodId }
+                : {}),
+            }
+          : {}),
       });
       baseMeta = { ...baseMeta, payoutId };
       await this.txRepo.update(tx.id, { metadata: baseMeta as any });
     } catch (err) {
-      // Payout manuel refusé (probablement payouts automatiques sur le compte)
-      // → on se repose sur le payout automatique Stripe. Le transfert a réussi :
-      // NE PAS rollback. Journalisé pour vérif staging.
-      this.logger.warn(
-        `Retrait Connect: payout explicite non créé tx=${tx.id} ` +
-        `(payout automatique probable): ${err?.message}`,
-      );
+      if (!destination.explicit) {
+        // Parcours historique : payout manuel refusé (probablement payouts
+        // automatiques sur le compte) → on se repose sur le payout automatique
+        // Stripe. Le transfert a réussi : NE PAS rollback.
+        this.logger.warn(
+          `Retrait Connect: payout explicite non créé tx=${tx.id} ` +
+          `(payout automatique probable): ${err?.message}`,
+        );
+      } else {
+        // Destination CHOISIE par l'investisseur : laisser les fonds sur le
+        // compte connecté les enverrait au versement automatique, donc vers une
+        // autre destination que celle demandée. Rollback intégral.
+        return this.rollbackAfterPayoutFailure(
+          user,
+          dto,
+          tx.id,
+          transferId,
+          metricMethod,
+          err,
+        );
+      }
     }
 
     this.notificationService
@@ -300,7 +376,111 @@ export class RequestRetraitUseCase {
       })
       .catch(() => {});
 
-    return { success: true, transactionId: tx.id, status: tx.statut, transferId, payoutId };
+    this.metrics.incrementCounter(METRIC.WITHDRAWAL_REQUESTS_TOTAL, {
+      method: metricMethod,
+      result: 'success',
+    });
+    return {
+      success: true,
+      transactionId: tx.id,
+      status: tx.statut,
+      transferId,
+      payoutId,
+      ...(destination.explicit
+        ? {
+            payoutMethodId: destination.payoutMethodId,
+            payoutMethod: destination.method,
+          }
+        : {}),
+    };
+  }
+
+  /**
+   * Rollback d'un retrait dont le payout vers une destination CHOISIE a échoué
+   * de façon synchrone alors que le Transfer avait réussi.
+   *
+   * Ordre imposé : rapatrier d'abord les fonds vers la plateforme (reversal du
+   * transfert) PUIS recréditer le wallet. Recréditer sans reversal réussi
+   * double-créditerait l'investisseur (fonds encore sur le compte connecté) —
+   * dans ce cas on n'écrit rien et on escalade aux admins, exactement comme le
+   * webhook `payout.failed`.
+   */
+  private async rollbackAfterPayoutFailure(
+    user: ActiveUser,
+    dto: CreateRetraitDto,
+    txId: string,
+    transferId: string,
+    metricMethod: string,
+    cause: any,
+  ) {
+    this.logger.error(
+      `Retrait Connect: payout vers destination choisie refusé tx=${txId} ` +
+      `code=${cause?.code ?? 'n/a'}: ${cause?.message ?? 'inconnu'}`,
+    );
+
+    try {
+      await this.stripeConnect.reverseTransfer(
+        transferId,
+        `retrait-reverse:${txId}`,
+      );
+    } catch (reversalErr: any) {
+      // Aucun recrédit à l'aveugle : les fonds sont toujours sur le compte
+      // connecté. Revue manuelle.
+      this.logger.error(
+        `Retrait Connect: reversal impossible après payout refusé tx=${txId} ` +
+        `transfer=${transferId}: ${reversalErr?.message}`,
+      );
+      this.notificationService
+        .pushToAdmins({
+          type: NotificationType.RETRAIT_TRAITE,
+          titre: 'Retrait — payout refusé et reversal échoué, revue manuelle',
+          message:
+            `Le payout du retrait ${txId} a été refusé et le reversal du transfert ` +
+            `n'a pas abouti. Vérifier l'état Stripe avant tout recrédit manuel.`,
+          roles: [UserRole.SUPER_ADMIN, UserRole.FINANCIER],
+          metadata: { transactionId: txId, transferId },
+        })
+        .catch(() => {});
+      this.metrics.incrementCounter(METRIC.WITHDRAWAL_PAYOUT_TOTAL, {
+        outcome: 'failed',
+        reversal: 'reversal_failed',
+      });
+      return {
+        success: false,
+        code: 'PAYOUT_FAILED',
+        message:
+          'Le versement n\'a pas pu être effectué. Notre équipe vérifie votre demande.',
+      };
+    }
+
+    const outcome = await this.recreditRetrait(
+      txId,
+      `Payout Stripe refusé: ${cause?.message ?? 'inconnu'}`,
+      TransactionStatus.ECHOUE,
+    );
+    if (outcome === 'recredited') {
+      this.metrics.incrementCounter(METRIC.WITHDRAWAL_RECREDITED_TOTAL, {
+        trigger: 'payout_rejected',
+      });
+    }
+    this.metrics.incrementCounter(METRIC.WITHDRAWAL_PAYOUT_TOTAL, {
+      outcome: 'failed',
+      reversal: 'reversal_ok',
+    });
+    this.metrics.incrementCounter(METRIC.WITHDRAWAL_REQUESTS_TOTAL, {
+      method: metricMethod,
+      result: 'failed',
+    });
+    this.notifyRetraitEchec(user.userId, Number(dto.amount), txId);
+
+    // Message utilisateur générique : la cause Stripe reste dans les logs et
+    // dans `motifEchec`, jamais renvoyée au client.
+    return {
+      success: false,
+      code: 'CARD_REJECTED',
+      message:
+        'Le versement vers cette destination a été refusé. Votre solde a été recrédité.',
+    };
   }
 
   /**
@@ -316,9 +496,20 @@ export class RequestRetraitUseCase {
       { method: 'legacy_manuel', ibanDestination: dto.ibanDestination, userId: user.userId },
     );
     if (!opened.ok) {
+      this.metrics.incrementCounter(METRIC.WITHDRAWAL_REQUESTS_TOTAL, {
+        method: 'legacy_manuel',
+        result: 'rejected',
+      });
       return { success: false, message: opened.message };
     }
     const tx = opened.tx;
+    this.metrics.incrementCounter(METRIC.WITHDRAWAL_REQUESTS_TOTAL, {
+      method: 'legacy_manuel',
+      result: 'success',
+    });
+    this.metrics.observeHistogram(METRIC.WITHDRAWAL_AMOUNT_EUR, Number(dto.amount), {
+      method: 'legacy_manuel',
+    });
 
     this.notificationService
       .pushToAdmins({

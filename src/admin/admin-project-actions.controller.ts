@@ -37,6 +37,8 @@ import { RefundCollecteService } from 'src/investments/applications/refund-colle
 import { NotificationService } from 'src/notifications/applications/notification.service';
 import { BroadcastService } from 'src/notifications/applications/broadcast.service';
 import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
+import { MetricsPort } from 'src/observability/metrics/metrics.port';
+import { METRIC } from 'src/observability/metrics/metric-names';
 
 const ADMIN_ROLES: string[] = rolesWithPermission('projects:manage');
 
@@ -62,6 +64,7 @@ export class AdminProjectActionsController {
     private readonly notif: NotificationService,
     private readonly refundService: RefundCollecteService,
     private readonly broadcast: BroadcastService,
+    private readonly metrics: MetricsPort,
   ) {}
 
   private async ensureAdmin(currentUser: ActiveUser): Promise<UserEntity> {
@@ -101,6 +104,7 @@ export class AdminProjectActionsController {
       reason: dto.reason ?? null,
       triggeredByUserId: currentUser.userId,
     });
+    this.metrics.incrementCounter(METRIC.COLLECTE_CLOSED_TOTAL, { outcome: 'annule' });
 
     return {
       projectId: id,
@@ -161,6 +165,7 @@ export class AdminProjectActionsController {
           metadata: { projectId: id, raised, minimum, target },
         })
         .catch(() => {});
+      this.metrics.incrementCounter(METRIC.COLLECTE_CLOSED_TOTAL, { outcome: 'finance' });
       return {
         projectId: id,
         outcome: 'finance',
@@ -176,6 +181,7 @@ export class AdminProjectActionsController {
       reason: `Objectif minimum de collecte non atteint (${formatEur(raised)} / min ${formatEur(minimum)}).`,
       triggeredByUserId: currentUser.userId,
     });
+    this.metrics.incrementCounter(METRIC.COLLECTE_CLOSED_TOTAL, { outcome: 'echec' });
     return {
       projectId: id,
       outcome: 'echec',

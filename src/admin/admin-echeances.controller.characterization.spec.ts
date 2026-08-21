@@ -8,12 +8,6 @@ import {
   EcheanceStatus,
   InvestmentStatus,
 } from 'src/investments/domains/enums/investment-status.enum';
-import {
-  TransactionFournisseur,
-  TransactionStatus,
-  TransactionType,
-  WalletType,
-} from 'src/wallets/domains/enums/wallet.enum';
 
 /**
  * Tests de CARACTÉRISATION de AdminEcheancesController (audit SOLID vague 4).
@@ -24,7 +18,7 @@ import {
  * test). Les tests instancient le contrôleur avec des dépendances mockées ;
  * après extraction ils resteront verts (le contrôleur délègue).
  *
- *  - triggerPayment      : crédit wallet + transaction + statut PAYE, skips, gardes
+ *  - triggerPayment      : DÉLÈGUE le règlement à PayEcheanceUseCase (M-4), skips, gardes
  *  - getAggregatedSchedule : agrégation par numéro (sommes, date, statut, capital restant)
  *  - patchAggregated     : répartition prorata des montants + gardes
  */
@@ -69,7 +63,7 @@ describe('AdminEcheancesController — caractérisation (vague 4)', () => {
     const triggerEcheancePayment = new TriggerEcheancePaymentUseCase(
       echeanceRepo,
       investRepo,
-      dataSource,
+      payEcheance, // M-4 : règlement délégué au chemin durci (atomique + PFU)
       notifications,
     );
     const aggregatedSchedule = new GetAggregatedScheduleUseCase(
@@ -128,7 +122,7 @@ describe('AdminEcheancesController — caractérisation (vague 4)', () => {
       ).rejects.toBeInstanceOf(NotFoundException);
     });
 
-    it('crédite le wallet, écrit la transaction, passe l’échéance à PAYE et notifie', async () => {
+    it('délègue chaque règlement à PayEcheanceUseCase (atomique + PFU) et agrège le total', async () => {
       investRepo.find.mockResolvedValue([{ id: 'i1', utilisateurId: 7 }]);
       const ech = {
         id: 'e1',
@@ -138,46 +132,23 @@ describe('AdminEcheancesController — caractérisation (vague 4)', () => {
         montantTotal: 100,
       };
       echeanceRepo.find.mockResolvedValue([ech]);
-
-      const em = {
-        findOne: jest
-          .fn()
-          .mockResolvedValue({ id: 'w1', solde: 50, devise: 'EUR' }),
-        save: jest.fn(async (_e: any, x: any) => x),
-        create: jest.fn((_e: any, x: any) => x),
-      };
-      dataSource.transaction.mockImplementation(async (cb: any) => cb(em));
+      // Le chemin durci (H-C) renvoie l'échéance réglée (net + prélèvements PFU
+      // déjà appliqués vers les séquestres) — M-4 : plus aucun crédit brut ici.
+      payEcheance.execute.mockResolvedValue({
+        ...ech,
+        statut: EcheanceStatus.PAYE,
+      });
 
       const res = await controller.triggerPayment('p1', 1, admin, {});
 
       expect(res).toEqual({ paidCount: 1, totalAmount: 100, skipped: 0 });
-      // Wallet crédité (+montant).
-      const savedWallet = em.save.mock.calls.find(
-        (c: any[]) => c[1]?.id === 'w1',
-      );
-      expect(savedWallet?.[1].solde).toBe(150);
-      // Transaction de remboursement capital idempotente.
-      const txSave = em.save.mock.calls.find(
-        (c: any[]) => c[1]?.idempotencyKey === 'echeance-pay:e1',
-      );
-      expect(txSave?.[1]).toEqual(
-        expect.objectContaining({
-          type: TransactionType.REMBOURSEMENT_CAPITAL,
-          statut: TransactionStatus.REUSSI,
-          fournisseur: TransactionFournisseur.INTERNE,
-          montant: 100,
-          projetId: 'p1',
-          investissementId: 'i1',
-        }),
-      );
-      // Échéance marquée payée.
-      expect(ech.statut).toBe(EcheanceStatus.PAYE);
-      // Notifications investisseur + admins.
-      expect(notifications.push).toHaveBeenCalled();
+      // Source de vérité UNIQUE : règlement délégué, avec l'acteur (audit + rôle).
+      expect(payEcheance.execute).toHaveBeenCalledWith('e1', admin.userId, admin.role, 'trigger_masse');
+      // Récap admin émis (le use case délégué notifie l'investisseur lui-même).
       expect(notifications.pushToAdmins).toHaveBeenCalled();
     });
 
-    it('ignore (skip) une échéance déjà PAYE, sans ouvrir de transaction', async () => {
+    it('ignore (skip) une échéance déjà PAYE, sans la déléguer', async () => {
       investRepo.find.mockResolvedValue([{ id: 'i1', utilisateurId: 7 }]);
       echeanceRepo.find.mockResolvedValue([
         {
@@ -192,7 +163,27 @@ describe('AdminEcheancesController — caractérisation (vague 4)', () => {
       const res = await controller.triggerPayment('p1', 1, admin, {});
 
       expect(res).toEqual({ paidCount: 0, totalAmount: 0, skipped: 1 });
-      expect(dataSource.transaction).not.toHaveBeenCalled();
+      expect(payEcheance.execute).not.toHaveBeenCalled();
+    });
+
+    it('compte "skipped" quand le règlement délégué échoue (concurrence / non payable)', async () => {
+      investRepo.find.mockResolvedValue([{ id: 'i1', utilisateurId: 7 }]);
+      echeanceRepo.find.mockResolvedValue([
+        {
+          id: 'e1',
+          investissementId: 'i1',
+          numero: 1,
+          statut: EcheanceStatus.A_VENIR,
+          montantTotal: 100,
+        },
+      ]);
+      payEcheance.execute.mockRejectedValue(
+        new BadRequestException('Échéance déjà payée ou non payable'),
+      );
+
+      const res = await controller.triggerPayment('p1', 1, admin, {});
+
+      expect(res).toEqual({ paidCount: 0, totalAmount: 0, skipped: 1 });
     });
   });
 

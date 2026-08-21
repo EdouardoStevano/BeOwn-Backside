@@ -9,6 +9,8 @@ import { PayEcheanceUseCase } from './usecases/pay-echeance.usecase';
 import { NotificationService } from 'src/notifications/applications/notification.service';
 import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
 import { UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
+import { MetricsPort } from 'src/observability/metrics/metrics.port';
+import { METRIC } from 'src/observability/metrics/metric-names';
 
 @Injectable()
 export class EcheancesCronService {
@@ -20,6 +22,7 @@ export class EcheancesCronService {
     private readonly notificationEvents: NotificationEventService,
     private readonly payEcheance: PayEcheanceUseCase,
     private readonly notifications: NotificationService,
+    private readonly metrics: MetricsPort,
   ) {}
 
   @Cron('0 9 * * *')
@@ -68,6 +71,7 @@ export class EcheancesCronService {
     for (const e of overdue) {
       await this.echeanceRepo.update(e.id, { statut: EcheanceStatus.RETARD });
       await this.notificationEvents.echeanceOverdueAdmin(e, (e as any).investissement.projet);
+      this.metrics.incrementCounter(METRIC.ECHEANCE_OVERDUE_TRANSITIONS_TOTAL);
     }
 
     this.logger.log(`CRON échéances: J-7=${j7.length}, J-1=${j1.length}, overdue=${overdue.length}`);
@@ -90,16 +94,18 @@ export class EcheancesCronService {
     let failed = 0;
     for (const e of dueVerified) {
       try {
-        await this.payEcheance.execute(e.id, 0, UserRole.SUPER_ADMIN);
+        await this.payEcheance.execute(e.id, 0, UserRole.SUPER_ADMIN, 'cron');
         paid++;
       } catch {
         failed++;
+        this.metrics.incrementCounter(METRIC.ECHEANCE_AUTOPAY_FAILED_TOTAL);
       }
     }
 
     const dueUnverified = await this.echeanceRepo.count({
       where: { datePrevue: LessThanOrEqual(today), statut: EcheanceStatus.A_VENIR },
     });
+    this.metrics.setGauge(METRIC.ECHEANCES_DUE_UNVERIFIED, dueUnverified);
     if (dueUnverified > 0) {
       this.notifications
         .pushToAdmins({

@@ -15,10 +15,13 @@ import {
 import { NotificationService } from 'src/notifications/applications/notification.service';
 import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
 import { formatEur } from 'src/common/money/format-eur';
+import { MetricsPort } from 'src/observability/metrics/metrics.port';
+import { METRIC } from 'src/observability/metrics/metric-names';
 
 /** Investissements remboursables (fonds engagés, ni rétractés ni déjà annulés). */
 const REFUNDABLE_INVESTMENT_STATUSES = [
   InvestmentStatus.CONFIRME,
+  InvestmentStatus.EN_DELAI_RETRACTATION,
   InvestmentStatus.SIGNE,
   InvestmentStatus.PAYE,
   InvestmentStatus.ADEQUATION_OK,
@@ -43,6 +46,7 @@ export class RefundCollecteService {
   constructor(
     private readonly dataSource: DataSource,
     private readonly notifications: NotificationService,
+    private readonly metrics: MetricsPort,
   ) {}
 
   /**
@@ -168,6 +172,12 @@ export class RefundCollecteService {
       this.logger.log(
         `Projet ${projectId} → ${options.targetStatus} : ${refundedCount} investisseur(s) remboursé(s) pour ${formatEur(refundedAmount)}`,
       );
+
+      if (refundedAmount > 0) {
+        this.metrics.observeHistogram(METRIC.COLLECTE_REFUND_AMOUNT_EUR, refundedAmount, {
+          trigger: options.targetStatus === 'ANNULE' ? 'admin_annulation' : 'cron_echec',
+        });
+      }
 
       return { refundedCount, refundedAmount };
     });

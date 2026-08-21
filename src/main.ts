@@ -1,14 +1,56 @@
-import { NestFactory } from '@nestjs/core';
+// ⚠ ORDRE D'IMPORT CRITIQUE — voir observability/tracing/otel.ts : ce module
+// DOIT être importé EN TOUT PREMIER, avant tout import qui charge http/express
+// /pg/ioredis (directement ou via NestFactory/AppModule), sous peine de
+// traces vides (les auto-instrumentations monkey-patchent au `require`).
+import './observability/tracing/otel';
+import { initSentry } from './observability/sentry';
+import { SentryExceptionFilter } from './observability/sentry-exception.filter';
+
+import { HttpAdapterHost, NestFactory } from '@nestjs/core';
+import { Logger as PinoLogger } from 'nestjs-pino';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import * as express from 'express';
 import helmet from 'helmet';
 import { IoAdapter } from '@nestjs/platform-socket.io';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, { rawBody: true });
+  // Init Sentry avant tout (après le tracing OTel importé ci-dessus) : capture
+  // aussi les erreurs qui surviendraient pendant le bootstrap Nest lui-même.
+  initSentry();
+
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    rawBody: true,
+    bufferLogs: true,
+  });
+  // Bascule le logger Nest sur pino (JSON structuré, redaction RGPD, corrélation
+  // traceId) dès que possible — `bufferLogs` retient les logs de bootstrap
+  // émis avant ce point et les rejoue au bon format.
+  app.useLogger(app.get(PinoLogger));
+
+  const { httpAdapter } = app.get(HttpAdapterHost);
+  app.useGlobalFilters(new SentryExceptionFilter(httpAdapter));
+
   app.useWebSocketAdapter(new IoAdapter(app));
+
+  // M-5 — derrière un ingress/Nginx, `req.ip` vaut l'IP du proxy pour TOUS les
+  // clients : la limitation de débit devient un seau commun (un client peut
+  // verrouiller la connexion de tout le monde — constaté en test) et ne
+  // distingue plus l'attaquant. `trust proxy` fait lire l'IP réelle dans
+  // X-Forwarded-For.
+  //
+  // La valeur est le NOMBRE DE PROXYS de confiance devant l'application, à
+  // régler selon le déploiement (1 = un ingress). Elle n'est jamais mise à
+  // `true` : faire confiance à un nombre illimité de sauts laisserait un
+  // client falsifier son IP en injectant lui-même l'en-tête, et donc
+  // contourner toute limitation. Défaut 0 = comportement historique (aucun
+  // proxy), pour ne rien changer en développement.
+  const trustProxyHops = Number.parseInt(process.env.TRUST_PROXY_HOPS ?? '0', 10);
+  if (Number.isFinite(trustProxyHops) && trustProxyHops > 0) {
+    app.set('trust proxy', trustProxyHops);
+  }
 
   app.use(
     helmet({
@@ -141,7 +183,12 @@ async function bootstrap() {
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    // `sentry-trace` et `baggage` sont injectés par le browserTracing de Sentry
+    // côté front (uniquement vers l'API BeOwn, via tracePropagationTargets) :
+    // sans eux dans cette liste, le préflight échoue et TOUTE requête est
+    // bloquée par le navigateur — c'est la corrélation de traces front↔back qui
+    // les rend nécessaires, pas un confort.
+    allowedHeaders: ['Content-Type', 'Authorization', 'sentry-trace', 'baggage'],
   });
 
   await app.listen(process.env.PORT ?? 3001);

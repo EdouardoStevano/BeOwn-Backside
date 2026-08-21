@@ -10,6 +10,7 @@ import {
   Body,
   ParseIntPipe,
   UseGuards,
+  ConflictException,
   ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
@@ -21,12 +22,18 @@ import {
   ApiQuery,
   ApiParam,
   ApiBody,
+  ApiProperty,
+  ApiPropertyOptional,
 } from '@nestjs/swagger';
+import { IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In, ILike } from 'typeorm';
 import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
 import { RequirePermission } from 'src/common/auth/require-permission.decorator';
-import { rolesWithPermission } from 'src/common/auth/permissions.constants';
+import {
+  hasPermission,
+  rolesWithPermission,
+} from 'src/common/auth/permissions.constants';
 import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
 import { formatEur } from 'src/common/money/format-eur';
@@ -52,6 +59,7 @@ const ADMIN_ROLES: string[] = rolesWithPermission('reports:read');
 
 const ACTIVE_INVESTMENT_STATUSES = [
   InvestmentStatus.CONFIRME,
+  InvestmentStatus.EN_DELAI_RETRACTATION,
   InvestmentStatus.SIGNE,
   InvestmentStatus.PAYE,
   InvestmentStatus.REMBOURSE_CAPITAL,
@@ -62,6 +70,26 @@ const MONTH_LABELS: Record<number, string> = {
   1: 'Jan', 2: 'Fév', 3: 'Mar', 4: 'Avr', 5: 'Mai', 6: 'Jun',
   7: 'Jul', 8: 'Aoû', 9: 'Sep', 10: 'Oct', 11: 'Nov', 12: 'Déc',
 };
+
+/**
+ * M-6 — le corps était typé par une interface inline (`{ status: string }`),
+ * effacée en `Object` à l'exécution : le `ValidationPipe` global ne la voyait
+ * pas et n'importe quelle chaîne partait en base comme statut de compte. Un
+ * statut inconnu n'est bloqué par aucune garde (`AccountStatusGuard` ne
+ * refuse que SUSPENDU/CLOS/SUPPRIME) — le compte restait donc actif avec une
+ * valeur de statut corrompue.
+ */
+class UpdateUserStatusDto {
+  @ApiProperty({ enum: UserStatus, example: UserStatus.SUSPENDU })
+  @IsEnum(UserStatus)
+  status: UserStatus;
+
+  @ApiPropertyOptional({ example: 'Fraude avérée sur le dossier KYC' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  motif?: string;
+}
 
 // ─── Controller ───────────────────────────────────────────────────────────────
 
@@ -99,6 +127,38 @@ export class AdminController {
     }
   }
 
+  /**
+   * Autorise l'accès à l'annuaire et indique le NIVEAU de détail permis.
+   *
+   * RGPD / minimisation — cette route était gardée par la seule permission de
+   * classe `reports:read`, qui ouvrait l'annuaire complet (identités + e-mails)
+   * à cio, financier, analyste_financier et rcci, dont aucune page ne le
+   * consomme légitimement, tout en le REFUSANT à support, chargé de relation
+   * investisseur et dpo, qui détiennent pourtant `users:read`.
+   *
+   * Deux niveaux désormais :
+   *  - `users:read` → annuaire complet (page « Utilisateurs » du back-office) ;
+   *  - `aml:manage` sans `users:read` → accès conservé (le sélecteur
+   *    d'utilisateur de la page PEP en dépend) mais projection RESTREINTE :
+   *    identité et rôle seulement, ni e-mail, ni données financières ou
+   *    fiscales. Identifier une personne à signaler ne requiert pas de disposer
+   *    du fichier d'adresses.
+   */
+  private async assertCanListUsers(
+    userId: number,
+  ): Promise<{ canReadIdentities: boolean }> {
+    const user = await this.userRepo.findOne({
+      where: { userId },
+      select: ['userId', 'role'],
+    });
+    const canReadIdentities = hasPermission(user?.role, 'users:read');
+    const canPickForAml = hasPermission(user?.role, 'aml:manage');
+    if (!user || (!canReadIdentities && !canPickForAml)) {
+      throw new ForbiddenException('Accès réservé aux administrateurs BeOwn.');
+    }
+    return { canReadIdentities };
+  }
+
   private displayName(u: UserEntity): string {
     return [u.firstname, u.lastname].filter(Boolean).join(' ') ||
       u.userEmail?.email ||
@@ -113,6 +173,11 @@ export class AdminController {
   @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiQuery({ name: 'search', required: false, type: String })
   @ApiQuery({ name: 'kycStatus', required: false, type: String })
+  @ApiResponse({
+    status: 403,
+    description: 'Permission users:read (annuaire complet) ou aml:manage (projection restreinte) requise',
+  })
+  @RequirePermission('users:read', 'aml:manage')
   @Get('users')
   async listUsers(
     @CurrentUser() currentUser: ActiveUser,
@@ -121,7 +186,9 @@ export class AdminController {
     @Query('search') search?: string,
     @Query('kycStatus') kycStatus?: string,
   ) {
-    await this.assertAdmin(currentUser.userId);
+    const { canReadIdentities } = await this.assertCanListUsers(
+      currentUser.userId,
+    );
 
     const page = Math.max(1, parseInt(pageParam ?? '1', 10) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(limitParam ?? '20', 10) || 20));
@@ -139,7 +206,9 @@ export class AdminController {
       userIds.length > 0
         ? this.kycRepo.find({ where: { utilisateurId: In(userIds) } })
         : Promise.resolve([] as KycEntity[]),
-      userIds.length > 0
+      // Les montants investis ne sont ni calculés ni renvoyés pour un appelant
+      // en projection restreinte : donnée financière hors de son besoin.
+      userIds.length > 0 && canReadIdentities
         ? this.investRepo
             .createQueryBuilder('i')
             .select('i.utilisateurId', 'userId')
@@ -160,11 +229,35 @@ export class AdminController {
         if (!search) return true;
         const q = search.toLowerCase();
         const name = this.displayName(u).toLowerCase();
+        if (!canReadIdentities) {
+          // Recherche par NOM uniquement : autoriser la recherche par e-mail
+          // ferait de l'endpoint un oracle permettant de confirmer, adresse par
+          // adresse, la présence d'une personne — ce que la projection
+          // restreinte vise précisément à empêcher.
+          return name.includes(q);
+        }
         const email = (u.userEmail?.email ?? '').toLowerCase();
         return name.includes(q) || email.includes(q);
       })
       .map((u) => {
         const kyc = kycMap.get(u.userId) ?? null;
+
+        if (!canReadIdentities) {
+          // Projection minimale : de quoi désigner une personne dans le
+          // sélecteur PEP, rien de plus. `email: null` est renvoyé
+          // explicitement pour que le front distingue « non communiqué » d'un
+          // champ absent.
+          return {
+            userId: u.userId,
+            firstname: u.firstname,
+            lastname: u.lastname,
+            role: u.role,
+            status: u.status,
+            email: null,
+            kycStatus: kyc?.statut ?? 'non_demarre',
+          };
+        }
+
         const { password: _p, ...safe } = u as any;
         return {
           ...safe,
@@ -187,25 +280,57 @@ export class AdminController {
       items = items.filter((u) => allowed.includes(u.kycStatus));
     }
 
-    return { items, total: search ? items.length : total };
+    // `restricted` permet au front d'adapter son affichage (masquer la colonne
+    // e-mail) plutôt que de rendre un champ vide sans explication.
+    return {
+      items,
+      total: search ? items.length : total,
+      restricted: !canReadIdentities,
+    };
   }
 
   // ─── Suspend / activate user ───────────────────────────────────────────────
 
   @ApiOperation({ summary: 'Suspendre ou réactiver un compte utilisateur' })
   @ApiParam({ name: 'id', type: Number })
-  @ApiBody({ schema: { properties: { status: { type: 'string', enum: ['actif', 'suspendu', 'clos'] }, motif: { type: 'string' } } } })
+  @ApiBody({ type: UpdateUserStatusDto })
   @ApiResponse({ status: 200, description: 'Statut mis à jour' })
+  @ApiResponse({ status: 400, description: 'Statut inconnu' })
+  @ApiResponse({
+    status: 409,
+    description:
+      'Compte supprimé (état terminal), ou tentative de suppression par cet endpoint',
+  })
   @RequirePermission('users:manage')
   @Patch('users/:id/status')
   async updateUserStatus(
     @Param('id', ParseIntPipe) id: number,
-    @Body() body: { status: string; motif?: string },
+    @Body() body: UpdateUserStatusDto,
     @CurrentUser() currentUser: ActiveUser,
   ) {
     await this.assertAdmin(currentUser.userId);
     const user = await this.userRepo.findOne({ where: { userId: id } });
     if (!user) throw new NotFoundException('Utilisateur introuvable.');
+
+    // SUPPRIME est terminal : sans cette garde, un compte supprimé pouvait être
+    // remis ACTIF ou SUSPENDU depuis le back-office — une résurrection qui
+    // rendait au compte l'accès à la plateforme.
+    if (user.status === UserStatus.SUPPRIME) {
+      throw new ConflictException(
+        'Ce compte est supprimé : son statut ne peut plus être modifié.',
+      );
+    }
+
+    // Supprimer implique de vérifier les bloqueurs (investissements actifs,
+    // ordres ouverts), de déclencher le retrait automatique du solde et de
+    // notifier : tout cela vit dans DeleteAccountUseCase. Poser le statut ici
+    // court-circuiterait l'ensemble.
+    if (body.status === UserStatus.SUPPRIME) {
+      throw new ConflictException(
+        'Utilisez DELETE /admin/users/:id pour supprimer un compte.',
+      );
+    }
+
     const previousStatus = user.status;
     await this.userRepo.update({ userId: id }, { status: body.status as UserStatus });
     if (body.status === UserStatus.SUSPENDU && previousStatus !== UserStatus.SUSPENDU) {
@@ -248,6 +373,13 @@ export class AdminController {
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiResponse({ status: 200, description: 'Investissements paginés' })
+  @ApiResponse({ status: 403, description: 'Permission users:read requise' })
+  // Donnée personnelle nominative : l'historique d'investissement d'une
+  // personne désignée relève de la consultation de dossier, pas du reporting.
+  // La seule page qui la consomme (`UserDetail`) est déjà gardée par
+  // `users:read` ; `reports:read` laissait cio/financier/analyste lire le
+  // dossier de n'importe qui alors qu'ils n'ont même plus accès à l'annuaire.
+  @RequirePermission('users:read')
   @Get('users/:id/investments')
   async getUserInvestments(
     @Param('id', ParseIntPipe) id: number,
@@ -297,6 +429,13 @@ export class AdminController {
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiResponse({ status: 200, description: 'Investisseurs paginés' })
+  @ApiResponse({ status: 403, description: 'Permission projects:read requise' })
+  // Donnée rattachée au SUIVI D'UN PROJET, pas au reporting global : la seule
+  // page qui la consomme (`ProjectInvestorsTable`, dans le détail projet) est
+  // gardée par `projects:read`. S'aligner dessus retire marketing — qui n'a
+  // aucun accès aux projets — et débloque support et chargé de relation
+  // investisseur, qui atteignent la page mais recevaient un 403.
+  @RequirePermission('projects:read')
   @Get('projects/:id/investors')
   async getProjectInvestors(
     @Param('id') projetId: string,
@@ -454,9 +593,22 @@ export class AdminController {
 
   // ─── Activité globale de la plateforme ────────────────────────────────────
 
+  /**
+   * ANO-02 — le journal nomme QUI a fait QUOI : identités, e-mails et montants
+   * d'autres utilisateurs. La permission de classe `reports:read` l'ouvrait à
+   * cio, financier, marketing et analyste_financier, alors que le back-office
+   * réserve déjà l'entrée « Journal d'activité » à `audit:read`
+   * (Admin/src/utils/navigation.ts). La route s'aligne sur l'UI.
+   *
+   * Le tableau de bord appelle aussi cette route, mais dans un
+   * `Promise.allSettled` (Admin/src/hooks/useDashboard.ts) : un 403 y est
+   * absorbé sans casser la page.
+   */
   @ApiOperation({ summary: 'Journal complet d\'activité de la plateforme (qui a fait quoi)' })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiQuery({ name: 'type', required: false, enum: ['all', 'kyc', 'investment', 'registration', 'market'] })
+  @ApiResponse({ status: 403, description: 'Permission audit:read requise' })
+  @RequirePermission('audit:read')
   @Get('activity')
   async getActivity(
     @CurrentUser() currentUser: ActiveUser,

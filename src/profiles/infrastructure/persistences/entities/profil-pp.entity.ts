@@ -8,7 +8,8 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { UserEntity } from 'src/users/infrastructure/persistences/entities/user.entity';
-import { CategoriePsfp } from 'src/profiles/domains/enums/kyc-status.enum';
+import { CategorieInvestisseur } from 'src/profiles/domains/investor-classification';
+import { LienAvecPrestataire } from 'src/projects/domains/conflits-interets';
 
 @Entity('profil_personne_physique')
 export class ProfilPPEntity {
@@ -76,14 +77,33 @@ export class ProfilPPEntity {
   @Column({ type: 'varchar', nullable: true })
   nif: string | null;
 
-  @Column({ type: 'varchar', default: CategoriePsfp.NON_AVERTI })
-  categoriePsfp: CategoriePsfp;
+  @Column({ type: 'varchar', default: CategorieInvestisseur.NON_AVERTI })
+  categoriePsfp: CategorieInvestisseur;
 
+  /** Patrimoine net au sens de l'art. 21(5) du règlement (UE) 2020/1503. */
   @Column({ type: 'decimal', precision: 15, scale: 2, nullable: true })
-  patrimoineDeclare: number | null;
+  patrimoineNetCalcule: number | null;
 
+  /** max(1 000 €, 5 % du patrimoine net) — seuil d'avertissement art. 21(7). */
   @Column({ type: 'decimal', precision: 15, scale: 2, nullable: true })
-  montantMaxConseille: number | null;
+  seuilAvertissementCalcule: number | null;
+
+  /** Art. 21(2) : au-delà de cette date, l'évaluation doit être refaite. */
+  @Column({ type: 'timestamptz', nullable: true })
+  evaluationExpireLe: Date | null;
+
+  /**
+   * Art. 8(2) : lien déclaré avec le prestataire. Le rôle back-office suffit à
+   * identifier salariés et dirigeants ; cette déclaration couvre ce que le
+   * système ne peut pas deviner — actionnaires et personnes liées par une
+   * relation de contrôle.
+   */
+  @Column({ type: 'varchar', default: LienAvecPrestataire.AUCUN })
+  lienAvecPrestataire: LienAvecPrestataire;
+
+  /** Part du capital ou des droits de vote détenue, entre 0 et 1. */
+  @Column({ type: 'decimal', precision: 5, scale: 4, nullable: true })
+  participationPrestataire: number | null;
 
   @Column({ type: 'varchar', nullable: true })
   niveauRisque: string | null; // 'vulnerable' | 'modere' | 'qualifie'

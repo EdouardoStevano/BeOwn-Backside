@@ -1,10 +1,11 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { InjectRepository, InjectDataSource } from '@nestjs/typeorm';
-import { DataSource, In, Repository } from 'typeorm';
+import { InjectRepository } from '@nestjs/typeorm';
+import { In, Repository } from 'typeorm';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
 import { formatEur } from 'src/common/money/format-eur';
 import { UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
@@ -14,35 +15,38 @@ import {
   EcheanceStatus,
   InvestmentStatus,
 } from 'src/investments/domains/enums/investment-status.enum';
-import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/wallet.entity';
-import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entities/transaction.entity';
-import {
-  TransactionFournisseur,
-  TransactionStatus,
-  TransactionType,
-  WalletType,
-} from 'src/wallets/domains/enums/wallet.enum';
+import { PayEcheanceUseCase } from 'src/investments/applications/usecases/pay-echeance.usecase';
 import { NotificationService } from 'src/notifications/applications/notification.service';
 import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
 
 /**
  * Déclenche manuellement le paiement d'une échéance (numero) pour tous les
- * investisseurs confirmés d'un projet : crédit du wallet + transaction de
- * remboursement capital + passage de l'échéance à PAYE, le tout par
- * investisseur dans une transaction DB. Extrait verbatim de
- * AdminEcheancesController.triggerPayment (SOLID vague 4).
+ * investisseurs confirmés d'un projet.
+ *
+ * Correctif M-4 — ce use case ne règle plus lui-même l'échéance. Il DÉLÈGUE
+ * chaque paiement à {@link PayEcheanceUseCase} (le chemin durci H-C, partagé
+ * avec la route `/pay` et le CRON), qui garantit un règlement :
+ *  - ATOMIQUE : claim conditionnel de l'échéance + crédit SQL `solde + :x`
+ *    (fini le read-modify-write sujet au lost-update) ;
+ *  - FISCALEMENT CORRECT : PFU 30 % (IR 12,8 % + CSG 17,2 %) prélevé vers les
+ *    wallets séquestres, comme sur tous les autres chemins de paiement.
+ *
+ * Ainsi il n'existe plus qu'UNE seule logique de paiement d'échéance : les deux
+ * boutons admin (`/pay` unitaire et `/trigger-payment` de masse) produisent des
+ * écritures identiques, ce qui supprime la divergence de traitement fiscal.
  *
  * L'autorisation (`assertPay`) reste portée par le contrôleur.
  */
 @Injectable()
 export class TriggerEcheancePaymentUseCase {
+  private readonly logger = new Logger(TriggerEcheancePaymentUseCase.name);
+
   constructor(
     @InjectRepository(EcheanceEntity)
     private readonly echeanceRepo: Repository<EcheanceEntity>,
     @InjectRepository(InvestmentEntity)
     private readonly investRepo: Repository<InvestmentEntity>,
-    @InjectDataSource()
-    private readonly dataSource: DataSource,
+    private readonly payEcheance: PayEcheanceUseCase,
     private readonly notifications: NotificationService,
   ) {}
 
@@ -71,74 +75,39 @@ export class TriggerEcheancePaymentUseCase {
       throw new NotFoundException(`Aucune échéance #${numero} trouvée pour ce projet`);
     }
 
-    const investmentByid = new Map(investments.map((i) => [i.id, i]));
-
     let paidCount = 0;
     let totalAmount = 0;
     let skipped = 0;
 
-    // 3. Pour chaque échéance, créditer le wallet investisseur dans une transaction
+    // 3. Déléguer chaque règlement au chemin durci (atomique + PFU). La sécurité
+    //    d'idempotence/concurrence est portée par le claim conditionnel de
+    //    PayEcheanceUseCase ; on court-circuite juste les échéances déjà payées
+    //    pour éviter une transaction inutile.
     for (const ech of echeances) {
       if (ech.statut === EcheanceStatus.PAYE) {
         skipped++;
         continue;
       }
 
-      const invest = investmentByid.get(ech.investissementId);
-      if (!invest) {
-        skipped++;
-        continue;
-      }
-      const montant = Number(ech.montantTotal);
-      if (montant <= 0) {
-        skipped++;
-        continue;
-      }
-
       try {
-        await this.dataSource.transaction(async (em) => {
-          const wallet = await em.findOne(WalletEntity, {
-            where: { proprietaireUserId: invest.utilisateurId, type: WalletType.INVESTISSEUR },
-          });
-          if (!wallet) throw new Error(`Wallet introuvable pour user ${invest.utilisateurId}`);
-
-          wallet.solde = Number(wallet.solde) + montant;
-          await em.save(WalletEntity, wallet);
-
-          await em.save(TransactionEntity, em.create(TransactionEntity, {
-            walletId: wallet.id,
-            walletSource: null,
-            walletDestination: wallet.id,
-            type: TransactionType.REMBOURSEMENT_CAPITAL,
-            montant,
-            devise: wallet.devise,
-            statut: TransactionStatus.REUSSI,
-            fournisseur: TransactionFournisseur.INTERNE,
-            investissementId: invest.id,
-            projetId: projectId,
-            idempotencyKey: `echeance-pay:${ech.id}`,
-            fraisPsp: 0,
-            fraisPlateforme: 0,
-          }));
-
-          ech.statut = EcheanceStatus.PAYE;
-          ech.payeLe = new Date();
-          await em.save(EcheanceEntity, ech);
-        });
-
+        const paid = await this.payEcheance.execute(
+          ech.id,
+          admin.userId,
+          admin.role,
+          'trigger_masse',
+        );
         paidCount++;
-        totalAmount += montant;
-
-        this.notifications
-          .push({
-            utilisateurId: invest.utilisateurId,
-            type: NotificationType.ECHEANCE,
-            titre: `Échéance #${numero} reçue`,
-            message: `Vous avez reçu ${formatEur(montant)} sur votre wallet (échéance ${numero} du projet).`,
-            metadata: { investissementId: invest.id, echeanceId: ech.id, montant, numero },
-          })
-          .catch(() => {});
-      } catch {
+        totalAmount += Number(paid.montantTotal);
+      } catch (err: any) {
+        // Déjà payée par un run concurrent, statut non payable, ou wallet
+        // introuvable → ignorée sans faire échouer le lot, mais journalisée :
+        // sur un chemin monétaire, un skip ne doit jamais masquer une vraie
+        // erreur de règlement (wallet manquant, panne DB) en la confondant
+        // avec un no-op « déjà payée ».
+        this.logger.warn(
+          `Échéance ${ech.id} non réglée (ignorée) lors du déclenchement ` +
+          `#${numero} projet=${projectId}: ${err?.message ?? err}`,
+        );
         skipped++;
       }
     }

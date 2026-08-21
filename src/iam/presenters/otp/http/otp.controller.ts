@@ -42,6 +42,11 @@ export class OtpController {
 
   @ApiOperation({ summary: "Vérifier l'OTP email" })
   @ApiResponse({ status: 200, description: 'OTP valide ou invalide' })
+  @ApiResponse({ status: 429, description: 'Trop de tentatives' })
+  // M-5 — la vérification n'avait aucun palier dédié (contrairement à l'envoi) :
+  // le compteur de 5 essais par OTP restait la seule barrière, réarmable en
+  // redemandant un code. On borne aussi la cadence par IP.
+  @Throttle({ short: { ttl: 60_000, limit: 10 }, auth: { ttl: 900_000, limit: 30 } })
   @Public()
   @Post('email/verify')
   verifyEmailOtp(@Body() dto: VerifyEmailOtpDto) {
@@ -81,6 +86,8 @@ export class OtpController {
 
   @ApiOperation({ summary: "Vérifier l'OTP SMS" })
   @ApiResponse({ status: 200, description: 'OTP valide' })
+  @ApiResponse({ status: 429, description: 'Trop de tentatives' })
+  @Throttle({ short: { ttl: 60_000, limit: 10 }, auth: { ttl: 900_000, limit: 30 } })
   @Public()
   @Post('sms/verify')
   verifySmsOtp(@Body() dto: VerifySmsOtpDto) {

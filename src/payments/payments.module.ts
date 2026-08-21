@@ -17,6 +17,15 @@ import { NotificationsModule } from 'src/notifications/notifications.module';
 import { KycEntity } from 'src/profiles/infrastructure/persistences/entities/kyc.entity';
 import { KycValidatedGuard } from 'src/common/auth/kyc-validated.guard';
 import { RequestRetraitUseCase } from './applications/usecases/request-retrait.usecase';
+import { PayoutMethodsController } from './presenters/http/payout-methods.controller';
+import { StripePayoutMethodsService } from './infrastructure/stripe-payout-methods.service';
+import { ManagePayoutMethodsUseCase } from './applications/usecases/manage-payout-methods.usecase';
+import { PayoutDestinationResolver } from './applications/services/payout-destination.resolver';
+import { ConnectAccountReader } from './applications/ports/connect-account.port';
+import {
+  PayoutMethodsReader,
+  PayoutMethodsWriter,
+} from './applications/ports/payout-methods.port';
 
 @Module({
   imports: [
@@ -28,7 +37,7 @@ import { RequestRetraitUseCase } from './applications/usecases/request-retrait.u
     CloudStorageModule,
     NotificationsModule,
   ],
-  controllers: [PaymentController],
+  controllers: [PaymentController, PayoutMethodsController],
   providers: [
     { provide: PAYMENT_SERVICE, useClass: StripePaymentService },
     StripePaymentService,
@@ -36,6 +45,16 @@ import { RequestRetraitUseCase } from './applications/usecases/request-retrait.u
     StripeConnectService,
     RequestRetraitUseCase,
     KycValidatedGuard,
+    // ─── Lot 4a — destinations de retrait (DIP) ──────────────────────────
+    // Un seul adaptateur Stripe branché derrière DEUX ports séparés (ISP) :
+    // le chemin retrait n'injecte que le Reader et ne peut donc pas modifier
+    // les destinations de l'investisseur.
+    StripePayoutMethodsService,
+    { provide: PayoutMethodsReader, useExisting: StripePayoutMethodsService },
+    { provide: PayoutMethodsWriter, useExisting: StripePayoutMethodsService },
+    { provide: ConnectAccountReader, useExisting: StripeConnectService },
+    PayoutDestinationResolver,
+    ManagePayoutMethodsUseCase,
   ],
   exports: [PAYMENT_SERVICE, StripeIdentityServiceImpl, StripeConnectService],
 })

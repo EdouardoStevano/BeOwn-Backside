@@ -45,6 +45,7 @@ export class StripePaymentService implements PaymentService {
       intentId: intent.id,
       status: intent.status,
       amount: intent.amount,
+      currency: intent.currency,
     };
   }
 
@@ -55,6 +56,7 @@ export class StripePaymentService implements PaymentService {
       intentId: intent.id,
       status: intent.status,
       amount: intent.amount,
+      currency: intent.currency,
       metadata: (intent.metadata ?? {}) as Record<string, string>,
     };
   }

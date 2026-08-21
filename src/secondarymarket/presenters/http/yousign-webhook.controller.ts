@@ -44,6 +44,8 @@ import { UserRole } from 'src/users/infrastructure/persistences/entities/user.en
 import { NotificationEventService } from 'src/notifications/applications/notification-event.service';
 import type { UserRepository } from 'src/users/applications/ports/repositories/user.repository';
 import { USER_REPOSITORY } from 'src/users/applications/ports/repositories/user.repository';
+import { MetricsPort } from 'src/observability/metrics/metrics.port';
+import { METRIC } from 'src/observability/metrics/metric-names';
 
 /**
  * Résultat de l'exécution atomique d'une signature `signature_request.done`.
@@ -91,6 +93,7 @@ export class YouSignWebhookController {
     private readonly userRepository: UserRepository,
     private readonly notificationEvents: NotificationEventService,
     private readonly platformFees: PlatformFeesService,
+    private readonly metrics: MetricsPort,
   ) {}
 
   @Public()
@@ -105,6 +108,9 @@ export class YouSignWebhookController {
 
     if (!this.youSignService.verifyWebhookSignature(rawBody, signature)) {
       this.logger.warn('Invalid YouSign webhook signature — ignored');
+      this.metrics.incrementCounter(METRIC.WEBHOOK_SIGNATURE_INVALID_TOTAL, {
+        provider: 'yousign',
+      });
       return { received: false };
     }
 
@@ -406,6 +412,25 @@ export class YouSignWebhookController {
       signature.statut = SignatureStatus.SIGNED;
       signature.signedAt = new Date();
       await em.save(SignatureEntity, signature);
+
+      // Émission APRÈS le dernier `em.save` de la transaction : si tout ce qui
+      // précède a réussi, le callback va se résoudre et TypeORM va commit — ces
+      // incréments ne peuvent donc pas survivre à un rollback (cf. contrat du
+      // MetricsPort : jamais bloquant, jamais dans le chemin d'erreur).
+      this.metrics.incrementCounter(METRIC.SECONDARY_ORDERS_TOTAL, { action: 'executed' });
+      this.metrics.observeHistogram(METRIC.SECONDARY_ORDER_AMOUNT_EUR, montantTotal, {
+        action: 'executed',
+      });
+      if (transactionFee > 0) {
+        this.metrics.observeHistogram(METRIC.SECONDARY_FEES_EUR, transactionFee, {
+          source: 'revente_transaction',
+        });
+      }
+      if (gainFee > 0) {
+        this.metrics.observeHistogram(METRIC.SECONDARY_FEES_EUR, gainFee, {
+          source: 'gain_revente_actions',
+        });
+      }
 
       return { branch: 'secondary', buyerInvestId: buyerInvest.id, fusionnee: !!existingInvest };
     });

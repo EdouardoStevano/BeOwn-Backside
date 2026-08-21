@@ -1,0 +1,33 @@
+# Valeurs Helm pour `grafana/alloy` — voir DOC/MONITORING_SETUP.md §4.4.
+# Déploiement (poste connecté / CI, jamais le poste offline) :
+#   helm repo add grafana https://grafana.github.io/helm-charts
+#   helm upgrade --install alloy grafana/alloy \
+#     --namespace monitoring --create-namespace \
+#     --values k8s/monitoring/alloy-values.yaml \
+#     --set-file alloy.configMap.content=k8s/monitoring/config.alloy
+#
+# Le Secret `grafana-cloud-credentials` (PROM/LOKI/TEMPO usernames+URLs +
+# GRAFANA_CLOUD_API_TOKEN) doit exister au préalable dans le namespace
+# `monitoring` (cf. MONITORING_SETUP.md §4.3) — jamais commité.
+#
+# Le Secret `beown-metrics-token` (une seule clé METRICS_TOKEN) doit contenir
+# LA MÊME valeur que METRICS_TOKEN dans `beown-backend-secrets` (namespace
+# `beown`) — c'est le jeton que le scrape Alloy présente à /metrics, devenu
+# obligatoire en production (OBS-1). Créer avec :
+#   kubectl create secret generic beown-metrics-token -n monitoring \
+#     --from-literal=METRICS_TOKEN='<même valeur que beown-backend-secrets>'
+alloy:
+  configMap:
+    create: true
+  envFrom:
+    - secretRef:
+        name: grafana-cloud-credentials
+    - secretRef:
+        name: beown-metrics-token
+  extraPorts:
+    - name: otlp-grpc
+      port: 4317
+      targetPort: 4317
+      protocol: TCP
+controller:
+  type: daemonset

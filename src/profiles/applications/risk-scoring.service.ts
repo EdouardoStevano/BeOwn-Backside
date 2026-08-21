@@ -30,10 +30,9 @@ export class RiskScoringService {
 
   private score(q: QuestionnaireAdequationEntity | null): string {
     if (!q) return 'vulnerable';
-    if (q.resultCategorie === 'professionnel') return 'qualifie';
-    if (q.resultCategorie === 'averti') return 'modere';
-    // non_averti — différencier par patrimoine
-    const patrimoine = Number(q.patrimoineNet ?? 0);
+    if (q.resultCategorie === 'averti') return 'qualifie';
+    // non averti — différencier par patrimoine net (art. 21(5))
+    const patrimoine = Number(q.patrimoineNetCalcule ?? 0);
     if (patrimoine >= 100_000) return 'modere';
     return 'vulnerable';
   }

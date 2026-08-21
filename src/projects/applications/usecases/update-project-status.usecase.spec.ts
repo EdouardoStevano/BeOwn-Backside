@@ -1,11 +1,21 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { UpdateProjectStatusUseCase } from './update-project-status.usecase';
 import { ProjectStatus } from 'src/projects/domains/enums/project-status.enum';
+import { SECTIONS_REQUISES, SectionFici } from 'src/projects/domains/fici';
 
 const PROJECT_ID = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
 
-function makeProject(statut: ProjectStatus) {
-  return { id: PROJECT_ID, titre: 'Résidence Horizon', statut } as any;
+/** FICI complète : sans elle, l'ouverture de collecte est refusée (art. 23). */
+const FICI_VALIDE = {
+  sections: Object.fromEntries(
+    SECTIONS_REQUISES.map((section) => [section, 'Contenu du porteur.']),
+  ),
+  nombrePages: 4,
+  langue: 'fr',
+};
+
+function makeProject(statut: ProjectStatus, fici: unknown = FICI_VALIDE) {
+  return { id: PROJECT_ID, titre: 'Résidence Horizon', statut, fici } as any;
 }
 
 function makeDeps(currentStatus: ProjectStatus) {
@@ -107,5 +117,56 @@ describe('UpdateProjectStatusUseCase — déclencheurs de diffusion', () => {
     expect(result.statut).toBe(ProjectStatus.ANNONCE);
     // Laisse la microtâche du .catch() se résoudre — aucune rejection non gérée.
     await new Promise(process.nextTick);
+  });
+});
+
+describe("UpdateProjectStatusUseCase — fiche d'informations clés (art. 23)", () => {
+  it("refuse l'ouverture de collecte sans FICI", async () => {
+    const { usecase, projectRepository } = makeDeps(ProjectStatus.ANNONCE);
+    projectRepository.findProjectById.mockResolvedValue(
+      makeProject(ProjectStatus.ANNONCE, null),
+    );
+
+    await expect(
+      usecase.execute(PROJECT_ID, ProjectStatus.EN_COLLECTE, 1),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(projectRepository.updateProjectStatus).not.toHaveBeenCalled();
+  });
+
+  it("refuse l'ouverture de collecte avec une FICI incomplète", async () => {
+    const { usecase, projectRepository } = makeDeps(ProjectStatus.ANNONCE);
+    const incomplete = {
+      ...FICI_VALIDE,
+      sections: { ...FICI_VALIDE.sections, [SectionFici.FACTEURS_DE_RISQUE]: '' },
+    };
+    projectRepository.findProjectById.mockResolvedValue(
+      makeProject(ProjectStatus.ANNONCE, incomplete),
+    );
+
+    await expect(
+      usecase.execute(PROJECT_ID, ProjectStatus.EN_COLLECTE, 1),
+    ).rejects.toThrow(/Facteurs de risque/);
+  });
+
+  it('refuse aussi le pré-investissement sans FICI : une réservation engage', async () => {
+    const { usecase, projectRepository } = makeDeps(ProjectStatus.ANNONCE);
+    projectRepository.findProjectById.mockResolvedValue(
+      makeProject(ProjectStatus.ANNONCE, null),
+    );
+
+    await expect(
+      usecase.execute(PROJECT_ID, ProjectStatus.PRE_INVESTISSEMENT, 1),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it("laisse passer une transition qui n'ouvre aucun engagement", async () => {
+    const { usecase, projectRepository } = makeDeps(ProjectStatus.BROUILLON);
+    projectRepository.findProjectById.mockResolvedValue(
+      makeProject(ProjectStatus.BROUILLON, null),
+    );
+
+    await expect(
+      usecase.execute(PROJECT_ID, ProjectStatus.ANNONCE, 1),
+    ).resolves.toBeDefined();
   });
 });

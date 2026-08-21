@@ -1,3 +1,4 @@
+import type { ContenuFici } from './fici';
 import {
   ProjectInstrument,
   ProjectStatus,
@@ -15,6 +16,14 @@ export class Project {
   slug: string;
   titre: string;
   spvId: string | null;
+  /**
+   * Dénomination sociale de la société support (SCI/SPV) émettrice — champ de
+   * LECTURE seule, projeté depuis la relation `spv`. Le contrat de souscription
+   * doit imprimer l'émetteur : `spvId` seul ne le permettait pas.
+   * `null` quand le projet n'a pas de société support ou que la relation n'a
+   * pas été chargée.
+   */
+  societeSupportNom: string | null;
   porteurId: number | null;
   type: ProjectType;
   ville: string | null;
@@ -43,6 +52,8 @@ export class Project {
   dateCloturePrevue: Date | null;
   descriptionMd: string | null;
   avertissementMd: string | null;
+  /** Fiche d'informations clés (art. 23). */
+  fici: ContenuFici | null = null;
   previsionnel: PrevisionnelFinancier | null;
   chronologie: EtapeChronologie[];
   garanties: Garantie[];

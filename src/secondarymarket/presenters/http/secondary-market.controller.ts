@@ -40,6 +40,13 @@ import { NotificationService } from 'src/notifications/applications/notification
 import { NotificationEventService } from 'src/notifications/applications/notification-event.service';
 import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
 import { InitiateBuyUseCase } from 'src/secondarymarket/applications/usecases/initiate-buy.usecase';
+import { ExprimerInteretUseCase } from 'src/secondarymarket/applications/usecases/exprimer-interet.usecase';
+import { RepondreInteretUseCase } from 'src/secondarymarket/applications/usecases/repondre-interet.usecase';
+import {
+  MENTION_NON_SYSTEME_DE_NEGOCIATION,
+  METHODE_PRIX_REFERENCE,
+  PRIX_REFERENCE_CONTRAIGNANT,
+} from 'src/secondarymarket/domains/tableau-affichage';
 import { CancelInitiationUseCase } from 'src/secondarymarket/applications/usecases/cancel-initiation.usecase';
 import { SignatureEntity } from 'src/signatures/infrastructure/persistences/entities/signature.entity';
 import { SignatureStatus } from 'src/signatures/domains/enums/signature-status.enum';
@@ -52,6 +59,8 @@ import {
   TransactionType,
   WalletType,
 } from 'src/wallets/domains/enums/wallet.enum';
+import { MetricsPort } from 'src/observability/metrics/metrics.port';
+import { METRIC } from 'src/observability/metrics/metric-names';
 
 @SkipThrottle()
 @ApiTags('Marché Secondaire')
@@ -71,9 +80,12 @@ export class SecondaryMarketController {
     private readonly notificationService: NotificationService,
     private readonly notificationEvents: NotificationEventService,
     private readonly initiateBuyUseCase: InitiateBuyUseCase,
+    private readonly exprimerInteretUseCase: ExprimerInteretUseCase,
+    private readonly repondreInteretUseCase: RepondreInteretUseCase,
     private readonly cancelInitiationUseCase: CancelInitiationUseCase,
     @InjectRepository(SignatureEntity)
     private readonly signatureRepo: Repository<SignatureEntity>,
+    private readonly metrics: MetricsPort,
   ) {}
 
   @Public()
@@ -184,6 +196,10 @@ export class SecondaryMarketController {
       this.notificationEvents.secondaryOrderCreated(saved, project, vendeur);
     }
 
+    this.metrics.incrementCounter(METRIC.SECONDARY_ORDERS_TOTAL, { action: 'created' });
+    this.metrics.observeHistogram(METRIC.SECONDARY_ORDER_AMOUNT_EUR, Number(saved.montant), {
+      action: 'created',
+    });
     return saved;
   }
 
@@ -225,7 +241,15 @@ export class SecondaryMarketController {
     const vendeurId = ordre.vendeurId;
     const totalCost = qtyToBuy * Number(ordre.prixUnitaire);
 
-    const result = await this.dataSource.transaction(async (em) => {
+    let result: {
+      success: true;
+      investissementId: string;
+      fractionsAchetees: number;
+      restantDansOrdre: number;
+      fusionnee: boolean;
+    };
+    try {
+      result = await this.dataSource.transaction(async (em) => {
       // ── Verrou + re-validation de l'ordre (anti survente concurrente) ────────
       // On recharge l'ordre SOUS VERROU dans la transaction : deux achats
       // concurrents (total/partiel) sur le même ordre sont ainsi sérialisés,
@@ -368,13 +392,24 @@ export class SecondaryMarketController {
       await em.save(OrdreMarcheEntity, lockedOrdre);
 
       return {
-        success: true,
+        success: true as const,
         investissementId: buyerInvestId,
         fractionsAchetees: qtyToBuy,
         restantDansOrdre:
           lockedOrdre.statut === OrdreMarcheStatus.EXECUTE ? 0 : lockedOrdre.nbFractions,
         fusionnee: !!buyerExisting,
       };
+      });
+    } catch (err) {
+      this.metrics.incrementCounter(METRIC.SECONDARY_EXECUTION_FAILED_TOTAL, {
+        reason: this.classifyExecutionFailure(err),
+      });
+      throw err;
+    }
+
+    this.metrics.incrementCounter(METRIC.SECONDARY_ORDERS_TOTAL, { action: 'executed' });
+    this.metrics.observeHistogram(METRIC.SECONDARY_ORDER_AMOUNT_EUR, totalCost, {
+      action: 'executed',
     });
 
     const [project, buyerUser, sellerUser] = await Promise.all([
@@ -389,6 +424,20 @@ export class SecondaryMarketController {
     }
 
     return result;
+  }
+
+  /**
+   * Classe une exception d'exécution d'ordre en raison BORNÉE (jamais le
+   * message brut — cardinalité Prometheus, cf. metric-names.ts) pour
+   * `secondary_execution_failed_total{reason}`.
+   */
+  private classifyExecutionFailure(err: unknown): string {
+    const message = err instanceof Error ? err.message : String(err);
+    if (message.startsWith('Ordre non disponible')) return 'order_unavailable';
+    if (message.startsWith('Quantité invalide')) return 'invalid_quantity';
+    if (message.startsWith('Wallet introuvable')) return 'buyer_wallet_missing';
+    if (message.startsWith('Solde insuffisant')) return 'insufficient_balance';
+    return 'other';
   }
 
   @UseGuards(JwtAuthGuard)
@@ -406,21 +455,64 @@ export class SecondaryMarketController {
       throw new BadRequestException("Cet ordre ne peut plus être annulé");
     }
     ordre.statut = OrdreMarcheStatus.ANNULE;
-    return this.ordreRepo.save(ordre);
+    const saved = await this.ordreRepo.save(ordre);
+    this.metrics.incrementCounter(METRIC.SECONDARY_ORDERS_TOTAL, { action: 'cancelled' });
+    return saved;
+  }
+
+  @ApiOperation({
+    summary: "Mentions réglementaires du tableau d'affichage (art. 25)",
+  })
+  @Public()
+  @Get('mentions')
+  mentions() {
+    return {
+      systemeDeNegociation: false,
+      mention: MENTION_NON_SYSTEME_DE_NEGOCIATION,
+      prixReferenceContraignant: PRIX_REFERENCE_CONTRAIGNANT,
+      methodePrixReference: METHODE_PRIX_REFERENCE,
+      texteApplicable: 'Règlement (UE) 2020/1503, article 25',
+    };
   }
 
   @UseGuards(JwtAuthGuard, KycValidatedGuard)
-  @ApiOperation({ summary: 'Initier un achat (génère contrat + YouSign)' })
-  @ApiParam({ name: 'id', description: "UUID de l'ordre" })
+  @ApiOperation({
+    summary:
+      "Exprimer un intérêt pour une annonce. N'apparie rien et ne forme aucun contrat : le vendeur doit accepter (art. 25).",
+  })
+  @ApiParam({ name: 'id', description: "UUID de l'annonce" })
   @ApiResponse({ status: 403, description: 'KYC non validé' })
   @HttpCode(HttpStatus.OK)
-  @Post('orders/:id/initiate-buy')
-  async initiateBuy(
+  @Post('orders/:id/interet')
+  async exprimerInteret(
     @Param('id') id: string,
     @Body() dto: ExecuteOrderDto,
     @CurrentUser() user: ActiveUser,
   ) {
-    return this.initiateBuyUseCase.execute(id, user.userId, dto.nbFractions ?? 1);
+    return this.exprimerInteretUseCase.execute(id, user.userId, dto.nbFractions ?? 1);
+  }
+
+  @UseGuards(JwtAuthGuard, KycValidatedGuard)
+  @ApiOperation({
+    summary:
+      "Accepter la marque d'intérêt reçue sur son annonce. Seule cette acceptation forme le contrat et déclenche la signature.",
+  })
+  @ApiParam({ name: 'id', description: "UUID de l'annonce" })
+  @HttpCode(HttpStatus.OK)
+  @Post('orders/:id/interet/acceptation')
+  async accepterInteret(@Param('id') id: string, @CurrentUser() user: ActiveUser) {
+    return this.repondreInteretUseCase.accepter(id, user.userId);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({
+    summary: "Refuser la marque d'intérêt : l'annonce est remise en circulation.",
+  })
+  @ApiParam({ name: 'id', description: "UUID de l'annonce" })
+  @HttpCode(HttpStatus.OK)
+  @Post('orders/:id/interet/refus')
+  async refuserInteret(@Param('id') id: string, @CurrentUser() user: ActiveUser) {
+    return this.repondreInteretUseCase.refuser(id, user.userId);
   }
 
   @UseGuards(JwtAuthGuard)

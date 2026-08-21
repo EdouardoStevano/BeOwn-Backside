@@ -87,6 +87,35 @@ export class UpdatePreferencesDto {
   preferredCurrency?: string;
 }
 
+/**
+ * Corps des bascules de préférences (`PATCH /users/me/preferences/*`).
+ *
+ * M-6 — ces routes typaient leur corps par une interface inline
+ * (`{ value: boolean }`), effacée à l'exécution en `Object` : le
+ * `ValidationPipe` global les ignorait entièrement. Un corps absent ou d'un
+ * autre type produisait une écriture silencieuse ou une 500, là où l'on
+ * attend une 400.
+ */
+export class PreferenceBooleanDto {
+  @ApiProperty({ example: true })
+  @IsBoolean()
+  value: boolean;
+}
+
+export class PreferenceLangueDto {
+  @ApiProperty({ example: 'fr', enum: ['fr', 'en', 'ar'] })
+  @IsString()
+  @IsIn(['fr', 'en', 'ar'])
+  value: string;
+}
+
+export class SetUserTypeDto {
+  @ApiProperty({ example: 'PP', enum: ['PP', 'PM'] })
+  @IsString()
+  @IsIn(['PP', 'PM'])
+  userType: string;
+}
+
 export class UpdateUserAdminDto {
   @ApiPropertyOptional({ example: 'Jean' })
   @IsOptional()
