@@ -50,7 +50,7 @@ import type { ActiveUser } from 'src/common/auth/current-user.decorator';
 import { Public } from 'src/common/auth/public.decorator';
 import { Roles } from 'src/common/auth/roles.decorator';
 import { RequirePermission } from 'src/common/auth/require-permission.decorator';
-import { UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
+import { UserRole } from 'src/iam/domains/enums/user.enum';
 import { NotificationService } from 'src/notifications/applications/notification.service';
 import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
 import { InjectRepository } from '@nestjs/typeorm';

@@ -7,7 +7,8 @@ import {
   NotificationType,
 } from '../infrastructure/persistences/entities/notification.entity';
 import { NotificationGateway } from '../presenters/ws/notification.gateway';
-import { UserEntity, UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
+import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
+import { UserRole } from 'src/iam/domains/enums/user.enum';
 
 export interface PushNotificationOptions {
   utilisateurId: number;
@@ -119,7 +120,10 @@ export class NotificationService {
 
   async deleteOne(id: string, userId: number): Promise<{ deleted: boolean }> {
     // Constrain by utilisateurId so a user can only delete their own notifs.
-    const res = await this.notificationRepo.delete({ id, utilisateurId: userId });
+    const res = await this.notificationRepo.delete({
+      id,
+      utilisateurId: userId,
+    });
     const deleted = (res.affected ?? 0) > 0;
     if (deleted) {
       const unread = await this.countUnread(userId);

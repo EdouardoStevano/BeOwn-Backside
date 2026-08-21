@@ -12,6 +12,7 @@ import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import * as express from 'express';
+import { join } from 'path';
 import helmet from 'helmet';
 import { IoAdapter } from '@nestjs/platform-socket.io';
 import type { NestExpressApplication } from '@nestjs/platform-express';
@@ -51,6 +52,14 @@ async function bootstrap() {
   if (Number.isFinite(trustProxyHops) && trustProxyHops > 0) {
     app.set('trust proxy', trustProxyHops);
   }
+
+  // Ressources publiques servies telles quelles : le logo que les applications
+  // authenticator vont chercher via le paramètre `image` de l'URI otpauth
+  // (cf. `TotpSecretService`). Elles téléchargent cette URL depuis le
+  // téléphone de l'utilisateur, sans en-tête d'authentification — le dossier
+  // doit donc rester joignable publiquement, et ne contenir que des fichiers
+  // destinés à l'être.
+  app.use('/images', express.static(join(process.cwd(), 'images')));
 
   app.use(
     helmet({
@@ -99,11 +108,11 @@ async function bootstrap() {
         `BeOwn est une plateforme PSFP (Prestataire de Services de Financement Participatif) ` +
         `permettant l'investissement fractionné dans l'immobilier africain.\n\n` +
         `### Authentification\n` +
-        `La majorité des routes nécessitent un **JWT Bearer token** okay obtenu via \`POST /auth/sign-in\`.\n` +
+        `La majorité des routes nécessitent un **JWT Bearer token** obtenu via \`POST /auth/sign-in\`.\n` +
         `Utilisez le bouton **Authorize** ci-dessus pour renseigner votre token.\n\n` +
         `### Flux principal\n` +
         `1. \`POST /auth/sign-up\` — Créer un compte\n` +
-        `2. \`POST /email/send-verification\` + \`GET /email/verify?token=...\` — Vérifier l'email\n` +
+        `2. \`POST /auth/email/send-verification\` + \`GET /auth/email/verify?token=...\` — Vérifier l'email\n` +
         `3. \`POST /auth/sign-in\` — Obtenir les tokens\n` +
         `4. \`POST /profiles/:userId/pp\` + \`POST /profiles/:userId/kyc\` — Compléter le profil KYC\n` +
         `5. \`GET /projects\` — Parcourir les projets\n` +
@@ -123,12 +132,19 @@ async function bootstrap() {
       in: 'header',
     })
     .addTag('Health', "Vérification de l'état de l'API")
+    // Un seul tag pour tout le parcours d'authentification : `Email
+    // Verification` et `OTP / 2FA` étaient trois modules distincts, ils sont
+    // désormais une seule feature servie sous `/auth`.
     .addTag(
       'Authentication',
-      'Connexion, inscription, OAuth social, tokens JWT',
+      'Connexion, inscription, OAuth social, tokens JWT, vérification ' +
+        "d'adresse email (`/auth/email/*`) " +
+        'et double authentification (`/auth/mfa/*`) — TOTP, email ou SMS, le ' +
+        'canal étant choisi dans le body de `POST /auth/mfa/enroll`. Un ' +
+        'compte muni d’un facteur actif reçoit un 401 `MFA_REQUIRED` sur ' +
+        '`POST /auth/sign-in`, puis termine sa connexion par ' +
+        '`POST /auth/sign-in/mfa`.',
     )
-    .addTag('Email Verification', "Envoi et confirmation d'email")
-    .addTag('OTP / 2FA', 'OTP par email et TOTP (Google Authenticator)')
     .addTag('Users', 'Gestion des comptes utilisateurs')
     .addTag('Profiles & KYC', 'Profil investisseur (PP/PM) et dossier KYC')
     .addTag('Projects', 'Projets immobiliers — CRUD, statuts, SPV')

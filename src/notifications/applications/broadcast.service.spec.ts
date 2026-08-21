@@ -1,5 +1,5 @@
 import { BroadcastService } from './broadcast.service';
-import { UserStatus } from 'src/users/infrastructure/persistences/entities/user.entity';
+import { UserStatus } from 'src/iam/domains/enums/user.enum';
 
 /**
  * Specs de BroadcastService — AUCUN transport réel : EMAIL_SERVICE et
@@ -71,9 +71,7 @@ function makeDeps(overrides: Partial<Deps> = {}): Deps {
     },
     userRepo: {
       find: jest.fn().mockResolvedValue([makeUser(1)]),
-      findOne: jest
-        .fn()
-        .mockResolvedValue({ userId: 99, role: 'super_admin' }),
+      findOne: jest.fn().mockResolvedValue({ userId: 99, role: 'super_admin' }),
     },
     prefsRepo: { find: jest.fn().mockResolvedValue([makePrefs(1)]) },
     profilRepo: { find: jest.fn().mockResolvedValue([]) },
@@ -84,7 +82,9 @@ function makeDeps(overrides: Partial<Deps> = {}): Deps {
         html: '<html>corps</html>',
       }),
     },
-    emailService: { sendTransactionalEmail: jest.fn().mockResolvedValue(undefined) },
+    emailService: {
+      sendTransactionalEmail: jest.fn().mockResolvedValue(undefined),
+    },
     smsService: {
       sendOtp: jest.fn().mockResolvedValue(undefined),
       sendTransactional: jest.fn().mockResolvedValue(undefined),
@@ -282,7 +282,7 @@ describe('BroadcastService — filtrage des destinataires', () => {
     });
   });
 
-  it('notifEmail=false → pas d\'email (mais notif in-app quand même)', async () => {
+  it("notifEmail=false → pas d'email (mais notif in-app quand même)", async () => {
     const deps = makeDeps();
     deps.prefsRepo.find.mockResolvedValue([
       makePrefs(1, { notifEmail: false }),
@@ -493,7 +493,7 @@ describe('BroadcastService — résilience des envois', () => {
     expect(result.diffuse).toBe(true);
   });
 
-  it('template désactivé (render → null) : pas d\'email, SMS et in-app continuent', async () => {
+  it("template désactivé (render → null) : pas d'email, SMS et in-app continuent", async () => {
     const deps = makeDeps();
     deps.templates.render.mockResolvedValue(null);
     deps.settingsRepo.findOne.mockResolvedValue(settingsWithSms());
@@ -514,7 +514,7 @@ describe('BroadcastService — résilience des envois', () => {
     expect(result.sms).toBe(1);
   });
 
-  it('ne throw jamais vers l\'appelant, même sur une panne totale en amont', async () => {
+  it("ne throw jamais vers l'appelant, même sur une panne totale en amont", async () => {
     const deps = makeDeps();
     deps.projectRepo.findOne.mockRejectedValue(new Error('db down'));
 

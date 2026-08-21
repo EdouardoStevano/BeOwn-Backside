@@ -1,0 +1,128 @@
+import {
+  InvalidEmailError,
+  InvalidPersonNameError,
+} from 'src/iam/domains/errors';
+import { UserStatus } from 'src/iam/domains/enums/user.enum';
+import { User } from './user';
+import { buildUser } from './user.fixture';
+
+const registerProps = {
+  firstname: 'Jean',
+  lastname: null,
+  email: 'user@example.com',
+  passwordHash: 'hashed',
+  socialId: null,
+};
+
+describe('User — identité du titulaire', () => {
+  it('normalise le prénom à la création', () => {
+    const user = User.register({ ...registerProps, firstname: '  Jean  ' });
+
+    expect(user.firstname).toBe('Jean');
+  });
+
+  it('refuse de créer un compte au prénom invalide, quel que soit l’appelant', () => {
+    expect(() => User.register({ ...registerProps, firstname: 'J' })).toThrow(
+      InvalidPersonNameError,
+    );
+  });
+
+  it('applique la même règle au renommage qu’à l’inscription', () => {
+    const user = buildUser();
+
+    expect(() => user.rename('J')).toThrow(InvalidPersonNameError);
+    expect(user.rename('Jeanne')).toBe(true);
+    expect(user.firstname).toBe('Jeanne');
+  });
+
+  it('ne signale aucun changement quand le nouveau nom est le même', () => {
+    const user = buildUser({ firstname: 'Jean' });
+
+    expect(user.rename('  Jean  ')).toBe(false);
+  });
+
+  it('sait se projeter même chargé avant son mapper', () => {
+    // `user.ts` et `user.mapper.ts` s'importent mutuellement — l'entité pour
+    // déléguer `toJSON()`, le mapper pour construire l'entité. Ce test charge
+    // l'entité en premier (cf. les imports en tête de fichier) et vérifie que
+    // la délégation fonctionne quand même ; `user.mapper.spec.ts` couvre
+    // l'ordre inverse.
+    const user = buildUser({ firstname: 'Jean' });
+
+    expect(user.toJSON().firstname).toBe('Jean');
+  });
+
+  it('efface le nom de famille quand on le vide', () => {
+    const user = buildUser({ lastname: 'Dupont' });
+
+    expect(user.rename(undefined, null)).toBe(true);
+    expect(user.lastname).toBeNull();
+  });
+});
+
+describe('User — adresse email et sa vérification', () => {
+  it("normalise l'adresse à la création", () => {
+    const user = User.register({
+      ...registerProps,
+      email: '  User@Example.COM  ',
+    });
+
+    expect(user.email).toBe('user@example.com');
+  });
+
+  it("refuse de créer un compte à l'adresse invalide, quel que soit l'appelant", () => {
+    // Le DTO HTTP contrôlait déjà, mais rien ne protégeait les autres points
+    // d'entrée (OAuth, import, script) — un compte pouvait naître injoignable.
+    expect(() =>
+      User.register({ ...registerProps, email: 'pas-une-adresse' }),
+    ).toThrow(InvalidEmailError);
+  });
+
+  it('naît non vérifié, et le devient avec sa date', () => {
+    const user = User.register(registerProps);
+    expect(user.isEmailVerified()).toBe(false);
+    expect(user.emailVerifiedDate).toBeNull();
+
+    user.markEmailAsVerified();
+
+    expect(user.isEmailVerified()).toBe(true);
+    expect(user.emailVerifiedDate).toBeInstanceOf(Date);
+  });
+
+  it('fait avancer le statut du compte en même temps que la vérification', () => {
+    // La règle vivait en deux moitiés : `verify()` sur le VO, la transition de
+    // statut sur l'entité. Un appelant pouvait n'en jouer qu'une.
+    const user = User.register(registerProps);
+    expect(user.status).toBe(UserStatus.CREE);
+
+    user.markEmailAsVerified();
+
+    expect(user.status).toBe(UserStatus.EMAIL_VERIFIE);
+  });
+
+  it('reste idempotent : re-vérifier ne déplace pas la date', () => {
+    const user = buildUser({ emailVerified: true });
+    const first = user.emailVerifiedDate;
+
+    user.markEmailAsVerified();
+
+    expect(user.emailVerifiedDate).toBe(first);
+  });
+
+  it("vérifie d'emblée l'adresse d'un compte social", () => {
+    const user = User.register({ ...registerProps, emailVerified: true });
+
+    expect(user.isEmailVerified()).toBe(true);
+    expect(user.emailVerifiedDate).toBeInstanceOf(Date);
+  });
+
+  it("publie la forme d'API attendue par le front", () => {
+    const user = buildUser({ email: 'user@example.com', emailVerified: true });
+
+    expect(user.toJSON().userEmail).toEqual({
+      email: 'user@example.com',
+      isVerified: true,
+      verifiedDate: new Date('2026-01-01T00:00:00Z'),
+    });
+  });
+});

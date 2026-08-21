@@ -2,7 +2,7 @@ import { BadRequestException } from '@nestjs/common';
 import { PaymentController } from './payment.controller';
 import { KycStatus } from 'src/profiles/domains/enums/kyc-status.enum';
 import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
-import { UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
+import { UserRole } from 'src/iam/domains/enums/user.enum';
 
 /**
  * KYC validé AUTOMATIQUEMENT par Stripe Identity via le webhook
@@ -35,6 +35,7 @@ describe('PaymentController — webhook Stripe Identity (KYC auto + fallback rev
   let txRepo: any;
   let dataSource: any;
   let metricsPort: any;
+  let requestRetrait: any;
 
   const req = (body: any) => ({ rawBody: Buffer.from(JSON.stringify(body)) }) as any;
 
@@ -77,6 +78,7 @@ describe('PaymentController — webhook Stripe Identity (KYC auto + fallback rev
       observeHistogram: jest.fn(),
       setGauge: jest.fn(),
     };
+    requestRetrait = { execute: jest.fn().mockResolvedValue(undefined) };
 
     controller = new PaymentController(
       stripeService,
@@ -90,7 +92,7 @@ describe('PaymentController — webhook Stripe Identity (KYC auto + fallback rev
       walletRepo,
       txRepo,
       dataSource,
-      /* requestRetrait */ {} as any,
+      requestRetrait,
       metricsPort,
     );
   });

@@ -1,6 +1,6 @@
 import { ForbiddenException } from '@nestjs/common';
 import { AdminController } from './admin.controller';
-import { UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
+import { UserRole } from 'src/iam/domains/enums/user.enum';
 
 /**
  * Lot 2-back — minimisation RGPD de `GET /admin/users`.

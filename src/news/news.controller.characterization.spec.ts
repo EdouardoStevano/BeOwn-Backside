@@ -6,7 +6,7 @@ import {
 import { AdminNewsController, PublicNewsController } from './news.controller';
 import { NewsStatus } from './news.entity';
 import { rolesWithPermission } from 'src/common/auth/permissions.constants';
-import { UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
+import { UserRole } from 'src/iam/domains/enums/user.enum';
 
 /**
  * Tests de CARACTÉRISATION de PublicNewsController + AdminNewsController

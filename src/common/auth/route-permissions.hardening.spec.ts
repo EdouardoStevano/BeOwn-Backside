@@ -1,8 +1,8 @@
 import { ForbiddenException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { PermissionsGuard } from './permissions.guard';
-import { UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
-import { UserController } from 'src/users/presenters/http/user.controller';
+import { UserRole } from 'src/iam/domains/enums/user.enum';
+import { UserController } from 'src/iam/presenters/http/user.controller';
 import { AdminController } from 'src/admin/admin.controller';
 import {
   AdminEcheancesController,
@@ -51,33 +51,40 @@ const expectForbidden = (
 describe('Durcissement des autorisations de routes (Lot 2-back)', () => {
   // ─── 1. POST /users ────────────────────────────────────────────────────────
 
-  describe('POST /users — création de compte back-office', () => {
-    it('refuse un investisseur authentifié (contournement OTP/captcha de /auth/sign-up)', () => {
-      expectForbidden(UserController, 'register', UserRole.INVESTISSEUR);
+  describe('POST /users — création de compte back-office (route SUPPRIMÉE)', () => {
+    /**
+     * Ce contrôleur exposait un `POST /users` protégé par le seul
+     * `JwtAuthGuard` : n'importe quel utilisateur authentifié pouvait créer des
+     * comptes en contournant le reCAPTCHA, le throttle et la vérification
+     * d'e-mail de `POST /auth/sign-up`.
+     *
+     * Le durcissement initial le réservait à `users:manage`. La refonte
+     * hexagonale IAM va plus loin et SUPPRIME la route : l'inscription n'a
+     * qu'une porte, `POST /auth/sign-up`. On garde donc une garde de
+     * non-régression sur l'absence du point d'entrée plutôt que sur sa
+     * permission — réintroduire un `POST /users` ici rouvrirait la faille.
+     */
+    it('le contrôleur n\'expose plus de point d\'entrée de création de compte', () => {
+      const proto = UserController.prototype as unknown as Record<string, unknown>;
+      expect(proto.register).toBeUndefined();
+      expect(proto.create).toBeUndefined();
     });
 
-    it.each([
-      UserRole.PORTEUR,
-      UserRole.CGP,
-      UserRole.SUPPORT,
-      UserRole.MARKETING,
-      UserRole.ANALYSTE_FINANCIER,
-      UserRole.RCCI,
-      UserRole.CIO,
-    ])('refuse %s (pas de users:manage)', (role) => {
-      expectForbidden(UserController, 'register', role);
-    });
-
-    it.each([UserRole.SUPER_ADMIN, UserRole.COMPLIANCE])(
-      'autorise %s (users:manage)',
-      (role) => {
-        expect(allows(UserController, 'register', role)).toBe(true);
-      },
-    );
-
-    it('refuse un rôle absent ou inconnu', () => {
-      expectForbidden(UserController, 'register', undefined);
-      expectForbidden(UserController, 'register', 'admin');
+    it('aucune méthode du contrôleur n\'est montée en POST sur la racine', () => {
+      // `POST /users` reviendrait forcément par une méthode décorée @Post()
+      // sans chemin : on vérifie qu'il n'en existe aucune.
+      const methods = Object.getOwnPropertyNames(UserController.prototype).filter(
+        (m) => m !== 'constructor',
+      );
+      const rootPosts = methods.filter((m) => {
+        const handler = (UserController.prototype as any)[m];
+        if (typeof handler !== 'function') return false;
+        const httpMethod = Reflect.getMetadata('method', handler);
+        const path = Reflect.getMetadata('path', handler);
+        // 1 = RequestMethod.POST dans Nest.
+        return httpMethod === 1 && (path === '/' || path === '');
+      });
+      expect(rootPosts).toEqual([]);
     });
   });
 

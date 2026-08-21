@@ -1,6 +1,6 @@
 import { ExecuteSortieUseCase } from './execute-sortie.usecase';
 import { StatutSortie } from '../../domains/sortie-projet';
-import { UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
+import { UserRole } from 'src/iam/domains/enums/user.enum';
 
 describe('ExecuteSortieUseCase — audit role', () => {
   let useCase: ExecuteSortieUseCase;

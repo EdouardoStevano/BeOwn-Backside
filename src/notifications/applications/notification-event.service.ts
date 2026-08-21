@@ -1,8 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { NotificationService } from './notification.service';
 import { NotificationType } from '../infrastructure/persistences/entities/notification.entity';
-import { UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
-import { formatEur } from 'src/common/money/format-eur';
+import { UserRole } from 'src/iam/domains/enums/user.enum';
+import { formatEur } from 'src/shared/money/format-eur';
 
 @Injectable()
 export class NotificationEventService {
@@ -10,7 +10,11 @@ export class NotificationEventService {
 
   constructor(private readonly notifications: NotificationService) {}
 
-  private displayName(u: { firstname?: string | null; lastname?: string | null; userEmail?: { email?: string } | null }): string {
+  private displayName(u: {
+    firstname?: string | null;
+    lastname?: string | null;
+    userEmail?: { email?: string } | null;
+  }): string {
     const name = [u.firstname, u.lastname].filter(Boolean).join(' ');
     return name || u.userEmail?.email || 'Utilisateur inconnu';
   }
@@ -21,15 +25,22 @@ export class NotificationEventService {
         utilisateurId: userId,
         type: NotificationType.KYC_VALIDE,
         titre: 'Identité vérifiée ✓',
-        message: 'Votre KYC a été validé par notre équipe. Vous pouvez désormais investir.',
+        message:
+          'Votre KYC a été validé par notre équipe. Vous pouvez désormais investir.',
         metadata: { adminId },
       });
     } catch (err) {
-      this.logger.warn(`kycValidatedByAdmin failed: ${(err as Error)?.message}`);
+      this.logger.warn(
+        `kycValidatedByAdmin failed: ${(err as Error)?.message}`,
+      );
     }
   }
 
-  async kycRejectedByAdmin(userId: number, motif: string, adminId: number): Promise<void> {
+  async kycRejectedByAdmin(
+    userId: number,
+    motif: string,
+    adminId: number,
+  ): Promise<void> {
     try {
       await this.notifications.push({
         utilisateurId: userId,
@@ -43,7 +54,11 @@ export class NotificationEventService {
     }
   }
 
-  async accountSuspended(userId: number, motif: string | null, adminId: number): Promise<void> {
+  async accountSuspended(
+    userId: number,
+    motif: string | null,
+    adminId: number,
+  ): Promise<void> {
     try {
       const suffix = motif ? `. Motif : ${motif}` : '';
       await this.notifications.push({
@@ -64,7 +79,8 @@ export class NotificationEventService {
         utilisateurId: userId,
         type: NotificationType.COMPTE_REACTIVE,
         titre: 'Compte réactivé ✓',
-        message: 'Votre compte a été réactivé. Vous pouvez à nouveau accéder à la plateforme.',
+        message:
+          'Votre compte a été réactivé. Vous pouvez à nouveau accéder à la plateforme.',
         metadata: { adminId },
       });
     } catch (err) {
@@ -72,7 +88,11 @@ export class NotificationEventService {
     }
   }
 
-  async accountClosed(userId: number, motif: string | null, adminId: number): Promise<void> {
+  async accountClosed(
+    userId: number,
+    motif: string | null,
+    adminId: number,
+  ): Promise<void> {
     try {
       const suffix = motif ? `. Motif : ${motif}` : '';
       await this.notifications.push({
@@ -101,7 +121,9 @@ export class NotificationEventService {
         metadata: { changedFields, adminId },
       });
     } catch (err) {
-      this.logger.warn(`profileUpdatedByAdmin failed: ${(err as Error)?.message}`);
+      this.logger.warn(
+        `profileUpdatedByAdmin failed: ${(err as Error)?.message}`,
+      );
     }
   }
 
@@ -167,7 +189,9 @@ export class NotificationEventService {
         },
       });
     } catch (err) {
-      this.logger.warn(`echeanceOverdueAdmin failed: ${(err as Error)?.message}`);
+      this.logger.warn(
+        `echeanceOverdueAdmin failed: ${(err as Error)?.message}`,
+      );
     }
   }
 
@@ -200,7 +224,9 @@ export class NotificationEventService {
         metadata: { userId: user.userId, email },
       });
     } catch (err) {
-      this.logger.warn(`accountDeletedByUser failed: ${(err as Error)?.message}`);
+      this.logger.warn(
+        `accountDeletedByUser failed: ${(err as Error)?.message}`,
+      );
     }
   }
 
@@ -219,7 +245,11 @@ export class NotificationEventService {
     }
   }
 
-  async secondaryOrderCreated(ordre: any, project: any, vendeur: any): Promise<void> {
+  async secondaryOrderCreated(
+    ordre: any,
+    project: any,
+    vendeur: any,
+  ): Promise<void> {
     try {
       await this.notifications.pushToRoles({
         type: NotificationType.MARCHE_SECONDAIRE,
@@ -235,11 +265,17 @@ export class NotificationEventService {
         },
       });
     } catch (err) {
-      this.logger.warn(`secondaryOrderCreated failed: ${(err as Error)?.message}`);
+      this.logger.warn(
+        `secondaryOrderCreated failed: ${(err as Error)?.message}`,
+      );
     }
   }
 
-  async investmentCreated(investment: any, project: any, user: any): Promise<void> {
+  async investmentCreated(
+    investment: any,
+    project: any,
+    user: any,
+  ): Promise<void> {
     const montant = Number(investment.montant);
     const nbFractions = investment.nbTitres ?? 0;
     try {
@@ -256,7 +292,9 @@ export class NotificationEventService {
         },
       });
     } catch (err) {
-      this.logger.warn(`investmentCreated (user) failed: ${(err as Error)?.message}`);
+      this.logger.warn(
+        `investmentCreated (user) failed: ${(err as Error)?.message}`,
+      );
     }
     try {
       await this.notifications.pushToRoles({
@@ -273,7 +311,9 @@ export class NotificationEventService {
         },
       });
     } catch (err) {
-      this.logger.warn(`investmentCreated (admin) failed: ${(err as Error)?.message}`);
+      this.logger.warn(
+        `investmentCreated (admin) failed: ${(err as Error)?.message}`,
+      );
     }
   }
 
@@ -300,7 +340,9 @@ export class NotificationEventService {
         },
       });
     } catch (err) {
-      this.logger.warn(`fractionsToppedUp (user) failed: ${(err as Error)?.message}`);
+      this.logger.warn(
+        `fractionsToppedUp (user) failed: ${(err as Error)?.message}`,
+      );
     }
     try {
       await this.notifications.pushToRoles({
@@ -317,11 +359,17 @@ export class NotificationEventService {
         },
       });
     } catch (err) {
-      this.logger.warn(`fractionsToppedUp (admin) failed: ${(err as Error)?.message}`);
+      this.logger.warn(
+        `fractionsToppedUp (admin) failed: ${(err as Error)?.message}`,
+      );
     }
   }
 
-  async ifuGenerated(userId: number, year: number, documentId: string): Promise<void> {
+  async ifuGenerated(
+    userId: number,
+    year: number,
+    documentId: string,
+  ): Promise<void> {
     try {
       await this.notifications.push({
         utilisateurId: userId,
@@ -360,7 +408,9 @@ export class NotificationEventService {
         metadata: meta,
       });
     } catch (err) {
-      this.logger.warn(`secondaryTradeExecuted (buyer) failed: ${(err as Error)?.message}`);
+      this.logger.warn(
+        `secondaryTradeExecuted (buyer) failed: ${(err as Error)?.message}`,
+      );
     }
     try {
       await this.notifications.push({
@@ -371,7 +421,9 @@ export class NotificationEventService {
         metadata: meta,
       });
     } catch (err) {
-      this.logger.warn(`secondaryTradeExecuted (seller) failed: ${(err as Error)?.message}`);
+      this.logger.warn(
+        `secondaryTradeExecuted (seller) failed: ${(err as Error)?.message}`,
+      );
     }
     try {
       await this.notifications.pushToRoles({
@@ -382,7 +434,9 @@ export class NotificationEventService {
         metadata: meta,
       });
     } catch (err) {
-      this.logger.warn(`secondaryTradeExecuted (admin) failed: ${(err as Error)?.message}`);
+      this.logger.warn(
+        `secondaryTradeExecuted (admin) failed: ${(err as Error)?.message}`,
+      );
     }
   }
 }

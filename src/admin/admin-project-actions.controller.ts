@@ -24,11 +24,9 @@ import { RequirePermission } from 'src/common/auth/require-permission.decorator'
 import { rolesWithPermission } from 'src/common/auth/permissions.constants';
 import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
-import { formatEur } from 'src/common/money/format-eur';
-import {
-  UserEntity,
-  UserRole,
-} from 'src/users/infrastructure/persistences/entities/user.entity';
+import { formatEur } from 'src/shared/money/format-eur';
+import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
+import { UserRole } from 'src/iam/domains/enums/user.enum';
 import { ProjectEntity } from 'src/projects/infrastructure/persistences/entities/project.entity';
 import { ProjectStatus } from 'src/projects/domains/enums/project-status.enum';
 import { InvestmentEntity } from 'src/investments/infrastructure/persistences/entities/investment.entity';

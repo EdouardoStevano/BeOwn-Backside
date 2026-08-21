@@ -3,7 +3,7 @@ import { AdminController } from './admin.controller';
 import {
   UserStatus,
   UserRole,
-} from 'src/users/infrastructure/persistences/entities/user.entity';
+} from 'src/iam/domains/enums/user.enum';
 
 /**
  * PATCH /admin/users/:id/status — suspendre / réactiver / clôturer un compte.

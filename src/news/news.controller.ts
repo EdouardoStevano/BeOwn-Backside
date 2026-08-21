@@ -27,7 +27,7 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import { CloudStorageService } from 'src/common/cloud-storage/cloud-storage.service';
+import { CloudStorageService } from 'src/shared/cloud-storage/cloud-storage.service';
 import {
   ArrayMaxSize,
   IsArray,
@@ -46,7 +46,7 @@ import { RequirePermission } from 'src/common/auth/require-permission.decorator'
 import { rolesWithPermission } from 'src/common/auth/permissions.constants';
 import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
-import { UserEntity } from 'src/users/infrastructure/persistences/entities/user.entity';
+import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 import { NewsEntity, NewsStatus } from './news.entity';
 
 const ADMIN_ROLES: string[] = rolesWithPermission('news:manage');

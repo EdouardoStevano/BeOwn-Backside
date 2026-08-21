@@ -22,7 +22,8 @@ import {
 } from '@nestjs/swagger';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { UserEntity, UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
+import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
+import { UserRole } from 'src/iam/domains/enums/user.enum';
 import { CreateProfilPPUseCase } from 'src/profiles/applications/usecases/create-profil-pp.usecase';
 import { CreateKycUseCase } from 'src/profiles/applications/usecases/create-kyc.usecase';
 import { UpdateKycStatusUseCase } from 'src/profiles/applications/usecases/update-kyc-status.usecase';

@@ -10,7 +10,7 @@ import {
   TransactionType,
   WalletType,
 } from 'src/wallets/domains/enums/wallet.enum';
-import { formatEur } from 'src/common/money/format-eur';
+import { formatEur } from 'src/shared/money/format-eur';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
 import { CreateRetraitDto } from '../../presenters/dto/payment.dto';
 import {
@@ -19,7 +19,7 @@ import {
 } from '../../infrastructure/stripe-connect.service';
 import { NotificationService } from 'src/notifications/applications/notification.service';
 import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
-import { UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
+import { UserRole } from 'src/iam/domains/enums/user.enum';
 import { MetricsPort } from 'src/observability/metrics/metrics.port';
 import { METRIC } from 'src/observability/metrics/metric-names';
 import {

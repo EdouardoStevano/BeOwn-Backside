@@ -15,8 +15,8 @@ import type { WalletRepository } from 'src/wallets/applications/ports/repositori
 import { WALLET_REPOSITORY } from 'src/wallets/applications/ports/repositories/wallet.repository';
 import type { DocumentRepository } from 'src/documents/applications/ports/repositories/document.repository';
 import { DOCUMENT_REPOSITORY } from 'src/documents/applications/ports/repositories/document.repository';
-import type { UserRepository } from 'src/users/applications/ports/repositories/user.repository';
-import { USER_REPOSITORY } from 'src/users/applications/ports/repositories/user.repository';
+import type { UserRepository } from 'src/iam/domains/ports/user.repository';
+import { USER_REPOSITORY } from 'src/iam/domains/ports/user.repository';
 import type { ProfilRepository } from 'src/profiles/applications/ports/repositories/profil.repository';
 import { PROFIL_REPOSITORY } from 'src/profiles/applications/ports/repositories/profil.repository';
 import { Investment } from 'src/investments/domains/investment';
@@ -36,8 +36,8 @@ import {
   TransactionType,
 } from 'src/wallets/domains/enums/wallet.enum';
 import { ContractGeneratorService } from './contract-generator.service';
-import { CloudStorageService } from 'src/common/cloud-storage/cloud-storage.service';
-import { formatEur } from 'src/common/money/format-eur';
+import { CloudStorageService } from 'src/shared/cloud-storage/cloud-storage.service';
+import { formatEur } from 'src/shared/money/format-eur';
 import { Document } from 'src/documents/domains/document';
 import { DocumentRelatedTo, DocumentType } from 'src/documents/domains/enums/document-type.enum';
 import { NotificationService } from 'src/notifications/applications/notification.service';
@@ -392,7 +392,7 @@ export class CreateInvestmentUseCase {
     const user = await this.userRepository.findById(userId);
     const firstname = user?.firstname ?? 'Investisseur';
     const lastname = user?.lastname ?? '';
-    const email = user?.userEmail?.email ?? '';
+    const email = user?.email ?? '';
 
     const pdfBuffer = await this.contractGenerator.generateBulletin({
       investment,

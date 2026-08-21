@@ -7,7 +7,7 @@ import {
   PrimaryColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { UserEntity } from 'src/users/infrastructure/persistences/entities/user.entity';
+import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 
 @Entity('profil_personne_morale')
 export class ProfilPMEntity {

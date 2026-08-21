@@ -1,7 +1,7 @@
 import { ConflictException, ForbiddenException } from '@nestjs/common';
 import { ProfileController } from './profile.controller';
 import { KycStatus } from 'src/profiles/domains/enums/kyc-status.enum';
-import { UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
+import { UserRole } from 'src/iam/domains/enums/user.enum';
 
 /**
  * Le KYC est validé AUTOMATIQUEMENT par Stripe Identity (webhook). L'admin ne

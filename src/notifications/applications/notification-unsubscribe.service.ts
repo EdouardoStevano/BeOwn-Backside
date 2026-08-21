@@ -1,14 +1,13 @@
 import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
 import {
   NOTIF_UNSUBSCRIBE_TYPE,
-  TOKEN_SERVICE,
-  type TokenService,
   type UnsubscribeTokenPayload,
-} from 'src/iam/domains/ports/token.service';
+} from 'src/iam/applications/models/auth-token';
+import { TokenService } from 'src/iam/applications/services/token/token.service';
 import {
   USER_REPOSITORY,
   type UserRepository,
-} from 'src/users/applications/ports/repositories/user.repository';
+} from 'src/iam/domains/ports/user.repository';
 
 /**
  * Désinscription des communications marketing depuis le lien présent dans les
@@ -23,7 +22,7 @@ import {
 @Injectable()
 export class NotificationUnsubscribeService {
   constructor(
-    @Inject(TOKEN_SERVICE) private readonly tokenService: TokenService,
+    private readonly tokenService: TokenService,
     @Inject(USER_REPOSITORY) private readonly userRepository: UserRepository,
   ) {}
 

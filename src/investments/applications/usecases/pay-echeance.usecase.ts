@@ -13,7 +13,7 @@ import {
 } from 'src/wallets/domains/enums/wallet.enum';
 import { NotificationEventService } from 'src/notifications/applications/notification-event.service';
 import { AuditLogService } from 'src/notifications/applications/audit-log.service';
-import { UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
+import { UserRole } from 'src/iam/domains/enums/user.enum';
 import { MetricsPort } from 'src/observability/metrics/metrics.port';
 import { METRIC } from 'src/observability/metrics/metric-names';
 

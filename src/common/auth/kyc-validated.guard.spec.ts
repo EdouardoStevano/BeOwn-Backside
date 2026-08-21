@@ -1,4 +1,8 @@
-import { ExecutionContext, ForbiddenException, HttpStatus } from '@nestjs/common';
+import {
+  ExecutionContext,
+  ForbiddenException,
+  HttpStatus,
+} from '@nestjs/common';
 import {
   KycValidatedGuard,
   KYC_NOT_VALIDATED_CODE,

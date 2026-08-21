@@ -6,7 +6,6 @@ import { ThrottlerModule } from '@nestjs/throttler';
 import { MetricsThrottlerGuard } from './common/throttler/metrics-throttler.guard';
 import { ScheduleModule } from '@nestjs/schedule';
 import { EventEmitterModule } from '@nestjs/event-emitter';
-import { UsersModule } from './users/applications/users.module';
 import { HealthController } from './health/health.controller';
 import { IamModule } from './iam/iam.module';
 import { IamInfrastructureModule } from './iam/infrastructure/iam-infrastructure.module';
@@ -14,7 +13,7 @@ import { JwtAuthGuard } from './common/auth/jwt-auth.guard';
 import { AccountStatusGuard } from './common/auth/account-status.guard';
 import { RolesGuard } from './common/auth/roles.guard';
 import { PermissionsGuard } from './common/auth/permissions.guard';
-import { UserEntity } from './users/infrastructure/persistences/entities/user.entity';
+import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 import { AuditInterceptor } from './common/audit/audit.interceptor';
 import { ProfilesModule } from './profiles/applications/profiles.module';
 import { ProjectsModule } from './projects/applications/projects.module';
@@ -42,11 +41,8 @@ import { PlatformSettingsModule } from './common/platform-settings/platform-sett
 import { ContactModule } from './common/contact/contact.module';
 import { ThrottlerStorageModule } from './common/throttler/throttler-storage.module';
 import { RedisThrottlerStorage } from './common/throttler/redis-throttler.storage';
-import { SmsModule } from './common/sms/sms.module';
-import { EmailModule } from './common/email/email.module';
-import { MailerModule } from '@nestjs-modules/mailer';
-import { HandlebarsAdapter } from '@nestjs-modules/mailer/adapters/handlebars.adapter';
-import { join } from 'path';
+import { SmsModule } from './shared/sms/sms.module';
+import { EmailModule } from './shared/email/email.module';
 import { CacheModule } from '@nestjs/cache-manager';
 import { buildCacheModuleOptions } from './common/redis/cache.config';
 import { LoggerModule } from 'nestjs-pino';
@@ -111,34 +107,16 @@ function requireEnv(name: string): string {
       // Schema changes are applied only by reviewed migrations.
       synchronize: false,
     }),
-    MailerModule.forRootAsync({
-      useFactory: () => ({
-        transport: {
-          host: process.env.MAIL_HOST || 'smtp.gmail.com',
-          port: Number(process.env.MAIL_PORT) || 587,
-          secure: false,
-          auth: {
-            user: process.env.MAIL_USER,
-            pass: process.env.MAIL_USER_PASSWORD,
-          },
-        },
-        defaults: {
-          from: `"BeOwn" <${process.env.MAIL_FROM}>`,
-        },
-        template: {
-          dir: join(process.cwd(), 'src', 'common', 'email', 'templates'),
-          adapter: new HandlebarsAdapter(),
-          options: { strict: true },
-        },
-      }),
-    }),
+    // Plus de MailerModule/SMTP : l'email passe par EMAIL_SERVICE, fourni
+    // globalement par EmailModule (Mailpit en dev, Brevo en prod).
     // Feeds AccountStatusGuard: lean per-request lookup of the user status,
     // independent of UsersModule's exports (see account-status.guard.ts).
     TypeOrmModule.forFeature([UserEntity]),
     SmsModule,
     EmailModule,
     IamInfrastructureModule,
-    UsersModule,
+    // UsersModule n'est plus monté ici : le compte utilisateur est devenu une
+    // feature d'IAM, agrégée par IamModule au même titre qu'Authentication.
     IamModule,
     ProfilesModule,
     ProjectsModule,

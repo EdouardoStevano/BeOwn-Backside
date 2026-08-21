@@ -1,7 +1,8 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { UserEntity, UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
+import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
+import { UserRole } from 'src/iam/domains/enums/user.enum';
 import { ProfilPPEntity } from 'src/profiles/infrastructure/persistences/entities/profil-pp.entity';
 import {
   LienAvecPrestataire,

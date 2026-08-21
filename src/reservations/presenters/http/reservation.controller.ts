@@ -34,7 +34,7 @@ import { KycValidatedGuard } from 'src/common/auth/kyc-validated.guard';
 import { RequirePermission } from 'src/common/auth/require-permission.decorator';
 import { hasPermission } from 'src/common/auth/permissions.constants';
 import { Roles } from 'src/common/auth/roles.decorator';
-import { UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
+import { UserRole } from 'src/iam/domains/enums/user.enum';
 
 @ApiTags('Reservations (Pré-investissement)')
 @ApiBearerAuth()

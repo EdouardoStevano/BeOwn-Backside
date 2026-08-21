@@ -11,7 +11,7 @@ import {
   type ChargeRepository,
 } from '../ports/repositories/charge.repository';
 import { AuditLogService } from 'src/notifications/applications/audit-log.service';
-import { UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
+import { UserRole } from 'src/iam/domains/enums/user.enum';
 
 @Injectable()
 export class ValidateChargeUseCase {

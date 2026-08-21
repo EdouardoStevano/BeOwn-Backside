@@ -10,7 +10,7 @@ import { OrdreMarcheEntity } from 'src/secondarymarket/infrastructure/persistenc
 import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/wallet.entity';
 import { OrdreMarcheStatus } from 'src/secondarymarket/domains/ordre-marche';
 import { WalletType } from 'src/wallets/domains/enums/wallet.enum';
-import { formatEur } from 'src/common/money/format-eur';
+import { formatEur } from 'src/shared/money/format-eur';
 import {
   MENTION_NON_SYSTEME_DE_NEGOCIATION,
   verifierInteret,

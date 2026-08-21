@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import PDFDocument from 'pdfkit';
 import { Investment } from 'src/investments/domains/investment';
-import { formatEur } from 'src/common/money/format-eur';
+import { formatEur } from 'src/shared/money/format-eur';
 
 export interface ContratRachatData {
   ordreId: string;

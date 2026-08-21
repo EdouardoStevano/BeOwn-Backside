@@ -4,7 +4,7 @@ import {
   Inject,
   Injectable,
 } from '@nestjs/common';
-import { formatEur } from 'src/common/money/format-eur';
+import { formatEur } from 'src/shared/money/format-eur';
 import {
   PLAFOND_PORTEUR_12_MOIS_EUR,
   debutFenetreGlissante,

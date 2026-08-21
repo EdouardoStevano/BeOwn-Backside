@@ -5,8 +5,11 @@ import { PROFIL_REPOSITORY } from '../ports/repositories/profil.repository';
 import type { ProfilRepository } from '../ports/repositories/profil.repository';
 import { CreateProfilPPDto } from 'src/profiles/presenters/dto/profil.dto';
 import { ProfilPP } from 'src/profiles/domains/profil-pp';
+// Chemin d'entité : version distante (src/users a été absorbé par iam).
+// Enum de catégorie : `CategorieInvestisseur` du domaine PSFP (lot conformité),
+// seule valeur utilisée par ce use case.
 import { CategorieInvestisseur } from 'src/profiles/domains/investor-classification';
-import { UserEntity } from 'src/users/infrastructure/persistences/entities/user.entity';
+import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 
 @Injectable()
 export class CreateProfilPPUseCase {

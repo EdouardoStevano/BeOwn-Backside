@@ -1,8 +1,9 @@
-import { UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
+import { UserRole } from 'src/iam/domains/enums/user.enum';
 import {
   hasPermission,
   rolesWithPermission,
   ROLE_PERMISSIONS,
+  type Permission,
 } from './permissions.constants';
 
 describe('permissions.constants', () => {
@@ -103,7 +104,7 @@ describe('permissions.constants', () => {
         .filter((p) => p[0] !== '*')
         .flat(),
     );
-    const wildcardOnly = [
+    const wildcardOnly: Permission[] = [
       'roles:assign',
       'projects:validate',
       'echeancier:pay',

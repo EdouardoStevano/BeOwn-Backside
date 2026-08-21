@@ -1,6 +1,6 @@
 import { ValidateChargeUseCase } from './validate-charge.usecase';
 import { StatutDeclaration } from '../../domains/enums/statut-declaration.enum';
-import { UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
+import { UserRole } from 'src/iam/domains/enums/user.enum';
 
 describe('ValidateChargeUseCase', () => {
   let useCase: ValidateChargeUseCase;

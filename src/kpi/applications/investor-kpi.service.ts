@@ -3,7 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Not, Repository } from 'typeorm';
 import { InvestmentEntity } from 'src/investments/infrastructure/persistences/entities/investment.entity';
 import { EcheanceEntity } from 'src/investments/infrastructure/persistences/entities/echeance.entity';
-import { UserEntity } from 'src/users/infrastructure/persistences/entities/user.entity';
+import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 import { InvestmentStatus } from 'src/investments/domains/enums/investment-status.enum';
 import {
   computeIrr,

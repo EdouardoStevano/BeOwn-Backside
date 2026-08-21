@@ -16,7 +16,7 @@ export const KYC_NOT_VALIDATED_CODE = 'KYC_NOT_VALIDATED';
 
 /** Message affiché au front — contrat fixe, ne pas varier selon la cause du refus. */
 export const KYC_NOT_VALIDATED_MESSAGE =
-  'Profil non validé — complétez votre vérification d\'identité.';
+  "Profil non validé — complétez votre vérification d'identité.";
 
 const kycNotValidatedException = (): ForbiddenException =>
   new ForbiddenException({

@@ -32,10 +32,10 @@ import type { ActiveUser } from 'src/common/auth/current-user.decorator';
 import {
   EMAIL_SERVICE,
   type EmailService,
-} from 'src/common/email/email.service';
-import { EmailTemplateService } from 'src/common/email/email-template.service';
-import { EmailTemplateEntity } from 'src/common/email/entities/email-template.entity';
-import { UserEntity } from 'src/users/infrastructure/persistences/entities/user.entity';
+} from 'src/shared/email/email.service';
+import { EmailTemplateService } from 'src/shared/email/email-template.service';
+import { EmailTemplateEntity } from 'src/shared/email/entities/email-template.entity';
+import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 import {
   EMAIL_TEMPLATE_SAMPLES,
   TRIGGER_EVENTS,

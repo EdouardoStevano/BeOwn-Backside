@@ -3,7 +3,7 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { InvestorKpiService } from './investor-kpi.service';
 import { InvestmentEntity } from 'src/investments/infrastructure/persistences/entities/investment.entity';
 import { EcheanceEntity } from 'src/investments/infrastructure/persistences/entities/echeance.entity';
-import { UserEntity } from 'src/users/infrastructure/persistences/entities/user.entity';
+import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 import { EcheanceStatus, InvestmentStatus } from 'src/investments/domains/enums/investment-status.enum';
 
 describe('InvestorKpiService', () => {

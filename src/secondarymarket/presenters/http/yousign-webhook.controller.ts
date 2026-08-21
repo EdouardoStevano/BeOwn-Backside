@@ -27,7 +27,7 @@ import { InvestmentStatus, EcheanceStatus } from 'src/investments/domains/enums/
 import { OrdreMarcheStatus } from 'src/secondarymarket/domains/ordre-marche';
 import { PlatformFeesService } from 'src/common/platform-fees/platform-fees.service';
 import { round2 } from 'src/common/platform-fees/platform-fees.constants';
-import { formatEur } from 'src/common/money/format-eur';
+import { formatEur } from 'src/shared/money/format-eur';
 import { computeCoutAcquisition } from 'src/secondarymarket/domains/cout-acquisition';
 import {
   TransactionFournisseur,
@@ -37,13 +37,13 @@ import {
 } from 'src/wallets/domains/enums/wallet.enum';
 import { ProjectStatus } from 'src/projects/domains/enums/project-status.enum';
 import { YouSignService } from 'src/common/yousign/yousign.service';
-import { CloudStorageService } from 'src/common/cloud-storage/cloud-storage.service';
+import { CloudStorageService } from 'src/shared/cloud-storage/cloud-storage.service';
 import { NotificationService } from 'src/notifications/applications/notification.service';
 import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
-import { UserRole } from 'src/users/infrastructure/persistences/entities/user.entity';
+import { UserRole } from 'src/iam/domains/enums/user.enum';
 import { NotificationEventService } from 'src/notifications/applications/notification-event.service';
-import type { UserRepository } from 'src/users/applications/ports/repositories/user.repository';
-import { USER_REPOSITORY } from 'src/users/applications/ports/repositories/user.repository';
+import type { UserRepository } from 'src/iam/domains/ports/user.repository';
+import { USER_REPOSITORY } from 'src/iam/domains/ports/user.repository';
 import { MetricsPort } from 'src/observability/metrics/metrics.port';
 import { METRIC } from 'src/observability/metrics/metric-names';
 

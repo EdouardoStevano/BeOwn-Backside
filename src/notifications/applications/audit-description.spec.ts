@@ -2,9 +2,9 @@ import { describeAuditAction } from './audit-description';
 
 describe('describeAuditAction', () => {
   it('libellé métier connu (approve retrait)', () => {
-    expect(describeAuditAction('POST /admin/retraits/12/approve', 'retraits')).toBe(
-      "Approbation d'un retrait",
-    );
+    expect(
+      describeAuditAction('POST /admin/retraits/12/approve', 'retraits'),
+    ).toBe("Approbation d'un retrait");
   });
   it('création projet', () => {
     expect(describeAuditAction('POST /admin/projects', 'projects')).toBe(

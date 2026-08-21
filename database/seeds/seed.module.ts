@@ -1,12 +1,9 @@
 ﻿import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule } from '@nestjs/config';
-import { UserEntity } from 'src/users/infrastructure/persistences/entities/user.entity';
-import { UserEmailEntity } from 'src/users/infrastructure/persistences/entities/user-email.entity';
-import { TFAMethodEntity } from 'src/users/infrastructure/persistences/entities/tfa-method.entity';
-import { EmailMethodEntity } from 'src/users/infrastructure/persistences/entities/email-method.entity';
-import { SMSMethodEntity } from 'src/users/infrastructure/persistences/entities/sms-method.entity';
-import { TOTPMethodEntity } from 'src/users/infrastructure/persistences/entities/totp-method.entity';
+import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
+import { UserEmailEntity } from 'src/iam/infrastructure/persistence/entities/user-email.entity';
+import { MfaMethodEntity } from 'src/iam/infrastructure/persistence/entities/mfa-method.entity';
 import { SpvEntity } from 'src/projects/infrastructure/persistences/entities/spv.entity';
 import { ProjectEntity } from 'src/projects/infrastructure/persistences/entities/project.entity';
 import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/wallet.entity';
@@ -34,10 +31,7 @@ import { SeedService } from './seed.service';
 const SEED_ENTITIES = [
   UserEntity,
   UserEmailEntity,
-  TFAMethodEntity,
-  EmailMethodEntity,
-  SMSMethodEntity,
-  TOTPMethodEntity,
+  MfaMethodEntity,
   SpvEntity,
   ProjectEntity,
   WalletEntity,

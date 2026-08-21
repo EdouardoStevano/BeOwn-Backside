@@ -7,7 +7,7 @@ import {
   PrimaryColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { UserEntity } from 'src/users/infrastructure/persistences/entities/user.entity';
+import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 import { CategorieInvestisseur } from 'src/profiles/domains/investor-classification';
 import { LienAvecPrestataire } from 'src/projects/domains/conflits-interets';
 

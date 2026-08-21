@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { LocativeManagementInfrastructureModule } from '../infrastructure/locative-management-infrastructure.module';
 import { NotificationsModule } from 'src/notifications/notifications.module';
-import { CloudStorageModule } from 'src/common/cloud-storage/cloud-storage.module';
+import { CloudStorageModule } from 'src/shared/cloud-storage/cloud-storage.module';
 import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructure.module';
 import { ProjectsInfrastructureModule } from 'src/projects/infrastructure/projects-infrastructure.module';
 import { AddUniteLouableUseCase } from './usecases/add-unite-louable.usecase';

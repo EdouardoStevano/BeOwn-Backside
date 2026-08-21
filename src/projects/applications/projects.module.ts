@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { UserEntity } from 'src/users/infrastructure/persistences/entities/user.entity';
+import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 import { ProfilPPEntity } from 'src/profiles/infrastructure/persistences/entities/profil-pp.entity';
 import { ConflitsInteretsService } from './conflits-interets.service';
 import { TypeOrmModule } from '@nestjs/typeorm';
