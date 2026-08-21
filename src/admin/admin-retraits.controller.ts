@@ -19,9 +19,9 @@ import { CurrentUser } from 'src/iam/presentation/decorators/current-user.decora
 import type { ActiveUser } from 'src/iam/presentation/decorators/current-user.decorator';
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 import { UserRole } from 'src/iam/domain/enums/user.enum';
-import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entities/transaction.entity';
-import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/wallet.entity';
-import { TransactionStatus, TransactionType } from 'src/wallets/domains/enums/wallet.enum';
+import { TransactionEntity } from 'src/treasury/infrastructure/persistence/entities/transaction.entity';
+import { WalletEntity } from 'src/treasury/infrastructure/persistence/entities/wallet.entity';
+import { TransactionStatus, TransactionType } from 'src/treasury/domain/enums/wallet.enum';
 import { NotificationEventService } from 'src/notifications/applications/notification-event.service';
 import { AuditLogService } from 'src/notifications/applications/audit-log.service';
 

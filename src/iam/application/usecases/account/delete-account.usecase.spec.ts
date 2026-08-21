@@ -11,9 +11,9 @@ import { OrdreMarcheStatus } from 'src/secondarymarket/domains/ordre-marche';
 import {
   TransactionStatus,
   TransactionType,
-} from 'src/wallets/domains/enums/wallet.enum';
-import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/wallet.entity';
-import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entities/transaction.entity';
+} from 'src/treasury/domain/enums/wallet.enum';
+import { WalletEntity } from 'src/treasury/infrastructure/persistence/entities/wallet.entity';
+import { TransactionEntity } from 'src/treasury/infrastructure/persistence/entities/transaction.entity';
 
 /**
  * Chaque bloqueur est isolé puis combiné. Les repos sont mockés — on vérifie

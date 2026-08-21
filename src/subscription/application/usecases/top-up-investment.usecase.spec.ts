@@ -1,8 +1,8 @@
 import { TopUpInvestmentUseCase } from './top-up-investment.usecase';
 import { InvestmentEntity } from 'src/subscription/infrastructure/persistence/entities/investment.entity';
 import { EcheanceEntity } from 'src/subscription/infrastructure/persistence/entities/echeance.entity';
-import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/wallet.entity';
-import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entities/transaction.entity';
+import { WalletEntity } from 'src/treasury/infrastructure/persistence/entities/wallet.entity';
+import { TransactionEntity } from 'src/treasury/infrastructure/persistence/entities/transaction.entity';
 import { ProjectEntity } from 'src/catalog/infrastructure/persistence/entities/project.entity';
 import { Investment } from 'src/subscription/domain/aggregates/investment';
 import { InvestmentStatus } from 'src/subscription/domain/enums/investment-status.enum';
@@ -101,7 +101,7 @@ describe('TopUpInvestmentUseCase — atomicité', () => {
       findProjectById: jest.fn().mockResolvedValue(baseProject()),
     };
     walletRepository = {
-      findWalletByUser: jest
+      findByUser: jest
         .fn()
         .mockResolvedValue({ id: 'w1', solde: 1000, devise: 'EUR' }),
     };

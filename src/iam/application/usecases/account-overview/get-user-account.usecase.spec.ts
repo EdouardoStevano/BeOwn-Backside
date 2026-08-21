@@ -7,7 +7,7 @@ import {
 import { buildUser } from 'src/iam/domain/aggregates/user.fixture';
 import type { UserRepository } from 'src/iam/domain/repositories/user.repository';
 import type { KycRepository } from 'src/compliance/domain/repositories/kyc.repository';
-import type { WalletRepository } from 'src/wallets/applications/ports/repositories/wallet.repository';
+import type { WalletRepository } from 'src/treasury/domain/repositories/wallet.repository';
 
 const CIBLE = 7;
 const APPELANT = 42;
@@ -27,7 +27,7 @@ function monter(roleAppelant: UserRole = UserRole.INVESTISSEUR) {
   const useCase = new GetUserAccountUseCase(
     { findById: mocks.findById } as unknown as UserRepository,
     { findByUserId: mocks.findKyc } as unknown as KycRepository,
-    { findWalletByUser: mocks.findWallet } as unknown as WalletRepository,
+    { findByUser: mocks.findWallet } as unknown as WalletRepository,
   );
 
   return { useCase, mocks };

@@ -11,14 +11,14 @@ import { OrdreMarcheEntity } from 'src/secondarymarket/infrastructure/persistenc
 import { InvestmentEntity } from 'src/subscription/infrastructure/persistence/entities/investment.entity';
 import { DocumentEntity } from 'src/documents/infrastructure/persistences/entities/document.entity';
 import { SignatureEntity } from 'src/signatures/infrastructure/persistences/entities/signature.entity';
-import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/wallet.entity';
+import { WalletEntity } from 'src/treasury/infrastructure/persistence/entities/wallet.entity';
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 import { UserEmailEntity } from 'src/iam/infrastructure/persistence/entities/user-email.entity';
 import { OrdreMarcheStatus } from 'src/secondarymarket/domains/ordre-marche';
 import { InvestmentStatus } from 'src/subscription/domain/enums/investment-status.enum';
 import { DocumentType, DocumentRelatedTo } from 'src/documents/domains/enums/document-type.enum';
 import { SignatureStatus } from 'src/signatures/domains/enums/signature-status.enum';
-import { WalletType } from 'src/wallets/domains/enums/wallet.enum';
+import { WalletType } from 'src/treasury/domain/enums/wallet.enum';
 import { CloudStorageService } from 'src/shared/cloud-storage/cloud-storage.service';
 import { ContractGeneratorService } from 'src/subscription/application/services/contract-generator.service';
 import { YouSignService } from 'src/common/yousign/yousign.service';

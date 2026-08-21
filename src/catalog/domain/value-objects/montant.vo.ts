@@ -9,7 +9,7 @@
  * Une fonction et non une classe `Money` : les montants circulent ici en
  * `number` de bout en bout, jusqu'aux colonnes `decimal(18,2)`. Introduire un
  * Value Object monétaire complet obligerait à convertir aux frontières de
- * quatre autres contextes (Wallets, Investments, Distributions, Payments) —
+ * quatre autres contextes (Treasury, Subscription, Distributions, Servicing) —
  * c'est un chantier en soi, pas un effet de bord de celui-ci.
  */
 export function arrondirAuCentime(montant: number): number {

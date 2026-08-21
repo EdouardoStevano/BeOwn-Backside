@@ -7,8 +7,8 @@ import { SubscriptionInfrastructureModule } from 'src/subscription/infrastructur
 import { NotificationsModule } from 'src/notifications/notifications.module';
 import { AmlModule } from 'src/common/aml/aml.module';
 import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructure.module';
-import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/wallet.entity';
-import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entities/transaction.entity';
+import { WalletEntity } from 'src/treasury/infrastructure/persistence/entities/wallet.entity';
+import { TransactionEntity } from 'src/treasury/infrastructure/persistence/entities/transaction.entity';
 import { CalculateDistributionPeriodeUseCase } from './usecases/calculate-distribution-periode.usecase';
 import { ValidatePeriodeDistributionUseCase } from './usecases/validate-periode-distribution.usecase';
 import { ExecuteDistributionUseCase } from './usecases/execute-distribution.usecase';

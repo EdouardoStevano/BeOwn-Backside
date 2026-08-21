@@ -3,9 +3,9 @@ import { SignatureEntity } from 'src/signatures/infrastructure/persistences/enti
 import { SignatureStatus } from 'src/signatures/domains/enums/signature-status.enum';
 import { InvestmentEntity } from 'src/subscription/infrastructure/persistence/entities/investment.entity';
 import { ProjectEntity } from 'src/catalog/infrastructure/persistence/entities/project.entity';
-import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/wallet.entity';
+import { WalletEntity } from 'src/treasury/infrastructure/persistence/entities/wallet.entity';
 import { InvestmentStatus } from 'src/subscription/domain/enums/investment-status.enum';
-import { WalletType } from 'src/wallets/domains/enums/wallet.enum';
+import { WalletType } from 'src/treasury/domain/enums/wallet.enum';
 
 /**
  * Régression sécurité (fix paiements) : la signature n'est marquée SIGNED

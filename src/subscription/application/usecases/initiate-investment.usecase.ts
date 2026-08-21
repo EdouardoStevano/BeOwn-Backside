@@ -8,8 +8,8 @@ import type { ProjectRepository } from 'src/catalog/domain/repositories/project.
 import { PROJECT_REPOSITORY } from 'src/catalog/domain/repositories/project.repository';
 import type { InvestmentRepository } from '../../domain/repositories/investment.repository';
 import { INVESTMENT_REPOSITORY } from '../../domain/repositories/investment.repository';
-import type { WalletRepository } from 'src/wallets/applications/ports/repositories/wallet.repository';
-import { WALLET_REPOSITORY } from 'src/wallets/applications/ports/repositories/wallet.repository';
+import type { WalletRepository } from 'src/treasury/domain/repositories/wallet.repository';
+import { WALLET_REPOSITORY } from 'src/treasury/domain/repositories/wallet.repository';
 import type { DocumentRepository } from 'src/documents/applications/ports/repositories/document.repository';
 import { DOCUMENT_REPOSITORY } from 'src/documents/applications/ports/repositories/document.repository';
 import type { UserRepository } from 'src/iam/domain/repositories/user.repository';
@@ -27,7 +27,7 @@ import {
   DocumentRelatedTo,
 } from 'src/documents/domains/enums/document-type.enum';
 import { SignatureStatus } from 'src/signatures/domains/enums/signature-status.enum';
-import { WalletType } from 'src/wallets/domains/enums/wallet.enum';
+import { WalletType } from 'src/treasury/domain/enums/wallet.enum';
 import { CloudStorageService } from 'src/shared/cloud-storage/cloud-storage.service';
 import { ContractGeneratorService } from '../services/contract-generator.service';
 import { YouSignService } from 'src/common/yousign/yousign.service';
@@ -116,7 +116,7 @@ export class InitiateInvestmentUseCase {
     );
 
     // Le solde est vérifié sans être débité : le débit suit la signature.
-    const wallet = await this.walletRepository.findWalletByUser(
+    const wallet = await this.walletRepository.findByUser(
       userId,
       WalletType.INVESTISSEUR,
     );

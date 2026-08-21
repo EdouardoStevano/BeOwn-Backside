@@ -4,8 +4,8 @@ import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import { InvestmentEntity } from 'src/subscription/infrastructure/persistence/entities/investment.entity';
 import { InvestmentOrmMapper } from 'src/subscription/infrastructure/persistence/mappers/investment.orm-mapper';
-import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/wallet.entity';
-import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entities/transaction.entity';
+import { WalletEntity } from 'src/treasury/infrastructure/persistence/entities/wallet.entity';
+import { TransactionEntity } from 'src/treasury/infrastructure/persistence/entities/transaction.entity';
 import { InvestmentStatus } from 'src/subscription/domain/enums/investment-status.enum';
 import { InvestissementRetracteDomainEvent } from 'src/subscription/domain/events/investissement-retracte.domain-event';
 import {
@@ -18,7 +18,7 @@ import {
   TransactionStatus,
   TransactionType,
   WalletType,
-} from 'src/wallets/domains/enums/wallet.enum';
+} from 'src/treasury/domain/enums/wallet.enum';
 
 /**
  * **Se rétracter** — l'investisseur non-averti exerce son droit de

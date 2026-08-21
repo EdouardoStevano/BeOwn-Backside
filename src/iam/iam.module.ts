@@ -34,7 +34,7 @@ import { UsersModule } from './application/users.module';
   ],
   // Traduit les erreurs de domaine IAM en réponses HTTP. Enregistré via
   // APP_FILTER donc actif sur toute l'application : un use case IAM appelé
-  // depuis AdminModule ou PaymentsModule doit produire la même réponse.
+  // depuis AdminModule ou TreasuryModule doit produire la même réponse.
   // `@Catch(IamError)` limite sa portée au vocabulaire du domaine.
   providers: [{ provide: APP_FILTER, useClass: IamErrorFilter }],
   exports: [IamInfrastructureModule],

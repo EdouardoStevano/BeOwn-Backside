@@ -19,8 +19,8 @@ import { NotificationEntity } from 'src/notifications/infrastructure/persistence
 import { InvestorInactivityCronService } from 'src/iam/application/services/investor-inactivity-cron.service';
 import { InvestmentEntity } from 'src/subscription/infrastructure/persistence/entities/investment.entity';
 import { OrdreMarcheEntity } from 'src/secondarymarket/infrastructure/persistences/entities/ordre-marche.entity';
-import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/wallet.entity';
-import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entities/transaction.entity';
+import { WalletEntity } from 'src/treasury/infrastructure/persistence/entities/wallet.entity';
+import { TransactionEntity } from 'src/treasury/infrastructure/persistence/entities/transaction.entity';
 
 /**
  * Feature « compte utilisateur » du Bounded Context IAM — au même rang
@@ -45,7 +45,7 @@ import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entit
     // Fournit `TokenService` au JwtAuthGuard que `UserController` monte via
     // @UseGuards.
     IamInfrastructureModule,
-    // Profiles, Preferences, Documents et Wallets étaient importés ici pour la
+    // Profiles, Preferences, Documents et Treasury étaient importés ici pour la
     // seule composition de `GET /users/me` et `GET /users/:id`. Ces deux
     // lectures sont parties dans `AccountOverviewModule`, et avec elles les
     // quatre arêtes qui faisaient dépendre IAM — le contexte dont tous les

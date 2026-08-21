@@ -8,7 +8,7 @@ import { ProfilesModule } from 'src/compliance/application/profiles.module';
 import { KycInfrastructureModule } from 'src/compliance/infrastructure/kyc-infrastructure.module';
 import { PreferencesModule } from 'src/iam/application/preferences.module';
 import { DocumentsInfrastructureModule } from 'src/documents/infrastructure/documents-infrastructure.module';
-import { WalletsInfrastructureModule } from 'src/wallets/infrastructure/wallets-infrastructure.module';
+import { TreasuryInfrastructureModule } from 'src/treasury/infrastructure/treasury-infrastructure.module';
 
 /**
  * Module de **composition** : il assemble ce que plusieurs Bounded Contexts
@@ -19,7 +19,7 @@ import { WalletsInfrastructureModule } from 'src/wallets/infrastructure/wallets-
  * importé**. Aucun autre module ne dépend de lui, donc aucune arête ne peut
  * revenir vers ses dépendances. C'est ce qui casse le cycle `iam ↔ profiles` —
  * IAM redevient le contexte purement amont qu'il doit être, et KYC, Documents
- * et Wallets continuent de dépendre d'IAM dans le seul sens légitime.
+ * et Treasury continuent de dépendre d'IAM dans le seul sens légitime.
  *
  * Il vit désormais dans `src/iam/` — les deux routes qu'il sert, `GET /users/me`
  * et `GET /users/:id`, lisent le compte — mais **reste un module Nest distinct**,
@@ -47,7 +47,7 @@ import { WalletsInfrastructureModule } from 'src/wallets/infrastructure/wallets-
     // `GetPreferencesUseCase` — les réglages publiés à côté du compte.
     PreferencesModule,
     DocumentsInfrastructureModule,
-    WalletsInfrastructureModule,
+    TreasuryInfrastructureModule,
   ],
   providers: [GetMyAccountUseCase, GetUserAccountUseCase],
   controllers: [AccountOverviewController],

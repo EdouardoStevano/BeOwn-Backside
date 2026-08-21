@@ -12,11 +12,11 @@ import {
   KYC_REPOSITORY,
   type KycRepository,
 } from 'src/compliance/domain/repositories/kyc.repository';
-import { WalletType } from 'src/wallets/domains/enums/wallet.enum';
+import { WalletType } from 'src/treasury/domain/enums/wallet.enum';
 import {
   WALLET_REPOSITORY,
   type WalletRepository,
-} from 'src/wallets/applications/ports/repositories/wallet.repository';
+} from 'src/treasury/domain/repositories/wallet.repository';
 
 /** Rôles détenant `users:read` — back-office, consultation d'un compte tiers. */
 const ROLES_LECTURE: string[] = rolesWithPermission('users:read');
@@ -33,7 +33,7 @@ const ROLES_LECTURE: string[] = rolesWithPermission('users:read');
  *
  * Comme `GetMyAccountUseCase`, il vit dans ce module de composition et non dans
  * IAM : il assemble le compte avec le dossier KYC (Profiles) et le portefeuille
- * (Wallets), deux contextes qui dépendent déjà d'IAM. L'y laisser refermait le
+ * (Treasury), deux contextes qui dépendent déjà d'IAM. L'y laisser refermait le
  * cycle.
  */
 @Injectable()
@@ -58,7 +58,7 @@ export class GetUserAccountUseCase {
     const [kyc, wallet] = await Promise.all([
       this.kycRepository.findByUserId(cible).catch(() => null),
       this.walletRepository
-        .findWalletByUser(cible, WalletType.INVESTISSEUR)
+        .findByUser(cible, WalletType.INVESTISSEUR)
         .catch(() => null),
     ]);
 

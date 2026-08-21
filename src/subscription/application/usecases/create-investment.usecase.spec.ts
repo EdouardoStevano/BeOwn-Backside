@@ -1,7 +1,7 @@
 import { CreateInvestmentUseCase } from './create-investment.usecase';
 import { InvestmentEntity } from 'src/subscription/infrastructure/persistence/entities/investment.entity';
-import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/wallet.entity';
-import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entities/transaction.entity';
+import { WalletEntity } from 'src/treasury/infrastructure/persistence/entities/wallet.entity';
+import { TransactionEntity } from 'src/treasury/infrastructure/persistence/entities/transaction.entity';
 import { ProjectEntity } from 'src/catalog/infrastructure/persistence/entities/project.entity';
 import { ProjectStatus } from 'src/catalog/domain/enums/project-status.enum';
 import { InvestmentStatus } from 'src/subscription/domain/enums/investment-status.enum';
@@ -29,6 +29,7 @@ describe('CreateInvestmentUseCase — atomicité', () => {
   let investmentRepository: any;
   let projectRepository: any;
   let walletRepository: any;
+  let transactionRepository: any;
   let documentRepository: any;
   let userRepository: any;
   let profilPPRepository: any;
@@ -79,10 +80,12 @@ describe('CreateInvestmentUseCase — atomicité', () => {
       findProjectById: jest.fn().mockResolvedValue(baseProject()),
     };
     walletRepository = {
-      findTransactionByIdempotencyKey: jest.fn().mockResolvedValue(null),
-      findWalletByUser: jest
+      findByUser: jest
         .fn()
         .mockResolvedValue({ id: 'w1', solde: 1000, devise: 'EUR' }),
+    };
+    transactionRepository = {
+      findByIdempotencyKey: jest.fn().mockResolvedValue(null),
     };
     documentRepository = { save: jest.fn().mockResolvedValue({ id: 'd1' }) };
     userRepository = {
@@ -134,6 +137,7 @@ describe('CreateInvestmentUseCase — atomicité', () => {
       investmentRepository,
       projectRepository,
       walletRepository,
+      transactionRepository,
       documentRepository,
       userRepository,
       profilPPRepository,
@@ -233,7 +237,7 @@ describe('CreateInvestmentUseCase — atomicité', () => {
 
   it('retry idempotent : une requête déjà traitée renvoie l’investissement sans entrer dans la transaction', async () => {
     const idemDto = { ...dto, idempotencyKey: 'abc' };
-    walletRepository.findTransactionByIdempotencyKey.mockResolvedValue({
+    transactionRepository.findByIdempotencyKey.mockResolvedValue({
       investissementId: 'inv-existing',
     });
     investmentRepository.findById.mockResolvedValue({ id: 'inv-existing' });

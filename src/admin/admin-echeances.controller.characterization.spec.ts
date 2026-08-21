@@ -13,7 +13,7 @@ import {
   TransactionStatus,
   TransactionType,
   WalletType,
-} from 'src/wallets/domains/enums/wallet.enum';
+} from 'src/treasury/domain/enums/wallet.enum';
 
 /**
  * Tests de CARACTÉRISATION de AdminEcheancesController (audit SOLID vague 4).

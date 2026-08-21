@@ -11,7 +11,7 @@ import {
   KycLegacyPaymentsController,
   KycLegacyProfilesController,
 } from '../http/kyc-legacy.controller';
-import { PaymentController } from 'src/payments/presenters/http/payment.controller';
+import { PaymentController } from 'src/treasury/presentation/http/payment.controller';
 import { InvestmentController } from 'src/subscription/presentation/http/investment.controller';
 import { SecondaryMarketController } from 'src/secondarymarket/presenters/http/secondary-market.controller';
 

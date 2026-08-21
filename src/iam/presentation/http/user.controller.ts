@@ -44,7 +44,7 @@ export class DeleteAccountDto {
  * Le compte, vu par son titulaire et par l'administration.
  *
  * **Ce contrôleur ne connaît plus que des use cases.** Il se faisait injecter
- * six repositories — dont ceux des contextes Profiles, Documents et Wallets —
+ * six repositories — dont ceux des contextes Profiles, Documents et Treasury —
  * plus le service de hachage et celui des notifications : la présentation
  * dialoguait directement avec des adapters de sortie appartenant à d'autres
  * modules, alors que ces deux couches sont parallèles et ne communiquent que

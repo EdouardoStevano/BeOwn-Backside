@@ -19,8 +19,7 @@ import { ComplianceModule } from './compliance/compliance.module';
 import { CatalogModule } from './catalog/catalog.module';
 import { ReservationModule } from './reservation/reservation.module';
 import { SubscriptionModule } from './subscription/subscription.module';
-import { WalletsModule } from './wallets/applications/wallets.module';
-import { PaymentsModule } from './payments/payments.module';
+import { TreasuryModule } from './treasury/treasury.module';
 import { SecondaryMarketModule } from './secondarymarket/applications/secondary-market.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { PreferencesModule } from 'src/iam/application/preferences.module';
@@ -98,14 +97,13 @@ function requireEnv(name: string): string {
     CatalogModule,
     ReservationModule,
     SubscriptionModule,
-    WalletsModule,
-    PaymentsModule,
+    TreasuryModule,
     SecondaryMarketModule,
     NotificationsModule,
     PreferencesModule,
     DocumentsModule,
     // Module de composition, monté après les contextes qu'il assemble (IAM,
-    // Profiles, Preferences, Documents, Wallets) : il en dépend tous, et aucun
+    // Profiles, Preferences, Documents, Treasury) : il en dépend tous, et aucun
     // ne dépend de lui. Sert `GET /users/me` et `GET /users/:id`.
     AccountOverviewModule,
     AvisModule,
