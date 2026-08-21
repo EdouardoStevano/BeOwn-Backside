@@ -74,14 +74,23 @@ describe('PayEcheanceUseCase (atomique — H-C)', () => {
   let dataSource: any;
   let notificationEvents: any;
   let auditLog: any;
+  let eventBus: any;
   let em: any;
 
   const makeUseCase = (mockEm: any) => {
     em = mockEm;
     dataSource = { transaction: jest.fn(async (cb: any) => cb(mockEm)) };
-    notificationEvents = { echeancePaid: jest.fn().mockResolvedValue(undefined) };
+    notificationEvents = {
+      echeancePaid: jest.fn().mockResolvedValue(undefined),
+    };
     auditLog = { create: jest.fn().mockResolvedValue(undefined) };
-    return new PayEcheanceUseCase(dataSource, notificationEvents, auditLog);
+    eventBus = { publish: jest.fn() };
+    return new PayEcheanceUseCase(
+      dataSource,
+      notificationEvents,
+      auditLog,
+      eventBus,
+    );
   };
 
   it('crédite le net (après PFU 30%), stocke les prélèvements et passe PAYE', async () => {
@@ -98,8 +107,8 @@ describe('PayEcheanceUseCase (atomique — H-C)', () => {
     };
     em = createMockEm(echeance, [
       { id: 'w1', solde: 100000, devise: 'EUR' }, // investisseur
-      { id: 'wIR', solde: 0, devise: 'EUR' },      // SEQUESTRE_IR existant
-      { id: 'wCSG', solde: 0, devise: 'EUR' },     // SEQUESTRE_CSG existant
+      { id: 'wIR', solde: 0, devise: 'EUR' }, // SEQUESTRE_IR existant
+      { id: 'wCSG', solde: 0, devise: 'EUR' }, // SEQUESTRE_CSG existant
     ]);
     useCase = makeUseCase(em);
 
@@ -117,13 +126,20 @@ describe('PayEcheanceUseCase (atomique — H-C)', () => {
     expect(em._amountParams).toEqual([47000, 1280, 1720]);
     // 3. Trois traces ledger idempotency-keyées
     const keys = em._savedTx.map((t: any) => t.idempotencyKey).sort();
-    expect(keys).toEqual(['echeance:csg:e1', 'echeance:ir:e1', 'echeance:pay:e1']);
+    expect(keys).toEqual([
+      'echeance:csg:e1',
+      'echeance:ir:e1',
+      'echeance:pay:e1',
+    ]);
     // 4. Entité renvoyée reflète l'état payé
     expect(result.statut).toBe(EcheanceStatus.PAYE);
     expect(result.prelevementIR).toBe(1280);
     expect(result.prelevementCSG).toBe(1720);
     // 5. Effets de bord après commit
-    expect(notificationEvents.echeancePaid).toHaveBeenCalledWith(echeance, project);
+    expect(notificationEvents.echeancePaid).toHaveBeenCalledWith(
+      echeance,
+      project,
+    );
     expect(auditLog.create).toHaveBeenCalledWith(
       '1',
       UserRole.SUPER_ADMIN,
@@ -136,7 +152,7 @@ describe('PayEcheanceUseCase (atomique — H-C)', () => {
     );
   });
 
-  it('crée les wallets séquestres IR/CSG quand ils n\'existent pas encore', async () => {
+  it("crée les wallets séquestres IR/CSG quand ils n'existent pas encore", async () => {
     const project = { id: 'p2', titre: 'Test' };
     const echeance: any = {
       id: 'e2',
@@ -163,7 +179,7 @@ describe('PayEcheanceUseCase (atomique — H-C)', () => {
     );
   });
 
-  it('rejette si l\'échéance est déjà PAYE (statut non payable)', async () => {
+  it("rejette si l'échéance est déjà PAYE (statut non payable)", async () => {
     em = createMockEm({ id: 'e1', statut: EcheanceStatus.PAYE }, []);
     useCase = makeUseCase(em);
     await expect(useCase.execute('e1', 1)).rejects.toThrow();
@@ -176,7 +192,11 @@ describe('PayEcheanceUseCase (atomique — H-C)', () => {
       montantTotal: 20000,
       montantInterets: 4000,
       investissementId: 'i4',
-      investissement: { utilisateurId: 9, projet: { id: 'p4' }, projetId: 'p4' },
+      investissement: {
+        utilisateurId: 9,
+        projet: { id: 'p4' },
+        projetId: 'p4',
+      },
     };
     em = createMockEm(
       echeance,
@@ -190,7 +210,7 @@ describe('PayEcheanceUseCase (atomique — H-C)', () => {
     expect(em._savedTx).toEqual([]);
   });
 
-  it('audite avec le rôle réel de l\'acteur quand adminRole est fourni', async () => {
+  it("audite avec le rôle réel de l'acteur quand adminRole est fourni", async () => {
     const project = { id: 'p3', titre: 'Cottage' };
     const echeance: any = {
       id: 'e3',

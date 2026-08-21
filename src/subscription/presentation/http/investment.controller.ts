@@ -11,7 +11,6 @@ import {
   HttpCode,
   HttpStatus,
   Inject,
-  NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -26,9 +25,11 @@ import { IsInt, IsPositive, IsUUID } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { CreateInvestmentUseCase } from 'src/subscription/application/usecases/create-investment.usecase';
 import { InitiateInvestmentUseCase } from 'src/subscription/application/usecases/initiate-investment.usecase';
-import { CancelInvestmentUseCase } from 'src/subscription/application/usecases/cancel-investment.usecase';
+import { RetractInvestmentUseCase } from 'src/subscription/application/usecases/retract-investment.usecase';
 import type { InvestmentRepository } from 'src/subscription/domain/repositories/investment.repository';
 import { INVESTMENT_REPOSITORY } from 'src/subscription/domain/repositories/investment.repository';
+import type { InvestmentSnapshot } from 'src/subscription/domain/aggregates/investment';
+import { InvestissementIntrouvableError } from 'src/subscription/domain/errors/subscription.errors';
 import {
   CreateInvestmentDto,
   TopUpDto,
@@ -59,6 +60,15 @@ class InitiateInvestmentDto {
   nbFractions: number;
 }
 
+/**
+ * Routes de la souscription. Le contrôleur ne parle qu'aux use cases et rend
+ * des snapshots — mêmes clés JSON que l'ancien modèle anémique qu'il
+ * sérialisait tel quel. Les erreurs métier remontent telles quelles :
+ * `SubscriptionErrorFilter` les traduit (§21).
+ *
+ * Le RBAC (`Roles`, `RequirePermission`, `KycValidatedGuard`) reste ici : c'est
+ * de la composition d'accès, pas une règle du domaine (§3.3).
+ */
 @SkipThrottle()
 @ApiTags('Investments')
 @ApiBearerAuth()
@@ -69,7 +79,7 @@ export class InvestmentController {
     private readonly createInvestment: CreateInvestmentUseCase,
     private readonly topUpInvestment: TopUpInvestmentUseCase,
     private readonly initiateInvestment: InitiateInvestmentUseCase,
-    private readonly cancelInvestment: CancelInvestmentUseCase,
+    private readonly retractInvestment: RetractInvestmentUseCase,
     @Inject(INVESTMENT_REPOSITORY)
     private readonly investmentRepository: InvestmentRepository,
     @InjectRepository(EcheanceEntity)
@@ -102,8 +112,12 @@ export class InvestmentController {
   @UseGuards(KycValidatedGuard)
   @Roles(UserRole.INVESTISSEUR)
   @Post()
-  create(@Body() dto: CreateInvestmentDto, @CurrentUser() user: ActiveUser) {
-    return this.createInvestment.execute(user.userId, dto);
+  async create(
+    @Body() dto: CreateInvestmentDto,
+    @CurrentUser() user: ActiveUser,
+  ): Promise<InvestmentSnapshot> {
+    const investment = await this.createInvestment.execute(user.userId, dto);
+    return investment.snapshot();
   }
 
   @ApiOperation({ summary: 'Initier un investissement avec signature YouSign (sans débit immédiat)' })
@@ -121,10 +135,10 @@ export class InvestmentController {
   @ApiResponse({ status: 200, description: 'Liste des investissements' })
   @ApiResponse({ status: 403, description: 'Accès refusé' })
   @Get('user/:userId')
-  listByUser(
+  async listByUser(
     @Param('userId', ParseIntPipe) userId: number,
     @CurrentUser() currentUser: ActiveUser,
-  ) {
+  ): Promise<InvestmentSnapshot[]> {
     if (
       currentUser.userId !== userId &&
       !hasPermission(currentUser.role, 'users:read') &&
@@ -132,7 +146,8 @@ export class InvestmentController {
     ) {
       throw new ForbiddenException('Accès refusé.');
     }
-    return this.investmentRepository.findByUserId(userId);
+    const investments = await this.investmentRepository.findByUserId(userId);
+    return investments.map((i) => i.snapshot());
   }
 
   @ApiOperation({ summary: "Investissements d'un projet" })
@@ -140,8 +155,12 @@ export class InvestmentController {
   @ApiResponse({ status: 200, description: 'Liste des investissements du projet' })
   @Get('project/:projetId')
   @RequirePermission('projects:read')
-  listByProject(@Param('projetId') projetId: string) {
-    return this.investmentRepository.findByProjetId(projetId);
+  async listByProject(
+    @Param('projetId') projetId: string,
+  ): Promise<InvestmentSnapshot[]> {
+    const investments =
+      await this.investmentRepository.findByProjetId(projetId);
+    return investments.map((i) => i.snapshot());
   }
 
   @ApiOperation({ summary: "Détail d'un investissement" })
@@ -152,25 +171,24 @@ export class InvestmentController {
   async findOne(
     @Param('id') id: string,
     @CurrentUser() user: ActiveUser,
-  ) {
-    const inv = await this.investmentRepository.findInvestmentById(id);
-    if (!inv) throw new NotFoundException('Investissement introuvable.');
+  ): Promise<InvestmentSnapshot> {
+    const inv = await this.investmentRepository.findById(id);
+    if (!inv) throw new InvestissementIntrouvableError(id);
     this.assertCanReadInvestment(user, inv.utilisateurId);
-    return inv;
+    return inv.snapshot();
   }
 
   @ApiOperation({ summary: "Echéancier d'un investissement" })
   @ApiParam({ name: 'id', description: "UUID de l'investissement" })
   @ApiResponse({ status: 200, description: 'Echéancier de remboursement' })
   @Get(':id/schedule')
-  async getSchedule(
-    @Param('id') id: string,
-    @CurrentUser() user: ActiveUser,
-  ) {
-    const inv = await this.investmentRepository.findInvestmentById(id);
-    if (!inv) throw new NotFoundException('Investissement introuvable.');
+  async getSchedule(@Param('id') id: string, @CurrentUser() user: ActiveUser) {
+    const inv = await this.investmentRepository.findById(id);
+    if (!inv) throw new InvestissementIntrouvableError(id);
     this.assertCanReadInvestment(user, inv.utilisateurId);
-    return this.investmentRepository.findEcheancesByInvestissement(id);
+    const echeances =
+      await this.investmentRepository.findEcheancesByInvestissement(id);
+    return echeances.map((e) => e.snapshot());
   }
 
   @ApiOperation({
@@ -182,8 +200,20 @@ export class InvestmentController {
   @HttpCode(HttpStatus.OK)
   @RequirePermission('funds:disburse')
   @Patch(':id/status')
-  patchStatus(@Param('id') id: string, @Body() dto: UpdateInvestmentStatusDto) {
-    return this.investmentRepository.updateInvestmentStatus(id, dto.statut);
+  async patchStatus(
+    @Param('id') id: string,
+    @Body() dto: UpdateInvestmentStatusDto,
+  ): Promise<InvestmentSnapshot> {
+    const investment = await this.investmentRepository.findById(id);
+    if (!investment) throw new InvestissementIntrouvableError(id);
+
+    // Reprise en main manuelle du back-office : le statut est posé hors de
+    // tout cycle de vie, mais passe par l'agrégat (§6) — le repository
+    // n'expose plus d'écriture de colonne.
+    investment.forcerStatutParAdministration(dto.statut);
+
+    const saved = await this.investmentRepository.save(investment);
+    return saved.snapshot();
   }
 
   @ApiOperation({ summary: 'Vue portfolio de mes investissements' })
@@ -193,15 +223,12 @@ export class InvestmentController {
     const investments = await this.investmentRepository.findByUserId(
       user.userId,
     );
-    const montantTotal = investments.reduce(
-      (sum, inv) => sum + Number(inv.montant),
-      0,
-    );
+    const montantTotal = investments.reduce((sum, inv) => sum + inv.montant, 0);
     return {
       userId: user.userId,
       nbInvestissements: investments.length,
       montantTotal,
-      investments,
+      investments: investments.map((i) => i.snapshot()),
     };
   }
 
@@ -216,8 +243,8 @@ export class InvestmentController {
     let gainTotal = 0;
 
     const roiParProjet = investments.map((inv) => {
-      const montant = Number(inv.montant);
-      const tri = Number((inv as any).projet?.triCible ?? 0);
+      const montant = inv.montant;
+      const tri = Number(inv.projet?.triCible ?? 0);
       const createdAt = new Date(inv.createdAt ?? now);
       const anneesEcoulees =
         (now.getTime() - createdAt.getTime()) / (365.25 * 24 * 60 * 60 * 1000);
@@ -262,12 +289,17 @@ export class InvestmentController {
   @Roles(UserRole.INVESTISSEUR)
   @HttpCode(HttpStatus.OK)
   @Patch(':id/top-up')
-  topUp(
+  async topUp(
     @Param('id') id: string,
     @Body() dto: TopUpDto,
     @CurrentUser() user: ActiveUser,
-  ) {
-    return this.topUpInvestment.execute(id, user.userId, dto.nbFractions);
+  ): Promise<InvestmentSnapshot> {
+    const investment = await this.topUpInvestment.execute(
+      id,
+      user.userId,
+      dto.nbFractions,
+    );
+    return investment.snapshot();
   }
 
   @ApiOperation({ summary: 'Annuler un investissement pendant le délai de rétractation (4j, non-averti uniquement)' })
@@ -279,8 +311,8 @@ export class InvestmentController {
   async retract(
     @Param('id') id: string,
     @CurrentUser() user: ActiveUser,
-  ) {
-    await this.cancelInvestment.execute(id, user.userId);
+  ): Promise<void> {
+    await this.retractInvestment.execute(id, user.userId);
   }
 
   @ApiOperation({ summary: 'Résumé fiscal annuel de mes échéances (PFU 30%)' })

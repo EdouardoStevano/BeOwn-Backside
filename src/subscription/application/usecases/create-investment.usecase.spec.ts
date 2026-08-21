@@ -1,11 +1,14 @@
-import { BadRequestException } from '@nestjs/common';
 import { CreateInvestmentUseCase } from './create-investment.usecase';
 import { InvestmentEntity } from 'src/subscription/infrastructure/persistence/entities/investment.entity';
-import { EcheanceEntity } from 'src/subscription/infrastructure/persistence/entities/echeance.entity';
 import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/wallet.entity';
 import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entities/transaction.entity';
 import { ProjectEntity } from 'src/catalog/infrastructure/persistence/entities/project.entity';
 import { ProjectStatus } from 'src/catalog/domain/enums/project-status.enum';
+import { InvestmentStatus } from 'src/subscription/domain/enums/investment-status.enum';
+import {
+  FractionsDemandeesIndisponiblesError,
+  SoldeInsuffisantError,
+} from 'src/subscription/domain/errors/subscription.errors';
 
 /**
  * Vérifie l'atomicité de la création d'investissement (correctif de survente /
@@ -16,6 +19,10 @@ import { ProjectStatus } from 'src/catalog/domain/enums/project-status.enum';
  * création), solde insuffisant relu SOUS VERROU → throw sans persistance,
  * survente recomptée SOUS VERROU → throw sans persistance, et que les écritures
  * sont bien enveloppées dans la transaction avec verrous.
+ *
+ * Depuis le passage au modèle riche, les refus sont des **erreurs de domaine**
+ * (§21) et non plus des `BadRequestException` : c'est `SubscriptionErrorFilter`
+ * qui leur donne un statut HTTP, la couche application n'en connaît aucun.
  */
 describe('CreateInvestmentUseCase — atomicité', () => {
   let useCase: CreateInvestmentUseCase;
@@ -27,8 +34,8 @@ describe('CreateInvestmentUseCase — atomicité', () => {
   let profilPPRepository: any;
   let contractGenerator: any;
   let cloudStorage: any;
-  let notificationService: any;
   let notificationEvents: any;
+  let eventBus: any;
   let dataSource: any;
   let manager: any;
 
@@ -40,6 +47,11 @@ describe('CreateInvestmentUseCase — atomicité', () => {
   const USER_ID = 42;
   const dto: any = { projetId: 'p1', nbFractions: 2 };
 
+  /**
+   * L'agrégat `Project` de `catalog` tel que `ProjetSouscriptibleTranslator`
+   * le lit : le prix de la fraction et le nombre total de fractions viennent
+   * du contexte amont, ils ne sont plus recalculés ici.
+   */
   const baseProject = () => ({
     id: 'p1',
     titre: 'Projet Test',
@@ -47,10 +59,9 @@ describe('CreateInvestmentUseCase — atomicité', () => {
     pays: 'FR',
     instrument: 'OBLIGATION',
     statut: ProjectStatus.EN_COLLECTE,
-    capitalCible: 10000,
-    ticketMinimum: 100,
     ticketMaximum: null,
-    nbFractions: 100,
+    prixUnitaireFraction: 100,
+    nbFractionsTotal: 100,
     triCible: 8,
     dureeMois: 12,
   });
@@ -61,9 +72,8 @@ describe('CreateInvestmentUseCase — atomicité', () => {
     lockedSoldTotal = 0;
 
     investmentRepository = {
-      findInvestmentById: jest.fn().mockResolvedValue(null),
-      countFractionsVendues: jest.fn().mockResolvedValue(0),
-      updateBulletinDocId: jest.fn().mockResolvedValue(undefined),
+      findById: jest.fn().mockResolvedValue(null),
+      save: jest.fn(async (inv: any) => inv),
     };
     projectRepository = {
       findProjectById: jest.fn().mockResolvedValue(baseProject()),
@@ -80,7 +90,7 @@ describe('CreateInvestmentUseCase — atomicité', () => {
         userId: USER_ID,
         firstname: 'Jean',
         lastname: 'Test',
-        userEmail: { email: 'jean@example.com' },
+        email: 'jean@example.com',
       }),
     };
     profilPPRepository = {
@@ -90,12 +100,10 @@ describe('CreateInvestmentUseCase — atomicité', () => {
       generateBulletin: jest.fn().mockResolvedValue(Buffer.from('pdf')),
     };
     cloudStorage = {
-      upload: jest
-        .fn()
-        .mockResolvedValue({ objectName: 'o', publicUrl: 'u' }),
+      upload: jest.fn().mockResolvedValue({ objectName: 'o', publicUrl: 'u' }),
     };
-    notificationService = { push: jest.fn(), pushToAdmins: jest.fn() };
     notificationEvents = { investmentCreated: jest.fn() };
+    eventBus = { publish: jest.fn() };
 
     manager = {
       findOne: jest.fn(async (entity: any) => {
@@ -131,8 +139,8 @@ describe('CreateInvestmentUseCase — atomicité', () => {
       profilPPRepository,
       contractGenerator,
       cloudStorage,
-      notificationService,
       notificationEvents,
+      eventBus,
       dataSource,
     );
   });
@@ -141,6 +149,15 @@ describe('CreateInvestmentUseCase — atomicité', () => {
     manager.save.mock.calls.filter((c: any) => c[0] === InvestmentEntity);
   const walletSaves = () =>
     manager.save.mock.calls.filter((c: any) => c[0] === WalletEntity);
+
+  const withLockedFractionsSold = (total: string) => {
+    manager.createQueryBuilder = jest.fn(() => ({
+      select: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      getRawOne: jest.fn().mockResolvedValue({ total }),
+    }));
+  };
 
   it('chemin heureux : débite exactement une fois et crée l’investissement dans la transaction', async () => {
     const result = await useCase.execute(USER_ID, dto);
@@ -173,46 +190,37 @@ describe('CreateInvestmentUseCase — atomicité', () => {
     expect(txSaves[0][1].montant).toBe(200);
 
     expect(result.id).toBe('inv-1');
+    expect(result.montant).toBe(200);
+    expect(result.statut).toBe(InvestmentStatus.CONFIRME);
   });
 
   it('solde insuffisant relu SOUS VERROU → throw, rien n’est persisté', async () => {
-    // Pré-check passant (findWalletByUser = 1000) mais le solde verrouillé est
-    // insuffisant → seul le contrôle sous verrou tranche.
+    // Le wallet lu hors transaction affiche 1000, celui relu sous verrou 50 :
+    // seul le contrôle sous verrou tranche.
     walletRow = { id: 'w1', solde: 50, devise: 'EUR' };
 
     await expect(useCase.execute(USER_ID, dto)).rejects.toBeInstanceOf(
-      BadRequestException,
+      SoldeInsuffisantError,
     );
     expect(savedInvestments()).toHaveLength(0);
     expect(walletSaves()).toHaveLength(0);
   });
 
   it('survente recomptée SOUS VERROU (nbFractions > disponibles) → throw, rien n’est persisté', async () => {
-    // Pré-check passant (countFractionsVendues = 0) mais 99 fractions déjà
-    // vendues d'après le recompte verrouillé → 1 dispo < 2 demandées.
-    lockedSoldTotal = 99;
-    manager.createQueryBuilder = jest.fn(() => ({
-      select: jest.fn().mockReturnThis(),
-      where: jest.fn().mockReturnThis(),
-      andWhere: jest.fn().mockReturnThis(),
-      getRawOne: jest.fn().mockResolvedValue({ total: '99' }),
-    }));
+    // 99 fractions déjà vendues d'après le recompte verrouillé → 1 dispo < 2
+    // demandées : c'est `CollecteCapacity` qui refuse.
+    withLockedFractionsSold('99');
 
     await expect(useCase.execute(USER_ID, dto)).rejects.toBeInstanceOf(
-      BadRequestException,
+      FractionsDemandeesIndisponiblesError,
     );
     expect(savedInvestments()).toHaveLength(0);
     expect(walletSaves()).toHaveLength(0);
   });
 
   it('projet entièrement vendu → passage FINANCE sous le verrou projet', async () => {
-    // 98 déjà vendues + 2 demandées = 100 = total → FINANCE.
-    manager.createQueryBuilder = jest.fn(() => ({
-      select: jest.fn().mockReturnThis(),
-      where: jest.fn().mockReturnThis(),
-      andWhere: jest.fn().mockReturnThis(),
-      getRawOne: jest.fn().mockResolvedValue({ total: '98' }),
-    }));
+    // 98 déjà vendues + 2 demandées = 100 = total → collecte complète.
+    withLockedFractionsSold('98');
 
     await useCase.execute(USER_ID, dto);
 
@@ -228,9 +236,7 @@ describe('CreateInvestmentUseCase — atomicité', () => {
     walletRepository.findTransactionByIdempotencyKey.mockResolvedValue({
       investissementId: 'inv-existing',
     });
-    investmentRepository.findInvestmentById.mockResolvedValue({
-      id: 'inv-existing',
-    });
+    investmentRepository.findById.mockResolvedValue({ id: 'inv-existing' });
 
     const result = await useCase.execute(USER_ID, idemDto);
     expect(result.id).toBe('inv-existing');

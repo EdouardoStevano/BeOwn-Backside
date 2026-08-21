@@ -1,12 +1,16 @@
-import { BadRequestException } from '@nestjs/common';
 import { TopUpInvestmentUseCase } from './top-up-investment.usecase';
 import { InvestmentEntity } from 'src/subscription/infrastructure/persistence/entities/investment.entity';
 import { EcheanceEntity } from 'src/subscription/infrastructure/persistence/entities/echeance.entity';
 import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/wallet.entity';
 import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entities/transaction.entity';
 import { ProjectEntity } from 'src/catalog/infrastructure/persistence/entities/project.entity';
+import { Investment } from 'src/subscription/domain/aggregates/investment';
 import { InvestmentStatus } from 'src/subscription/domain/enums/investment-status.enum';
 import { ProjectStatus } from 'src/catalog/domain/enums/project-status.enum';
+import {
+  FractionsDemandeesIndisponiblesError,
+  SoldeInsuffisantError,
+} from 'src/subscription/domain/errors/subscription.errors';
 
 /**
  * Vérifie l'atomicité du top-up (ajout de fractions à un investissement
@@ -15,6 +19,10 @@ import { ProjectStatus } from 'src/catalog/domain/enums/project-status.enum';
  * vit dans dataSource.transaction. On prouve : chemin heureux (débit unique +
  * mise à jour), solde insuffisant SOUS VERROU → throw sans écriture, survente
  * SOUS VERROU → throw sans écriture, et enveloppe transactionnelle + verrous.
+ *
+ * Le repository rend désormais un véritable agrégat : c'est
+ * `Investment.completer` qui éprouve la titularité, le statut et les fractions
+ * actives, et qui rend le montant à débiter.
  */
 describe('TopUpInvestmentUseCase — atomicité', () => {
   let useCase: TopUpInvestmentUseCase;
@@ -25,8 +33,8 @@ describe('TopUpInvestmentUseCase — atomicité', () => {
   let userRepository: any;
   let contractGenerator: any;
   let cloudStorage: any;
-  let notificationService: any;
   let notificationEvents: any;
+  let eventBus: any;
   let dataSource: any;
   let manager: any;
 
@@ -37,28 +45,45 @@ describe('TopUpInvestmentUseCase — atomicité', () => {
   const USER_ID = 42;
   const INVEST_ID = 'inv1';
 
-  const baseInvestment = () => ({
-    id: INVEST_ID,
-    utilisateurId: USER_ID,
-    statut: InvestmentStatus.CONFIRME,
-    nbTitres: 5,
-    montant: 500,
-    valeurTitre: 100,
-    projetId: 'p1',
-    bulletinDocId: null,
-    projet: { id: 'p1', titre: 'Projet Test' },
-  });
+  const baseInvestment = () =>
+    new Investment({
+      id: INVEST_ID,
+      projetId: 'p1',
+      utilisateurId: USER_ID,
+      montant: 500,
+      instrument: 'OBLIGATION',
+      nbTitres: 5,
+      valeurTitre: 100,
+      statut: InvestmentStatus.CONFIRME,
+      delaiRetractationJusquAu: null,
+      bulletinDocId: null,
+      signatureId: null,
+      reservationId: null,
+      createdAt: new Date('2026-01-01'),
+      updatedAt: new Date('2026-01-01'),
+      projet: {
+        id: 'p1',
+        titre: 'Projet Test',
+        ville: 'Paris',
+        pays: 'FR',
+        type: 'RESIDENTIEL',
+        triCible: 8,
+        dureeMois: 12,
+        prixFraction: 100,
+        nbFractions: 100,
+      },
+    });
 
   const baseProject = () => ({
     id: 'p1',
     titre: 'Projet Test',
     ville: 'Paris',
     pays: 'FR',
+    instrument: 'OBLIGATION',
     statut: ProjectStatus.EN_COLLECTE,
-    capitalCible: 10000,
-    ticketMinimum: 100,
-    prixFraction: 100,
-    nbFractions: 100,
+    ticketMaximum: null,
+    prixUnitaireFraction: 100,
+    nbFractionsTotal: 100,
     triCible: 8,
     dureeMois: 12,
   });
@@ -69,9 +94,8 @@ describe('TopUpInvestmentUseCase — atomicité', () => {
     lockedSoldTotal = 5;
 
     investmentRepository = {
-      findInvestmentById: jest.fn().mockResolvedValue(baseInvestment()),
-      countFractionsVendues: jest.fn().mockResolvedValue(5),
-      updateBulletinDocId: jest.fn().mockResolvedValue(undefined),
+      findById: jest.fn().mockResolvedValue(baseInvestment()),
+      save: jest.fn(async (inv: any) => inv),
     };
     projectRepository = {
       findProjectById: jest.fn().mockResolvedValue(baseProject()),
@@ -91,7 +115,7 @@ describe('TopUpInvestmentUseCase — atomicité', () => {
         userId: USER_ID,
         firstname: 'Jean',
         lastname: 'Test',
-        userEmail: { email: 'jean@example.com' },
+        email: 'jean@example.com',
       }),
     };
     contractGenerator = {
@@ -101,8 +125,8 @@ describe('TopUpInvestmentUseCase — atomicité', () => {
       upload: jest.fn().mockResolvedValue({ objectName: 'o', publicUrl: 'u' }),
       delete: jest.fn().mockResolvedValue(undefined),
     };
-    notificationService = { push: jest.fn(), pushToAdmins: jest.fn() };
     notificationEvents = { fractionsToppedUp: jest.fn() };
+    eventBus = { publish: jest.fn() };
 
     manager = {
       findOne: jest.fn(async (entity: any) => {
@@ -134,8 +158,8 @@ describe('TopUpInvestmentUseCase — atomicité', () => {
       userRepository,
       contractGenerator,
       cloudStorage,
-      notificationService,
       notificationEvents,
+      eventBus,
       dataSource,
     );
   });
@@ -144,6 +168,15 @@ describe('TopUpInvestmentUseCase — atomicité', () => {
     manager.update.mock.calls.filter((c: any) => c[0] === InvestmentEntity);
   const walletSaves = () =>
     manager.save.mock.calls.filter((c: any) => c[0] === WalletEntity);
+
+  const withLockedFractionsSold = (total: string) => {
+    manager.createQueryBuilder = jest.fn(() => ({
+      select: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      getRawOne: jest.fn().mockResolvedValue({ total }),
+    }));
+  };
 
   it('chemin heureux : débite une fois et met à jour nbTitres + montant dans la transaction', async () => {
     const result = await useCase.execute(INVEST_ID, USER_ID, 2);
@@ -172,6 +205,13 @@ describe('TopUpInvestmentUseCase — atomicité', () => {
       manager.delete.mock.calls.some((c: any) => c[0] === EcheanceEntity),
     ).toBe(true);
 
+    // Ledger : le complément débité, pas le total.
+    const txSaves = manager.save.mock.calls.filter(
+      (c: any) => c[0] === TransactionEntity,
+    );
+    expect(txSaves).toHaveLength(1);
+    expect(txSaves[0][1].montant).toBe(200);
+
     expect(result.nbTitres).toBe(7);
     expect(result.montant).toBe(700);
   });
@@ -180,7 +220,7 @@ describe('TopUpInvestmentUseCase — atomicité', () => {
     walletRow = { id: 'w1', solde: 50, devise: 'EUR' };
 
     await expect(useCase.execute(INVEST_ID, USER_ID, 2)).rejects.toBeInstanceOf(
-      BadRequestException,
+      SoldeInsuffisantError,
     );
     expect(investmentUpdates()).toHaveLength(0);
     expect(walletSaves()).toHaveLength(0);
@@ -188,15 +228,10 @@ describe('TopUpInvestmentUseCase — atomicité', () => {
 
   it('survente recomptée SOUS VERROU → throw, aucune écriture', async () => {
     // 99 déjà vendues sous verrou → 1 dispo < 2 demandées.
-    manager.createQueryBuilder = jest.fn(() => ({
-      select: jest.fn().mockReturnThis(),
-      where: jest.fn().mockReturnThis(),
-      andWhere: jest.fn().mockReturnThis(),
-      getRawOne: jest.fn().mockResolvedValue({ total: '99' }),
-    }));
+    withLockedFractionsSold('99');
 
     await expect(useCase.execute(INVEST_ID, USER_ID, 2)).rejects.toBeInstanceOf(
-      BadRequestException,
+      FractionsDemandeesIndisponiblesError,
     );
     expect(investmentUpdates()).toHaveLength(0);
     expect(walletSaves()).toHaveLength(0);

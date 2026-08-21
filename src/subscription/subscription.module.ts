@@ -1,4 +1,6 @@
 import { Module } from '@nestjs/common';
+import { APP_FILTER } from '@nestjs/core';
+import { CqrsModule } from '@nestjs/cqrs';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { SubscriptionInfrastructureModule } from './infrastructure/subscription-infrastructure.module';
 import { CatalogInfrastructureModule } from 'src/catalog/infrastructure/catalog-infrastructure.module';
@@ -12,8 +14,9 @@ import { CreateInvestmentUseCase } from './application/usecases/create-investmen
 import { ContractGeneratorService } from './application/services/contract-generator.service';
 import { TopUpInvestmentUseCase } from './application/usecases/top-up-investment.usecase';
 import { InitiateInvestmentUseCase } from './application/usecases/initiate-investment.usecase';
-import { CancelInvestmentUseCase } from './application/usecases/cancel-investment.usecase';
+import { RetractInvestmentUseCase } from './application/usecases/retract-investment.usecase';
 import { InvestmentController } from './presentation/http/investment.controller';
+import { SubscriptionErrorFilter } from './presentation/http/filters/subscription-error.filter';
 import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructure.module';
 import { NotificationsModule } from 'src/notifications/notifications.module';
 import { ProjectEntity } from 'src/catalog/infrastructure/persistence/entities/project.entity';
@@ -40,12 +43,20 @@ import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entit
  *
  * Position dans la Context Map (§3.4) :
  *
- * - **aval** de `compliance` (éligibilité, catégorie, plafond conseillé), de
- *   `catalog` (statut du projet, fractions) et — à terme — de `reservation` :
- *   le fait `ReservationConvertie` est le contrat par lequel une réservation
- *   deviendra un investissement en tête de file ; sa consommation n'est pas
- *   encore branchée (la conversion reste un geste manuel du back-office) ;
+ * - **aval** de `compliance` (éligibilité, catégorie, plafond conseillé — lu
+ *   via `PROFIL_PP_REPOSITORY`, traduit par `EligibilitePsfpTranslator`), de
+ *   `catalog` (statut du projet, fractions — `PROJECT_REPOSITORY`, traduit par
+ *   `ProjetSouscriptibleTranslator`) et — à terme — de `reservation` : le fait
+ *   `ReservationConvertie` est le contrat par lequel une réservation deviendra
+ *   un investissement en tête de file ; sa consommation n'est pas encore
+ *   branchée (la conversion reste un geste manuel du back-office) ;
  * - **amont** de `servicing` : la signature déclenche l'échéancier.
+ *
+ * Le modèle riche est en place : `Investment` est un agrégat à transitions
+ * (rétractation PSFP, complément de fractions), `CollecteCapacity` possède
+ * l'invariant d'anti-survente (§6), `InvestmentFactory` la naissance (§23),
+ * `EcheancierGenerator` et ses stratégies le calcul des coupons (§38.1), et le
+ * contexte porte ses propres erreurs métier (§21) et ses faits publiés (§12).
  *
  * Écarts temporaires, assumés et à résorber (§3.3) :
  *
@@ -54,15 +65,15 @@ import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entit
  * - `IfuGenerationService` appartient à `regulatory-reporting` (M11) ;
  * - le module enregistre encore des entités d'autres contextes
  *   (`TypeOrmModule.forFeature` sur Project, Wallet, User, Document,
- *   Signature, Transaction) : des use cases accèdent à leur base sans passer
- *   par un port — le symptôme §12 que `catalog` a déjà résorbé chez lui.
- *
- * Ce module donne au contexte son nom et sa forme (§5) ; le modèle riche
- * (`Investment` en agrégat à transitions, erreurs de domaine, événements)
- * est l'étape suivante — même découpage en deux temps que `compliance`.
+ *   Signature, Transaction) : les sections transactionnelles y accèdent par
+ *   l'`EntityManager`, faute d'unité de travail partagée — résorber cela
+ *   demande un port de transaction, pas un remodelage du domaine ;
+ * - les faits publiés le sont après commit, en best-effort : les rendre
+ *   fiables demande l'Outbox (§19).
  */
 @Module({
   imports: [
+    CqrsModule,
     TypeOrmModule.forFeature([
       ProjectEntity,
       InvestmentEntity,
@@ -92,13 +103,16 @@ import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entit
     ContractGeneratorService,
     TopUpInvestmentUseCase,
     InitiateInvestmentUseCase,
-    CancelInvestmentUseCase,
+    RetractInvestmentUseCase,
     EcheancesCronService,
     IfuGenerationService,
     PayEcheanceUseCase,
     ProjectScheduleGeneratorService,
     CollecteCloseCronService,
     RefundCollecteService,
+    // Traduit les erreurs métier du contexte en réponses HTTP : le domaine ne
+    // connaît aucun statut (§21), la présentation s'en charge.
+    { provide: APP_FILTER, useClass: SubscriptionErrorFilter },
   ],
   controllers: [InvestmentController],
   exports: [

@@ -78,7 +78,7 @@ export class IfuCronService {
     }
 
     for (const invId of paidInYearInvestmentIds) {
-      const inv = await this.investmentRepo.findInvestmentById(invId);
+      const inv = await this.investmentRepo.findById(invId);
       if (inv) userIds.add(inv.utilisateurId);
     }
 

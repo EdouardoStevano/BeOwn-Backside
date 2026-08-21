@@ -1,11 +1,5 @@
-import {
-  BadRequestException,
-  ForbiddenException,
-  Inject,
-  Injectable,
-  Logger,
-  NotFoundException,
-} from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
+import { EventBus } from '@nestjs/cqrs';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import type { InvestmentRepository } from '../../domain/repositories/investment.repository';
@@ -18,12 +12,20 @@ import type { DocumentRepository } from 'src/documents/applications/ports/reposi
 import { DOCUMENT_REPOSITORY } from 'src/documents/applications/ports/repositories/document.repository';
 import type { UserRepository } from 'src/iam/domain/repositories/user.repository';
 import { USER_REPOSITORY } from 'src/iam/domain/repositories/user.repository';
-import { Echeance } from 'src/subscription/domain/entities/echeance';
+import { CollecteCapacity } from 'src/subscription/domain/aggregates/collecte-capacity';
+import { Investment } from 'src/subscription/domain/aggregates/investment';
+import { EcheancierGenerator } from 'src/subscription/domain/domain-services/echeancier.domain-service';
 import {
-  EcheanceStatus,
   InvestmentStatus,
   RemboursementMode,
 } from 'src/subscription/domain/enums/investment-status.enum';
+import { InvestissementCompleteDomainEvent } from 'src/subscription/domain/events/investissement-complete.domain-event';
+import {
+  InvestissementIntrouvableError,
+  ProjetIntrouvableError,
+  SoldeInsuffisantError,
+  WalletIntrouvableError,
+} from 'src/subscription/domain/errors/subscription.errors';
 import { Transaction } from 'src/wallets/domains/transaction';
 import {
   TransactionFournisseur,
@@ -33,12 +35,11 @@ import {
 } from 'src/wallets/domains/enums/wallet.enum';
 import { ContractGeneratorService } from '../services/contract-generator.service';
 import { CloudStorageService } from 'src/shared/cloud-storage/cloud-storage.service';
-import { formatEur } from 'src/shared/money/format-eur';
 import { Document } from 'src/documents/domains/document';
-import { DocumentRelatedTo, DocumentType } from 'src/documents/domains/enums/document-type.enum';
-import { Investment } from 'src/subscription/domain/aggregates/investment';
-import { NotificationService } from 'src/notifications/applications/notification.service';
-import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
+import {
+  DocumentRelatedTo,
+  DocumentType,
+} from 'src/documents/domains/enums/document-type.enum';
 import { NotificationEventService } from 'src/notifications/applications/notification-event.service';
 import { InvestmentEntity } from 'src/subscription/infrastructure/persistence/entities/investment.entity';
 import { EcheanceEntity } from 'src/subscription/infrastructure/persistence/entities/echeance.entity';
@@ -47,7 +48,30 @@ import { ProjectEntity } from 'src/catalog/infrastructure/persistence/entities/p
 import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/wallet.entity';
 import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entities/transaction.entity';
 import { WalletMapper } from 'src/wallets/infrastructure/persistences/mappers/wallet.mapper';
+import { ProjetSouscriptibleTranslator } from '../acl/projet-souscriptible.translator';
 
+/**
+ * **Compléter une souscription** — l'investisseur ajoute des fractions à un
+ * investissement déjà confirmé, son wallet est débité du complément et son
+ * échéancier régénéré sur le nouveau capital.
+ *
+ * Le use case orchestre, il ne décide pas (§14) : qui peut compléter quoi, et
+ * depuis quel état, appartient à {@link Investment.completer} — titularité,
+ * statut `CONFIRME`, fractions encore actives, quantité entière positive.
+ * Ces quatre `if` vivaient ici, en clair. L'anti-survente appartient à
+ * {@link CollecteCapacity}, et le calcul de l'échéancier — recopié à
+ * l'identique depuis `CreateInvestmentUseCase` — à
+ * {@link EcheancierGenerator}.
+ *
+ * Comme pour la souscription, les portes sont éprouvées **une seule fois, sous
+ * le verrou** : la double passe optimiste/verrouillée dupliquait chaque règle
+ * pour un verdict que seule la seconde rendait.
+ *
+ * L'atomicité est inchangée : verrou sur la ligne projet (sérialise le
+ * recompte des fractions face aux souscriptions et top-ups concurrents), puis
+ * sur la ligne wallet (solde relu sous verrou avant débit) ; mise à jour,
+ * débit, ledger et régénération de l'échéancier vivent dans UNE transaction.
+ */
 @Injectable()
 export class TopUpInvestmentUseCase {
   private readonly logger = new Logger(TopUpInvestmentUseCase.name);
@@ -65,8 +89,8 @@ export class TopUpInvestmentUseCase {
     private readonly userRepository: UserRepository,
     private readonly contractGenerator: ContractGeneratorService,
     private readonly cloudStorage: CloudStorageService,
-    private readonly notificationService: NotificationService,
     private readonly notificationEvents: NotificationEventService,
+    private readonly eventBus: EventBus,
     @InjectDataSource()
     private readonly dataSource: DataSource,
   ) {}
@@ -76,188 +100,188 @@ export class TopUpInvestmentUseCase {
     userId: number,
     nbFractions: number,
   ): Promise<Investment> {
-    const investment = await this.investmentRepository.findInvestmentById(investmentId);
-    if (!investment) throw new NotFoundException('Investissement introuvable');
-    if (investment.utilisateurId !== userId) throw new ForbiddenException('Accès refusé');
-    if (investment.statut !== InvestmentStatus.CONFIRME) {
-      throw new BadRequestException('Seuls les investissements confirmés peuvent être complétés');
-    }
-    if (!investment.nbTitres || investment.nbTitres <= 0) {
-      throw new BadRequestException('Cet investissement ne possède plus de fractions actives');
-    }
+    const investment = await this.investmentRepository.findById(investmentId);
+    if (!investment) throw new InvestissementIntrouvableError(investmentId);
 
-    const project = await this.projectRepository.findProjectById(investment.projetId);
-    if (!project) throw new NotFoundException('Projet introuvable');
-
-    const prixFraction = Number(investment.valeurTitre ?? project.prixFraction ?? project.ticketMinimum ?? 0);
-    const nbFractionsTotal = project.nbFractions ?? Math.floor(Number(project.capitalCible) / prixFraction);
-    const fractionsVendues = await this.investmentRepository.countFractionsVendues(investment.projetId);
-    const disponibles = nbFractionsTotal - fractionsVendues;
-    if (disponibles <= 0) {
-      throw new BadRequestException('Il ne reste plus de fractions disponibles sur ce projet.');
+    const projetCatalogue = await this.projectRepository.findProjectById(
+      investment.projetId,
+    );
+    if (!projetCatalogue) {
+      throw new ProjetIntrouvableError(investment.projetId);
     }
-    if (nbFractions > disponibles) {
-      throw new BadRequestException(
-        `Seulement ${disponibles} fraction(s) disponible(s) sur ce projet`,
-      );
-    }
-    const montantDelta = nbFractions * prixFraction;
+    const projet = ProjetSouscriptibleTranslator.traduire(projetCatalogue);
 
-    // ── Wallet check & deduction ──────────────────────────────────────────────
-    const wallet = await this.walletRepository.findWalletByUser(userId, WalletType.INVESTISSEUR);
-    if (!wallet) {
-      throw new BadRequestException(
-        "Wallet introuvable. Veuillez alimenter votre compte avant d'investir.",
-      );
-    }
-    if (Number(wallet.solde) < montantDelta) {
-      throw new BadRequestException(
-        `Solde insuffisant. Disponible : ${formatEur(Number(wallet.solde))} — Requis : ${formatEur(montantDelta)}`,
-      );
-    }
+    const wallet = await this.walletRepository.findWalletByUser(
+      userId,
+      WalletType.INVESTISSEUR,
+    );
+    if (!wallet) throw new WalletIntrouvableError();
 
-    const newNbTitres = (investment.nbTitres ?? 0) + nbFractions;
-    const newMontant = Number(investment.montant) + montantDelta;
-
-    // ── Section critique atomique (anti-survente + débit garanti) ─────────────
-    // Verrou sur la ligne projet (sérialise le recompte des fractions face aux
-    // souscriptions/top-ups concurrents) puis sur la ligne wallet (solde relu
-    // sous verrou avant débit). Mise à jour de l'investissement, débit, ledger
-    // et régénération de l'échéancier vivent dans UNE transaction : tout throw
-    // annule l'ensemble.
-    const updated = await this.dataSource.transaction(async (manager) => {
+    const montantDelta = await this.dataSource.transaction(async (manager) => {
       // 1. Verrou sur la ligne projet.
       const projectRow = await manager.findOne(ProjectEntity, {
         where: { id: investment.projetId },
         lock: { mode: 'pessimistic_write' },
       });
-      if (!projectRow) throw new NotFoundException('Projet introuvable');
+      if (!projectRow) throw new ProjetIntrouvableError(investment.projetId);
 
-      // 2. Recompte des fractions vendues SOUS VERROU (même filtre que
-      //    countFractionsVendues : SUM(nbTitres) hors RETRACTE/ANNULE).
-      const raw = await manager
-        .createQueryBuilder(InvestmentEntity, 'i')
-        .select('COALESCE(SUM(i.nbTitres), 0)', 'total')
-        .where('i.projetId = :projetId', { projetId: investment.projetId })
-        .andWhere('i.statut NOT IN (:...exclus)', {
-          exclus: [InvestmentStatus.RETRACTE, InvestmentStatus.ANNULE],
-        })
-        .getRawOne<{ total: string }>();
-      const fractionsVenduesLocked = Number(raw?.total ?? 0);
-      const disponiblesLocked = nbFractionsTotal - fractionsVenduesLocked;
-      if (disponiblesLocked <= 0) {
-        throw new BadRequestException(
-          'Il ne reste plus de fractions disponibles sur ce projet.',
-        );
-      }
-      if (nbFractions > disponiblesLocked) {
-        throw new BadRequestException(
-          `Seulement ${disponiblesLocked} fraction(s) disponible(s) sur ce projet`,
-        );
-      }
+      // 2. Recompte des fractions vendues SOUS VERROU, puis allocation : c'est
+      //    la capacité qui refuse une survente (§6).
+      const capacite = CollecteCapacity.duProjet(
+        projet,
+        await this.recompterFractionsVendues(manager, investment.projetId),
+      );
+      capacite.allouer(nbFractions);
 
-      // 3. Verrou sur la ligne wallet + re-vérification du solde SOUS VERROU.
+      // 3. Le domaine tranche : titularité, statut, fractions actives.
+      const delta = investment.completer(
+        userId,
+        nbFractions,
+        projet.prixFraction,
+      );
+
+      // 4. Verrou sur la ligne wallet + solde relu SOUS VERROU avant débit.
       const walletRow = await manager.findOne(WalletEntity, {
         where: { id: wallet.id },
         lock: { mode: 'pessimistic_write' },
       });
-      if (!walletRow) {
-        throw new BadRequestException(
-          "Wallet introuvable. Veuillez alimenter votre compte avant d'investir.",
-        );
-      }
-      if (Number(walletRow.solde) < montantDelta) {
-        throw new BadRequestException(
-          `Solde insuffisant. Disponible : ${formatEur(Number(walletRow.solde))} — Requis : ${formatEur(montantDelta)}`,
-        );
+      if (!walletRow) throw new WalletIntrouvableError();
+      if (Number(walletRow.solde) < delta) {
+        throw new SoldeInsuffisantError(Number(walletRow.solde), delta);
       }
 
-      // 4. Mise à jour de l'investissement (nbTitres + montant).
+      // 5. Mise à jour de l'investissement (les deux champs que le complément
+      //    déplace ; l'agrégat les porte déjà à leur nouvelle valeur).
       await manager.update(InvestmentEntity, investmentId, {
-        nbTitres: newNbTitres,
-        montant: newMontant,
+        nbTitres: investment.nbTitres,
+        montant: investment.montant,
       });
 
-      // 5. Débit du wallet SOUS VERROU.
-      walletRow.solde = Number(walletRow.solde) - montantDelta;
+      // 6. Débit du wallet SOUS VERROU.
+      walletRow.solde = Number(walletRow.solde) - delta;
       await manager.save(WalletEntity, walletRow);
 
-      // 6. Écriture de la transaction ledger.
-      const tx = new Transaction();
-      tx.walletSource = wallet.id;
-      tx.walletDestination = null;
-      tx.type = TransactionType.SOUSCRIPTION;
-      tx.montant = montantDelta;
-      tx.devise = wallet.devise;
-      tx.statut = TransactionStatus.REUSSI;
-      tx.fournisseur = TransactionFournisseur.INTERNE;
-      tx.referenceExterne = null;
-      tx.investissementId = investmentId;
-      tx.echeanceId = null;
-      tx.reservationId = null;
-      tx.projetId = investment.projetId;
-      tx.idempotencyKey = `topup:${userId}:${investmentId}:${Date.now()}`;
-      tx.fraisPsp = 0;
-      tx.fraisPlateforme = 0;
-      tx.metadata = null;
-      tx.motifEchec = null;
-      await manager.save(TransactionEntity, WalletMapper.txToEntity(tx));
+      // 7. Écriture de la transaction ledger.
+      await manager.save(
+        TransactionEntity,
+        WalletMapper.txToEntity(
+          this.tracerComplement(investment, wallet, userId, delta),
+        ),
+      );
 
-      // 7. Régénération de l'échéancier avec les nouveaux totaux.
+      // 8. Régénération de l'échéancier sur le nouveau capital.
       await manager.delete(EcheanceEntity, { investissementId: investmentId });
-      const echeances = this.generateEcheances(
-        investmentId,
-        newMontant,
-        Number((project as any).triCible ?? 0),
-        Number((project as any).dureeMois ?? 12),
+      const echeances = EcheancierGenerator.generer(
+        investment,
+        projet,
         RemboursementMode.IN_FINE,
       );
       await manager.save(
         EcheanceEntity,
-        echeances.map(InvestmentOrmMapper.echeanceToEntity),
+        echeances.map(InvestmentOrmMapper.echeanceNaissanteToEntity),
       );
 
-      // Domaine renvoyé : investissement existant enrichi des nouveaux totaux
-      // (la relation projet est déjà chargée sur `investment`).
-      const updatedDomain = Object.assign(new Investment(), investment, {
-        nbTitres: newNbTitres,
-        montant: newMontant,
-      });
-      return updatedDomain;
+      return delta;
     });
 
-    // Async bulletin regeneration (non-blocking)
-    this.regenerateBulletin(updated, project, userId).catch((err) =>
-      this.logger.error(`Top-up bulletin regen failed for ${investmentId}: ${err?.message}`),
+    this.eventBus.publish(
+      new InvestissementCompleteDomainEvent(
+        investment.id,
+        investment.projetId,
+        investment.utilisateurId,
+        nbFractions,
+        montantDelta,
+        investment.montant,
+      ),
     );
 
-    // Notify via facade (handles both user + admin)
+    void this.regenererLeBulletin(investment, userId).catch((err) =>
+      this.logger.error(
+        `Top-up bulletin regen failed for ${investmentId}: ${err?.message}`,
+      ),
+    );
+
     const user = await this.userRepository.findById(userId);
     if (user) {
-      this.notificationEvents.fractionsToppedUp(updated, project, user, nbFractions, montantDelta);
+      this.notificationEvents.fractionsToppedUp(
+        investment,
+        projetCatalogue,
+        user,
+        nbFractions,
+        montantDelta,
+      );
     }
 
-    return updated;
+    return investment;
   }
 
-  private async regenerateBulletin(investment: Investment, project: any, userId: number): Promise<void> {
-    const oldBulletinDocId = investment.bulletinDocId ?? null;
+  // ── Orchestration annexe ──────────────────────────────────────────────────
 
+  /** Le même filtre que `countFractionsVendues`, mais sous le verrou projet. */
+  private async recompterFractionsVendues(
+    manager: { createQueryBuilder: (...args: any[]) => any },
+    projetId: string,
+  ): Promise<number> {
+    const raw = await manager
+      .createQueryBuilder(InvestmentEntity, 'i')
+      .select('COALESCE(SUM(i.nbTitres), 0)', 'total')
+      .where('i.projetId = :projetId', { projetId })
+      .andWhere('i.statut NOT IN (:...exclus)', {
+        exclus: [InvestmentStatus.RETRACTE, InvestmentStatus.ANNULE],
+      })
+      .getRawOne();
+    return Number(raw?.total ?? 0);
+  }
+
+  private tracerComplement(
+    investment: Investment,
+    wallet: { id: string; devise: string },
+    userId: number,
+    montantDelta: number,
+  ): Transaction {
+    const tx = new Transaction();
+    tx.walletSource = wallet.id;
+    tx.walletDestination = null;
+    tx.type = TransactionType.SOUSCRIPTION;
+    tx.montant = montantDelta;
+    tx.devise = wallet.devise;
+    tx.statut = TransactionStatus.REUSSI;
+    tx.fournisseur = TransactionFournisseur.INTERNE;
+    tx.referenceExterne = null;
+    tx.investissementId = investment.id;
+    tx.echeanceId = null;
+    tx.reservationId = null;
+    tx.projetId = investment.projetId;
+    tx.idempotencyKey = `topup:${userId}:${investment.id}:${Date.now()}`;
+    tx.fraisPsp = 0;
+    tx.fraisPlateforme = 0;
+    tx.metadata = null;
+    tx.motifEchec = null;
+    return tx;
+  }
+
+  /**
+   * Le bulletin reflète le capital souscrit : il est régénéré après commit, et
+   * le précédent est supprimé — un seul bulletin courant par investissement.
+   */
+  private async regenererLeBulletin(
+    investment: Investment,
+    userId: number,
+  ): Promise<void> {
+    const bulletinPrecedent = investment.bulletinDocId;
+    const projet = investment.projet;
     const user = await this.userRepository.findById(userId);
-    const firstname = user?.firstname ?? 'Investisseur';
-    const lastname = user?.lastname ?? '';
-    const email = user?.email ?? '';
 
     const pdfBuffer = await this.contractGenerator.generateBulletin({
       investment,
-      projectTitle: project.titre,
-      projectVille: project.ville ?? '',
-      projectPays: project.pays,
-      investorFirstname: firstname,
-      investorLastname: lastname,
-      investorEmail: email,
-      triCible: Number(project.triCible ?? 0),
-      dureeMois: Number(project.dureeMois),
+      projectTitle: projet?.titre ?? '',
+      projectVille: projet?.ville ?? '',
+      projectPays: projet?.pays ?? '',
+      investorFirstname: user?.firstname ?? 'Investisseur',
+      investorLastname: user?.lastname ?? '',
+      investorEmail: user?.email ?? '',
+      triCible: Number(projet?.triCible ?? 0),
+      dureeMois: Number(projet?.dureeMois ?? 0),
     });
 
     const filename = `bulletin_${investment.id}_${Date.now()}.pdf`;
@@ -285,72 +309,30 @@ export class TopUpInvestmentUseCase {
     doc.estPrincipale = false;
 
     const savedDoc = await this.documentRepository.save(doc);
-    await this.investmentRepository.updateBulletinDocId(investment.id, savedDoc.id);
-    this.logger.log(`Top-up bulletin regenerated: investmentId=${investment.id} docId=${savedDoc.id}`);
 
-    // Overwrite policy: delete the previous bulletin so only the current one remains
-    if (oldBulletinDocId && oldBulletinDocId !== savedDoc.id) {
-      try {
-        const oldDoc = await this.documentRepository.findById(oldBulletinDocId);
-        if (oldDoc) {
-          await this.cloudStorage.delete(oldDoc.filename).catch(() => {});
-          await this.documentRepository.delete(oldBulletinDocId);
-          this.logger.log(`Previous bulletin deleted: docId=${oldBulletinDocId}`);
-        }
-      } catch (err: any) {
-        this.logger.warn(`Failed to delete previous bulletin ${oldBulletinDocId}: ${err?.message ?? err}`);
-      }
+    investment.attacherBulletin(savedDoc.id);
+    await this.investmentRepository.save(investment);
+
+    this.logger.log(
+      `Top-up bulletin regenerated: investmentId=${investment.id} docId=${savedDoc.id}`,
+    );
+
+    if (bulletinPrecedent && bulletinPrecedent !== savedDoc.id) {
+      await this.supprimerLeBulletinPrecedent(bulletinPrecedent);
     }
   }
 
-  private generateEcheances(
-    investissementId: string,
-    montant: number,
-    triAnnuel: number,
-    dureeMois: number,
-    mode: RemboursementMode,
-  ): Echeance[] {
-    const echeances: Echeance[] = [];
-    const tauxMensuel = triAnnuel / 100 / 12;
-    const now = new Date();
-
-    if (mode === RemboursementMode.IN_FINE) {
-      for (let i = 1; i <= dureeMois; i++) {
-        const datePrevue = new Date(now);
-        datePrevue.setMonth(datePrevue.getMonth() + i);
-        const ech = new Echeance();
-        ech.investissementId = investissementId;
-        ech.numero = i;
-        ech.datePrevue = datePrevue;
-        ech.montantCapital = i === dureeMois ? montant : 0;
-        ech.montantInterets = Math.round(montant * tauxMensuel * 100) / 100;
-        ech.montantTotal = ech.montantCapital + ech.montantInterets;
-        ech.statut = EcheanceStatus.A_VENIR;
-        ech.payeLe = null;
-        echeances.push(ech);
-      }
-    } else {
-      const capitalMensuel = montant / dureeMois;
-      let solde = montant;
-      for (let i = 1; i <= dureeMois; i++) {
-        const datePrevue = new Date(now);
-        datePrevue.setMonth(datePrevue.getMonth() + i);
-        const interets = Math.round(solde * tauxMensuel * 100) / 100;
-        const capital = Math.round(capitalMensuel * 100) / 100;
-        const ech = new Echeance();
-        ech.investissementId = investissementId;
-        ech.numero = i;
-        ech.datePrevue = datePrevue;
-        ech.montantCapital = capital;
-        ech.montantInterets = interets;
-        ech.montantTotal = capital + interets;
-        ech.statut = EcheanceStatus.A_VENIR;
-        ech.payeLe = null;
-        echeances.push(ech);
-        solde -= capital;
-      }
+  private async supprimerLeBulletinPrecedent(docId: string): Promise<void> {
+    try {
+      const ancien = await this.documentRepository.findById(docId);
+      if (!ancien) return;
+      await this.cloudStorage.delete(ancien.filename).catch(() => {});
+      await this.documentRepository.delete(docId);
+      this.logger.log(`Previous bulletin deleted: docId=${docId}`);
+    } catch (err: any) {
+      this.logger.warn(
+        `Failed to delete previous bulletin ${docId}: ${err?.message ?? err}`,
+      );
     }
-
-    return echeances;
   }
 }

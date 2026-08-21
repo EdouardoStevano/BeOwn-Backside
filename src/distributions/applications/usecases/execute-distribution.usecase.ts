@@ -210,9 +210,7 @@ export class ExecuteDistributionUseCase {
         }
 
         // Trouver l'investissement pour récupérer l'utilisateurId
-        const inv = await this.investmentRepo.findInvestmentById(
-          part.investissementId,
-        );
+        const inv = await this.investmentRepo.findById(part.investissementId);
         if (!inv) {
           this.logger.warn(
             `Investissement ${part.investissementId} introuvable — part ignorée.`,

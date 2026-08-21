@@ -2,13 +2,22 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { InvestmentRepository } from 'src/subscription/domain/repositories/investment.repository';
-import { Investment } from 'src/subscription/domain/aggregates/investment';
-import { Echeance } from 'src/subscription/domain/entities/echeance';
+import {
+  Investment,
+  type InvestmentNaissant,
+} from 'src/subscription/domain/aggregates/investment';
+import {
+  Echeance,
+  type EcheanceNaissante,
+} from 'src/subscription/domain/entities/echeance';
 import { InvestmentStatus } from 'src/subscription/domain/enums/investment-status.enum';
 import { InvestmentEntity } from '../persistence/entities/investment.entity';
 import { EcheanceEntity } from '../persistence/entities/echeance.entity';
 import { InvestmentOrmMapper } from '../persistence/mappers/investment.orm-mapper';
 import { ProjectEntity } from 'src/catalog/infrastructure/persistence/entities/project.entity';
+
+/** Statuts qui ne pèsent plus sur la collecte — le filtre du recompte de fractions. */
+const STATUTS_INACTIFS = [InvestmentStatus.RETRACTE, InvestmentStatus.ANNULE];
 
 @Injectable()
 export class TypeOrmInvestmentRepository implements InvestmentRepository {
@@ -19,9 +28,17 @@ export class TypeOrmInvestmentRepository implements InvestmentRepository {
     private readonly echeanceRepo: Repository<EcheanceEntity>,
   ) {}
 
-  async saveInvestment(investment: Investment): Promise<Investment> {
-    const entity = InvestmentOrmMapper.toEntity(investment);
-    const saved = await this.investRepo.save(entity);
+  async creer(naissant: InvestmentNaissant): Promise<Investment> {
+    const saved = await this.investRepo.save(
+      InvestmentOrmMapper.naissantToEntity(naissant),
+    );
+    return InvestmentOrmMapper.toDomain(saved);
+  }
+
+  async save(investment: Investment): Promise<Investment> {
+    const saved = await this.investRepo.save(
+      InvestmentOrmMapper.toEntity(investment),
+    );
     return InvestmentOrmMapper.toDomain(saved);
   }
 
@@ -36,7 +53,7 @@ export class TypeOrmInvestmentRepository implements InvestmentRepository {
       );
   }
 
-  async findInvestmentById(id: string): Promise<Investment | null> {
+  async findById(id: string): Promise<Investment | null> {
     const entity = await this.withProjet()
       .where('inv.id = :id', { id })
       .getOne();
@@ -64,9 +81,7 @@ export class TypeOrmInvestmentRepository implements InvestmentRepository {
       .createQueryBuilder('i')
       .select('COALESCE(SUM(i.nbTitres), 0)', 'total')
       .where('i.projetId = :projetId', { projetId })
-      .andWhere('i.statut NOT IN (:...exclus)', {
-        exclus: [InvestmentStatus.RETRACTE, InvestmentStatus.ANNULE],
-      })
+      .andWhere('i.statut NOT IN (:...exclus)', { exclus: STATUTS_INACTIFS })
       .getRawOne();
     return Number(result?.total ?? 0);
   }
@@ -80,40 +95,22 @@ export class TypeOrmInvestmentRepository implements InvestmentRepository {
       .select('i.projetId', 'projetId')
       .addSelect('COALESCE(SUM(i.nbTitres), 0)', 'total')
       .where('i.projetId IN (:...projetIds)', { projetIds })
-      .andWhere('i.statut NOT IN (:...exclus)', {
-        exclus: [InvestmentStatus.RETRACTE, InvestmentStatus.ANNULE],
-      })
+      .andWhere('i.statut NOT IN (:...exclus)', { exclus: STATUTS_INACTIFS })
       .groupBy('i.projetId')
       .getRawMany<{ projetId: string; total: string }>();
     return Object.fromEntries(rows.map((r) => [r.projetId, Number(r.total)]));
   }
 
-  async updateInvestmentStatus(
-    id: string,
-    status: InvestmentStatus,
-  ): Promise<Investment> {
-    await this.investRepo.update(id, { statut: status });
-    const updated = await this.investRepo.findOneOrFail({ where: { id } });
-    return InvestmentOrmMapper.toDomain(updated);
-  }
-
-  async updateBulletinDocId(investmentId: string, bulletinDocId: string): Promise<void> {
-    await this.investRepo.update(investmentId, { bulletinDocId });
-  }
-
-  async updateTopUp(id: string, nbTitresTotal: number, montantTotal: number): Promise<Investment> {
-    await this.investRepo.update(id, { nbTitres: nbTitresTotal, montant: montantTotal });
-    const updated = await this.withProjet().where('inv.id = :id', { id }).getOneOrFail();
-    return InvestmentOrmMapper.toDomain(updated);
-  }
-
-  async deleteEcheancesByInvestissementId(investissementId: string): Promise<void> {
+  async deleteEcheancesByInvestissementId(
+    investissementId: string,
+  ): Promise<void> {
     await this.echeanceRepo.delete({ investissementId });
   }
 
-  async saveEcheances(echeances: Echeance[]): Promise<Echeance[]> {
-    const entities = echeances.map(InvestmentOrmMapper.echeanceToEntity);
-    const saved = await this.echeanceRepo.save(entities);
+  async saveEcheances(echeances: EcheanceNaissante[]): Promise<Echeance[]> {
+    const saved = await this.echeanceRepo.save(
+      echeances.map(InvestmentOrmMapper.echeanceNaissanteToEntity),
+    );
     return saved.map(InvestmentOrmMapper.echeanceToDomain);
   }
 

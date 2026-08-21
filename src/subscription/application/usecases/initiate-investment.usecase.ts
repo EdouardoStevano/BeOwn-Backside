@@ -1,48 +1,87 @@
-import {
-  BadRequestException,
-  Injectable,
-  Logger,
-  NotFoundException,
-} from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ProjectEntity } from 'src/catalog/infrastructure/persistence/entities/project.entity';
-import { InvestmentEntity } from 'src/subscription/infrastructure/persistence/entities/investment.entity';
-import { DocumentEntity } from 'src/documents/infrastructure/persistences/entities/document.entity';
 import { SignatureEntity } from 'src/signatures/infrastructure/persistences/entities/signature.entity';
-import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/wallet.entity';
-import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
-import { UserEmailEntity } from 'src/iam/infrastructure/persistence/entities/user-email.entity';
 import { ProjectStatus } from 'src/catalog/domain/enums/project-status.enum';
-import { InvestmentStatus } from 'src/subscription/domain/enums/investment-status.enum';
-import { DocumentType, DocumentRelatedTo } from 'src/documents/domains/enums/document-type.enum';
+import type { ProjectRepository } from 'src/catalog/domain/repositories/project.repository';
+import { PROJECT_REPOSITORY } from 'src/catalog/domain/repositories/project.repository';
+import type { InvestmentRepository } from '../../domain/repositories/investment.repository';
+import { INVESTMENT_REPOSITORY } from '../../domain/repositories/investment.repository';
+import type { WalletRepository } from 'src/wallets/applications/ports/repositories/wallet.repository';
+import { WALLET_REPOSITORY } from 'src/wallets/applications/ports/repositories/wallet.repository';
+import type { DocumentRepository } from 'src/documents/applications/ports/repositories/document.repository';
+import { DOCUMENT_REPOSITORY } from 'src/documents/applications/ports/repositories/document.repository';
+import type { UserRepository } from 'src/iam/domain/repositories/user.repository';
+import { USER_REPOSITORY } from 'src/iam/domain/repositories/user.repository';
+import { CollecteCapacity } from 'src/subscription/domain/aggregates/collecte-capacity';
+import { InvestmentFactory } from 'src/subscription/domain/factories/investment.factory';
+import {
+  ProjetIntrouvableError,
+  SoldeInsuffisantError,
+  WalletIntrouvableError,
+} from 'src/subscription/domain/errors/subscription.errors';
+import { Document } from 'src/documents/domains/document';
+import {
+  DocumentType,
+  DocumentRelatedTo,
+} from 'src/documents/domains/enums/document-type.enum';
 import { SignatureStatus } from 'src/signatures/domains/enums/signature-status.enum';
 import { WalletType } from 'src/wallets/domains/enums/wallet.enum';
 import { CloudStorageService } from 'src/shared/cloud-storage/cloud-storage.service';
-import { formatEur } from 'src/shared/money/format-eur';
 import { ContractGeneratorService } from '../services/contract-generator.service';
 import { YouSignService } from 'src/common/yousign/yousign.service';
-import { Investment } from 'src/subscription/domain/aggregates/investment';
+import { ProjetSouscriptibleTranslator } from '../acl/projet-souscriptible.translator';
 
+/** Durée de validité d'une demande de signature envoyée au prestataire. */
+const VALIDITE_DEMANDE_SIGNATURE_MS = 48 * 60 * 60 * 1000;
+
+/**
+ * **Initier une souscription par signature** — l'investissement est réservé
+ * (`INITIE`, sans débit) et l'investisseur reçoit un lien de signature
+ * électronique pour son bulletin. Le débit et la confirmation suivent le
+ * retour du prestataire.
+ *
+ * Le use case orchestre, il ne décide pas (§14) : les portes de la
+ * souscription vivent dans {@link InvestmentFactory.initier} et l'anti-survente
+ * dans {@link CollecteCapacity}. Ce use case portait sa **propre copie** des
+ * deux règles — un troisième `SUM(nbTitres)` écrit à la main, un troisième
+ * calcul de `nbFractionsTotal`, un troisième contrôle de ticket plafond — et
+ * ses messages avaient déjà divergé de ceux des deux autres.
+ *
+ * Il lit désormais ses dépendances par les ports des contextes amont
+ * (`PROJECT_REPOSITORY`, `WALLET_REPOSITORY`, `USER_REPOSITORY`,
+ * `DOCUMENT_REPOSITORY`) au lieu d'injecter six `Repository<Entity>` TypeORM
+ * appartenant à cinq contextes différents (§13, §33).
+ *
+ * > Écarts restants, assumés : l'écriture du passage `FINANCE` sur
+ * > `ProjectEntity` et la création de `SignatureEntity` touchent encore
+ * > directement la base d'autres contextes, faute de port en écriture côté
+ * > `catalog` et `documents`. Contrairement à `CreateInvestmentUseCase`, ce
+ * > parcours ne pose **aucun verrou** : deux initiations concurrentes peuvent
+ * > se réserver les mêmes dernières fractions. C'est le comportement d'origine,
+ * > inchangé — le durcir demande la même section critique que la souscription
+ * > directe, et mérite son propre correctif.
+ */
 @Injectable()
 export class InitiateInvestmentUseCase {
   private readonly logger = new Logger(InitiateInvestmentUseCase.name);
 
   constructor(
+    @Inject(PROJECT_REPOSITORY)
+    private readonly projectRepository: ProjectRepository,
+    @Inject(INVESTMENT_REPOSITORY)
+    private readonly investmentRepository: InvestmentRepository,
+    @Inject(WALLET_REPOSITORY)
+    private readonly walletRepository: WalletRepository,
+    @Inject(DOCUMENT_REPOSITORY)
+    private readonly documentRepository: DocumentRepository,
+    @Inject(USER_REPOSITORY)
+    private readonly userRepository: UserRepository,
     @InjectRepository(ProjectEntity)
-    private readonly projectRepo: Repository<ProjectEntity>,
-    @InjectRepository(InvestmentEntity)
-    private readonly investRepo: Repository<InvestmentEntity>,
-    @InjectRepository(DocumentEntity)
-    private readonly documentRepo: Repository<DocumentEntity>,
+    private readonly projectRows: Repository<ProjectEntity>,
     @InjectRepository(SignatureEntity)
-    private readonly signatureRepo: Repository<SignatureEntity>,
-    @InjectRepository(WalletEntity)
-    private readonly walletRepo: Repository<WalletEntity>,
-    @InjectRepository(UserEntity)
-    private readonly userRepo: Repository<UserEntity>,
-    @InjectRepository(UserEmailEntity)
-    private readonly userEmailRepo: Repository<UserEmailEntity>,
+    private readonly signatureRows: Repository<SignatureEntity>,
     private readonly cloudStorage: CloudStorageService,
     private readonly contractGenerator: ContractGeneratorService,
     private readonly youSignService: YouSignService,
@@ -53,108 +92,56 @@ export class InitiateInvestmentUseCase {
     projetId: string,
     nbFractions: number,
   ): Promise<{ signingUrl: string; signatureId: string }> {
-    // ── Validation du projet ──────────────────────────────────────────────────
-    const project = await this.projectRepo.findOne({ where: { id: projetId } });
-    if (!project) throw new NotFoundException('Projet introuvable');
+    const projetCatalogue =
+      await this.projectRepository.findProjectById(projetId);
+    if (!projetCatalogue) throw new ProjetIntrouvableError(projetId);
+    const projet = ProjetSouscriptibleTranslator.traduire(projetCatalogue);
 
-    if (project.statut !== ProjectStatus.EN_COLLECTE) {
-      throw new BadRequestException(
-        project.statut === ProjectStatus.FINANCE
-          ? 'Ce projet est déjà entièrement financé.'
-          : "L'investissement n'est possible que sur un projet en cours de collecte.",
-      );
+    const capacite = CollecteCapacity.duProjet(
+      projet,
+      await this.investmentRepository.countFractionsVendues(projetId),
+    );
+
+    // La collecte est complète : on l'acte sur le projet avant de refuser —
+    // c'est le rattrapage de statut que faisait déjà l'ancienne version.
+    if (capacite.estIntegralementSouscrite && projet.enCollecte) {
+      await this.projectRows.update(projetId, {
+        statut: ProjectStatus.FINANCE,
+      });
     }
 
-    const prixFraction = Number(project.ticketMinimum);
-    const nbFractionsTotal =
-      project.nbFractions ?? Math.floor(Number(project.capitalCible) / prixFraction);
+    const naissant = InvestmentFactory.initier(
+      { projet, utilisateurId: userId, nbFractions },
+      capacite,
+    );
 
-    const fractionsVendues = await this.investRepo
-      .createQueryBuilder('inv')
-      .select('COALESCE(SUM(inv.nbTitres), 0)', 'total')
-      .where('inv.projetId = :projetId', { projetId })
-      .andWhere('inv.statut NOT IN (:...excluded)', {
-        excluded: [InvestmentStatus.RETRACTE, InvestmentStatus.ANNULE],
-      })
-      .getRawOne()
-      .then((r) => Number(r?.total ?? 0));
-
-    const fractionsDisponibles = nbFractionsTotal - fractionsVendues;
-
-    if (fractionsDisponibles <= 0) {
-      if (project.statut === ProjectStatus.EN_COLLECTE) {
-        await this.projectRepo.update(projetId, { statut: ProjectStatus.FINANCE });
-      }
-      throw new BadRequestException(
-        'Il ne reste plus de fractions disponibles sur ce projet.',
-      );
-    }
-    if (nbFractions < 1 || nbFractions > fractionsDisponibles) {
-      throw new BadRequestException(
-        `Quantité invalide. Fractions disponibles : ${fractionsDisponibles}`,
-      );
+    // Le solde est vérifié sans être débité : le débit suit la signature.
+    const wallet = await this.walletRepository.findWalletByUser(
+      userId,
+      WalletType.INVESTISSEUR,
+    );
+    if (!wallet) throw new WalletIntrouvableError();
+    if (Number(wallet.solde) < naissant.montant) {
+      throw new SoldeInsuffisantError(Number(wallet.solde), naissant.montant);
     }
 
-    const montantTotal = nbFractions * prixFraction;
+    const investment = await this.investmentRepository.creer(naissant);
 
-    if (project.ticketMaximum && montantTotal > Number(project.ticketMaximum)) {
-      throw new BadRequestException(
-        `Votre investissement dépasse le ticket maximum de ${project.ticketMaximum}.`,
-      );
-    }
-
-    // ── Vérification solde wallet (sans débiter) ───────────────────────────────
-    const wallets = await this.walletRepo.find({
-      where: { proprietaireUserId: userId, type: WalletType.INVESTISSEUR, devise: 'EUR' },
-    });
-    if (wallets.length === 0) {
-      throw new BadRequestException(
-        "Wallet introuvable. Alimentez votre compte avant d'investir.",
-      );
-    }
-    const wallet = wallets.reduce((best, w) => (Number(w.solde) > Number(best.solde) ? w : best));
-    if (Number(wallet.solde) < montantTotal) {
-      throw new BadRequestException(
-        `Solde insuffisant. Disponible : ${formatEur(Number(wallet.solde))} — Requis : ${formatEur(montantTotal)}`,
-      );
-    }
-
-    // ── Infos investisseur pour le PDF ─────────────────────────────────────────
-    const user = await this.userRepo.findOne({ where: { userId } });
-    const userEmail = await this.userEmailRepo.findOne({ where: { userId } });
-
-    // ── Création de l'investissement (statut INITIE) ───────────────────────────
-    const investment = this.investRepo.create({
-      projetId,
-      utilisateurId: userId,
-      montant: montantTotal,
-      instrument: project.instrument,
-      nbTitres: nbFractions,
-      valeurTitre: prixFraction,
-      statut: InvestmentStatus.INITIE,
-      delaiRetractationJusquAu: null,
-      bulletinDocId: null,
-      signatureId: null,
-      reservationId: null,
-    });
-    const savedInvestment = await this.investRepo.save(investment);
-
-    // ── Génération du PDF contrat de souscription ──────────────────────────────
-    const investmentDomain = Object.assign(new Investment(), savedInvestment);
+    // ── Bulletin, signature électronique, traçabilité ─────────────────────────
+    const user = await this.userRepository.findById(userId);
     const pdfBuffer = await this.contractGenerator.generateContratSouscription({
-      investment: investmentDomain,
+      investment,
       investorFirstname: user?.firstname ?? 'Investisseur',
       investorLastname: user?.lastname ?? '',
-      investorEmail: userEmail?.email ?? '',
-      projectTitle: project.titre,
-      projectVille: project.ville ?? '',
-      projectPays: project.pays,
-      triCible: Number(project.triCible ?? 0),
-      dureeMois: Number(project.dureeMois),
+      investorEmail: user?.email ?? '',
+      projectTitle: projetCatalogue.titre,
+      projectVille: projetCatalogue.ville ?? '',
+      projectPays: projetCatalogue.pays,
+      triCible: projet.triCible,
+      dureeMois: projet.dureeMois,
     });
 
-    // ── Upload GCS ─────────────────────────────────────────────────────────────
-    const filename = `contrat_souscription_${savedInvestment.id.slice(0, 8)}_${userId}_${Date.now()}.pdf`;
+    const filename = `contrat_souscription_${investment.id.slice(0, 8)}_${userId}_${Date.now()}.pdf`;
     const { objectName, publicUrl } = await this.cloudStorage.upload(
       pdfBuffer,
       filename,
@@ -162,79 +149,72 @@ export class InitiateInvestmentUseCase {
       'contrats',
     );
 
-    // ── Création du Document ───────────────────────────────────────────────────
-    const docEntity = this.documentRepo.create({
-      type: DocumentType.CONTRAT_SOUSCRIPTION,
-      relatedTo: DocumentRelatedTo.INVESTMENT,
-      userId,
-      projectId: projetId,
-      investmentId: savedInvestment.id,
-      originalName: filename,
-      filename: objectName,
-      mimeType: 'application/pdf',
-      sizeBytes: pdfBuffer.length,
-      path: publicUrl,
-      isPublic: false,
-      uploadedBy: userId,
-      ordre: null,
-      estPrincipale: false,
-    });
-    const savedDoc = await this.documentRepo.save(docEntity);
+    const doc = new Document();
+    doc.type = DocumentType.CONTRAT_SOUSCRIPTION;
+    doc.relatedTo = DocumentRelatedTo.INVESTMENT;
+    doc.userId = userId;
+    doc.projectId = projetId;
+    doc.investmentId = investment.id;
+    doc.originalName = filename;
+    doc.filename = objectName;
+    doc.mimeType = 'application/pdf';
+    doc.sizeBytes = pdfBuffer.length;
+    doc.path = publicUrl;
+    doc.isPublic = false;
+    doc.uploadedBy = userId;
+    doc.ordre = null;
+    doc.estPrincipale = false;
+    const savedDoc = await this.documentRepository.save(doc);
 
-    // ── Envoi à YouSign + lien de signature embarqué ───────────────────────────
+    const expiresAt = new Date(Date.now() + VALIDITE_DEMANDE_SIGNATURE_MS);
     const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:5173';
-    const successRedirectUrl = `${frontendUrl}/dashboard/invest/success?investmentId=${savedInvestment.id}`;
+    const successRedirectUrl = `${frontendUrl}/dashboard/invest/success?investmentId=${investment.id}`;
     const { requestId, signerId, signingUrl } =
       await this.youSignService.createEmbeddedSignatureRequest({
         documentBuffer: pdfBuffer,
         documentName: filename,
-        signerEmail: userEmail?.email ?? '',
+        signerEmail: user?.email ?? '',
         signerFirstname: user?.firstname ?? 'Investisseur',
         signerLastname: user?.lastname ?? '',
-        expiresAt: new Date(Date.now() + 48 * 60 * 60 * 1000),
+        expiresAt,
         successRedirectUrl,
         errorRedirectUrl: successRedirectUrl,
       });
 
-    // ── Création de l'enregistrement Signature ─────────────────────────────────
-    const sigEntity = this.signatureRepo.create({
-      youSignRequestId: requestId,
-      youSignSignerId: signerId,
-      youSignSigningUrl: signingUrl,
-      documentId: savedDoc.id,
-      investmentId: savedInvestment.id,
-      ordreId: null,
-      nbFractions,
-      userId,
-      statut: SignatureStatus.PENDING,
-      expiresAt: new Date(Date.now() + 48 * 60 * 60 * 1000),
-      signedAt: null,
-    });
-    const savedSig = await this.signatureRepo.save(sigEntity);
+    const savedSignature = await this.signatureRows.save(
+      this.signatureRows.create({
+        youSignRequestId: requestId,
+        youSignSignerId: signerId,
+        youSignSigningUrl: signingUrl,
+        documentId: savedDoc.id,
+        investmentId: investment.id,
+        ordreId: null,
+        nbFractions,
+        userId,
+        statut: SignatureStatus.PENDING,
+        expiresAt,
+        signedAt: null,
+      }),
+    );
 
-    // Lier la signature à l'investissement
-    await this.investRepo.update(savedInvestment.id, { signatureId: savedSig.id });
+    investment.rattacherDemandeDeSignature(savedSignature.id);
+    await this.investmentRepository.save(investment);
 
-    // Auto-transition FINANCE si toutes les fractions sont réservées
-    const totalClaims = await this.investRepo
-      .createQueryBuilder('inv')
-      .select('COALESCE(SUM(inv.nbTitres), 0)', 'total')
-      .where('inv.projetId = :projetId', { projetId })
-      .andWhere('inv.statut NOT IN (:...excluded)', {
-        excluded: [InvestmentStatus.RETRACTE, InvestmentStatus.ANNULE],
-      })
-      .getRawOne()
-      .then((r) => Number(r?.total ?? 0));
-
-    if (totalClaims >= nbFractionsTotal) {
-      await this.projectRepo.update(projetId, { statut: ProjectStatus.FINANCE });
-      this.logger.log(`Project ${projetId} → FINANCE (${totalClaims}/${nbFractionsTotal} fractions réservées)`);
+    // Les fractions de cette initiation comptent déjà dans la collecte : si
+    // elle vient de la compléter, le projet passe FINANCE.
+    if (capacite.estIntegralementSouscrite) {
+      await this.projectRows.update(projetId, {
+        statut: ProjectStatus.FINANCE,
+      });
+      this.logger.log(
+        `Project ${projetId} → FINANCE (${capacite.fractionsDejaVendues}/${capacite.nbFractionsTotal} fractions réservées)`,
+      );
     }
 
     this.logger.log(
-      `InitiateInvestment: investmentId=${savedInvestment.id} userId=${userId} signatureId=${savedSig.id}`,
+      `InitiateInvestment: investmentId=${investment.id} userId=${userId} signatureId=${savedSignature.id}`,
     );
 
-    return { signingUrl, signatureId: savedSig.id };
+    return { signingUrl, signatureId: savedSignature.id };
   }
 }
