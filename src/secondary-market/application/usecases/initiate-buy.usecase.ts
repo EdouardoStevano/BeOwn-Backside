@@ -7,14 +7,14 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { OrdreMarcheEntity } from 'src/secondarymarket/infrastructure/persistences/entities/ordre-marche.entity';
+import { OrdreMarcheEntity } from 'src/secondary-market/infrastructure/persistence/entities/ordre-marche.entity';
 import { InvestmentEntity } from 'src/subscription/infrastructure/persistence/entities/investment.entity';
 import { DocumentEntity } from 'src/documents/infrastructure/persistences/entities/document.entity';
 import { SignatureEntity } from 'src/signatures/infrastructure/persistences/entities/signature.entity';
 import { WalletEntity } from 'src/treasury/infrastructure/persistence/entities/wallet.entity';
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 import { UserEmailEntity } from 'src/iam/infrastructure/persistence/entities/user-email.entity';
-import { OrdreMarcheStatus } from 'src/secondarymarket/domains/ordre-marche';
+import { OrdreMarcheStatus } from 'src/secondary-market/domain/enums/ordre-marche.enum';
 import { InvestmentStatus } from 'src/subscription/domain/enums/investment-status.enum';
 import { DocumentType, DocumentRelatedTo } from 'src/documents/domains/enums/document-type.enum';
 import { SignatureStatus } from 'src/signatures/domains/enums/signature-status.enum';

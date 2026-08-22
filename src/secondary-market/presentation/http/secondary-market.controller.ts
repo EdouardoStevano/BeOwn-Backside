@@ -22,14 +22,14 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import { SkipThrottle } from '@nestjs/throttler';
-import { OrdreMarcheEntity } from 'src/secondarymarket/infrastructure/persistences/entities/ordre-marche.entity';
+import { OrdreMarcheEntity } from 'src/secondary-market/infrastructure/persistence/entities/ordre-marche.entity';
 import { InvestmentEntity } from 'src/subscription/infrastructure/persistence/entities/investment.entity';
 import { ProjectEntity } from 'src/catalog/infrastructure/persistence/entities/project.entity';
 import { CreateOrdreMarcheDto, ExecuteOrderDto } from '../dto/ordre-marche.dto';
 import {
   OrdreMarcheStatus,
   OrdreMarcheSens,
-} from 'src/secondarymarket/domains/ordre-marche';
+} from 'src/secondary-market/domain/enums/ordre-marche.enum';
 import { InvestmentStatus } from 'src/subscription/domain/enums/investment-status.enum';
 import { CurrentUser } from 'src/iam/presentation/decorators/current-user.decorator';
 import type { ActiveUser } from 'src/iam/presentation/decorators/current-user.decorator';
@@ -39,8 +39,8 @@ import { Public } from 'src/iam/presentation/decorators/public.decorator';
 import { NotificationService } from 'src/notifications/applications/notification.service';
 import { NotificationEventService } from 'src/notifications/applications/notification-event.service';
 import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
-import { InitiateBuyUseCase } from 'src/secondarymarket/applications/usecases/initiate-buy.usecase';
-import { CancelInitiationUseCase } from 'src/secondarymarket/applications/usecases/cancel-initiation.usecase';
+import { InitiateBuyUseCase } from 'src/secondary-market/application/usecases/initiate-buy.usecase';
+import { CancelInitiationUseCase } from 'src/secondary-market/application/usecases/cancel-initiation.usecase';
 import { SignatureEntity } from 'src/signatures/infrastructure/persistences/entities/signature.entity';
 import { SignatureStatus } from 'src/signatures/domains/enums/signature-status.enum';
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';

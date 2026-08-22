@@ -7,7 +7,7 @@ import { QueryFailedError } from 'typeorm';
 import { DeleteAccountUseCase } from 'src/iam/application/usecases/account/delete-account.usecase';
 import { UserStatus } from 'src/iam/domain/enums/user.enum';
 import { InvestmentStatus } from 'src/subscription/domain/enums/investment-status.enum';
-import { OrdreMarcheStatus } from 'src/secondarymarket/domains/ordre-marche';
+import { OrdreMarcheStatus } from 'src/secondary-market/domain/enums/ordre-marche.enum';
 import {
   TransactionStatus,
   TransactionType,

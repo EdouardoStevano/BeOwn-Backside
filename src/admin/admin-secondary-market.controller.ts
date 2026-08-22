@@ -21,14 +21,14 @@ import { rolesWithPermission } from 'src/iam/domain/policies/role-permissions.po
 import { CurrentUser } from 'src/iam/presentation/decorators/current-user.decorator';
 import type { ActiveUser } from 'src/iam/presentation/decorators/current-user.decorator';
 import { formatEur } from 'src/shared/money/format-eur';
-import { OrdreMarcheEntity } from 'src/secondarymarket/infrastructure/persistences/entities/ordre-marche.entity';
+import { OrdreMarcheEntity } from 'src/secondary-market/infrastructure/persistence/entities/ordre-marche.entity';
 import { SignatureEntity } from 'src/signatures/infrastructure/persistences/entities/signature.entity';
 import { SignatureStatus } from 'src/signatures/domains/enums/signature-status.enum';
 import { InvestmentEntity } from 'src/subscription/infrastructure/persistence/entities/investment.entity';
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 import { UserRole } from 'src/iam/domain/enums/user.enum';
-import { OrdreMarcheStatus } from 'src/secondarymarket/domains/ordre-marche';
-import { computeCoutAcquisition } from 'src/secondarymarket/domains/cout-acquisition';
+import { OrdreMarcheStatus } from 'src/secondary-market/domain/enums/ordre-marche.enum';
+import { computeCoutAcquisition } from 'src/secondary-market/domain/services/cout-acquisition';
 import { PlatformFeesService } from 'src/common/platform-fees/platform-fees.service';
 import { round2 } from 'src/common/platform-fees/platform-fees.constants';
 import { InvestmentStatus } from 'src/subscription/domain/enums/investment-status.enum';

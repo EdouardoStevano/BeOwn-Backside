@@ -17,7 +17,7 @@ import { KycEntity } from 'src/compliance/infrastructure/persistence/entities/ky
 import { NotificationEntity } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
 import { AuditLogEntity } from 'src/notifications/infrastructure/persistences/entities/audit-log.entity';
 import { DocumentEntity } from 'src/documents/infrastructure/persistences/entities/document.entity';
-import { OrdreMarcheEntity } from 'src/secondarymarket/infrastructure/persistences/entities/ordre-marche.entity';
+import { OrdreMarcheEntity } from 'src/secondary-market/infrastructure/persistence/entities/ordre-marche.entity';
 import { AvisEntity } from 'src/avis/infrastructure/persistences/entities/avis.entity';
 import { SignatureEntity } from 'src/signatures/infrastructure/persistences/entities/signature.entity';
 import { UniteLouableEntity } from 'src/locative-management/infrastructure/persistences/entities/unite-louable.entity';

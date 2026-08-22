@@ -8,7 +8,7 @@
   Min,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { OrdreMarcheSens } from 'src/secondarymarket/domains/ordre-marche';
+import { OrdreMarcheSens } from 'src/secondary-market/domain/enums/ordre-marche.enum';
 
 export class CreateOrdreMarcheDto {
   @ApiProperty({ example: 'uuid-investissement' })

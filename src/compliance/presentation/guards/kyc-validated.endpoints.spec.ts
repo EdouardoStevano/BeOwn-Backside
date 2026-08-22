@@ -13,7 +13,7 @@ import {
 } from '../http/kyc-legacy.controller';
 import { PaymentController } from 'src/treasury/presentation/http/payment.controller';
 import { InvestmentController } from 'src/subscription/presentation/http/investment.controller';
-import { SecondaryMarketController } from 'src/secondarymarket/presenters/http/secondary-market.controller';
+import { SecondaryMarketController } from 'src/secondary-market/presentation/http/secondary-market.controller';
 import { RepaymentScheduleController } from 'src/servicing/presentation/http/repayment-schedule.controller';
 
 type ControllerClass = new (...args: any[]) => unknown;

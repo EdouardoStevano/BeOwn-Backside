@@ -42,11 +42,11 @@ import {
   DocumentType,
   DocumentRelatedTo,
 } from 'src/documents/domains/enums/document-type.enum';
-import { OrdreMarcheEntity } from 'src/secondarymarket/infrastructure/persistences/entities/ordre-marche.entity';
+import { OrdreMarcheEntity } from 'src/secondary-market/infrastructure/persistence/entities/ordre-marche.entity';
 import {
   OrdreMarcheSens,
   OrdreMarcheStatus,
-} from 'src/secondarymarket/domains/ordre-marche';
+} from 'src/secondary-market/domain/enums/ordre-marche.enum';
 import { AvisEntity } from 'src/avis/infrastructure/persistences/entities/avis.entity';
 
 // Configuration interface pour le seed
