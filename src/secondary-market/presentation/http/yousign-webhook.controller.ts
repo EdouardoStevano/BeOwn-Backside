@@ -103,7 +103,9 @@ export class YouSignWebhookController {
     @Body() payload: any,
     @Headers('x-yousign-signature-256') signature: string,
   ) {
-    const rawBody = (req.rawBody as Buffer | undefined)?.toString('utf-8') ?? JSON.stringify(payload);
+    const rawBody =
+      (req.rawBody as Buffer | undefined)?.toString('utf-8') ??
+      JSON.stringify(payload);
 
     if (!this.youSignService.verifyWebhookSignature(rawBody, signature)) {
       this.logger.warn('Invalid YouSign webhook signature — ignored');
@@ -119,11 +121,16 @@ export class YouSignWebhookController {
 
     if (event === 'signature_request.done') {
       await this.handleSignatureDone(requestId).catch((err) =>
-        this.logger.error(`handleSignatureDone failed for ${requestId}: ${err?.message}`, err?.stack),
+        this.logger.error(
+          `handleSignatureDone failed for ${requestId}: ${err?.message}`,
+          err?.stack,
+        ),
       );
     } else if (event === 'signature_request.expired') {
       await this.handleSignatureExpired(requestId).catch((err) =>
-        this.logger.error(`handleSignatureExpired failed for ${requestId}: ${err?.message}`),
+        this.logger.error(
+          `handleSignatureExpired failed for ${requestId}: ${err?.message}`,
+        ),
       );
     }
 
@@ -145,11 +152,15 @@ export class YouSignWebhookController {
       where: { youSignRequestId },
     });
     if (!existing) {
-      this.logger.warn(`No signature found for YouSign request ${youSignRequestId}`);
+      this.logger.warn(
+        `No signature found for YouSign request ${youSignRequestId}`,
+      );
       return;
     }
     if (existing.statut !== SignatureStatus.PENDING) {
-      this.logger.log(`Signature ${existing.id} already processed (${existing.statut})`);
+      this.logger.log(
+        `Signature ${existing.id} already processed (${existing.statut})`,
+      );
       return;
     }
 
@@ -159,254 +170,277 @@ export class YouSignWebhookController {
     const feeRates =
       existing.ordreId === null ? null : await this.platformFees.getRates();
 
-    const result = await this.dataSource.transaction(async (em): Promise<SignatureDoneResult> => {
-      // Verrou pessimiste sur la ligne signature + relecture du statut SOUS
-      // VERROU : sérialise les livraisons concurrentes du webhook.
-      const signature = await em.findOne(SignatureEntity, {
-        where: { youSignRequestId },
-        lock: { mode: 'pessimistic_write' },
-      });
-      if (!signature || signature.statut !== SignatureStatus.PENDING) {
-        return { branch: 'noop' };
-      }
-
-      // Souscription initiale (ordreId = null) → exécution atomique dédiée, puis
-      // SIGNED en dernier dans la même transaction.
-      if (signature.ordreId === null) {
-        const out = await this.executeInvestmentSignature(em, signature);
-        await this.acterSignature(em, signature);
-        return out;
-      }
-
-      // ── Marché secondaire : rachat de fractions ───────────────────────────
-      const ordre = await em.findOne(OrdreMarcheEntity, {
-        where: { id: signature.ordreId! },
-        relations: ['investissement'],
-      });
-      if (!ordre) throw new Error(`Ordre ${signature.ordreId} introuvable`);
-
-      const nbFractions = signature.nbFractions!;
-      const projetId = ordre.investissement.projetId;
-      const prixUnitaire = Number(ordre.prixUnitaire);
-      const montantTotal = round2(nbFractions * prixUnitaire);
-      // Plus-value vendeur = prix de vente − coût d'acquisition des parts
-      // vendues (coût moyen pondéré — voir domains/cout-acquisition.ts).
-      // Calculée AVANT la réduction de l'investissement vendeur (étape 5).
-      const coutAcquisition = computeCoutAcquisition(
-        ordre.investissement,
-        nbFractions,
-        prixUnitaire,
-      );
-      const plusValueVendeur = round2(montantTotal - coutAcquisition);
-      // Frais vendeur : % du montant de la vente + % de la plus-value.
-      const { transactionFee, gainFee } = await this.platformFees.computeResaleFees(
-        montantTotal,
-        plusValueVendeur,
-        // Non-null dans la branche marché secondaire (ordreId != null).
-        feeRates!,
-      );
-      const totalFrais = round2(transactionFee + gainFee);
-      const montantNetVendeur = round2(montantTotal - totalFrais);
-      const buyerUserId = signature.userId;
-
-      // 1. Vérifier/obtenir wallet acheteur
-      const buyerWallet = await em.findOne(WalletEntity, {
-        where: { proprietaireUserId: buyerUserId, type: WalletType.INVESTISSEUR },
-      });
-      if (!buyerWallet) throw new Error(`Wallet acheteur ${buyerUserId} introuvable`);
-      if (Number(buyerWallet.solde) < montantTotal) {
-        throw new Error(`Solde insuffisant pour acheteur ${buyerUserId}: ${buyerWallet.solde} < ${montantTotal}`);
-      }
-
-      // 2. Wallet vendeur
-      const sellerWallet = await em.findOne(WalletEntity, {
-        where: { proprietaireUserId: ordre.vendeurId, type: WalletType.INVESTISSEUR },
-      });
-
-      // 3. Cas A (investi) ou Cas B (nouvel investissement)
-      let buyerInvest: InvestmentEntity;
-      const existingInvest = signature.investmentId
-        ? await em.findOne(InvestmentEntity, { where: { id: signature.investmentId } })
-        : null;
-
-      if (existingInvest) {
-        existingInvest.nbTitres = (Number(existingInvest.nbTitres) ?? 0) + nbFractions;
-        existingInvest.montant = Number(existingInvest.montant) + montantTotal;
-        existingInvest.signatureId = signature.id;
-        buyerInvest = await em.save(InvestmentEntity, existingInvest);
-      } else {
-        const sellerInvest = ordre.investissement;
-        const newInvest = em.create(InvestmentEntity, {
-          projetId,
-          utilisateurId: buyerUserId,
-          montant: montantTotal,
-          instrument: sellerInvest.instrument,
-          nbTitres: nbFractions,
-          valeurTitre: prixUnitaire,
-          statut: InvestmentStatus.CONFIRME,
-          signatureId: signature.id,
+    const result = await this.dataSource.transaction(
+      async (em): Promise<SignatureDoneResult> => {
+        // Verrou pessimiste sur la ligne signature + relecture du statut SOUS
+        // VERROU : sérialise les livraisons concurrentes du webhook.
+        const signature = await em.findOne(SignatureEntity, {
+          where: { youSignRequestId },
+          lock: { mode: 'pessimistic_write' },
         });
-        buyerInvest = await em.save(InvestmentEntity, newInvest);
-      }
+        if (!signature || signature.statut !== SignatureStatus.PENDING) {
+          return { branch: 'noop' };
+        }
 
-      // 4. Lier le document au bon investissement
-      if (signature.documentId) {
-        await em.update(DocumentEntity, { id: signature.documentId }, {
-          investmentId: buyerInvest.id,
+        // Souscription initiale (ordreId = null) → exécution atomique dédiée, puis
+        // SIGNED en dernier dans la même transaction.
+        if (signature.ordreId === null) {
+          const out = await this.executeInvestmentSignature(em, signature);
+          await this.acterSignature(em, signature);
+          return out;
+        }
+
+        // ── Marché secondaire : rachat de fractions ───────────────────────────
+        const ordre = await em.findOne(OrdreMarcheEntity, {
+          where: { id: signature.ordreId! },
+          relations: ['investissement'],
         });
-      }
+        if (!ordre) throw new Error(`Ordre ${signature.ordreId} introuvable`);
 
-      // 5. Réduire les fractions du vendeur
-      const sellerInvest = await em.findOne(InvestmentEntity, {
-        where: { id: ordre.investissementId },
-      });
-      if (sellerInvest && sellerInvest.nbTitres != null) {
-        const remaining = Number(sellerInvest.nbTitres) - nbFractions;
-        sellerInvest.nbTitres = Math.max(0, remaining);
-        sellerInvest.montant = remaining > 0
-          ? Number(sellerInvest.montant) - montantTotal
-          : 0;
-        await em.save(InvestmentEntity, sellerInvest);
-      }
+        const nbFractions = signature.nbFractions!;
+        const projetId = ordre.investissement.projetId;
+        const prixUnitaire = Number(ordre.prixUnitaire);
+        const montantTotal = round2(nbFractions * prixUnitaire);
+        // Plus-value vendeur = prix de vente − coût d'acquisition des parts
+        // vendues (coût moyen pondéré — voir domains/cout-acquisition.ts).
+        // Calculée AVANT la réduction de l'investissement vendeur (étape 5).
+        const coutAcquisition = computeCoutAcquisition(
+          ordre.investissement,
+          nbFractions,
+          prixUnitaire,
+        );
+        const plusValueVendeur = round2(montantTotal - coutAcquisition);
+        // Frais vendeur : % du montant de la vente + % de la plus-value.
+        const { transactionFee, gainFee } =
+          await this.platformFees.computeResaleFees(
+            montantTotal,
+            plusValueVendeur,
+            // Non-null dans la branche marché secondaire (ordreId != null).
+            feeRates!,
+          );
+        const totalFrais = round2(transactionFee + gainFee);
+        const montantNetVendeur = round2(montantTotal - totalFrais);
+        const buyerUserId = signature.userId;
 
-      // 6. Mettre à jour l'ordre
-      if (nbFractions >= ordre.nbFractions) {
-        ordre.acheteurId = buyerUserId;
-        ordre.statut = OrdreMarcheStatus.EXECUTE;
-      } else {
-        ordre.nbFractions = ordre.nbFractions - nbFractions;
-        ordre.montant = Number(ordre.montant) - montantTotal;
-      }
-      await em.save(OrdreMarcheEntity, ordre);
-
-      // 7. Débiter wallet acheteur (montant total)
-      buyerWallet.solde = Number(buyerWallet.solde) - montantTotal;
-      await em.save(WalletEntity, buyerWallet);
-
-      // 8. Créditer wallet vendeur (net des frais vendeur)
-      if (sellerWallet) {
-        sellerWallet.solde = Number(sellerWallet.solde) + montantNetVendeur;
-        await em.save(WalletEntity, sellerWallet);
-      }
-
-      // 9. Créditer wallet plateforme (frais de transaction + frais sur gain)
-      // Wallet system-wide, créé à la volée si absent (parité avec SEQUESTRE_IR/CSG).
-      let platformWallet: WalletEntity | null = null;
-      if (totalFrais > 0) {
-        platformWallet = await em.findOne(WalletEntity, {
-          where: { type: WalletType.FRAIS_PLATEFORME },
+        // 1. Vérifier/obtenir wallet acheteur
+        const buyerWallet = await em.findOne(WalletEntity, {
+          where: {
+            proprietaireUserId: buyerUserId,
+            type: WalletType.INVESTISSEUR,
+          },
         });
-        if (!platformWallet) {
-          platformWallet = await em.save(
-            WalletEntity,
-            em.create(WalletEntity, {
-              type: WalletType.FRAIS_PLATEFORME,
-              proprietaireUserId: null,
-              fournisseurRef: 'PLAT-FEES-001',
-              devise: buyerWallet.devise,
-              solde: 0,
-            }),
+        if (!buyerWallet)
+          throw new Error(`Wallet acheteur ${buyerUserId} introuvable`);
+        if (Number(buyerWallet.solde) < montantTotal) {
+          throw new Error(
+            `Solde insuffisant pour acheteur ${buyerUserId}: ${buyerWallet.solde} < ${montantTotal}`,
           );
         }
-        platformWallet.solde = Number(platformWallet.solde) + totalFrais;
-        await em.save(WalletEntity, platformWallet);
-      }
 
-      // 10. Transaction ledger acheteur
-      const txBuyer = em.create(TransactionEntity, {
-        walletSource: buyerWallet.id,
-        walletDestination: sellerWallet?.id ?? null,
-        type: TransactionType.SOUSCRIPTION,
-        montant: montantTotal,
-        devise: buyerWallet.devise,
-        statut: TransactionStatus.REUSSI,
-        fournisseur: TransactionFournisseur.INTERNE,
-        investissementId: buyerInvest.id,
-        projetId,
-        idempotencyKey: `rachat:buyer:${signature.id}`,
-        fraisPsp: 0,
-        fraisPlateforme: totalFrais,
-      });
-      await em.save(TransactionEntity, txBuyer);
+        // 2. Wallet vendeur
+        const sellerWallet = await em.findOne(WalletEntity, {
+          where: {
+            proprietaireUserId: ordre.vendeurId,
+            type: WalletType.INVESTISSEUR,
+          },
+        });
 
-      // 11. Transaction ledger vendeur (net des frais)
-      if (sellerWallet) {
-        const txSeller = em.create(TransactionEntity, {
-          walletSource: null,
-          walletDestination: sellerWallet.id,
+        // 3. Cas A (investi) ou Cas B (nouvel investissement)
+        let buyerInvest: InvestmentEntity;
+        const existingInvest = signature.investmentId
+          ? await em.findOne(InvestmentEntity, {
+              where: { id: signature.investmentId },
+            })
+          : null;
+
+        if (existingInvest) {
+          existingInvest.nbTitres =
+            (Number(existingInvest.nbTitres) ?? 0) + nbFractions;
+          existingInvest.montant =
+            Number(existingInvest.montant) + montantTotal;
+          existingInvest.signatureId = signature.id;
+          buyerInvest = await em.save(InvestmentEntity, existingInvest);
+        } else {
+          const sellerInvest = ordre.investissement;
+          const newInvest = em.create(InvestmentEntity, {
+            projetId,
+            utilisateurId: buyerUserId,
+            montant: montantTotal,
+            instrument: sellerInvest.instrument,
+            nbTitres: nbFractions,
+            valeurTitre: prixUnitaire,
+            statut: InvestmentStatus.CONFIRME,
+            signatureId: signature.id,
+          });
+          buyerInvest = await em.save(InvestmentEntity, newInvest);
+        }
+
+        // 4. Lier le document au bon investissement
+        if (signature.documentId) {
+          await em.update(
+            DocumentEntity,
+            { id: signature.documentId },
+            {
+              investmentId: buyerInvest.id,
+            },
+          );
+        }
+
+        // 5. Réduire les fractions du vendeur
+        const sellerInvest = await em.findOne(InvestmentEntity, {
+          where: { id: ordre.investissementId },
+        });
+        if (sellerInvest && sellerInvest.nbTitres != null) {
+          const remaining = Number(sellerInvest.nbTitres) - nbFractions;
+          sellerInvest.nbTitres = Math.max(0, remaining);
+          sellerInvest.montant =
+            remaining > 0 ? Number(sellerInvest.montant) - montantTotal : 0;
+          await em.save(InvestmentEntity, sellerInvest);
+        }
+
+        // 6. Mettre à jour l'ordre
+        if (nbFractions >= ordre.nbFractions) {
+          ordre.acheteurId = buyerUserId;
+          ordre.statut = OrdreMarcheStatus.EXECUTE;
+        } else {
+          ordre.nbFractions = ordre.nbFractions - nbFractions;
+          ordre.montant = Number(ordre.montant) - montantTotal;
+        }
+        await em.save(OrdreMarcheEntity, ordre);
+
+        // 7. Débiter wallet acheteur (montant total)
+        buyerWallet.solde = Number(buyerWallet.solde) - montantTotal;
+        await em.save(WalletEntity, buyerWallet);
+
+        // 8. Créditer wallet vendeur (net des frais vendeur)
+        if (sellerWallet) {
+          sellerWallet.solde = Number(sellerWallet.solde) + montantNetVendeur;
+          await em.save(WalletEntity, sellerWallet);
+        }
+
+        // 9. Créditer wallet plateforme (frais de transaction + frais sur gain)
+        // Wallet system-wide, créé à la volée si absent (parité avec SEQUESTRE_IR/CSG).
+        let platformWallet: WalletEntity | null = null;
+        if (totalFrais > 0) {
+          platformWallet = await em.findOne(WalletEntity, {
+            where: { type: WalletType.FRAIS_PLATEFORME },
+          });
+          if (!platformWallet) {
+            platformWallet = await em.save(
+              WalletEntity,
+              em.create(WalletEntity, {
+                type: WalletType.FRAIS_PLATEFORME,
+                proprietaireUserId: null,
+                fournisseurRef: 'PLAT-FEES-001',
+                devise: buyerWallet.devise,
+                solde: 0,
+              }),
+            );
+          }
+          platformWallet.solde = Number(platformWallet.solde) + totalFrais;
+          await em.save(WalletEntity, platformWallet);
+        }
+
+        // 10. Transaction ledger acheteur
+        const txBuyer = em.create(TransactionEntity, {
+          walletSource: buyerWallet.id,
+          walletDestination: sellerWallet?.id ?? null,
           type: TransactionType.SOUSCRIPTION,
-          montant: montantNetVendeur,
-          devise: sellerWallet.devise,
+          montant: montantTotal,
+          devise: buyerWallet.devise,
           statut: TransactionStatus.REUSSI,
           fournisseur: TransactionFournisseur.INTERNE,
-          investissementId: ordre.investissementId,
+          investissementId: buyerInvest.id,
           projetId,
-          idempotencyKey: `rachat:seller:${signature.id}`,
+          idempotencyKey: `rachat:buyer:${signature.id}`,
           fraisPsp: 0,
           fraisPlateforme: totalFrais,
         });
-        await em.save(TransactionEntity, txSeller);
-      }
+        await em.save(TransactionEntity, txBuyer);
 
-      // 12. Transactions ledger frais plateforme — une par frais.
-      // Clés scoppées par signature (un ordre peut être exécuté en plusieurs
-      // fills partiels) ; metadata.ordreId permet le lookup au reverse admin.
-      if (platformWallet && transactionFee > 0) {
-        await em.save(
-          TransactionEntity,
-          em.create(TransactionEntity, {
+        // 11. Transaction ledger vendeur (net des frais)
+        if (sellerWallet) {
+          const txSeller = em.create(TransactionEntity, {
             walletSource: null,
-            walletDestination: platformWallet.id,
+            walletDestination: sellerWallet.id,
             type: TransactionType.SOUSCRIPTION,
-            montant: transactionFee,
-            devise: platformWallet.devise,
+            montant: montantNetVendeur,
+            devise: sellerWallet.devise,
             statut: TransactionStatus.REUSSI,
             fournisseur: TransactionFournisseur.INTERNE,
             investissementId: ordre.investissementId,
             projetId,
-            idempotencyKey: `secmarket:fee:revente_transaction:sig:${signature.id}`,
+            idempotencyKey: `rachat:seller:${signature.id}`,
             fraisPsp: 0,
-            fraisPlateforme: 0,
-            metadata: {
-              source: 'revente_transaction',
-              ordreId: ordre.id,
-              signatureId: signature.id,
-            },
-          }),
-        );
-      }
-      if (platformWallet && gainFee > 0) {
-        await em.save(
-          TransactionEntity,
-          em.create(TransactionEntity, {
-            walletSource: null,
-            walletDestination: platformWallet.id,
-            type: TransactionType.SOUSCRIPTION,
-            montant: gainFee,
-            devise: platformWallet.devise,
-            statut: TransactionStatus.REUSSI,
-            fournisseur: TransactionFournisseur.INTERNE,
-            investissementId: ordre.investissementId,
-            projetId,
-            idempotencyKey: `secmarket:fee:gain_revente_actions:sig:${signature.id}`,
-            fraisPsp: 0,
-            fraisPlateforme: 0,
-            metadata: {
-              source: 'gain_revente_actions',
-              ordreId: ordre.id,
-              signatureId: signature.id,
-              plusValueVendeur,
-              coutAcquisition,
-            },
-          }),
-        );
-      }
+            fraisPlateforme: totalFrais,
+          });
+          await em.save(TransactionEntity, txSeller);
+        }
 
-      // Statut SIGNED posé en DERNIER, dans la même transaction que l'exécution.
-      await this.acterSignature(em, signature);
+        // 12. Transactions ledger frais plateforme — une par frais.
+        // Clés scoppées par signature (un ordre peut être exécuté en plusieurs
+        // fills partiels) ; metadata.ordreId permet le lookup au reverse admin.
+        if (platformWallet && transactionFee > 0) {
+          await em.save(
+            TransactionEntity,
+            em.create(TransactionEntity, {
+              walletSource: null,
+              walletDestination: platformWallet.id,
+              type: TransactionType.SOUSCRIPTION,
+              montant: transactionFee,
+              devise: platformWallet.devise,
+              statut: TransactionStatus.REUSSI,
+              fournisseur: TransactionFournisseur.INTERNE,
+              investissementId: ordre.investissementId,
+              projetId,
+              idempotencyKey: `secmarket:fee:revente_transaction:sig:${signature.id}`,
+              fraisPsp: 0,
+              fraisPlateforme: 0,
+              metadata: {
+                source: 'revente_transaction',
+                ordreId: ordre.id,
+                signatureId: signature.id,
+              },
+            }),
+          );
+        }
+        if (platformWallet && gainFee > 0) {
+          await em.save(
+            TransactionEntity,
+            em.create(TransactionEntity, {
+              walletSource: null,
+              walletDestination: platformWallet.id,
+              type: TransactionType.SOUSCRIPTION,
+              montant: gainFee,
+              devise: platformWallet.devise,
+              statut: TransactionStatus.REUSSI,
+              fournisseur: TransactionFournisseur.INTERNE,
+              investissementId: ordre.investissementId,
+              projetId,
+              idempotencyKey: `secmarket:fee:gain_revente_actions:sig:${signature.id}`,
+              fraisPsp: 0,
+              fraisPlateforme: 0,
+              metadata: {
+                source: 'gain_revente_actions',
+                ordreId: ordre.id,
+                signatureId: signature.id,
+                plusValueVendeur,
+                coutAcquisition,
+              },
+            }),
+          );
+        }
 
-      return { branch: 'secondary', buyerInvestId: buyerInvest.id, fusionnee: !!existingInvest };
-    });
+        // Statut SIGNED posé en DERNIER, dans la même transaction que l'exécution.
+        await this.acterSignature(em, signature);
+
+        return {
+          branch: 'secondary',
+          buyerInvestId: buyerInvest.id,
+          fusionnee: !!existingInvest,
+        };
+      },
+    );
 
     // ── Effets de bord best-effort, HORS transaction ──────────────────────────
     if (result.branch === 'investment') {
@@ -429,7 +463,9 @@ export class YouSignWebhookController {
     // Cession dans "Mes Investissements".
     try {
       if (signature.documentId) {
-        const signedPdf = await this.youSignService.downloadSignedDocument(signature.youSignRequestId);
+        const signedPdf = await this.youSignService.downloadSignedDocument(
+          signature.youSignRequestId,
+        );
         const filename = `contrat_cession_${buyerInvestId.slice(0, 8)}_${signature.userId}_${Date.now()}.pdf`;
         const { objectName, publicUrl } = await this.cloudStorage.upload(
           signedPdf,
@@ -439,11 +475,18 @@ export class YouSignWebhookController {
         );
         await this.documentRepo.update(
           { id: signature.documentId },
-          { filename: objectName, path: publicUrl, originalName: filename, sizeBytes: signedPdf.length },
+          {
+            filename: objectName,
+            path: publicUrl,
+            originalName: filename,
+            sizeBytes: signedPdf.length,
+          },
         );
       }
     } catch (err: any) {
-      this.logger.warn(`Could not store signed cession PDF for investment ${buyerInvestId}: ${err?.message}`);
+      this.logger.warn(
+        `Could not store signed cession PDF for investment ${buyerInvestId}: ${err?.message}`,
+      );
     }
 
     // Notifications (non-bloquantes)
@@ -454,21 +497,33 @@ export class YouSignWebhookController {
     const nbFractions = signature.nbFractions!;
 
     if (ordre) {
-      this.notificationService.push({
-        utilisateurId: ordre.vendeurId,
-        type: NotificationType.MARCHE_SECONDAIRE,
-        titre: 'Vente exécutée',
-        message: `${nbFractions} fraction${nbFractions > 1 ? 's' : ''} ont été achetées et le paiement a été crédité sur votre wallet.`,
-        metadata: { ordreId: ordre.id, nbFractions },
-      }).catch(() => {});
+      this.notificationService
+        .push({
+          utilisateurId: ordre.vendeurId,
+          type: NotificationType.MARCHE_SECONDAIRE,
+          titre: 'Vente exécutée',
+          message: `${nbFractions} fraction${nbFractions > 1 ? 's' : ''} ont été achetées et le paiement a été crédité sur votre wallet.`,
+          metadata: { ordreId: ordre.id, nbFractions },
+        })
+        .catch(() => {});
 
       this.notificationService
         .pushToAdmins({
           type: NotificationType.MARCHE_SECONDAIRE,
           titre: 'Vente marché secondaire',
           message: `User #${signature.userId} a acheté ${nbFractions} fraction(s) à User #${ordre.vendeurId}.`,
-          roles: [UserRole.SUPER_ADMIN, UserRole.FINANCIER, UserRole.COMPLIANCE],
-          metadata: { ordreId: ordre.id, buyerInvestId, sellerId: ordre.vendeurId, buyerId: signature.userId, nbFractions },
+          roles: [
+            UserRole.SUPER_ADMIN,
+            UserRole.FINANCIER,
+            UserRole.COMPLIANCE,
+          ],
+          metadata: {
+            ordreId: ordre.id,
+            buyerInvestId,
+            sellerId: ordre.vendeurId,
+            buyerId: signature.userId,
+            nbFractions,
+          },
         })
         .catch(() => {});
 
@@ -479,12 +534,18 @@ export class YouSignWebhookController {
       const sellerUser = await this.userRepository.findById(ordre.vendeurId);
       if (projectEntity && buyerUser && sellerUser) {
         await this.notificationEvents.secondaryTradeExecuted(
-          ordre, projectEntity, buyerUser, sellerUser, nbFractions,
+          ordre,
+          projectEntity,
+          buyerUser,
+          sellerUser,
+          nbFractions,
         );
       }
     }
 
-    this.logger.log(`Signature done: investmentId=${buyerInvestId} fusionnee=${fusionnee}`);
+    this.logger.log(
+      `Signature done: investmentId=${buyerInvestId} fusionnee=${fusionnee}`,
+    );
   }
 
   // ── Souscription initiale signée → débiter + confirmer (exécution atomique) ──
@@ -501,15 +562,21 @@ export class YouSignWebhookController {
       where: { id: signature.investmentId! },
     });
     if (!investment) {
-      this.logger.warn(`Investment ${signature.investmentId} not found for signature ${signature.id}`);
+      this.logger.warn(
+        `Investment ${signature.investmentId} not found for signature ${signature.id}`,
+      );
       return { branch: 'noop' };
     }
     if (investment.statut !== InvestmentStatus.INITIE) {
-      this.logger.log(`Investment ${investment.id} already processed (${investment.statut})`);
+      this.logger.log(
+        `Investment ${investment.id} already processed (${investment.statut})`,
+      );
       return { branch: 'noop' };
     }
 
-    const project = await em.findOne(ProjectEntity, { where: { id: investment.projetId } });
+    const project = await em.findOne(ProjectEntity, {
+      where: { id: investment.projetId },
+    });
     const montant = Number(investment.montant);
     // Frais configurables : AUCUN frais d'entrée à la souscription — le
     // wallet est débité exactement du montant investi. (L'ancien frais
@@ -517,9 +584,15 @@ export class YouSignWebhookController {
     // distributions, la sortie et le marché secondaire.)
 
     const wallet = await em.findOne(WalletEntity, {
-      where: { proprietaireUserId: investment.utilisateurId, type: WalletType.INVESTISSEUR },
+      where: {
+        proprietaireUserId: investment.utilisateurId,
+        type: WalletType.INVESTISSEUR,
+      },
     });
-    if (!wallet) throw new Error(`Wallet introuvable pour user ${investment.utilisateurId}`);
+    if (!wallet)
+      throw new Error(
+        `Wallet introuvable pour user ${investment.utilisateurId}`,
+      );
     if (Number(wallet.solde) < montant) {
       throw new Error(
         `Solde insuffisant pour souscription : ${wallet.solde} < ${montant}`,
@@ -566,19 +639,29 @@ export class YouSignWebhookController {
     // Auto-transition FINANCE si toutes les fractions sont vendues
     if (project) {
       const prixFraction = Number(project.ticketMinimum);
-      const nbFractionsTotal = project.nbFractions ?? Math.floor(Number(project.capitalCible) / prixFraction);
+      const nbFractionsTotal =
+        project.nbFractions ??
+        Math.floor(Number(project.capitalCible) / prixFraction);
       const totalVendues = await em
         .createQueryBuilder(InvestmentEntity, 'inv')
         .select('COALESCE(SUM(inv.nbTitres), 0)', 'total')
         .where('inv.projetId = :projetId', { projetId: investment.projetId })
         .andWhere('inv.statut NOT IN (:...excluded)', {
-          excluded: [InvestmentStatus.RETRACTE, InvestmentStatus.ANNULE, InvestmentStatus.INITIE],
+          excluded: [
+            InvestmentStatus.RETRACTE,
+            InvestmentStatus.ANNULE,
+            InvestmentStatus.INITIE,
+          ],
         })
         .getRawOne()
         .then((r) => Number(r?.total ?? 0));
 
       if (totalVendues >= nbFractionsTotal) {
-        await em.update(ProjectEntity, { id: investment.projetId }, { statut: ProjectStatus.FINANCE });
+        await em.update(
+          ProjectEntity,
+          { id: investment.projetId },
+          { statut: ProjectStatus.FINANCE },
+        );
       }
     }
 
@@ -595,17 +678,31 @@ export class YouSignWebhookController {
   ): Promise<void> {
     // Replace unsigned PDF with the signed version from YouSign
     try {
-      const signedPdf = await this.youSignService.downloadSignedDocument(signature.youSignRequestId);
+      const signedPdf = await this.youSignService.downloadSignedDocument(
+        signature.youSignRequestId,
+      );
       const filename = `contrat_signe_${investment.id.slice(0, 8)}_${investment.utilisateurId}_${Date.now()}.pdf`;
-      const { objectName, publicUrl } = await this.cloudStorage.upload(signedPdf, filename, 'application/pdf', 'contrats');
+      const { objectName, publicUrl } = await this.cloudStorage.upload(
+        signedPdf,
+        filename,
+        'application/pdf',
+        'contrats',
+      );
       if (signature.documentId) {
         await this.documentRepo.update(
           { id: signature.documentId },
-          { filename: objectName, path: publicUrl, originalName: filename, sizeBytes: signedPdf.length },
+          {
+            filename: objectName,
+            path: publicUrl,
+            originalName: filename,
+            sizeBytes: signedPdf.length,
+          },
         );
       }
     } catch (err: any) {
-      this.logger.warn(`Could not store signed PDF for investment ${investment.id}: ${err?.message}`);
+      this.logger.warn(
+        `Could not store signed PDF for investment ${investment.id}: ${err?.message}`,
+      );
     }
 
     // Notify via facade (handles both user + admin)
@@ -620,11 +717,18 @@ export class YouSignWebhookController {
         titre: 'Nouvel investissement',
         message: `User #${investment.utilisateurId} a investi ${formatEur(montant)} dans "${project?.titre ?? 'projet'}".`,
         roles: [UserRole.SUPER_ADMIN, UserRole.FINANCIER, UserRole.COMPLIANCE],
-        metadata: { investissementId: investment.id, projetId: investment.projetId, montant, userId: investment.utilisateurId },
+        metadata: {
+          investissementId: investment.id,
+          projetId: investment.projetId,
+          montant,
+          userId: investment.utilisateurId,
+        },
       })
       .catch(() => {});
 
-    this.logger.log(`Investment signature done: investmentId=${investment.id} userId=${investment.utilisateurId}`);
+    this.logger.log(
+      `Investment signature done: investmentId=${investment.id} userId=${investment.utilisateurId}`,
+    );
   }
 
   private buildEcheances(
@@ -646,7 +750,9 @@ export class YouSignWebhookController {
         datePrevue,
         montantCapital: i === dureeMois ? montant : 0,
         montantInterets: Math.round(montant * tauxMensuel * 100) / 100,
-        montantTotal: (i === dureeMois ? montant : 0) + Math.round(montant * tauxMensuel * 100) / 100,
+        montantTotal:
+          (i === dureeMois ? montant : 0) +
+          Math.round(montant * tauxMensuel * 100) / 100,
         statut: EcheanceStatus.A_VENIR,
         payeLe: null,
       });
@@ -656,7 +762,9 @@ export class YouSignWebhookController {
 
   // ── Signature expirée → libérer l'ordre ─────────────────────────────────────
 
-  private async handleSignatureExpired(youSignRequestId: string): Promise<void> {
+  private async handleSignatureExpired(
+    youSignRequestId: string,
+  ): Promise<void> {
     const signature = await this.signatureRepo.findOne({
       where: { youSignRequestId },
     });
@@ -669,15 +777,20 @@ export class YouSignWebhookController {
       SignatureOrmMapper.appliquerSur(signature, demande),
     );
 
-    this.notificationService.push({
-      utilisateurId: signature.userId,
-      type: NotificationType.MARCHE_SECONDAIRE,
-      titre: 'Signature expirée',
-      message: 'Votre contrat de rachat a expiré (48h dépassées). L\'ordre est toujours disponible si vous souhaitez réessayer.',
-      metadata: { ordreId: signature.ordreId, signatureId: signature.id },
-    }).catch(() => {});
+    this.notificationService
+      .push({
+        utilisateurId: signature.userId,
+        type: NotificationType.MARCHE_SECONDAIRE,
+        titre: 'Signature expirée',
+        message:
+          "Votre contrat de rachat a expiré (48h dépassées). L'ordre est toujours disponible si vous souhaitez réessayer.",
+        metadata: { ordreId: signature.ordreId, signatureId: signature.id },
+      })
+      .catch(() => {});
 
-    this.logger.log(`Signature expired: ${signature.id} ordreId=${signature.ordreId}`);
+    this.logger.log(
+      `Signature expired: ${signature.id} ordreId=${signature.ordreId}`,
+    );
   }
 
   /**

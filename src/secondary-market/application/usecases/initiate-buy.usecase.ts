@@ -17,7 +17,10 @@ import { UserEmailEntity } from 'src/iam/infrastructure/persistence/entities/use
 import { OrdreMarcheOrmMapper } from 'src/secondary-market/infrastructure/persistence/mappers/ordre-marche.orm-mapper';
 import { OrdreIntrouvableError } from 'src/secondary-market/domain/errors';
 import { InvestmentStatus } from 'src/subscription/domain/enums/investment-status.enum';
-import { DocumentType, DocumentRelatedTo } from 'src/documents/domain/enums/document-type.enum';
+import {
+  DocumentType,
+  DocumentRelatedTo,
+} from 'src/documents/domain/enums/document-type.enum';
 import { Signature } from 'src/documents/domain/entities/signature';
 import { SignatureOrmMapper } from 'src/documents/infrastructure/persistence/mappers/signature.orm-mapper';
 import { WalletType } from 'src/treasury/domain/enums/wallet.enum';
@@ -65,7 +68,10 @@ export class InitiateBuyUseCase {
     // La même validation que celle de l'exécution, jouée avant la signature :
     // elle vivait ici en quatre `if` recopiés du contrôleur, et pouvait donc
     // diverger de la règle réellement appliquée au moment de céder (§14).
-    OrdreMarcheOrmMapper.toDomain(ordre).assertAchetablePar(nbFractions, userId);
+    OrdreMarcheOrmMapper.toDomain(ordre).assertAchetablePar(
+      nbFractions,
+      userId,
+    );
 
     const totalCost = nbFractions * Number(ordre.prixUnitaire);
     const projetId = ordre.investissement.projetId;

@@ -2,6 +2,9 @@ import { OrdreMarcheSens, OrdreMarcheStatus } from '../enums/ordre-marche.enum';
 import {
   AchatDeSonPropreOrdreError,
   AnnulationReserveeAuVendeurError,
+  AucunAcheteurSurLOrdreError,
+  ForcageReserveAuxMatchsProposesError,
+  OrdreDejaClosError,
   OrdreDeVenteInvalideError,
   OrdreIndisponibleError,
   OrdreNonAnnulableError,
@@ -174,6 +177,55 @@ export class SecondaryMarketOrder {
     }
 
     this._statut = OrdreMarcheStatus.ANNULE;
+  }
+
+  /**
+   * **L'administration annule l'ordre**, y compris après exécution.
+   *
+   * Ce n'est pas le même geste que `annuler` : le vendeur retire une annonce
+   * encore au carnet, l'administration défait une cession qui n'aurait pas dû
+   * avoir lieu. Elle peut donc frapper un ordre déjà exécuté — et c'est
+   * précisément là que la question devient financière.
+   *
+   * L'agrégat répond à la seule question qui lui revient : **faut-il défaire un
+   * règlement ?** Oui si des fonds ont bougé — ordre exécuté, ou apparié avec un
+   * acheteur ; non si l'annonce dormait au carnet. Défaire ce règlement — rendre
+   * les fractions, rembourser l'acheteur, reprendre au vendeur son net et à la
+   * plateforme sa commission — appartient à l'application, qui seule voit les
+   * wallets et le ledger (§14).
+   *
+   * Un ordre déjà annulé ou expiré n'a rien à défaire.
+   */
+  annulerParAdministration(): { reverseNecessaire: boolean } {
+    if (
+      this._statut === OrdreMarcheStatus.ANNULE ||
+      this._statut === OrdreMarcheStatus.EXPIRE
+    ) {
+      throw new OrdreDejaClosError(this._statut);
+    }
+
+    const reverseNecessaire = !this.estAuCarnet && this._acheteurId !== null;
+    this._statut = OrdreMarcheStatus.ANNULE;
+
+    return { reverseNecessaire };
+  }
+
+  /**
+   * **L'administration force l'exécution** d'un appariement resté en suspens.
+   *
+   * Réservé à `MATCH_PROPOSE` : c'est l'état d'un ordre à qui un acheteur a été
+   * proposé sans que la cession se conclue. Forcer un ordre encore au carnet
+   * n'aurait pas de sens — personne n'est en face.
+   */
+  forcerExecution(): void {
+    if (this._statut !== OrdreMarcheStatus.MATCH_PROPOSE) {
+      throw new ForcageReserveAuxMatchsProposesError(this._statut);
+    }
+    if (this._acheteurId === null) {
+      throw new AucunAcheteurSurLOrdreError();
+    }
+
+    this._statut = OrdreMarcheStatus.EXECUTE;
   }
 
   // ── Interrogations ────────────────────────────────────────────────────────

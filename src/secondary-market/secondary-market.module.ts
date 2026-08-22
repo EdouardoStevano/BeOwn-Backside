@@ -3,6 +3,10 @@ import { APP_FILTER } from '@nestjs/core';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { SecondaryMarketInfrastructureModule } from './infrastructure/secondary-market-infrastructure.module';
 import { SecondaryMarketController } from './presentation/http/secondary-market.controller';
+import { AdminSecondaryMarketController } from './presentation/http/admin-secondary-market.controller';
+import { AnnulerOrdreParAdministrationUseCase } from './application/usecases/annuler-ordre-par-administration.usecase';
+import { ForcerExecutionOrdreUseCase } from './application/usecases/forcer-execution-ordre.usecase';
+import { PlatformFeesModule } from 'src/common/platform-fees/platform-fees.module';
 import { YouSignWebhookController } from './presentation/http/yousign-webhook.controller';
 import { SecondaryMarketErrorFilter } from './presentation/http/filters/secondary-market-error.filter';
 import { PasserOrdreDeVenteUseCase } from './application/usecases/passer-ordre-de-vente.usecase';
@@ -85,18 +89,26 @@ import { UsersInfrastructureModule } from 'src/iam/infrastructure/users-infrastr
     UsersInfrastructureModule,
     // `KycValidatedGuard` : acheter au marché secondaire exige un dossier vérifié.
     KycModule,
+    // Les frais de revente, lus une fois avant chaque règlement.
+    PlatformFeesModule,
   ],
   providers: [
     ContractGeneratorService,
     PasserOrdreDeVenteUseCase,
     ExecuterOrdreUseCase,
     AnnulerOrdreUseCase,
+    AnnulerOrdreParAdministrationUseCase,
+    ForcerExecutionOrdreUseCase,
     InitiateBuyUseCase,
     CancelInitiationUseCase,
     // Traduit les erreurs métier du contexte en réponses HTTP : le domaine ne
     // connaît aucun statut (§21), la présentation s'en charge.
     { provide: APP_FILTER, useClass: SecondaryMarketErrorFilter },
   ],
-  controllers: [SecondaryMarketController, YouSignWebhookController],
+  controllers: [
+    SecondaryMarketController,
+    AdminSecondaryMarketController,
+    YouSignWebhookController,
+  ],
 })
 export class SecondaryMarketModule {}

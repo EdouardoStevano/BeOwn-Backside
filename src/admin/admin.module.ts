@@ -1,7 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AdminController } from './admin.controller';
-import { AdminSecondaryMarketController } from './admin-secondary-market.controller';
 import { AdminProjectActionsController } from './admin-project-actions.controller';
 import { AdminReservationsController } from './admin-reservations.controller';
 import { AdminSettingsController } from './admin-settings.controller';
@@ -56,7 +55,6 @@ import { UsersModule } from 'src/iam/application/users.module';
   ],
   controllers: [
     AdminController,
-    AdminSecondaryMarketController,
     AdminProjectActionsController,
     AdminReservationsController,
     AdminSettingsController,

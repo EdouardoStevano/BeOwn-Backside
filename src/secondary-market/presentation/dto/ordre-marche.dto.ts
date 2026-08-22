@@ -57,7 +57,8 @@ export class CreateOrdreMarcheDto {
 export class ExecuteOrderDto {
   @ApiPropertyOptional({
     example: 3,
-    description: 'Nombre de fractions à acheter (achat partiel). Omis = achat total.',
+    description:
+      'Nombre de fractions à acheter (achat partiel). Omis = achat total.',
   })
   @IsOptional()
   @IsNumber()

@@ -93,8 +93,15 @@ describe('YouSignWebhookController.handleSignatureDone (atomicité SIGNED)', () 
       transaction: jest.fn(async (cb: any) => cb(manager)),
     };
 
-    const signatureRepo: any = { findOne: jest.fn(async () => signature), save: jest.fn() };
-    const noopRepo: any = { findOne: jest.fn(), save: jest.fn(), update: jest.fn() };
+    const signatureRepo: any = {
+      findOne: jest.fn(async () => signature),
+      save: jest.fn(),
+    };
+    const noopRepo: any = {
+      findOne: jest.fn(),
+      save: jest.fn(),
+      update: jest.fn(),
+    };
     const youSignService: any = {
       downloadSignedDocument: jest.fn(async () => Buffer.from('pdf')),
     };
@@ -106,8 +113,13 @@ describe('YouSignWebhookController.handleSignatureDone (atomicité SIGNED)', () 
       pushToAdmins: jest.fn().mockResolvedValue(undefined),
     };
     const notificationEvents: any = { investmentCreated: jest.fn() };
-    const userRepository: any = { findById: jest.fn(async () => ({ userId: 1 })) };
-    const platformFees: any = { getRates: jest.fn(), computeResaleFees: jest.fn() };
+    const userRepository: any = {
+      findById: jest.fn(async () => ({ userId: 1 })),
+    };
+    const platformFees: any = {
+      getRates: jest.fn(),
+      computeResaleFees: jest.fn(),
+    };
 
     const controller = new YouSignWebhookController(
       signatureRepo,
@@ -127,10 +139,19 @@ describe('YouSignWebhookController.handleSignatureDone (atomicité SIGNED)', () 
       platformFees,
     );
 
-    return { controller, signature, lockedSignature, investment, wallet, dataSource, manager, notificationEvents };
+    return {
+      controller,
+      signature,
+      lockedSignature,
+      investment,
+      wallet,
+      dataSource,
+      manager,
+      notificationEvents,
+    };
   }
 
-  it('laisse la signature PENDING quand l\'exécution échoue (rejouable), puis réussit au rejeu', async () => {
+  it("laisse la signature PENDING quand l'exécution échoue (rejouable), puis réussit au rejeu", async () => {
     // Solde insuffisant → executeInvestmentSignature lève avant tout write.
     const ctx = setup({ solde: 50, preTxSignature: {} });
 

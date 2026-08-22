@@ -53,6 +53,73 @@ export class OrdreNonAnnulableError extends SecondaryMarketError {
   }
 }
 
+// ── La reprise en main par l'administration ─────────────────────────────────
+
+/** Un ordre déjà annulé ou expiré n'a plus rien à défaire. */
+export class OrdreDejaClosError extends SecondaryMarketError {
+  readonly kind = SecondaryMarketErrorKind.CONFLICT;
+
+  constructor(statut: string) {
+    super(`Ordre déjà au statut "${statut}"`, {
+      code: 'ORDER_ALREADY_CLOSED',
+      details: { statut },
+    });
+  }
+}
+
+/**
+ * On ne force que l'exécution d'un appariement resté en suspens. Forcer un
+ * ordre encore au carnet n'a pas de sens : personne n'est en face.
+ */
+export class ForcageReserveAuxMatchsProposesError extends SecondaryMarketError {
+  readonly kind = SecondaryMarketErrorKind.CONFLICT;
+
+  constructor(statut: string) {
+    super('Seuls les ordres au statut MATCH_PROPOSE peuvent être forcés', {
+      code: 'ORDER_NOT_FORCEABLE',
+      details: { statut },
+    });
+  }
+}
+
+/** Un appariement sans acheteur n'en est pas un. */
+export class AucunAcheteurSurLOrdreError extends SecondaryMarketError {
+  readonly kind = SecondaryMarketErrorKind.CONFLICT;
+
+  constructor() {
+    super('Aucun acheteur défini sur cet ordre', {
+      code: 'ORDER_HAS_NO_BUYER',
+    });
+  }
+}
+
+/**
+ * Un ordre rempli en plusieurs fois ne s'annule pas d'un bloc : l'état courant
+ * ne reflète que le dernier remplissage, et reverser la somme des frais de tous
+ * les remplissages rembourserait l'acheteur en trop tout en sous-débitant le
+ * vendeur. Faute de pouvoir identifier le remplissage en vigueur, on refuse
+ * plutôt que de rendre un montant faux.
+ */
+export class AnnulationMultiRemplissagesError extends SecondaryMarketError {
+  readonly kind = SecondaryMarketErrorKind.CONFLICT;
+
+  constructor() {
+    super(
+      'Ordre multi-remplissages : annulation globale impossible, traiter par remplissage',
+      { code: 'ORDER_MULTI_FILL_NOT_CANCELLABLE' },
+    );
+  }
+}
+
+/** L'acheteur désigné n'a pas de quoi régler la cession forcée. */
+export class SoldeAcheteurInsuffisantError extends SecondaryMarketError {
+  readonly kind = SecondaryMarketErrorKind.INVALID_INPUT;
+
+  constructor() {
+    super('Solde acheteur insuffisant', { code: 'WALLET_INSUFFICIENT' });
+  }
+}
+
 // ── L'investissement cédé ───────────────────────────────────────────────────
 
 /** L'investissement qu'on veut mettre au carnet n'existe pas. */
