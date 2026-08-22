@@ -21,7 +21,7 @@ import { ReservationModule } from './reservation/reservation.module';
 import { SubscriptionModule } from './subscription/subscription.module';
 import { ServicingModule } from './servicing/servicing.module';
 import { TreasuryModule } from './treasury/treasury.module';
-import { SecondaryMarketModule } from './secondarymarket/applications/secondary-market.module';
+import { SecondaryMarketModule } from './secondary-market/secondary-market.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { PreferencesModule } from 'src/iam/application/preferences.module';
 import { DocumentsModule } from './documents/applications/documents.module';

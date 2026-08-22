@@ -19,17 +19,17 @@ import { SignatureStatus } from 'src/signatures/domains/enums/signature-status.e
 import { InvestmentEntity } from 'src/subscription/infrastructure/persistence/entities/investment.entity';
 import { EcheanceEntity } from 'src/servicing/infrastructure/persistence/entities/echeance.entity';
 import { ProjectEntity } from 'src/catalog/infrastructure/persistence/entities/project.entity';
-import { OrdreMarcheEntity } from 'src/secondarymarket/infrastructure/persistences/entities/ordre-marche.entity';
+import { OrdreMarcheEntity } from 'src/secondary-market/infrastructure/persistence/entities/ordre-marche.entity';
 import { DocumentEntity } from 'src/documents/infrastructure/persistences/entities/document.entity';
 import { WalletEntity } from 'src/treasury/infrastructure/persistence/entities/wallet.entity';
 import { TransactionEntity } from 'src/treasury/infrastructure/persistence/entities/transaction.entity';
 import { InvestmentStatus } from 'src/subscription/domain/enums/investment-status.enum';
 import { EcheanceStatus } from 'src/servicing/domain/enums/echeance.enum';
-import { OrdreMarcheStatus } from 'src/secondarymarket/domains/ordre-marche';
+import { OrdreMarcheStatus } from 'src/secondary-market/domain/enums/ordre-marche.enum';
 import { PlatformFeesService } from 'src/common/platform-fees/platform-fees.service';
 import { round2 } from 'src/common/platform-fees/platform-fees.constants';
 import { formatEur } from 'src/shared/money/format-eur';
-import { computeCoutAcquisition } from 'src/secondarymarket/domains/cout-acquisition';
+import { computeCoutAcquisition } from 'src/secondary-market/domain/services/cout-acquisition';
 import {
   TransactionFournisseur,
   TransactionStatus,

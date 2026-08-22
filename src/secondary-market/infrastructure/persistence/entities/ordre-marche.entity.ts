@@ -12,7 +12,7 @@ import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.ent
 import {
   OrdreMarcheSens,
   OrdreMarcheStatus,
-} from 'src/secondarymarket/domains/ordre-marche';
+} from 'src/secondary-market/domain/enums/ordre-marche.enum';
 
 @Entity('ordre_marche')
 export class OrdreMarcheEntity {

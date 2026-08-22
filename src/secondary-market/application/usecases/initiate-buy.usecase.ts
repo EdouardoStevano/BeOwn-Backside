@@ -7,14 +7,15 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { OrdreMarcheEntity } from 'src/secondarymarket/infrastructure/persistences/entities/ordre-marche.entity';
+import { OrdreMarcheEntity } from 'src/secondary-market/infrastructure/persistence/entities/ordre-marche.entity';
 import { InvestmentEntity } from 'src/subscription/infrastructure/persistence/entities/investment.entity';
 import { DocumentEntity } from 'src/documents/infrastructure/persistences/entities/document.entity';
 import { SignatureEntity } from 'src/signatures/infrastructure/persistences/entities/signature.entity';
 import { WalletEntity } from 'src/treasury/infrastructure/persistence/entities/wallet.entity';
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 import { UserEmailEntity } from 'src/iam/infrastructure/persistence/entities/user-email.entity';
-import { OrdreMarcheStatus } from 'src/secondarymarket/domains/ordre-marche';
+import { OrdreMarcheOrmMapper } from 'src/secondary-market/infrastructure/persistence/mappers/ordre-marche.orm-mapper';
+import { OrdreIntrouvableError } from 'src/secondary-market/domain/errors';
 import { InvestmentStatus } from 'src/subscription/domain/enums/investment-status.enum';
 import { DocumentType, DocumentRelatedTo } from 'src/documents/domains/enums/document-type.enum';
 import { SignatureStatus } from 'src/signatures/domains/enums/signature-status.enum';
@@ -58,18 +59,12 @@ export class InitiateBuyUseCase {
       where: { id: ordreId },
       relations: ['investissement', 'investissement.projet'],
     });
-    if (!ordre) throw new NotFoundException('Ordre introuvable');
-    if (ordre.statut !== OrdreMarcheStatus.EN_CARNET) {
-      throw new BadRequestException('Cet ordre n\'est plus disponible');
-    }
-    if (ordre.vendeurId === userId) {
-      throw new ForbiddenException('Vous ne pouvez pas acheter votre propre ordre');
-    }
-    if (nbFractions < 1 || nbFractions > ordre.nbFractions) {
-      throw new BadRequestException(
-        `Quantité invalide : doit être entre 1 et ${ordre.nbFractions}`,
-      );
-    }
+    if (!ordre) throw new OrdreIntrouvableError(ordreId);
+
+    // La même validation que celle de l'exécution, jouée avant la signature :
+    // elle vivait ici en quatre `if` recopiés du contrôleur, et pouvait donc
+    // diverger de la règle réellement appliquée au moment de céder (§14).
+    OrdreMarcheOrmMapper.toDomain(ordre).assertAchetablePar(nbFractions, userId);
 
     const totalCost = nbFractions * Number(ordre.prixUnitaire);
     const projetId = ordre.investissement.projetId;

@@ -5,8 +5,8 @@ import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.ent
 import { UserStatus } from 'src/iam/domain/enums/user.enum';
 import { InvestmentEntity } from 'src/subscription/infrastructure/persistence/entities/investment.entity';
 import { InvestmentStatus } from 'src/subscription/domain/enums/investment-status.enum';
-import { OrdreMarcheEntity } from 'src/secondarymarket/infrastructure/persistences/entities/ordre-marche.entity';
-import { OrdreMarcheStatus } from 'src/secondarymarket/domains/ordre-marche';
+import { OrdreMarcheEntity } from 'src/secondary-market/infrastructure/persistence/entities/ordre-marche.entity';
+import { OrdreMarcheStatus } from 'src/secondary-market/domain/enums/ordre-marche.enum';
 import { WalletEntity } from 'src/treasury/infrastructure/persistence/entities/wallet.entity';
 import { TransactionEntity } from 'src/treasury/infrastructure/persistence/entities/transaction.entity';
 import {

@@ -1,7 +1,7 @@
 import { BadRequestException } from '@nestjs/common';
 import { AdminSecondaryMarketController } from './admin-secondary-market.controller';
-import { OrdreMarcheEntity } from 'src/secondarymarket/infrastructure/persistences/entities/ordre-marche.entity';
-import { OrdreMarcheStatus } from 'src/secondarymarket/domains/ordre-marche';
+import { OrdreMarcheEntity } from 'src/secondary-market/infrastructure/persistence/entities/ordre-marche.entity';
+import { OrdreMarcheStatus } from 'src/secondary-market/domain/enums/ordre-marche.enum';
 import { SignatureEntity } from 'src/signatures/infrastructure/persistences/entities/signature.entity';
 import { SignatureStatus } from 'src/signatures/domains/enums/signature-status.enum';
 import { InvestmentEntity } from 'src/subscription/infrastructure/persistence/entities/investment.entity';
