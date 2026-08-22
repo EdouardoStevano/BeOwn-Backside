@@ -18,7 +18,7 @@ import { NotificationEntity } from 'src/notifications/infrastructure/persistence
 import { AuditLogEntity } from 'src/notifications/infrastructure/persistences/entities/audit-log.entity';
 import { DocumentEntity } from 'src/documents/infrastructure/persistence/entities/document.entity';
 import { OrdreMarcheEntity } from 'src/secondary-market/infrastructure/persistence/entities/ordre-marche.entity';
-import { AvisEntity } from 'src/avis/infrastructure/persistences/entities/avis.entity';
+import { AvisEntity } from 'src/catalog/infrastructure/persistence/entities/avis.entity';
 import { SignatureEntity } from 'src/documents/infrastructure/persistence/entities/signature.entity';
 import { UniteLouableEntity } from 'src/locative-management/infrastructure/persistences/entities/unite-louable.entity';
 import { LocataireEntity } from 'src/locative-management/infrastructure/persistences/entities/locataire.entity';

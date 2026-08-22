@@ -28,7 +28,6 @@ import { DocumentsModule } from './documents/documents.module';
 import { NotificationTestModule } from './common/test/notification-test.module';
 import { AdminModule } from './admin/admin.module';
 import { CgpModule } from './iam/application/cgp.module';
-import { AvisModule } from './avis/applications/avis.module';
 import { NewsModule } from './news/news.module';
 import { KpiModule } from './kpi/kpi.module';
 import { LocativeManagementModule } from './locative-management/applications/locative-management.module';
@@ -108,7 +107,6 @@ function requireEnv(name: string): string {
     // Profiles, Preferences, Documents, Treasury) : il en dépend tous, et aucun
     // ne dépend de lui. Sert `GET /users/me` et `GET /users/:id`.
     AccountOverviewModule,
-    AvisModule,
     NewsModule,
     KpiModule,
     AdminModule,
