@@ -3,7 +3,7 @@ import { Cron } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Between, LessThan, LessThanOrEqual, Repository } from 'typeorm';
 import { EcheanceEntity } from '../../infrastructure/persistence/entities/echeance.entity';
-import { EcheanceStatus } from '../../domain/enums/investment-status.enum';
+import { EcheanceStatus } from '../../domain/enums/echeance.enum';
 import { NotificationEventService } from 'src/notifications/applications/notification-event.service';
 import { PayEcheanceUseCase } from '../usecases/pay-echeance.usecase';
 import { NotificationService } from 'src/notifications/applications/notification.service';

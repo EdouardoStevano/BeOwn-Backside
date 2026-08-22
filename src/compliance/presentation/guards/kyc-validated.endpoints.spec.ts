@@ -14,6 +14,7 @@ import {
 import { PaymentController } from 'src/treasury/presentation/http/payment.controller';
 import { InvestmentController } from 'src/subscription/presentation/http/investment.controller';
 import { SecondaryMarketController } from 'src/secondarymarket/presenters/http/secondary-market.controller';
+import { RepaymentScheduleController } from 'src/servicing/presentation/http/repayment-schedule.controller';
 
 type ControllerClass = new (...args: any[]) => unknown;
 
@@ -109,7 +110,6 @@ describe('KycValidatedGuard — application aux actions financières', () => {
       ['listByUser'],
       ['listByProject'],
       ['findOne'],
-      ['getSchedule'],
       ['getMyPortfolio'],
       ['getMyRoi'],
       ['getMyFiscalSummary'],
@@ -119,6 +119,17 @@ describe('KycValidatedGuard — application aux actions financières', () => {
       ['patchStatus'],
     ])('ne gate pas %s (consultation/admin)', (method) => {
       expect(hasKycGuard(InvestmentController, method)).toBe(false);
+    });
+  });
+
+  describe('RepaymentScheduleController', () => {
+    // `GET /investments/:id/schedule` a changé de contrôleur avec
+    // l'extraction de `servicing` ; la règle, elle, ne change pas :
+    // consulter son échéancier n'exige pas un dossier valide.
+    it('ne gate pas getSchedule (consultation)', () => {
+      expect(hasKycGuard(RepaymentScheduleController, 'getSchedule')).toBe(
+        false,
+      );
     });
   });
 

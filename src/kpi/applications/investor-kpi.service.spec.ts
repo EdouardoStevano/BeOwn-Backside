@@ -2,9 +2,10 @@ import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { InvestorKpiService } from './investor-kpi.service';
 import { InvestmentEntity } from 'src/subscription/infrastructure/persistence/entities/investment.entity';
-import { EcheanceEntity } from 'src/subscription/infrastructure/persistence/entities/echeance.entity';
+import { EcheanceEntity } from 'src/servicing/infrastructure/persistence/entities/echeance.entity';
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
-import { EcheanceStatus, InvestmentStatus } from 'src/subscription/domain/enums/investment-status.enum';
+import { InvestmentStatus } from 'src/subscription/domain/enums/investment-status.enum';
+import { EcheanceStatus } from 'src/servicing/domain/enums/echeance.enum';
 
 describe('InvestorKpiService', () => {
   let service: InvestorKpiService;

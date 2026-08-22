@@ -2,8 +2,9 @@ import { Injectable, Logger } from '@nestjs/common';
 import { DataSource, EntityManager, In } from 'typeorm';
 import { ProjectEntity } from 'src/catalog/infrastructure/persistence/entities/project.entity';
 import { InvestmentEntity } from 'src/subscription/infrastructure/persistence/entities/investment.entity';
-import { EcheanceEntity } from 'src/subscription/infrastructure/persistence/entities/echeance.entity';
-import { InvestmentStatus, EcheanceStatus } from 'src/subscription/domain/enums/investment-status.enum';
+import { EcheanceEntity } from 'src/servicing/infrastructure/persistence/entities/echeance.entity';
+import { InvestmentStatus } from 'src/subscription/domain/enums/investment-status.enum';
+import { EcheanceStatus } from 'src/servicing/domain/enums/echeance.enum';
 import { WalletEntity } from 'src/treasury/infrastructure/persistence/entities/wallet.entity';
 import { TransactionEntity } from 'src/treasury/infrastructure/persistence/entities/transaction.entity';
 import {

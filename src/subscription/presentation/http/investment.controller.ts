@@ -46,8 +46,8 @@ import { RequirePermission } from 'src/iam/presentation/decorators/require-permi
 import { hasPermission } from 'src/iam/domain/policies/role-permissions.policy';
 import { UserRole } from 'src/iam/domain/enums/user.enum';
 import { SkipThrottle } from '@nestjs/throttler';
-import { EcheanceEntity } from 'src/subscription/infrastructure/persistence/entities/echeance.entity';
-import { EcheanceStatus } from 'src/subscription/domain/enums/investment-status.enum';
+import { EcheanceEntity } from 'src/servicing/infrastructure/persistence/entities/echeance.entity';
+import { EcheanceStatus } from 'src/servicing/domain/enums/echeance.enum';
 
 class InitiateInvestmentDto {
   @ApiProperty({ description: 'UUID du projet' })
@@ -176,19 +176,6 @@ export class InvestmentController {
     if (!inv) throw new InvestissementIntrouvableError(id);
     this.assertCanReadInvestment(user, inv.utilisateurId);
     return inv.snapshot();
-  }
-
-  @ApiOperation({ summary: "Echéancier d'un investissement" })
-  @ApiParam({ name: 'id', description: "UUID de l'investissement" })
-  @ApiResponse({ status: 200, description: 'Echéancier de remboursement' })
-  @Get(':id/schedule')
-  async getSchedule(@Param('id') id: string, @CurrentUser() user: ActiveUser) {
-    const inv = await this.investmentRepository.findById(id);
-    if (!inv) throw new InvestissementIntrouvableError(id);
-    this.assertCanReadInvestment(user, inv.utilisateurId);
-    const echeances =
-      await this.investmentRepository.findEcheancesByInvestissement(id);
-    return echeances.map((e) => e.snapshot());
   }
 
   @ApiOperation({

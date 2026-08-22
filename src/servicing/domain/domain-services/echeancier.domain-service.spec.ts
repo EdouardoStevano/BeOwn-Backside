@@ -1,9 +1,6 @@
 import { EcheancierGenerator } from './echeancier.domain-service';
-import {
-  EcheanceStatus,
-  RemboursementMode,
-} from '../enums/investment-status.enum';
-import { EchelonnementImpossibleError } from '../errors/subscription.errors';
+import { EcheanceStatus, RemboursementMode } from '../enums/echeance.enum';
+import { EchelonnementImpossibleError } from '../errors';
 
 const ORIGINE = new Date('2026-01-15T00:00:00Z');
 

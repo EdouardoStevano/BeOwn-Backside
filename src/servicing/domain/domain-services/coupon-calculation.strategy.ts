@@ -1,7 +1,4 @@
-import {
-  EcheanceStatus,
-  RemboursementMode,
-} from '../enums/investment-status.enum';
+import { EcheanceStatus, RemboursementMode } from '../enums/echeance.enum';
 import type { EcheanceNaissante } from '../entities/echeance';
 
 /** Ce dont le calcul d'un échéancier a besoin, et rien de plus. */

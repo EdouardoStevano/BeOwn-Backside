@@ -14,11 +14,10 @@ import type { UserRepository } from 'src/iam/domain/repositories/user.repository
 import { USER_REPOSITORY } from 'src/iam/domain/repositories/user.repository';
 import { CollecteCapacity } from 'src/subscription/domain/aggregates/collecte-capacity';
 import { Investment } from 'src/subscription/domain/aggregates/investment';
-import { EcheancierGenerator } from 'src/subscription/domain/domain-services/echeancier.domain-service';
-import {
-  InvestmentStatus,
-  RemboursementMode,
-} from 'src/subscription/domain/enums/investment-status.enum';
+import { EcheancierGenerator } from 'src/servicing/domain/domain-services/echeancier.domain-service';
+import { EcheanceOrmMapper } from 'src/servicing/infrastructure/persistence/mappers/echeance.orm-mapper';
+import { InvestmentStatus } from 'src/subscription/domain/enums/investment-status.enum';
+import { RemboursementMode } from 'src/servicing/domain/enums/echeance.enum';
 import { InvestissementCompleteDomainEvent } from 'src/subscription/domain/events/investissement-complete.domain-event';
 import {
   InvestissementIntrouvableError,
@@ -42,7 +41,7 @@ import {
 } from 'src/documents/domains/enums/document-type.enum';
 import { NotificationEventService } from 'src/notifications/applications/notification-event.service';
 import { InvestmentEntity } from 'src/subscription/infrastructure/persistence/entities/investment.entity';
-import { EcheanceEntity } from 'src/subscription/infrastructure/persistence/entities/echeance.entity';
+import { EcheanceEntity } from 'src/servicing/infrastructure/persistence/entities/echeance.entity';
 import { InvestmentOrmMapper } from 'src/subscription/infrastructure/persistence/mappers/investment.orm-mapper';
 import { ProjectEntity } from 'src/catalog/infrastructure/persistence/entities/project.entity';
 import { WalletEntity } from 'src/treasury/infrastructure/persistence/entities/wallet.entity';
@@ -171,14 +170,19 @@ export class TopUpInvestmentUseCase {
 
       // 8. Régénération de l'échéancier sur le nouveau capital.
       await manager.delete(EcheanceEntity, { investissementId: investmentId });
-      const echeances = EcheancierGenerator.generer(
-        investment,
-        projet,
+      const echeances = EcheancierGenerator.genererPour(
+        {
+          investissementId: investment.id,
+          montant: investment.montant,
+          triAnnuel: projet.triCible,
+          dureeMois: projet.dureeMois,
+          origine: new Date(),
+        },
         RemboursementMode.IN_FINE,
       );
       await manager.save(
         EcheanceEntity,
-        echeances.map(InvestmentOrmMapper.echeanceNaissanteToEntity),
+        echeances.map(EcheanceOrmMapper.naissanteToEntity),
       );
 
       return delta;

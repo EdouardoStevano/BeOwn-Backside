@@ -2,11 +2,9 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { InvestmentEntity } from 'src/subscription/infrastructure/persistence/entities/investment.entity';
-import { EcheanceEntity } from 'src/subscription/infrastructure/persistence/entities/echeance.entity';
-import {
-  EcheanceStatus,
-  InvestmentStatus,
-} from 'src/subscription/domain/enums/investment-status.enum';
+import { EcheanceEntity } from 'src/servicing/infrastructure/persistence/entities/echeance.entity';
+import { InvestmentStatus } from 'src/subscription/domain/enums/investment-status.enum';
+import { EcheanceStatus } from '../../domain/enums/echeance.enum';
 import { ProjectEntity } from 'src/catalog/infrastructure/persistence/entities/project.entity';
 
 /**

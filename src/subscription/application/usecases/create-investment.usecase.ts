@@ -20,11 +20,12 @@ import {
 } from 'src/compliance/domain/repositories/profil-pp.repository';
 import { CollecteCapacity } from 'src/subscription/domain/aggregates/collecte-capacity';
 import { Investment } from 'src/subscription/domain/aggregates/investment';
-import { EcheancierGenerator } from 'src/subscription/domain/domain-services/echeancier.domain-service';
-import {
-  InvestmentStatus,
-  RemboursementMode,
-} from 'src/subscription/domain/enums/investment-status.enum';
+import { EcheancierGenerator } from 'src/servicing/domain/domain-services/echeancier.domain-service';
+import { EcheanceOrmMapper } from 'src/servicing/infrastructure/persistence/mappers/echeance.orm-mapper';
+import { InvestmentStatus } from 'src/subscription/domain/enums/investment-status.enum';
+// Le mode de remboursement appartient au vocabulaire de l'échéancier (§4) :
+// la souscription le choisit, `servicing` l'applique.
+import { RemboursementMode } from 'src/servicing/domain/enums/echeance.enum';
 import { InvestissementSouscritDomainEvent } from 'src/subscription/domain/events/investissement-souscrit.domain-event';
 import {
   ProjetIntrouvableError,
@@ -51,7 +52,7 @@ import {
 } from 'src/documents/domains/enums/document-type.enum';
 import { NotificationEventService } from 'src/notifications/applications/notification-event.service';
 import { InvestmentEntity } from 'src/subscription/infrastructure/persistence/entities/investment.entity';
-import { EcheanceEntity } from 'src/subscription/infrastructure/persistence/entities/echeance.entity';
+import { EcheanceEntity } from 'src/servicing/infrastructure/persistence/entities/echeance.entity';
 import { InvestmentOrmMapper } from 'src/subscription/infrastructure/persistence/mappers/investment.orm-mapper';
 import { ProjectEntity } from 'src/catalog/infrastructure/persistence/entities/project.entity';
 import { WalletEntity } from 'src/treasury/infrastructure/persistence/entities/wallet.entity';
@@ -204,15 +205,22 @@ export class CreateInvestmentUseCase {
         ),
       );
 
-      // 8. Génération + persistance de l'échéancier.
-      const echeances = EcheancierGenerator.generer(
-        investment,
-        projet,
+      // 8. Génération + persistance de l'échéancier. `servicing` calcule les
+      //    coupons à partir d'une demande ; ce contexte lui fournit le capital
+      //    souscrit et les conditions du projet, jamais son agrégat (§3.4).
+      const echeances = EcheancierGenerator.genererPour(
+        {
+          investissementId: investment.id,
+          montant: investment.montant,
+          triAnnuel: projet.triCible,
+          dureeMois: projet.dureeMois,
+          origine: new Date(),
+        },
         dto.modeRemboursement ?? RemboursementMode.IN_FINE,
       );
       await manager.save(
         EcheanceEntity,
-        echeances.map(InvestmentOrmMapper.echeanceNaissanteToEntity),
+        echeances.map(EcheanceOrmMapper.naissanteToEntity),
       );
 
       // 9. Collecte complète → FINANCE, sûr car on détient le verrou projet.

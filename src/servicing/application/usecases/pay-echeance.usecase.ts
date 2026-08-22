@@ -3,15 +3,15 @@ import { EventBus } from '@nestjs/cqrs';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource, EntityManager } from 'typeorm';
 import { EcheanceEntity } from '../../infrastructure/persistence/entities/echeance.entity';
-import { InvestmentOrmMapper } from '../../infrastructure/persistence/mappers/investment.orm-mapper';
+import { EcheanceOrmMapper } from '../../infrastructure/persistence/mappers/echeance.orm-mapper';
 import { Echeance } from '../../domain/entities/echeance';
-import { EcheanceStatus } from '../../domain/enums/investment-status.enum';
+import { EcheanceStatus } from '../../domain/enums/echeance.enum';
 import { EcheancePayeeDomainEvent } from '../../domain/events/echeance-payee.domain-event';
 import {
   EcheanceDejaPayeeError,
   EcheanceIntrouvableError,
   WalletInvestisseurIntrouvableError,
-} from '../../domain/errors/subscription.errors';
+} from '../../domain/errors';
 import { WalletEntity } from 'src/treasury/infrastructure/persistence/entities/wallet.entity';
 import { TransactionEntity } from 'src/treasury/infrastructure/persistence/entities/transaction.entity';
 import {
@@ -71,7 +71,7 @@ export class PayEcheanceUseCase {
       if (!row) throw new EcheanceIntrouvableError(echeanceId);
 
       // 1. Le domaine tranche la payabilité et calcule la retenue à la source.
-      const echeance = InvestmentOrmMapper.echeanceToDomain(row);
+      const echeance = EcheanceOrmMapper.toDomain(row);
       const prelevement = echeance.payer();
       const { prelevementIR, prelevementCSG, montantNet } = prelevement;
 

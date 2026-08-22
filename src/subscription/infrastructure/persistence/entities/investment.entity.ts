@@ -13,7 +13,7 @@ import { SignatureEntity } from 'src/signatures/infrastructure/persistences/enti
 import { ProjectEntity } from 'src/catalog/infrastructure/persistence/entities/project.entity';
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 import { InvestmentStatus } from 'src/subscription/domain/enums/investment-status.enum';
-import { EcheanceEntity } from './echeance.entity';
+import { EcheanceEntity } from 'src/servicing/infrastructure/persistence/entities/echeance.entity';
 
 @Entity('investissement')
 export class InvestmentEntity {

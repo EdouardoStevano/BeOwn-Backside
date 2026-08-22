@@ -1,5 +1,5 @@
 import { EcheancesCronService } from './echeances-cron.service';
-import { EcheanceStatus } from '../../domain/enums/investment-status.enum';
+import { EcheanceStatus } from '../../domain/enums/echeance.enum';
 
 describe('EcheancesCronService', () => {
   let service: EcheancesCronService;

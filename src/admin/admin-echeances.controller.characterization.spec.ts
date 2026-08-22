@@ -4,10 +4,8 @@ import { TriggerEcheancePaymentUseCase } from './usecases/trigger-echeance-payme
 import { GetAggregatedScheduleUseCase } from './usecases/get-aggregated-schedule.usecase';
 import { PatchAggregatedEcheanceUseCase } from './usecases/patch-aggregated-echeance.usecase';
 import { rolesWithPermission } from 'src/iam/domain/policies/role-permissions.policy';
-import {
-  EcheanceStatus,
-  InvestmentStatus,
-} from 'src/subscription/domain/enums/investment-status.enum';
+import { InvestmentStatus } from 'src/subscription/domain/enums/investment-status.enum';
+import { EcheanceStatus } from 'src/servicing/domain/enums/echeance.enum';
 import {
   TransactionFournisseur,
   TransactionStatus,
