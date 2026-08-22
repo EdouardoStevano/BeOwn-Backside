@@ -3,7 +3,7 @@ import { Cron } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { EcheanceEntity } from 'src/servicing/infrastructure/persistence/entities/echeance.entity';
-import { InvestmentEntity } from '../../infrastructure/persistence/entities/investment.entity';
+import { InvestmentEntity } from 'src/subscription/infrastructure/persistence/entities/investment.entity';
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 import { EcheanceStatus } from 'src/servicing/domain/enums/echeance.enum';
 import { CloudStorageService } from 'src/shared/cloud-storage/cloud-storage.service';

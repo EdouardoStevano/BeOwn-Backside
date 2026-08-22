@@ -1,6 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
-import { GenerateInvestisseurIfuUseCase } from './usecases/generate-investisseur-ifu.usecase';
+import { GenerateInvestisseurIfuUseCase } from '../usecases/generate-investisseur-ifu.usecase';
 import {
   DISTRIBUTION_PART_REPOSITORY,
   type DistributionPartRepository,

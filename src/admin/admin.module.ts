@@ -26,6 +26,7 @@ import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructu
 import { NotificationsModule } from 'src/notifications/notifications.module';
 import { SubscriptionModule } from 'src/subscription/subscription.module';
 import { ServicingModule } from 'src/servicing/servicing.module';
+import { RegulatoryReportingModule } from 'src/regulatory-reporting/regulatory-reporting.module';
 import { ProfilesModule } from 'src/compliance/application/profiles.module';
 import { UsersModule } from 'src/iam/application/users.module';
 import { TriggerEcheancePaymentUseCase } from './usecases/trigger-echeance-payment.usecase';
@@ -53,6 +54,9 @@ import { PatchAggregatedEcheanceUseCase } from './usecases/patch-aggregated-eche
     // `PayEcheanceUseCase`, `ProjectScheduleGeneratorService` : l'échéancier
     // que les écrans d'administration pilotent appartient à `servicing`.
     ServicingModule,
+    // `IfuGenerationService` : la génération des IFU que l'écran fiscal
+    // déclenche appartient à `regulatory-reporting`.
+    RegulatoryReportingModule,
     ProfilesModule,
     UsersModule,
   ],

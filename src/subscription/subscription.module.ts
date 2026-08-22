@@ -28,7 +28,6 @@ import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.ent
 import { UserEmailEntity } from 'src/iam/infrastructure/persistence/entities/user-email.entity';
 import { KycModule } from 'src/compliance/application/kyc.module';
 import { EcheanceEntity } from 'src/servicing/infrastructure/persistence/entities/echeance.entity';
-import { IfuGenerationService } from './application/services/ifu-generation.service';
 import { CollecteCloseCronService } from './application/services/collecte-close-cron.service';
 import { RefundCollecteService } from './application/services/refund-collecte.service';
 import { TransactionEntity } from 'src/treasury/infrastructure/persistence/entities/transaction.entity';
@@ -59,7 +58,6 @@ import { TransactionEntity } from 'src/treasury/infrastructure/persistence/entit
  *
  * Écarts temporaires, assumés et à résorber (§3.3) :
  *
- * - `IfuGenerationService` appartient à `regulatory-reporting` (M11) ;
  * - le module enregistre encore des entités d'autres contextes
  *   (`TypeOrmModule.forFeature` sur Project, Wallet, User, Document,
  *   Signature, Transaction, Echeance) : les sections transactionnelles y
@@ -101,7 +99,6 @@ import { TransactionEntity } from 'src/treasury/infrastructure/persistence/entit
     TopUpInvestmentUseCase,
     InitiateInvestmentUseCase,
     RetractInvestmentUseCase,
-    IfuGenerationService,
     CollecteCloseCronService,
     RefundCollecteService,
     // Traduit les erreurs métier du contexte en réponses HTTP : le domaine ne
@@ -110,7 +107,6 @@ import { TransactionEntity } from 'src/treasury/infrastructure/persistence/entit
   ],
   controllers: [InvestmentController],
   exports: [
-    IfuGenerationService,
     RefundCollecteService,
   ],
 })

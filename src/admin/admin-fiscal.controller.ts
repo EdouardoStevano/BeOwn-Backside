@@ -17,7 +17,7 @@ import { rolesWithPermission } from 'src/iam/domain/policies/role-permissions.po
 import { CurrentUser } from 'src/iam/presentation/decorators/current-user.decorator';
 import type { ActiveUser } from 'src/iam/presentation/decorators/current-user.decorator';
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
-import { IfuGenerationService } from 'src/subscription/application/services/ifu-generation.service';
+import { IfuGenerationService } from 'src/regulatory-reporting/application/services/ifu-generation.service';
 
 const ADMIN_ROLES: string[] = rolesWithPermission('fiscal:manage');
 

@@ -1,4 +1,4 @@
-import { DocumentFiscal } from '../../../domains/document-fiscal';
+import { DocumentFiscal } from 'src/regulatory-reporting/domain/document-fiscal';
 import { DocumentFiscalEntity } from '../entities/document-fiscal.entity';
 
 export class DocumentFiscalMapper {

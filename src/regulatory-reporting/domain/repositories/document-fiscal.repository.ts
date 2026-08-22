@@ -1,4 +1,4 @@
-import { DocumentFiscal } from '../../../domains/document-fiscal';
+import { DocumentFiscal } from '../document-fiscal';
 
 export const DOCUMENT_FISCAL_REPOSITORY = Symbol('DOCUMENT_FISCAL_REPOSITORY');
 

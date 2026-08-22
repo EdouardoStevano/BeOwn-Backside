@@ -1,9 +1,9 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { DocumentFiscal } from '../../domains/document-fiscal';
+import { DocumentFiscal } from 'src/regulatory-reporting/domain/document-fiscal';
 import {
   DOCUMENT_FISCAL_REPOSITORY,
   type DocumentFiscalRepository,
-} from '../ports/repositories/document-fiscal.repository';
+} from 'src/regulatory-reporting/domain/repositories/document-fiscal.repository';
 import {
   DISTRIBUTION_PART_REPOSITORY,
   type DistributionPartRepository,

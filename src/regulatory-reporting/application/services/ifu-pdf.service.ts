@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import type { Response } from 'express';
 import PDFDocument = require('pdfkit');
-import { DocumentFiscal } from '../domains/document-fiscal';
+import { DocumentFiscal } from 'src/regulatory-reporting/domain/document-fiscal';
 
 interface InvestorInfo {
   userId: number;
