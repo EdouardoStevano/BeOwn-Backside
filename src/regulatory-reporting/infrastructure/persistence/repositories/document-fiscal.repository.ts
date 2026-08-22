@@ -1,8 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { DocumentFiscal } from '../../../domains/document-fiscal';
-import { DocumentFiscalRepository } from '../../../applications/ports/repositories/document-fiscal.repository';
+import { DocumentFiscal } from 'src/regulatory-reporting/domain/document-fiscal';
+import { DocumentFiscalRepository } from 'src/regulatory-reporting/domain/repositories/document-fiscal.repository';
 import { DocumentFiscalEntity } from '../entities/document-fiscal.entity';
 import { DocumentFiscalMapper } from '../mappers/document-fiscal.mapper';
 

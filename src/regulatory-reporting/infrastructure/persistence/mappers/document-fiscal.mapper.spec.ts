@@ -1,5 +1,5 @@
 import { DocumentFiscalMapper } from './document-fiscal.mapper';
-import { DocumentFiscal } from '../../../domains/document-fiscal';
+import { DocumentFiscal } from 'src/regulatory-reporting/domain/document-fiscal';
 
 describe('DocumentFiscalMapper', () => {
   const base: DocumentFiscal = Object.assign(new DocumentFiscal(), {

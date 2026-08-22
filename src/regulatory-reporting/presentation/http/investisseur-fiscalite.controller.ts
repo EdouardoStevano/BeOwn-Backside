@@ -18,9 +18,9 @@ import { UserRole } from 'src/iam/domain/enums/user.enum';
 import {
   DOCUMENT_FISCAL_REPOSITORY,
   type DocumentFiscalRepository,
-} from '../../applications/ports/repositories/document-fiscal.repository';
-import { GenerateInvestisseurIfuUseCase } from '../../applications/usecases/generate-investisseur-ifu.usecase';
-import { IfuPdfService } from '../../applications/ifu-pdf.service';
+} from 'src/regulatory-reporting/domain/repositories/document-fiscal.repository';
+import { GenerateInvestisseurIfuUseCase } from '../../application/usecases/generate-investisseur-ifu.usecase';
+import { IfuPdfService } from '../../application/services/ifu-pdf.service';
 import {
   USER_REPOSITORY,
   type UserRepository,

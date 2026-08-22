@@ -8,8 +8,8 @@ import {
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from 'src/iam/presentation/guards/jwt-auth.guard';
 import { RequirePermission } from 'src/iam/presentation/decorators/require-permission.decorator';
-import { IfuCronService } from '../../applications/ifu-cron.service';
-import { GenerateInvestisseurIfuUseCase } from '../../applications/usecases/generate-investisseur-ifu.usecase';
+import { IfuCronService } from '../../application/services/ifu-cron.service';
+import { GenerateInvestisseurIfuUseCase } from '../../application/usecases/generate-investisseur-ifu.usecase';
 
 @ApiTags('Admin — Fiscalité')
 @ApiBearerAuth()

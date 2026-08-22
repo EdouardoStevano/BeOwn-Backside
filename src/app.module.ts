@@ -33,7 +33,7 @@ import { NewsModule } from './news/news.module';
 import { KpiModule } from './kpi/kpi.module';
 import { LocativeManagementModule } from './locative-management/applications/locative-management.module';
 import { DistributionsModule } from './distributions/applications/distributions.module';
-import { FiscaliteModule } from './fiscalite/applications/fiscalite.module';
+import { RegulatoryReportingModule } from './regulatory-reporting/regulatory-reporting.module';
 import { AmlModule } from './common/aml/aml.module';
 import { PlatformFeesModule } from './common/platform-fees/platform-fees.module';
 import { PlatformSettingsModule } from './common/platform-settings/platform-settings.module';
@@ -115,7 +115,7 @@ function requireEnv(name: string): string {
     CgpModule,
     LocativeManagementModule,
     DistributionsModule,
-    FiscaliteModule,
+    RegulatoryReportingModule,
     AmlModule,
     PlatformFeesModule,
     PlatformSettingsModule,
