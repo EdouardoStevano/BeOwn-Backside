@@ -65,6 +65,20 @@ export class UserTypeOrmRepository implements UserRepository {
   async update(user: User): Promise<User> {
     const entity = UserMapper.toEntity(user);
 
+    // La ligne `user_emails` porte sa propre clé générée, indépendante de
+    // l'id du compte. Sans elle, TypeORM (cascade) tente un INSERT et heurte
+    // l'unicité de `user_id` dès que les séquences ont divergé. On reprend la
+    // clé de la ligne existante pour que le save() soit un UPDATE.
+    if (entity.userEmail && entity.userId) {
+      const current = await this.usersRepository.findOne({
+        where: { userId: entity.userId },
+        relations: ['userEmail'],
+      });
+      if (current?.userEmail) {
+        entity.userEmail.userId = current.userEmail.userId;
+      }
+    }
+
     const updated = await this.usersRepository.save(entity);
     return UserMapper.toDomain(updated);
   }

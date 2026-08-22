@@ -61,9 +61,12 @@ describe('UserMapper (persistance) — couture user_emails ↔ agrégat', () => 
     expect(entity.userEmail.email).toBe('user@example.com');
     expect(entity.userEmail.isVerified).toBe(true);
     expect(entity.userEmail.verifiedDate).toBeInstanceOf(Date);
-    // Le lien des deux côtés : sans `userId`, TypeORM insère une ligne
-    // orpheline plutôt que de mettre à jour celle du compte.
-    expect(entity.userEmail.userId).toBe(42);
+    // Le lien vers le compte, mais AUCUNE clé présumée pour la ligne email :
+    // `user_emails.userId` est une séquence propre, qui ne vaut pas l'id du
+    // compte dès qu'une ligne a été insérée hors application. La poser ici
+    // faisait insérer un doublon (violation d'unicité sur `user_id`) ; c'est le
+    // repository qui relit la clé réelle avant le save().
+    expect(entity.userEmail.userId).toBeUndefined();
     expect(entity.userEmail.user).toBe(entity);
   });
 

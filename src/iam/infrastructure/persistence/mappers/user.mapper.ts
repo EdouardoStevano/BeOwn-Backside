@@ -55,10 +55,12 @@ export class UserMapper {
       emailEntity.isVerified = snapshot.emailVerified;
       emailEntity.verifiedDate = snapshot.emailVerifiedDate;
       emailEntity.user = entity;
-
-      if (snapshot.userId) {
-        emailEntity.userId = snapshot.userId;
-      }
+      // Pas de clé primaire ici : `user_emails.userId` est une séquence propre
+      // à la table, rien ne garantit qu'elle vaille l'id du compte (les deux
+      // divergent dès qu'une ligne est insérée hors application). La poser à
+      // l'aveugle faisait INSÉRER une seconde ligne pour le même compte —
+      // violation de l'unicité `user_id`. C'est le repository qui relit la clé
+      // réelle de la ligne existante avant le save() (voir `update`).
       entity.userEmail = emailEntity;
     }
 
