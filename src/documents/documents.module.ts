@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { APP_FILTER } from '@nestjs/core';
 import { MulterModule } from '@nestjs/platform-express';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { memoryStorage } from 'multer';
@@ -6,6 +7,7 @@ import { DocumentsInfrastructureModule } from './infrastructure/documents-infras
 import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructure.module';
 import { CloudStorageModule } from 'src/shared/cloud-storage/cloud-storage.module';
 import { DocumentController } from './presentation/http/document.controller';
+import { DocumentsErrorFilter } from './presentation/http/filters/documents-error.filter';
 import { InvestmentEntity } from 'src/subscription/infrastructure/persistence/entities/investment.entity';
 import { ProjectEntity } from 'src/catalog/infrastructure/persistence/entities/project.entity';
 
@@ -42,21 +44,25 @@ import { ProjectEntity } from 'src/catalog/infrastructure/persistence/entities/p
  *   charges) et vers le stockage objet, tous deux **Generic** (§3.1) — achetés,
  *   jamais reconstruits.
  *
- * Ce module donne au contexte son nom et sa forme (§5). Le modèle riche —
- * `SignableDocument` en agrégat portant le cycle de vie de la signature, ses
- * erreurs et leur filtre — est l'étape suivante, même découpage en deux temps
- * que `catalog`, `subscription`, `treasury`, `servicing` et `secondary-market`.
+ * Le contexte a son modèle : `SignableDocument` est l'agrégat racine (§6), et
+ * `Signature` l'entité interne qui porte le cycle de vie d'une demande — son
+ * invariant tient en une phrase, une signature ne quitte `PENDING` qu'une fois.
+ * Il a ses erreurs (`DocumentsError`) et leur filtre, ses mappers, et un port
+ * dont les écritures de colonnes ont disparu.
  *
  * Écarts temporaires, assumés et à résorber (§3.3) :
  *
- * - `Document` et `Signature` sont des sacs de champs publics sans un
- *   comportement (§7) : `DocumentController` porte les règles à leur place, en
- *   495 lignes ;
- * - le cycle de vie d'une signature s'écrit depuis six endroits, tous hors de
- *   ce contexte — `signature.statut = …` posé à la main par le webhook, par
- *   l'annulation d'initiation et par le back-office ;
+ * - les demandes de signature se lisent et s'écrivent encore par
+ *   `Repository<SignatureEntity>` depuis `subscription` et `secondary-market`,
+ *   faute de port : ces contextes traduisent par `SignatureOrmMapper` et jouent
+ *   la transition sur l'entité, mais tiennent la ligne eux-mêmes — le webhook
+ *   la verrouille dans sa propre transaction, un port ne saurait pas le faire ;
  * - `YouSignService` vit dans `src/common/yousign/` : l'adaptateur du
- *   partenaire de signature est rangé hors du contexte qu'il sert.
+ *   partenaire de signature est rangé hors du contexte qu'il sert (§20) ;
+ * - `DocumentController` compose encore lui-même ses règles d'accès en lisant
+ *   projet et investissement : c'est du RBAC, qui appartient bien à la
+ *   présentation (§3.3), mais il le fait par les entités ORM d'autres contextes
+ *   plutôt que par un port.
  */
 @Module({
   imports: [
@@ -69,5 +75,10 @@ import { ProjectEntity } from 'src/catalog/infrastructure/persistence/entities/p
     MulterModule.register({ storage: memoryStorage() }),
   ],
   controllers: [DocumentController],
+  providers: [
+    // Traduit les erreurs métier du contexte en réponses HTTP : le domaine ne
+    // connaît aucun statut (§21), la présentation s'en charge.
+    { provide: APP_FILTER, useClass: DocumentsErrorFilter },
+  ],
 })
 export class DocumentsModule {}

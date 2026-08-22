@@ -45,7 +45,7 @@ import {
 } from 'src/treasury/domain/enums/wallet.enum';
 import { ContractGeneratorService } from '../services/contract-generator.service';
 import { CloudStorageService } from 'src/shared/cloud-storage/cloud-storage.service';
-import { Document } from 'src/documents/domain/document';
+import { SignableDocument } from 'src/documents/domain/aggregates/signable-document';
 import {
   DocumentRelatedTo,
   DocumentType,
@@ -368,23 +368,24 @@ export class CreateInvestmentUseCase {
       'contrats',
     );
 
-    const doc = new Document();
-    doc.type = DocumentType.BULLETIN_SOUSCRIPTION;
-    doc.relatedTo = DocumentRelatedTo.INVESTMENT;
-    doc.userId = null;
-    doc.projectId = investment.projetId;
-    doc.investmentId = investment.id;
-    doc.originalName = filename;
-    doc.filename = objectName;
-    doc.mimeType = 'application/pdf';
-    doc.sizeBytes = pdfBuffer.length;
-    doc.path = publicUrl;
-    doc.isPublic = false;
-    doc.uploadedBy = userId;
-    doc.ordre = null;
-    doc.estPrincipale = false;
-
-    const savedDoc = await this.documentRepository.save(doc);
+    const savedDoc = await this.documentRepository.creer(
+      SignableDocument.televerser({
+        type: DocumentType.BULLETIN_SOUSCRIPTION,
+        relatedTo: DocumentRelatedTo.INVESTMENT,
+        userId: null,
+        projectId: investment.projetId,
+        investmentId: investment.id,
+        originalName: filename,
+        filename: objectName,
+        mimeType: 'application/pdf',
+        sizeBytes: pdfBuffer.length,
+        path: publicUrl,
+        isPublic: false,
+        uploadedBy: userId,
+        ordre: null,
+        estPrincipale: false,
+      }),
+    );
 
     investment.attacherBulletin(savedDoc.id);
     await this.investmentRepository.save(investment);

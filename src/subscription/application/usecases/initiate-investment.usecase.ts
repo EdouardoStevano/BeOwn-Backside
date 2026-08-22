@@ -21,12 +21,13 @@ import {
   SoldeInsuffisantError,
   WalletIntrouvableError,
 } from 'src/subscription/domain/errors/subscription.errors';
-import { Document } from 'src/documents/domain/document';
+import { SignableDocument } from 'src/documents/domain/aggregates/signable-document';
 import {
   DocumentType,
   DocumentRelatedTo,
 } from 'src/documents/domain/enums/document-type.enum';
-import { SignatureStatus } from 'src/documents/domain/enums/signature-status.enum';
+import { Signature } from 'src/documents/domain/entities/signature';
+import { SignatureOrmMapper } from 'src/documents/infrastructure/persistence/mappers/signature.orm-mapper';
 import { WalletType } from 'src/treasury/domain/enums/wallet.enum';
 import { CloudStorageService } from 'src/shared/cloud-storage/cloud-storage.service';
 import { ContractGeneratorService } from '../services/contract-generator.service';
@@ -149,22 +150,24 @@ export class InitiateInvestmentUseCase {
       'contrats',
     );
 
-    const doc = new Document();
-    doc.type = DocumentType.CONTRAT_SOUSCRIPTION;
-    doc.relatedTo = DocumentRelatedTo.INVESTMENT;
-    doc.userId = userId;
-    doc.projectId = projetId;
-    doc.investmentId = investment.id;
-    doc.originalName = filename;
-    doc.filename = objectName;
-    doc.mimeType = 'application/pdf';
-    doc.sizeBytes = pdfBuffer.length;
-    doc.path = publicUrl;
-    doc.isPublic = false;
-    doc.uploadedBy = userId;
-    doc.ordre = null;
-    doc.estPrincipale = false;
-    const savedDoc = await this.documentRepository.save(doc);
+    const savedDoc = await this.documentRepository.creer(
+      SignableDocument.televerser({
+        type: DocumentType.CONTRAT_SOUSCRIPTION,
+        relatedTo: DocumentRelatedTo.INVESTMENT,
+        userId,
+        projectId: projetId,
+        investmentId: investment.id,
+        originalName: filename,
+        filename: objectName,
+        mimeType: 'application/pdf',
+        sizeBytes: pdfBuffer.length,
+        path: publicUrl,
+        isPublic: false,
+        uploadedBy: userId,
+        ordre: null,
+        estPrincipale: false,
+      }),
+    );
 
     const expiresAt = new Date(Date.now() + VALIDITE_DEMANDE_SIGNATURE_MS);
     const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:5173';
@@ -182,19 +185,19 @@ export class InitiateInvestmentUseCase {
       });
 
     const savedSignature = await this.signatureRows.save(
-      this.signatureRows.create({
-        youSignRequestId: requestId,
-        youSignSignerId: signerId,
-        youSignSigningUrl: signingUrl,
-        documentId: savedDoc.id,
-        investmentId: investment.id,
-        ordreId: null,
-        nbFractions,
-        userId,
-        statut: SignatureStatus.PENDING,
-        expiresAt,
-        signedAt: null,
-      }),
+      SignatureOrmMapper.naissanteToEntity(
+        Signature.demander({
+          youSignRequestId: requestId,
+          youSignSignerId: signerId,
+          youSignSigningUrl: signingUrl,
+          documentId: savedDoc.id,
+          investmentId: investment.id,
+          ordreId: null,
+          nbFractions,
+          userId,
+          expiresAt,
+        }),
+      ),
     );
 
     investment.rattacherDemandeDeSignature(savedSignature.id);

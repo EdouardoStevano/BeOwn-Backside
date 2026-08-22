@@ -18,7 +18,8 @@ import { OrdreMarcheOrmMapper } from 'src/secondary-market/infrastructure/persis
 import { OrdreIntrouvableError } from 'src/secondary-market/domain/errors';
 import { InvestmentStatus } from 'src/subscription/domain/enums/investment-status.enum';
 import { DocumentType, DocumentRelatedTo } from 'src/documents/domain/enums/document-type.enum';
-import { SignatureStatus } from 'src/documents/domain/enums/signature-status.enum';
+import { Signature } from 'src/documents/domain/entities/signature';
+import { SignatureOrmMapper } from 'src/documents/infrastructure/persistence/mappers/signature.orm-mapper';
 import { WalletType } from 'src/treasury/domain/enums/wallet.enum';
 import { CloudStorageService } from 'src/shared/cloud-storage/cloud-storage.service';
 import { ContractGeneratorService } from 'src/subscription/application/services/contract-generator.service';
@@ -159,20 +160,21 @@ export class InitiateBuyUseCase {
       });
 
     // ── Création de l'enregistrement Signature ─────────────────────────────────
-    const sigEntity = this.signatureRepo.create({
-      youSignRequestId: requestId,
-      youSignSignerId: signerId,
-      youSignSigningUrl: signingUrl,
-      documentId: savedDoc.id,
-      investmentId: existingInvestment?.id ?? null,
-      ordreId,
-      nbFractions,
-      userId,
-      statut: SignatureStatus.PENDING,
-      expiresAt: new Date(Date.now() + 48 * 60 * 60 * 1000),
-      signedAt: null,
-    });
-    const savedSig = await this.signatureRepo.save(sigEntity);
+    const savedSig = await this.signatureRepo.save(
+      SignatureOrmMapper.naissanteToEntity(
+        Signature.demander({
+          youSignRequestId: requestId,
+          youSignSignerId: signerId,
+          youSignSigningUrl: signingUrl,
+          documentId: savedDoc.id,
+          investmentId: existingInvestment?.id ?? null,
+          ordreId,
+          nbFractions,
+          userId,
+          expiresAt: new Date(Date.now() + 48 * 60 * 60 * 1000),
+        }),
+      ),
+    );
 
     this.logger.log(
       `InitiateBuy: ordreId=${ordreId} userId=${userId} signatureId=${savedSig.id} youSignRequestId=${requestId}`,

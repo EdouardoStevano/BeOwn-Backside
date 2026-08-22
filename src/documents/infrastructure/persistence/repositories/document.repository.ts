@@ -1,11 +1,17 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { DocumentEntity } from '../entities/document.entity';
-import { DocumentRepository } from 'src/documents/domain/repositories/document.repository';
-import { Document } from 'src/documents/domain/document';
+import { DocumentOrmMapper } from '../mappers/document.orm-mapper';
+import type { DocumentRepository } from 'src/documents/domain/repositories/document.repository';
+import type {
+  SignableDocument,
+  SignableDocumentNaissant,
+} from 'src/documents/domain/aggregates/signable-document';
+import { DocumentIntrouvableError } from 'src/documents/domain/errors';
 import { DocumentType } from 'src/documents/domain/enums/document-type.enum';
 
+/** L'adapter TypeORM du port `DocumentRepository` (§33). */
 @Injectable()
 export class DocumentTypeOrmRepository implements DocumentRepository {
   constructor(
@@ -13,104 +19,73 @@ export class DocumentTypeOrmRepository implements DocumentRepository {
     private readonly repo: Repository<DocumentEntity>,
   ) {}
 
-  async save(doc: Document): Promise<Document> {
-    const entity = this.repo.create({
-      type: doc.type,
-      relatedTo: doc.relatedTo,
-      userId: doc.userId,
-      projectId: doc.projectId,
-      investmentId: doc.investmentId,
-      originalName: doc.originalName,
-      filename: doc.filename,
-      mimeType: doc.mimeType,
-      sizeBytes: doc.sizeBytes,
-      path: doc.path,
-      isPublic: doc.isPublic,
-      uploadedBy: doc.uploadedBy,
-      ordre: doc.ordre ?? null,
-      estPrincipale: doc.estPrincipale ?? false,
-    });
-    const saved = await this.repo.save(entity);
-    return this.toDoc(saved);
+  async creer(naissant: SignableDocumentNaissant): Promise<SignableDocument> {
+    const saved = await this.repo.save(
+      DocumentOrmMapper.naissantToEntity(naissant),
+    );
+    return DocumentOrmMapper.toDomain(saved);
   }
 
-  async findById(id: string): Promise<Document | null> {
+  async save(document: SignableDocument): Promise<SignableDocument> {
+    const saved = await this.repo.save(DocumentOrmMapper.toEntity(document));
+    return DocumentOrmMapper.toDomain(saved);
+  }
+
+  async findById(id: string): Promise<SignableDocument | null> {
     const entity = await this.repo.findOne({ where: { id } });
-    return entity ? this.toDoc(entity) : null;
+    return entity ? DocumentOrmMapper.toDomain(entity) : null;
   }
 
-  async findByUserId(userId: number): Promise<Document[]> {
-    const entities = await this.repo.find({
-      where: { userId },
-      order: { createdAt: 'DESC' },
-    });
-    return entities.map((e) => this.toDoc(e));
+  async findByUserId(userId: number): Promise<SignableDocument[]> {
+    return this.lire({ userId });
   }
 
-  async findByProjectId(projectId: string): Promise<Document[]> {
-    const entities = await this.repo.find({
-      where: { projectId },
-      order: { createdAt: 'DESC' },
-    });
-    return entities.map((e) => this.toDoc(e));
+  async findByProjectId(projectId: string): Promise<SignableDocument[]> {
+    return this.lire({ projectId });
   }
 
-  async findByInvestmentId(investmentId: string): Promise<Document[]> {
-    const entities = await this.repo.find({
-      where: { investmentId },
-      order: { createdAt: 'DESC' },
-    });
-    return entities.map((e) => this.toDoc(e));
+  async findByInvestmentId(investmentId: string): Promise<SignableDocument[]> {
+    return this.lire({ investmentId });
   }
 
-  async findProjectImages(projectId: string): Promise<Document[]> {
+  async findProjectImages(projectId: string): Promise<SignableDocument[]> {
     const entities = await this.repo.find({
       where: { projectId, type: DocumentType.PHOTO_PROJET },
       order: { estPrincipale: 'DESC', ordre: 'ASC', createdAt: 'ASC' },
     });
-    return entities.map((e) => this.toDoc(e));
+    return entities.map(DocumentOrmMapper.toDomain);
   }
 
-  async setMainImage(id: string, projectId: string): Promise<Document> {
+  /**
+   * Deux écritures, une intention : l'unicité de la couverture porte sur
+   * toutes les photos du projet, pas sur le document seul (voir le port).
+   */
+  async designerImagePrincipale(
+    document: SignableDocument,
+  ): Promise<SignableDocument> {
+    const { id, projectId } = document.snapshot();
     await this.repo.update(
-      { projectId, type: DocumentType.PHOTO_PROJET },
+      { projectId: projectId!, type: DocumentType.PHOTO_PROJET },
       { estPrincipale: false },
     );
     await this.repo.update(id, { estPrincipale: true });
-    const entity = await this.repo.findOne({ where: { id } });
-    if (!entity) throw new NotFoundException('Document introuvable.');
-    return this.toDoc(entity);
-  }
 
-  async updateOrdre(id: string, ordre: number): Promise<Document> {
-    await this.repo.update(id, { ordre });
     const entity = await this.repo.findOne({ where: { id } });
-    if (!entity) throw new NotFoundException('Document introuvable.');
-    return this.toDoc(entity);
+    if (!entity) throw new DocumentIntrouvableError(id);
+    return DocumentOrmMapper.toDomain(entity);
   }
 
   async delete(id: string): Promise<void> {
     await this.repo.delete(id);
   }
 
-  private toDoc(e: DocumentEntity): Document {
-    const doc = new Document();
-    doc.id = e.id;
-    doc.type = e.type;
-    doc.relatedTo = e.relatedTo;
-    doc.userId = e.userId;
-    doc.projectId = e.projectId;
-    doc.investmentId = e.investmentId;
-    doc.originalName = e.originalName;
-    doc.filename = e.filename;
-    doc.mimeType = e.mimeType;
-    doc.sizeBytes = e.sizeBytes;
-    doc.path = e.path;
-    doc.isPublic = e.isPublic;
-    doc.uploadedBy = e.uploadedBy;
-    doc.ordre = e.ordre;
-    doc.estPrincipale = e.estPrincipale;
-    doc.createdAt = e.createdAt;
-    return doc;
+  private async lire(
+    where: Record<string, unknown>,
+  ): Promise<SignableDocument[]> {
+    const entities = await this.repo.find({
+      where,
+      order: { createdAt: 'DESC' },
+    });
+    return entities.map(DocumentOrmMapper.toDomain);
   }
 }

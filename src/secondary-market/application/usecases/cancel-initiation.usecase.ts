@@ -7,7 +7,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { SignatureEntity } from 'src/documents/infrastructure/persistence/entities/signature.entity';
-import { SignatureStatus } from 'src/documents/domain/enums/signature-status.enum';
+import { SignatureOrmMapper } from 'src/documents/infrastructure/persistence/mappers/signature.orm-mapper';
 import { YouSignService } from 'src/common/yousign/yousign.service';
 
 @Injectable()
@@ -21,15 +21,21 @@ export class CancelInitiationUseCase {
   ) {}
 
   async execute(signatureId: string, userId: number): Promise<void> {
-    const signature = await this.signatureRepo.findOne({
+    const ligne = await this.signatureRepo.findOne({
       where: { id: signatureId },
     });
-    if (!signature) throw new NotFoundException('Signature introuvable');
-    if (signature.userId !== userId) throw new ForbiddenException('Non autorisé');
-    if (signature.statut !== SignatureStatus.PENDING) return; // idempotent
+    if (!ligne) throw new NotFoundException('Signature introuvable');
 
-    signature.statut = SignatureStatus.CANCELLED;
-    await this.signatureRepo.save(signature);
+    // La règle « on n'annule qu'une demande encore en attente, et seulement la
+    // sienne » appartient à `documents` : ici on interroge pour rester
+    // idempotent, puis on laisse l'entité trancher.
+    const signature = SignatureOrmMapper.toDomain(ligne);
+    if (!signature.estEnAttente) return; // idempotent
+    signature.annuler(userId);
+
+    await this.signatureRepo.save(
+      SignatureOrmMapper.appliquerSur(ligne, signature),
+    );
 
     // Annuler la procédure YouSign de manière non-bloquante
     this.youSignService
