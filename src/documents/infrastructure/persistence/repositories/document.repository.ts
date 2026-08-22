@@ -2,9 +2,9 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { DocumentEntity } from '../entities/document.entity';
-import { DocumentRepository } from 'src/documents/applications/ports/repositories/document.repository';
-import { Document } from 'src/documents/domains/document';
-import { DocumentType } from 'src/documents/domains/enums/document-type.enum';
+import { DocumentRepository } from 'src/documents/domain/repositories/document.repository';
+import { Document } from 'src/documents/domain/document';
+import { DocumentType } from 'src/documents/domain/enums/document-type.enum';
 
 @Injectable()
 export class DocumentTypeOrmRepository implements DocumentRepository {

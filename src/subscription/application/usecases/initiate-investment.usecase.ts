@@ -2,7 +2,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ProjectEntity } from 'src/catalog/infrastructure/persistence/entities/project.entity';
-import { SignatureEntity } from 'src/signatures/infrastructure/persistences/entities/signature.entity';
+import { SignatureEntity } from 'src/documents/infrastructure/persistence/entities/signature.entity';
 import { ProjectStatus } from 'src/catalog/domain/enums/project-status.enum';
 import type { ProjectRepository } from 'src/catalog/domain/repositories/project.repository';
 import { PROJECT_REPOSITORY } from 'src/catalog/domain/repositories/project.repository';
@@ -10,8 +10,8 @@ import type { InvestmentRepository } from '../../domain/repositories/investment.
 import { INVESTMENT_REPOSITORY } from '../../domain/repositories/investment.repository';
 import type { WalletRepository } from 'src/treasury/domain/repositories/wallet.repository';
 import { WALLET_REPOSITORY } from 'src/treasury/domain/repositories/wallet.repository';
-import type { DocumentRepository } from 'src/documents/applications/ports/repositories/document.repository';
-import { DOCUMENT_REPOSITORY } from 'src/documents/applications/ports/repositories/document.repository';
+import type { DocumentRepository } from 'src/documents/domain/repositories/document.repository';
+import { DOCUMENT_REPOSITORY } from 'src/documents/domain/repositories/document.repository';
 import type { UserRepository } from 'src/iam/domain/repositories/user.repository';
 import { USER_REPOSITORY } from 'src/iam/domain/repositories/user.repository';
 import { CollecteCapacity } from 'src/subscription/domain/aggregates/collecte-capacity';
@@ -21,12 +21,12 @@ import {
   SoldeInsuffisantError,
   WalletIntrouvableError,
 } from 'src/subscription/domain/errors/subscription.errors';
-import { Document } from 'src/documents/domains/document';
+import { Document } from 'src/documents/domain/document';
 import {
   DocumentType,
   DocumentRelatedTo,
-} from 'src/documents/domains/enums/document-type.enum';
-import { SignatureStatus } from 'src/signatures/domains/enums/signature-status.enum';
+} from 'src/documents/domain/enums/document-type.enum';
+import { SignatureStatus } from 'src/documents/domain/enums/signature-status.enum';
 import { WalletType } from 'src/treasury/domain/enums/wallet.enum';
 import { CloudStorageService } from 'src/shared/cloud-storage/cloud-storage.service';
 import { ContractGeneratorService } from '../services/contract-generator.service';

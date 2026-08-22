@@ -5,7 +5,7 @@ import {
   Index,
   PrimaryGeneratedColumn,
 } from 'typeorm';
-import { DocumentRelatedTo, DocumentType } from 'src/documents/domains/enums/document-type.enum';
+import { DocumentRelatedTo, DocumentType } from 'src/documents/domain/enums/document-type.enum';
 
 @Entity('document')
 export class DocumentEntity {

@@ -6,8 +6,8 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { SignatureEntity } from 'src/signatures/infrastructure/persistences/entities/signature.entity';
-import { SignatureStatus } from 'src/signatures/domains/enums/signature-status.enum';
+import { SignatureEntity } from 'src/documents/infrastructure/persistence/entities/signature.entity';
+import { SignatureStatus } from 'src/documents/domain/enums/signature-status.enum';
 import { YouSignService } from 'src/common/yousign/yousign.service';
 
 @Injectable()

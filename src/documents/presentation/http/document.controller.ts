@@ -36,13 +36,13 @@ import { CurrentUser } from 'src/iam/presentation/decorators/current-user.decora
 import type { ActiveUser } from 'src/iam/presentation/decorators/current-user.decorator';
 import { Public } from 'src/iam/presentation/decorators/public.decorator';
 import { hasPermission } from 'src/iam/domain/policies/role-permissions.policy';
-import { DOCUMENT_REPOSITORY } from 'src/documents/applications/ports/repositories/document.repository';
-import type { DocumentRepository } from 'src/documents/applications/ports/repositories/document.repository';
-import { Document } from 'src/documents/domains/document';
+import { DOCUMENT_REPOSITORY } from 'src/documents/domain/repositories/document.repository';
+import type { DocumentRepository } from 'src/documents/domain/repositories/document.repository';
+import { Document } from 'src/documents/domain/document';
 import {
   DocumentRelatedTo,
   DocumentType,
-} from 'src/documents/domains/enums/document-type.enum';
+} from 'src/documents/domain/enums/document-type.enum';
 import { InvestmentEntity } from 'src/subscription/infrastructure/persistence/entities/investment.entity';
 import { ProjectEntity } from 'src/catalog/infrastructure/persistence/entities/project.entity';
 import { SetOrdreDto, UploadDocumentDto } from '../dto/document.dto';

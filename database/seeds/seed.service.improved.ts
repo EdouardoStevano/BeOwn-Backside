@@ -37,11 +37,11 @@ import {
   NotificationCanal,
 } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
 import { AuditLogEntity } from 'src/notifications/infrastructure/persistences/entities/audit-log.entity';
-import { DocumentEntity } from 'src/documents/infrastructure/persistences/entities/document.entity';
+import { DocumentEntity } from 'src/documents/infrastructure/persistence/entities/document.entity';
 import {
   DocumentType,
   DocumentRelatedTo,
-} from 'src/documents/domains/enums/document-type.enum';
+} from 'src/documents/domain/enums/document-type.enum';
 import { OrdreMarcheEntity } from 'src/secondary-market/infrastructure/persistence/entities/ordre-marche.entity';
 import {
   OrdreMarcheSens,

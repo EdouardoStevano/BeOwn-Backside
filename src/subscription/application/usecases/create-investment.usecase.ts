@@ -10,8 +10,8 @@ import type { WalletRepository } from 'src/treasury/domain/repositories/wallet.r
 import { WALLET_REPOSITORY } from 'src/treasury/domain/repositories/wallet.repository';
 import type { TransactionRepository } from 'src/treasury/domain/repositories/transaction.repository';
 import { TRANSACTION_REPOSITORY } from 'src/treasury/domain/repositories/transaction.repository';
-import type { DocumentRepository } from 'src/documents/applications/ports/repositories/document.repository';
-import { DOCUMENT_REPOSITORY } from 'src/documents/applications/ports/repositories/document.repository';
+import type { DocumentRepository } from 'src/documents/domain/repositories/document.repository';
+import { DOCUMENT_REPOSITORY } from 'src/documents/domain/repositories/document.repository';
 import type { UserRepository } from 'src/iam/domain/repositories/user.repository';
 import { USER_REPOSITORY } from 'src/iam/domain/repositories/user.repository';
 import {
@@ -45,11 +45,11 @@ import {
 } from 'src/treasury/domain/enums/wallet.enum';
 import { ContractGeneratorService } from '../services/contract-generator.service';
 import { CloudStorageService } from 'src/shared/cloud-storage/cloud-storage.service';
-import { Document } from 'src/documents/domains/document';
+import { Document } from 'src/documents/domain/document';
 import {
   DocumentRelatedTo,
   DocumentType,
-} from 'src/documents/domains/enums/document-type.enum';
+} from 'src/documents/domain/enums/document-type.enum';
 import { NotificationEventService } from 'src/notifications/applications/notification-event.service';
 import { InvestmentEntity } from 'src/subscription/infrastructure/persistence/entities/investment.entity';
 import { EcheanceEntity } from 'src/servicing/infrastructure/persistence/entities/echeance.entity';

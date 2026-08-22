@@ -5,7 +5,7 @@ import {
   Index,
   PrimaryGeneratedColumn,
 } from 'typeorm';
-import { SignatureStatus } from 'src/signatures/domains/enums/signature-status.enum';
+import { SignatureStatus } from 'src/documents/domain/enums/signature-status.enum';
 
 @Entity('signature')
 export class SignatureEntity {

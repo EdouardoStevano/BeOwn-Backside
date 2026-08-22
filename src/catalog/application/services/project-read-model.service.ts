@@ -1,10 +1,10 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { AVIS_REPOSITORY } from 'src/avis/applications/ports/repositories/avis.repository';
 import type { AvisRepository } from 'src/avis/applications/ports/repositories/avis.repository';
-import { DOCUMENT_REPOSITORY } from 'src/documents/applications/ports/repositories/document.repository';
-import type { DocumentRepository } from 'src/documents/applications/ports/repositories/document.repository';
-import { Document } from 'src/documents/domains/document';
-import { DocumentType } from 'src/documents/domains/enums/document-type.enum';
+import { DOCUMENT_REPOSITORY } from 'src/documents/domain/repositories/document.repository';
+import type { DocumentRepository } from 'src/documents/domain/repositories/document.repository';
+import { Document } from 'src/documents/domain/document';
+import { DocumentType } from 'src/documents/domain/enums/document-type.enum';
 import { INVESTMENT_REPOSITORY } from 'src/subscription/domain/repositories/investment.repository';
 import type { InvestmentRepository } from 'src/subscription/domain/repositories/investment.repository';
 import { InvestmentStatus } from 'src/subscription/domain/enums/investment-status.enum';

@@ -1,4 +1,4 @@
-import { Document } from 'src/documents/domains/document';
+import { Document } from 'src/documents/domain/document';
 
 export const DOCUMENT_REPOSITORY = Symbol('DOCUMENT_REPOSITORY');
 
