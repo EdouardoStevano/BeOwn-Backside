@@ -1,11 +1,10 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { AVIS_REPOSITORY } from 'src/catalog/domain/repositories/avis.repository';
-import type { AvisRepository } from 'src/catalog/domain/repositories/avis.repository';
-import { Avis } from 'src/catalog/domain/aggregates/avis';
 import {
-  AvisDejaSoumisError,
-  ProjetIntrouvableError,
-} from 'src/catalog/domain/errors';
+  AVIS_REPOSITORY,
+  type AvisRepository,
+} from 'src/catalog/domain/repositories/avis.repository';
+import type { AvisSnapshot } from 'src/catalog/domain/aggregates/avis';
+import { ProjetIntrouvableError } from 'src/catalog/domain/errors';
 import {
   PROJECT_REPOSITORY,
   type ProjectRepository,
@@ -14,31 +13,31 @@ import {
 export interface AvisProjet {
   noteMoyenne: number;
   nbAvis: number;
-  avis: Avis[];
+  avis: AvisSnapshot[];
 }
 
-export interface SoumettreAvisProps {
-  projetId: string;
-  utilisateurId: number;
-  note: number;
-  commentaire?: string | null;
+export interface StatsAvisProjet {
+  noteMoyenne: number;
+  nbAvis: number;
 }
 
 /**
- * Les avis d'un projet : les lire, en déposer un.
+ * Les lectures d'avis d'un projet (§11) — la liste, les statistiques, et
+ * l'avis d'un compte donné.
  *
- * ⚠️ **Ces deux opérations appartiennent au contexte Avis**, pas à Projects.
- * Elles sont ici parce que les routes qui les portent — `GET`/`POST
- * /projects/:id/avis` — sont publiées par ce contexte, et parce qu'elles
- * étaient jusqu'ici écrites dans `ProjectController` : la liste des statuts
- * éligibles en dur, la recherche d'un avis existant, puis la fabrication d'un
- * agrégat `Avis` à la main — un contexte qui construit l'agrégat d'un autre,
- * depuis sa couche présentation (§12.5).
+ * **Toutes passent par la même garde**, et c'est le sens de ce use case : un
+ * projet qui n'est pas ouvert aux investisseurs répond comme un projet
+ * inexistant. La liste des avis ne doit pas renseigner sur l'existence d'un
+ * dossier qui n'est pas public.
  *
- * Les sortir du contrôleur est le premier pas. Le second est de les déplacer
- * dans `src/avis/` avec `AvisDejaSoumisError` et une fabrique `AvisFactory`,
- * Projects ne gardant que la garde d'éligibilité du projet. Ce déplacement
- * touche le contexte Avis : il n'entre pas dans le périmètre de ce refactor.
+ * Cette garde n'existait que sur `GET /projects/:id/avis`. `AvisController`
+ * servait les mêmes données sur `/avis/projet/:projetId`, en `@Public()` et
+ * sans aucun filtre : on pouvait donc confirmer l'existence d'un brouillon ou
+ * d'un projet annulé en listant ses avis. Les deux familles de routes
+ * appellent désormais ce use case.
+ *
+ * Il rend des snapshots, pas des agrégats : ce sont des read models, et un
+ * agrégat a des champs privés que `JSON.stringify` ne sait pas rendre.
  */
 @Injectable()
 export class ConsultAvisProjetUseCase {
@@ -49,53 +48,42 @@ export class ConsultAvisProjetUseCase {
     private readonly avisRepository: AvisRepository,
   ) {}
 
-  /**
-   * Avis et note moyenne d'un projet ouvert aux investisseurs.
-   *
-   * Un projet non éligible répond comme un projet inexistant : la liste des
-   * avis ne doit pas renseigner sur l'existence d'un dossier qui n'est pas
-   * public.
-   */
+  /** Avis et note moyenne d'un projet ouvert aux investisseurs. */
   async lister(projetId: string): Promise<AvisProjet> {
-    const projet = await this.projectRepository.findProjectById(projetId);
-    if (!projet || !projet.estOuvertAuxInvestisseurs()) {
-      throw new ProjetIntrouvableError();
-    }
+    await this.assertProjetConsultable(projetId);
 
     const [avis, stats] = await Promise.all([
       this.avisRepository.findByProjetId(projetId),
       this.avisRepository.getStats(projetId),
     ]);
-    return { ...stats, avis };
+    return { ...stats, avis: avis.map((a) => a.snapshot()) };
   }
 
-  /**
-   * Dépose l'avis d'un compte sur un projet — un seul par compte et par projet.
-   *
-   * ⚠️ Changement de comportement assumé : le dépôt exigeait seulement que le
-   * projet **existe**, là où sa lecture exigeait qu'il soit ouvert aux
-   * investisseurs. On pouvait donc noter un brouillon, ou un projet annulé, et
-   * ne jamais revoir son propre avis. Les deux routes partagent désormais la
-   * même garde.
-   */
-  async soumettre(props: SoumettreAvisProps): Promise<Avis> {
-    const projet = await this.projectRepository.findProjectById(props.projetId);
+  /** Note moyenne et nombre d'avis, sans les avis eux-mêmes. */
+  async statistiques(projetId: string): Promise<StatsAvisProjet> {
+    await this.assertProjetConsultable(projetId);
+
+    return this.avisRepository.getStats(projetId);
+  }
+
+  /** L'avis d'un compte sur un projet, ou `null` s'il n'en a pas déposé. */
+  async avisDuCompte(
+    projetId: string,
+    utilisateurId: number,
+  ): Promise<AvisSnapshot | null> {
+    await this.assertProjetConsultable(projetId);
+
+    const avis = await this.avisRepository.findByUserAndProjet(
+      utilisateurId,
+      projetId,
+    );
+    return avis?.snapshot() ?? null;
+  }
+
+  private async assertProjetConsultable(projetId: string): Promise<void> {
+    const projet = await this.projectRepository.findProjectById(projetId);
     if (!projet || !projet.estOuvertAuxInvestisseurs()) {
       throw new ProjetIntrouvableError();
     }
-
-    const existant = await this.avisRepository.findByUserAndProjet(
-      props.utilisateurId,
-      props.projetId,
-    );
-    if (existant) throw new AvisDejaSoumisError();
-
-    const avis = new Avis();
-    avis.projetId = props.projetId;
-    avis.userId = props.utilisateurId;
-    avis.note = props.note;
-    avis.commentaire = props.commentaire ?? null;
-
-    return this.avisRepository.save(avis);
   }
 }

@@ -1,13 +1,4 @@
-import {
-  Body,
-  ConflictException,
-  Controller,
-  Get,
-  NotFoundException,
-  Param,
-  Post,
-  UseGuards,
-} from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiOperation,
@@ -16,69 +7,68 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from 'src/iam/presentation/guards/jwt-auth.guard';
-import { Public } from 'src/iam/presentation/decorators/public.decorator';
 import { CurrentUser } from 'src/iam/presentation/decorators/current-user.decorator';
 import type { ActiveUser } from 'src/iam/presentation/decorators/current-user.decorator';
-import { Inject } from '@nestjs/common';
-import { AVIS_REPOSITORY } from 'src/catalog/domain/repositories/avis.repository';
-import type { AvisRepository } from 'src/catalog/domain/repositories/avis.repository';
-import { Avis } from 'src/catalog/domain/aggregates/avis';
+import { Public } from 'src/iam/presentation/decorators/public.decorator';
+import { ConsultAvisProjetUseCase } from 'src/catalog/application/usecases/avis/consult-avis-projet.usecase';
+import { DeposerAvisProjetUseCase } from 'src/catalog/application/usecases/avis/deposer-avis-projet.usecase';
 import { CreateAvisDto } from './dto/avis.dto';
-import { SkipThrottle } from '@nestjs/throttler';
 
-@SkipThrottle()
+/**
+ * Les avis, vus depuis un projet.
+ *
+ * Le contrôleur ne décide plus rien (§14). Il fabriquait l'agrégat à la main,
+ * dupliquait la règle « un seul avis par compte » et servait les avis de
+ * n'importe quel projet — y compris ceux qui ne sont pas publics, ce que la
+ * route jumelle de `ProjectController` interdisait déjà. Les cinq routes sont
+ * inchangées ; elles passent toutes par les use cases du contexte, donc par la
+ * même garde d'éligibilité.
+ */
 @ApiTags('Avis')
 @ApiBearerAuth()
 @Controller('avis')
 @UseGuards(JwtAuthGuard)
 export class AvisController {
   constructor(
-    @Inject(AVIS_REPOSITORY)
-    private readonly avisRepository: AvisRepository,
+    private readonly consultAvis: ConsultAvisProjetUseCase,
+    private readonly deposerAvis: DeposerAvisProjetUseCase,
   ) {}
 
   @ApiOperation({ summary: 'Soumettre un avis sur un projet' })
   @ApiParam({ name: 'projetId', description: 'UUID du projet' })
   @ApiResponse({ status: 201, description: 'Avis enregistré' })
-  @ApiResponse({ status: 409, description: 'Avis déjà soumis pour ce projet' })
+  @ApiResponse({ status: 400, description: 'Avis déjà soumis pour ce projet' })
+  @ApiResponse({ status: 404, description: 'Projet introuvable ou non public' })
   @Post('projet/:projetId')
   async create(
     @Param('projetId') projetId: string,
     @Body() dto: CreateAvisDto,
     @CurrentUser() user: ActiveUser,
   ) {
-    const existing = await this.avisRepository.findByUserAndProjet(user.userId, projetId);
-    if (existing) {
-      throw new ConflictException('Vous avez déjà soumis un avis pour ce projet.');
-    }
-
-    const avis = new Avis();
-    avis.projetId = projetId;
-    avis.userId = user.userId;
-    avis.note = dto.note;
-    avis.commentaire = dto.commentaire ?? null;
-
-    return this.avisRepository.save(avis);
+    return this.deposerAvis.deposer({
+      projetId,
+      utilisateurId: user.userId,
+      note: dto.note,
+      commentaire: dto.commentaire,
+    });
   }
 
-  @ApiOperation({ summary: "Mettre à jour son avis sur un projet" })
+  @ApiOperation({ summary: 'Mettre à jour son avis sur un projet' })
   @ApiParam({ name: 'projetId', description: 'UUID du projet' })
   @ApiResponse({ status: 200, description: 'Avis mis à jour' })
+  @ApiResponse({ status: 404, description: 'Aucun avis déposé sur ce projet' })
   @Post('projet/:projetId/update')
   async update(
     @Param('projetId') projetId: string,
     @Body() dto: CreateAvisDto,
     @CurrentUser() user: ActiveUser,
   ) {
-    const existing = await this.avisRepository.findByUserAndProjet(user.userId, projetId);
-    if (!existing) {
-      throw new NotFoundException("Aucun avis trouvé. Utilisez POST /avis/projet/:projetId pour en créer un.");
-    }
-
-    existing.note = dto.note;
-    existing.commentaire = dto.commentaire ?? null;
-
-    return this.avisRepository.save(existing);
+    return this.deposerAvis.modifier({
+      projetId,
+      utilisateurId: user.userId,
+      note: dto.note,
+      commentaire: dto.commentaire,
+    });
   }
 
   @ApiOperation({ summary: "Avis de l'utilisateur sur un projet" })
@@ -89,24 +79,25 @@ export class AvisController {
     @Param('projetId') projetId: string,
     @CurrentUser() user: ActiveUser,
   ) {
-    return this.avisRepository.findByUserAndProjet(user.userId, projetId);
+    return this.consultAvis.avisDuCompte(projetId, user.userId);
   }
 
-  @ApiOperation({ summary: 'Liste des avis d\'un projet (accès public)' })
+  @ApiOperation({ summary: "Liste des avis d'un projet (accès public)" })
   @ApiParam({ name: 'projetId', description: 'UUID du projet' })
   @ApiResponse({ status: 200, description: 'Liste des avis' })
   @Public()
   @Get('projet/:projetId')
-  getByProjet(@Param('projetId') projetId: string) {
-    return this.avisRepository.findByProjetId(projetId);
+  async getByProjet(@Param('projetId') projetId: string) {
+    const { avis } = await this.consultAvis.lister(projetId);
+    return avis;
   }
 
-  @ApiOperation({ summary: 'Statistiques des avis d\'un projet (accès public)' })
+  @ApiOperation({ summary: "Statistiques des avis d'un projet (accès public)" })
   @ApiParam({ name: 'projetId', description: 'UUID du projet' })
-  @ApiResponse({ status: 200, description: 'Note moyenne et nombre d\'avis' })
+  @ApiResponse({ status: 200, description: "Note moyenne et nombre d'avis" })
   @Public()
   @Get('projet/:projetId/stats')
-  getStats(@Param('projetId') projetId: string) {
-    return this.avisRepository.getStats(projetId);
+  async getStats(@Param('projetId') projetId: string) {
+    return this.consultAvis.statistiques(projetId);
   }
 }

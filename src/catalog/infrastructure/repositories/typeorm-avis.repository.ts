@@ -2,25 +2,20 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AvisEntity } from '../persistence/entities/avis.entity';
-import { AvisRepository } from 'src/catalog/domain/repositories/avis.repository';
-import { Avis } from 'src/catalog/domain/aggregates/avis';
-
-type AvisRawRow = {
-  id: string;
-  projetId: string;
-  userId: number;
-  note: number;
-  commentaire: string | null;
-  createdAt: Date;
-  userFirstname: string | null;
-  userLastname: string | null;
-};
+import {
+  AvisOrmMapper,
+  type AvisAvecAuteur,
+} from '../persistence/mappers/avis.orm-mapper';
+import type { AvisRepository } from 'src/catalog/domain/repositories/avis.repository';
+import type { Avis, AvisNaissant } from 'src/catalog/domain/aggregates/avis';
+import { AvisIntrouvableError } from 'src/catalog/domain/errors';
 
 type StatsRawRow = {
   avg: string | null;
   count: string;
 };
 
+/** L'adapter TypeORM du port `AvisRepository` (§33). */
 @Injectable()
 export class TypeOrmAvisRepository implements AvisRepository {
   constructor(
@@ -28,23 +23,19 @@ export class TypeOrmAvisRepository implements AvisRepository {
     private readonly repo: Repository<AvisEntity>,
   ) {}
 
+  async creer(naissant: AvisNaissant): Promise<Avis> {
+    const saved = await this.repo.save(
+      AvisOrmMapper.naissantToEntity(naissant),
+    );
+    return AvisOrmMapper.toDomain(saved);
+  }
+
   async save(avis: Avis): Promise<Avis> {
-    // If avis has an id, update the existing record; otherwise insert
-    const entity = avis.id
-      ? await this.repo.findOne({ where: { id: avis.id } }).then((e) =>
-          Object.assign(e ?? this.repo.create(), {
-            note: avis.note,
-            commentaire: avis.commentaire ?? null,
-          }),
-        )
-      : this.repo.create({
-          projetId: avis.projetId,
-          userId: avis.userId,
-          note: avis.note,
-          commentaire: avis.commentaire ?? null,
-        });
-    const saved = await this.repo.save(entity);
-    return this.toAvis(saved);
+    const ligne = await this.repo.findOne({ where: { id: avis.id } });
+    if (!ligne) throw new AvisIntrouvableError();
+
+    const saved = await this.repo.save(AvisOrmMapper.appliquerSur(ligne, avis));
+    return AvisOrmMapper.toDomain(saved);
   }
 
   async findByProjetId(projetId: string): Promise<Avis[]> {
@@ -63,19 +54,8 @@ export class TypeOrmAvisRepository implements AvisRepository {
         'u.firstname AS "userFirstname"',
         'u.lastname AS "userLastname"',
       ])
-      .getRawMany<AvisRawRow>();
-    return rows.map((r) => {
-      const avis = new Avis();
-      avis.id = r.id;
-      avis.projetId = r.projetId;
-      avis.userId = Number(r.userId);
-      avis.note = Number(r.note);
-      avis.commentaire = r.commentaire;
-      avis.createdAt = r.createdAt;
-      avis.userFirstname = r.userFirstname ?? null;
-      avis.userLastname = r.userLastname ?? null;
-      return avis;
-    });
+      .getRawMany<AvisAvecAuteur>();
+    return rows.map(AvisOrmMapper.toDomain);
   }
 
   async findByUserAndProjet(
@@ -83,7 +63,7 @@ export class TypeOrmAvisRepository implements AvisRepository {
     projetId: string,
   ): Promise<Avis | null> {
     const entity = await this.repo.findOne({ where: { userId, projetId } });
-    return entity ? this.toAvis(entity) : null;
+    return entity ? AvisOrmMapper.toDomain(entity) : null;
   }
 
   async getStats(
@@ -99,16 +79,5 @@ export class TypeOrmAvisRepository implements AvisRepository {
       noteMoyenne: result?.avg ? Math.round(Number(result.avg) * 10) / 10 : 0,
       nbAvis: Number(result?.count ?? 0),
     };
-  }
-
-  private toAvis(e: AvisEntity): Avis {
-    const avis = new Avis();
-    avis.id = e.id;
-    avis.projetId = e.projetId;
-    avis.userId = e.userId;
-    avis.note = e.note;
-    avis.commentaire = e.commentaire;
-    avis.createdAt = e.createdAt;
-    return avis;
   }
 }

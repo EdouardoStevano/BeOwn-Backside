@@ -26,6 +26,7 @@ import { RequirePermission } from 'src/iam/presentation/decorators/require-permi
 import { Roles } from 'src/iam/presentation/decorators/roles.decorator';
 import { UserRole } from 'src/iam/domain/enums/user.enum';
 import { ConsultAvisProjetUseCase } from 'src/catalog/application/usecases/avis/consult-avis-projet.usecase';
+import { DeposerAvisProjetUseCase } from '../../application/usecases/avis/deposer-avis-projet.usecase';
 import { ConsultProjectUseCase } from 'src/catalog/application/usecases/project/consult-project.usecase';
 import { CreateProjectUseCase } from 'src/catalog/application/usecases/project/create-project.usecase';
 import { GetProjectShareLinkUseCase } from 'src/catalog/application/usecases/project/get-project-share-link.usecase';
@@ -80,6 +81,7 @@ export class ProjectController {
     private readonly createSpv: CreateSpvUseCase,
     private readonly listSpv: ListSpvUseCase,
     private readonly avis: ConsultAvisProjetUseCase,
+    private readonly deposerAvis: DeposerAvisProjetUseCase,
   ) {}
 
   // ─── Catalogue ─────────────────────────────────────────────────────────────
@@ -292,7 +294,7 @@ export class ProjectController {
     @Body() dto: CreateAvisDto,
     @CurrentUser() user: ActiveUser,
   ) {
-    return this.avis.soumettre({
+    return this.deposerAvis.deposer({
       projetId: id,
       utilisateurId: user.userId,
       note: dto.note,

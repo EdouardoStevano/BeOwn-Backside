@@ -21,6 +21,7 @@ import { ProjetSoumisEventHandler } from './application/handlers/projet-soumis.e
 import { ProjectReadModelService } from './application/services/project-read-model.service';
 import { ProjectTimelineCronService } from './application/services/project-timeline-cron.service';
 import { ConsultAvisProjetUseCase } from './application/usecases/avis/consult-avis-projet.usecase';
+import { DeposerAvisProjetUseCase } from './application/usecases/avis/deposer-avis-projet.usecase';
 import { ConsultProjectUseCase } from './application/usecases/project/consult-project.usecase';
 import { CreateProjectUseCase } from './application/usecases/project/create-project.usecase';
 import { GetProjectShareLinkUseCase } from './application/usecases/project/get-project-share-link.usecase';
@@ -86,6 +87,7 @@ import { ListSpvUseCase } from './application/usecases/spv/list-spv.usecase';
     ManageSortieUseCase,
     ExecuteSortieUseCase,
     ConsultAvisProjetUseCase,
+    DeposerAvisProjetUseCase,
     ProjectReadModelService,
     ProjectTimelineCronService,
     ProjetPublieEventHandler,
