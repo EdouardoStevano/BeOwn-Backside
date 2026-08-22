@@ -9,16 +9,17 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { OrdreMarcheEntity } from 'src/secondary-market/infrastructure/persistence/entities/ordre-marche.entity';
 import { InvestmentEntity } from 'src/subscription/infrastructure/persistence/entities/investment.entity';
-import { DocumentEntity } from 'src/documents/infrastructure/persistences/entities/document.entity';
-import { SignatureEntity } from 'src/signatures/infrastructure/persistences/entities/signature.entity';
+import { DocumentEntity } from 'src/documents/infrastructure/persistence/entities/document.entity';
+import { SignatureEntity } from 'src/documents/infrastructure/persistence/entities/signature.entity';
 import { WalletEntity } from 'src/treasury/infrastructure/persistence/entities/wallet.entity';
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 import { UserEmailEntity } from 'src/iam/infrastructure/persistence/entities/user-email.entity';
 import { OrdreMarcheOrmMapper } from 'src/secondary-market/infrastructure/persistence/mappers/ordre-marche.orm-mapper';
 import { OrdreIntrouvableError } from 'src/secondary-market/domain/errors';
 import { InvestmentStatus } from 'src/subscription/domain/enums/investment-status.enum';
-import { DocumentType, DocumentRelatedTo } from 'src/documents/domains/enums/document-type.enum';
-import { SignatureStatus } from 'src/signatures/domains/enums/signature-status.enum';
+import { DocumentType, DocumentRelatedTo } from 'src/documents/domain/enums/document-type.enum';
+import { Signature } from 'src/documents/domain/entities/signature';
+import { SignatureOrmMapper } from 'src/documents/infrastructure/persistence/mappers/signature.orm-mapper';
 import { WalletType } from 'src/treasury/domain/enums/wallet.enum';
 import { CloudStorageService } from 'src/shared/cloud-storage/cloud-storage.service';
 import { ContractGeneratorService } from 'src/subscription/application/services/contract-generator.service';
@@ -159,20 +160,21 @@ export class InitiateBuyUseCase {
       });
 
     // ── Création de l'enregistrement Signature ─────────────────────────────────
-    const sigEntity = this.signatureRepo.create({
-      youSignRequestId: requestId,
-      youSignSignerId: signerId,
-      youSignSigningUrl: signingUrl,
-      documentId: savedDoc.id,
-      investmentId: existingInvestment?.id ?? null,
-      ordreId,
-      nbFractions,
-      userId,
-      statut: SignatureStatus.PENDING,
-      expiresAt: new Date(Date.now() + 48 * 60 * 60 * 1000),
-      signedAt: null,
-    });
-    const savedSig = await this.signatureRepo.save(sigEntity);
+    const savedSig = await this.signatureRepo.save(
+      SignatureOrmMapper.naissanteToEntity(
+        Signature.demander({
+          youSignRequestId: requestId,
+          youSignSignerId: signerId,
+          youSignSigningUrl: signingUrl,
+          documentId: savedDoc.id,
+          investmentId: existingInvestment?.id ?? null,
+          ordreId,
+          nbFractions,
+          userId,
+          expiresAt: new Date(Date.now() + 48 * 60 * 60 * 1000),
+        }),
+      ),
+    );
 
     this.logger.log(
       `InitiateBuy: ordreId=${ordreId} userId=${userId} signatureId=${savedSig.id} youSignRequestId=${requestId}`,

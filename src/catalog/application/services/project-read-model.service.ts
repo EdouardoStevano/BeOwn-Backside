@@ -1,10 +1,11 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { AVIS_REPOSITORY } from 'src/avis/applications/ports/repositories/avis.repository';
 import type { AvisRepository } from 'src/avis/applications/ports/repositories/avis.repository';
-import { DOCUMENT_REPOSITORY } from 'src/documents/applications/ports/repositories/document.repository';
-import type { DocumentRepository } from 'src/documents/applications/ports/repositories/document.repository';
-import { Document } from 'src/documents/domains/document';
-import { DocumentType } from 'src/documents/domains/enums/document-type.enum';
+import { DOCUMENT_REPOSITORY } from 'src/documents/domain/repositories/document.repository';
+import type { DocumentRepository } from 'src/documents/domain/repositories/document.repository';
+// Un read model expose l'état des documents, pas leurs agrégats (§11).
+import type { SignableDocumentSnapshot } from 'src/documents/domain/aggregates/signable-document';
+import { DocumentType } from 'src/documents/domain/enums/document-type.enum';
 import { INVESTMENT_REPOSITORY } from 'src/subscription/domain/repositories/investment.repository';
 import type { InvestmentRepository } from 'src/subscription/domain/repositories/investment.repository';
 import { InvestmentStatus } from 'src/subscription/domain/enums/investment-status.enum';
@@ -37,7 +38,9 @@ export type ProjetEnListe = ProjectSnapshot & {
   stats: StatsCollecte;
 };
 
-export type ProjetEnListeAvecImages = ProjetEnListe & { images: Document[] };
+export type ProjetEnListeAvecImages = ProjetEnListe & {
+  images: SignableDocumentSnapshot[];
+};
 
 export type ProjetDetaille = ProjectSnapshot & {
   /**
@@ -49,8 +52,8 @@ export type ProjetDetaille = ProjectSnapshot & {
   prixFraction: number;
   /** Doublon assumé des champs à plat, que le front consomme groupés. */
   localisation: LocalisationSnapshot;
-  images: Document[];
-  documents: Document[];
+  images: SignableDocumentSnapshot[];
+  documents: SignableDocumentSnapshot[];
   avis: { noteMoyenne: number; nbAvis: number };
   fractions: FractionsProjet;
   stats: StatsCollecte;
@@ -135,7 +138,7 @@ export class ProjectReadModelService {
 
     return projets.map((projet, i) => ({
       ...projet,
-      images: photosPubliques(documentsParProjet[i], true),
+      images: photosPubliques(etatsDe(documentsParProjet[i]), true),
     }));
   }
 
@@ -170,8 +173,8 @@ export class ProjectReadModelService {
       ...projet.toSnapshot(),
       prixFraction: prix,
       localisation: projet.localisation.toSnapshot(),
-      images: photosPubliques(documents, vuePublique),
-      documents: documents.filter(
+      images: photosPubliques(etatsDe(documents), vuePublique),
+      documents: etatsDe(documents).filter(
         (d) =>
           d.type !== DocumentType.PHOTO_PROJET &&
           (!vuePublique || d.isPublic === true),
@@ -205,11 +208,15 @@ const STATUTS_INVESTISSEMENT_ACTIFS: readonly InvestmentStatus[] = [
   InvestmentStatus.REMBOURSE_TOTAL,
 ];
 
+/** L'état des documents, seul lisible par un read model. */
+const etatsDe = (documents: { snapshot(): SignableDocumentSnapshot }[]) =>
+  documents.map((d) => d.snapshot());
+
 /** Photo principale d'abord, puis par `ordre` croissant, non ordonnées en fin. */
 function photosPubliques(
-  documents: Document[],
+  documents: SignableDocumentSnapshot[],
   vuePublique: boolean,
-): Document[] {
+): SignableDocumentSnapshot[] {
   return documents
     .filter(
       (d) =>

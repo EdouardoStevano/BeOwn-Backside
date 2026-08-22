@@ -22,8 +22,8 @@ import { CurrentUser } from 'src/iam/presentation/decorators/current-user.decora
 import type { ActiveUser } from 'src/iam/presentation/decorators/current-user.decorator';
 import { formatEur } from 'src/shared/money/format-eur';
 import { OrdreMarcheEntity } from 'src/secondary-market/infrastructure/persistence/entities/ordre-marche.entity';
-import { SignatureEntity } from 'src/signatures/infrastructure/persistences/entities/signature.entity';
-import { SignatureStatus } from 'src/signatures/domains/enums/signature-status.enum';
+import { SignatureEntity } from 'src/documents/infrastructure/persistence/entities/signature.entity';
+import { SignatureStatus } from 'src/documents/domain/enums/signature-status.enum';
 import { InvestmentEntity } from 'src/subscription/infrastructure/persistence/entities/investment.entity';
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 import { UserRole } from 'src/iam/domain/enums/user.enum';

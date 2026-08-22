@@ -2,7 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import {
   DOCUMENT_REPOSITORY,
   type DocumentRepository,
-} from 'src/documents/applications/ports/repositories/document.repository';
+} from 'src/documents/domain/repositories/document.repository';
 import { UtilisateurIntrouvableError } from 'src/iam/domain/errors';
 import {
   USER_REPOSITORY,

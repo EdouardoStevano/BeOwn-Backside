@@ -1,7 +1,7 @@
 import { IsEnum, IsNotEmpty, IsOptional, IsString, IsBoolean, IsInt, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { DocumentRelatedTo, DocumentType } from 'src/documents/domains/enums/document-type.enum';
+import { DocumentRelatedTo, DocumentType } from 'src/documents/domain/enums/document-type.enum';
 
 export class UploadDocumentDto {
   @ApiProperty({ enum: DocumentType })

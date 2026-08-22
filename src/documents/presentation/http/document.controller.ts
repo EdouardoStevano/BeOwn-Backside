@@ -36,13 +36,13 @@ import { CurrentUser } from 'src/iam/presentation/decorators/current-user.decora
 import type { ActiveUser } from 'src/iam/presentation/decorators/current-user.decorator';
 import { Public } from 'src/iam/presentation/decorators/public.decorator';
 import { hasPermission } from 'src/iam/domain/policies/role-permissions.policy';
-import { DOCUMENT_REPOSITORY } from 'src/documents/applications/ports/repositories/document.repository';
-import type { DocumentRepository } from 'src/documents/applications/ports/repositories/document.repository';
-import { Document } from 'src/documents/domains/document';
+import { DOCUMENT_REPOSITORY } from 'src/documents/domain/repositories/document.repository';
+import type { DocumentRepository } from 'src/documents/domain/repositories/document.repository';
+import { SignableDocument } from 'src/documents/domain/aggregates/signable-document';
 import {
   DocumentRelatedTo,
   DocumentType,
-} from 'src/documents/domains/enums/document-type.enum';
+} from 'src/documents/domain/enums/document-type.enum';
 import { InvestmentEntity } from 'src/subscription/infrastructure/persistence/entities/investment.entity';
 import { ProjectEntity } from 'src/catalog/infrastructure/persistence/entities/project.entity';
 import { SetOrdreDto, UploadDocumentDto } from '../dto/document.dto';
@@ -119,7 +119,9 @@ export class DocumentController {
   }
 
   private async findProjectOrFail(projectId: string): Promise<ProjectEntity> {
-    const project = await this.projectRepo.findOne({ where: { id: projectId } });
+    const project = await this.projectRepo.findOne({
+      where: { id: projectId },
+    });
     if (!project) throw new NotFoundException('Projet introuvable.');
     return project;
   }
@@ -169,7 +171,7 @@ export class DocumentController {
 
   private async assertCanReadDocument(
     user: ActiveUser,
-    doc: Document,
+    doc: SignableDocument,
   ): Promise<void> {
     if (doc.uploadedBy === user.userId) return;
 
@@ -179,7 +181,7 @@ export class DocumentController {
     }
 
     if (doc.relatedTo === DocumentRelatedTo.PROJECT) {
-      if (doc.isPublic) return;
+      if (doc.estPublic) return;
       if (!doc.projectId) throw new NotFoundException('Document introuvable.');
       const project = await this.findProjectOrFail(doc.projectId);
       if (this.canReadPrivateProject(user, project)) return;
@@ -200,7 +202,7 @@ export class DocumentController {
 
   private async assertCanManageDocument(
     user: ActiveUser,
-    doc: Document,
+    doc: SignableDocument,
   ): Promise<void> {
     if (doc.uploadedBy === user.userId) return;
 
@@ -235,7 +237,8 @@ export class DocumentController {
   }
 
   @ApiOperation({
-    summary: 'Uploader un document lie a un utilisateur, projet ou investissement',
+    summary:
+      'Uploader un document lie a un utilisateur, projet ou investissement',
   })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
@@ -297,44 +300,46 @@ export class DocumentController {
       isPublic,
     );
 
-    const doc = new Document();
-    doc.type = dto.type;
-    doc.relatedTo = dto.relatedTo;
-    doc.userId = dto.relatedTo === DocumentRelatedTo.USER ? user.userId : null;
-    doc.projectId = dto.projectId ?? null;
-    doc.investmentId = dto.investmentId ?? null;
-    doc.originalName = file.originalname;
-    doc.filename = objectName;
-    doc.mimeType = file.mimetype;
-    doc.sizeBytes = file.size;
-    doc.path = publicUrl;
-    doc.isPublic = isPublic;
-    doc.uploadedBy = user.userId;
-    doc.ordre = dto.ordre ?? null;
-    doc.estPrincipale = this.isTrue(dto.estPrincipale);
-
-    return this.documentRepository.save(doc);
+    const depose = await this.documentRepository.creer(
+      SignableDocument.televerser({
+        type: dto.type,
+        relatedTo: dto.relatedTo,
+        userId: dto.relatedTo === DocumentRelatedTo.USER ? user.userId : null,
+        projectId: dto.projectId ?? null,
+        investmentId: dto.investmentId ?? null,
+        originalName: file.originalname,
+        filename: objectName,
+        mimeType: file.mimetype,
+        sizeBytes: file.size,
+        path: publicUrl,
+        isPublic,
+        uploadedBy: user.userId,
+        ordre: dto.ordre ?? null,
+        estPrincipale: this.isTrue(dto.estPrincipale),
+      }),
+    );
+    return depose.snapshot();
   }
 
   @ApiOperation({ summary: 'Mes documents' })
   @ApiResponse({ status: 200, description: 'Liste des documents' })
   @Get('me')
-  getMyDocuments(@CurrentUser() user: ActiveUser) {
-    return this.documentRepository.findByUserId(user.userId);
+  async getMyDocuments(@CurrentUser() user: ActiveUser) {
+    return snapshots(await this.documentRepository.findByUserId(user.userId));
   }
 
   @ApiOperation({ summary: "Documents d'un utilisateur" })
   @ApiParam({ name: 'userId', description: "ID numerique de l'utilisateur" })
   @ApiResponse({ status: 200, description: 'Liste des documents' })
   @Get('user/:userId')
-  getByUser(
+  async getByUser(
     @Param('userId', ParseIntPipe) userId: number,
     @CurrentUser() user: ActiveUser,
   ) {
     if (!this.canReadUserDocuments(user, userId)) {
       throw new ForbiddenException('Acces refuse.');
     }
-    return this.documentRepository.findByUserId(userId);
+    return snapshots(await this.documentRepository.findByUserId(userId));
   }
 
   @ApiOperation({ summary: 'Documents publics d un projet' })
@@ -342,10 +347,9 @@ export class DocumentController {
   @ApiResponse({ status: 200, description: 'Documents publics du projet' })
   @Public()
   @Get('public/project/:projectId')
-  getPublicProjectDocs(@Param('projectId') projectId: string) {
-    return this.documentRepository
-      .findByProjectId(projectId)
-      .then((docs) => docs.filter((d) => d.isPublic));
+  async getPublicProjectDocs(@Param('projectId') projectId: string) {
+    const docs = await this.documentRepository.findByProjectId(projectId);
+    return snapshots(docs.filter((d) => d.estPublic));
   }
 
   @ApiOperation({ summary: 'Images publiques d un projet' })
@@ -353,10 +357,9 @@ export class DocumentController {
   @ApiResponse({ status: 200, description: 'Liste des images du projet' })
   @Public()
   @Get('public/project/:projectId/images')
-  getProjectImages(@Param('projectId') projectId: string) {
-    return this.documentRepository
-      .findProjectImages(projectId)
-      .then((docs) => docs.filter((d) => d.isPublic));
+  async getProjectImages(@Param('projectId') projectId: string) {
+    const docs = await this.documentRepository.findProjectImages(projectId);
+    return snapshots(docs.filter((d) => d.estPublic));
   }
 
   @ApiOperation({ summary: 'Documents lies a un projet' })
@@ -369,8 +372,8 @@ export class DocumentController {
   ) {
     const docs = await this.documentRepository.findByProjectId(projectId);
     const project = await this.findProjectOrFail(projectId);
-    if (this.canReadPrivateProject(user, project)) return docs;
-    return docs.filter((d) => d.isPublic);
+    if (this.canReadPrivateProject(user, project)) return snapshots(docs);
+    return snapshots(docs.filter((d) => d.estPublic));
   }
 
   @ApiOperation({ summary: 'Documents lies a un investissement' })
@@ -385,7 +388,9 @@ export class DocumentController {
     if (!this.canReadInvestment(user, investment)) {
       throw new ForbiddenException('Acces refuse.');
     }
-    return this.documentRepository.findByInvestmentId(investmentId);
+    return snapshots(
+      await this.documentRepository.findByInvestmentId(investmentId),
+    );
   }
 
   @ApiOperation({ summary: "Detail d'un document" })
@@ -397,7 +402,7 @@ export class DocumentController {
     const doc = await this.documentRepository.findById(id);
     if (!doc) throw new NotFoundException('Document introuvable.');
     await this.assertCanReadDocument(user, doc);
-    return doc;
+    return doc.snapshot();
   }
 
   @ApiOperation({ summary: 'URL de telechargement securisee' })
@@ -411,7 +416,7 @@ export class DocumentController {
     if (!doc) throw new NotFoundException('Document introuvable.');
     await this.assertCanReadDocument(user, doc);
 
-    if (doc.isPublic) {
+    if (doc.estPublic) {
       if (!doc.path.startsWith('https://')) {
         throw new NotFoundException('Fichier introuvable.');
       }
@@ -429,7 +434,10 @@ export class DocumentController {
   @ApiOperation({ summary: 'Supprimer un document' })
   @ApiParam({ name: 'id', description: 'UUID du document' })
   @ApiResponse({ status: 204, description: 'Document supprime' })
-  @ApiResponse({ status: 404, description: 'Document introuvable ou non autorise' })
+  @ApiResponse({
+    status: 404,
+    description: 'Document introuvable ou non autorise',
+  })
   @HttpCode(HttpStatus.NO_CONTENT)
   @Delete(':id')
   async remove(@Param('id') id: string, @CurrentUser() user: ActiveUser) {
@@ -445,28 +453,24 @@ export class DocumentController {
   @ApiParam({ name: 'id', description: 'UUID du document PHOTO_PROJET' })
   @ApiResponse({ status: 200, description: 'Image definie comme principale' })
   @Patch(':id/set-main')
-  async setMainImage(
-    @Param('id') id: string,
-    @CurrentUser() user: ActiveUser,
-  ) {
+  async setMainImage(@Param('id') id: string, @CurrentUser() user: ActiveUser) {
     const doc = await this.documentRepository.findById(id);
     if (!doc) throw new NotFoundException('Document introuvable.');
-    if (doc.type !== DocumentType.PHOTO_PROJET) {
-      throw new BadRequestException(
-        'Seules les PHOTO_PROJET peuvent etre definies comme principale.',
-      );
-    }
-    if (!doc.projectId) {
-      throw new BadRequestException("Ce document n'est pas lie a un projet.");
-    }
-    const project = await this.findProjectOrFail(doc.projectId);
+    // L'agrégat dit si CETTE photo peut être couverture ; qu'elle soit la
+    // seule à l'être porte sur toutes les photos du projet, d'où le repository.
+    doc.definirCommeImagePrincipale();
+
+    const project = await this.findProjectOrFail(doc.projectId!);
     if (!this.canManageProject(user, project)) {
       throw new ForbiddenException('Acces refuse.');
     }
-    return this.documentRepository.setMainImage(id, doc.projectId);
+    const designe = await this.documentRepository.designerImagePrincipale(doc);
+    return designe.snapshot();
   }
 
-  @ApiOperation({ summary: "Modifier l'ordre d'affichage d'une image de projet" })
+  @ApiOperation({
+    summary: "Modifier l'ordre d'affichage d'une image de projet",
+  })
   @ApiParam({ name: 'id', description: 'UUID du document PHOTO_PROJET' })
   @ApiBody({ type: SetOrdreDto })
   @ApiResponse({ status: 200, description: 'Ordre mis a jour' })
@@ -478,18 +482,20 @@ export class DocumentController {
   ) {
     const doc = await this.documentRepository.findById(id);
     if (!doc) throw new NotFoundException('Document introuvable.');
-    if (doc.type !== DocumentType.PHOTO_PROJET) {
-      throw new BadRequestException(
-        "Seules les PHOTO_PROJET ont un ordre d'affichage.",
-      );
-    }
-    if (!doc.projectId) {
-      throw new BadRequestException("Ce document n'est pas lie a un projet.");
-    }
-    const project = await this.findProjectOrFail(doc.projectId);
+    doc.placerEnPosition(dto.ordre);
+
+    const project = await this.findProjectOrFail(doc.projectId!);
     if (!this.canManageProject(user, project)) {
       throw new ForbiddenException('Acces refuse.');
     }
-    return this.documentRepository.updateOrdre(id, dto.ordre);
+    const range = await this.documentRepository.save(doc);
+    return range.snapshot();
   }
 }
+
+/**
+ * Les routes rendent l'état des documents, pas les agrégats eux-mêmes : un
+ * agrégat a des champs privés, que `JSON.stringify` ne sait pas rendre (§16).
+ */
+const snapshots = (documents: SignableDocument[]) =>
+  documents.map((d) => d.snapshot());

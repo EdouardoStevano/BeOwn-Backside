@@ -21,8 +21,8 @@ import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructu
 import { NotificationsModule } from 'src/notifications/notifications.module';
 import { ProjectEntity } from 'src/catalog/infrastructure/persistence/entities/project.entity';
 import { InvestmentEntity } from 'src/subscription/infrastructure/persistence/entities/investment.entity';
-import { DocumentEntity } from 'src/documents/infrastructure/persistences/entities/document.entity';
-import { SignatureEntity } from 'src/signatures/infrastructure/persistences/entities/signature.entity';
+import { DocumentEntity } from 'src/documents/infrastructure/persistence/entities/document.entity';
+import { SignatureEntity } from 'src/documents/infrastructure/persistence/entities/signature.entity';
 import { WalletEntity } from 'src/treasury/infrastructure/persistence/entities/wallet.entity';
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 import { UserEmailEntity } from 'src/iam/infrastructure/persistence/entities/user-email.entity';

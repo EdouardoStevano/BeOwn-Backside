@@ -36,7 +36,7 @@ import { ExecuterOrdreUseCase } from 'src/secondary-market/application/usecases/
 import { AnnulerOrdreUseCase } from 'src/secondary-market/application/usecases/annuler-ordre.usecase';
 import { InitiateBuyUseCase } from 'src/secondary-market/application/usecases/initiate-buy.usecase';
 import { CancelInitiationUseCase } from 'src/secondary-market/application/usecases/cancel-initiation.usecase';
-import { SignatureEntity } from 'src/signatures/infrastructure/persistences/entities/signature.entity';
+import { SignatureEntity } from 'src/documents/infrastructure/persistence/entities/signature.entity';
 
 /**
  * Adaptateur d'entrée HTTP du contexte — et rien de plus.

@@ -33,8 +33,8 @@ import {
   NotificationCanal,
 } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
 import { AuditLogEntity } from 'src/notifications/infrastructure/persistences/entities/audit-log.entity';
-import { SignatureEntity } from 'src/signatures/infrastructure/persistences/entities/signature.entity';
-import { SignatureStatus } from 'src/signatures/domains/enums/signature-status.enum';
+import { SignatureEntity } from 'src/documents/infrastructure/persistence/entities/signature.entity';
+import { SignatureStatus } from 'src/documents/domain/enums/signature-status.enum';
 import { UniteLouableEntity } from 'src/locative-management/infrastructure/persistences/entities/unite-louable.entity';
 import { LocataireEntity } from 'src/locative-management/infrastructure/persistences/entities/locataire.entity';
 import { BailEntity } from 'src/locative-management/infrastructure/persistences/entities/bail.entity';

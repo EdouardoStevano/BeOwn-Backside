@@ -24,7 +24,7 @@ import { TreasuryModule } from './treasury/treasury.module';
 import { SecondaryMarketModule } from './secondary-market/secondary-market.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { PreferencesModule } from 'src/iam/application/preferences.module';
-import { DocumentsModule } from './documents/applications/documents.module';
+import { DocumentsModule } from './documents/documents.module';
 import { NotificationTestModule } from './common/test/notification-test.module';
 import { AdminModule } from './admin/admin.module';
 import { CgpModule } from './iam/application/cgp.module';

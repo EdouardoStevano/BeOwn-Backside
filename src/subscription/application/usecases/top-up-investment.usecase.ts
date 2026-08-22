@@ -8,8 +8,8 @@ import type { ProjectRepository } from 'src/catalog/domain/repositories/project.
 import { PROJECT_REPOSITORY } from 'src/catalog/domain/repositories/project.repository';
 import type { WalletRepository } from 'src/treasury/domain/repositories/wallet.repository';
 import { WALLET_REPOSITORY } from 'src/treasury/domain/repositories/wallet.repository';
-import type { DocumentRepository } from 'src/documents/applications/ports/repositories/document.repository';
-import { DOCUMENT_REPOSITORY } from 'src/documents/applications/ports/repositories/document.repository';
+import type { DocumentRepository } from 'src/documents/domain/repositories/document.repository';
+import { DOCUMENT_REPOSITORY } from 'src/documents/domain/repositories/document.repository';
 import type { UserRepository } from 'src/iam/domain/repositories/user.repository';
 import { USER_REPOSITORY } from 'src/iam/domain/repositories/user.repository';
 import { CollecteCapacity } from 'src/subscription/domain/aggregates/collecte-capacity';
@@ -34,11 +34,11 @@ import {
 } from 'src/treasury/domain/enums/wallet.enum';
 import { ContractGeneratorService } from '../services/contract-generator.service';
 import { CloudStorageService } from 'src/shared/cloud-storage/cloud-storage.service';
-import { Document } from 'src/documents/domains/document';
+import { SignableDocument } from 'src/documents/domain/aggregates/signable-document';
 import {
   DocumentRelatedTo,
   DocumentType,
-} from 'src/documents/domains/enums/document-type.enum';
+} from 'src/documents/domain/enums/document-type.enum';
 import { NotificationEventService } from 'src/notifications/applications/notification-event.service';
 import { InvestmentEntity } from 'src/subscription/infrastructure/persistence/entities/investment.entity';
 import { EcheanceEntity } from 'src/servicing/infrastructure/persistence/entities/echeance.entity';
@@ -296,23 +296,24 @@ export class TopUpInvestmentUseCase {
       'contrats',
     );
 
-    const doc = new Document();
-    doc.type = DocumentType.BULLETIN_SOUSCRIPTION;
-    doc.relatedTo = DocumentRelatedTo.INVESTMENT;
-    doc.userId = null;
-    doc.projectId = investment.projetId;
-    doc.investmentId = investment.id;
-    doc.originalName = filename;
-    doc.filename = objectName;
-    doc.mimeType = 'application/pdf';
-    doc.sizeBytes = pdfBuffer.length;
-    doc.path = publicUrl;
-    doc.isPublic = false;
-    doc.uploadedBy = userId;
-    doc.ordre = null;
-    doc.estPrincipale = false;
-
-    const savedDoc = await this.documentRepository.save(doc);
+    const savedDoc = await this.documentRepository.creer(
+      SignableDocument.televerser({
+        type: DocumentType.BULLETIN_SOUSCRIPTION,
+        relatedTo: DocumentRelatedTo.INVESTMENT,
+        userId: null,
+        projectId: investment.projetId,
+        investmentId: investment.id,
+        originalName: filename,
+        filename: objectName,
+        mimeType: 'application/pdf',
+        sizeBytes: pdfBuffer.length,
+        path: publicUrl,
+        isPublic: false,
+        uploadedBy: userId,
+        ordre: null,
+        estPrincipale: false,
+      }),
+    );
 
     investment.attacherBulletin(savedDoc.id);
     await this.investmentRepository.save(investment);

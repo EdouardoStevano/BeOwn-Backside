@@ -14,13 +14,14 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, Repository } from 'typeorm';
 import { SkipThrottle } from '@nestjs/throttler';
 import { Public } from 'src/iam/presentation/decorators/public.decorator';
-import { SignatureEntity } from 'src/signatures/infrastructure/persistences/entities/signature.entity';
-import { SignatureStatus } from 'src/signatures/domains/enums/signature-status.enum';
+import { SignatureEntity } from 'src/documents/infrastructure/persistence/entities/signature.entity';
+import { SignatureStatus } from 'src/documents/domain/enums/signature-status.enum';
+import { SignatureOrmMapper } from 'src/documents/infrastructure/persistence/mappers/signature.orm-mapper';
 import { InvestmentEntity } from 'src/subscription/infrastructure/persistence/entities/investment.entity';
 import { EcheanceEntity } from 'src/servicing/infrastructure/persistence/entities/echeance.entity';
 import { ProjectEntity } from 'src/catalog/infrastructure/persistence/entities/project.entity';
 import { OrdreMarcheEntity } from 'src/secondary-market/infrastructure/persistence/entities/ordre-marche.entity';
-import { DocumentEntity } from 'src/documents/infrastructure/persistences/entities/document.entity';
+import { DocumentEntity } from 'src/documents/infrastructure/persistence/entities/document.entity';
 import { WalletEntity } from 'src/treasury/infrastructure/persistence/entities/wallet.entity';
 import { TransactionEntity } from 'src/treasury/infrastructure/persistence/entities/transaction.entity';
 import { InvestmentStatus } from 'src/subscription/domain/enums/investment-status.enum';
@@ -173,9 +174,7 @@ export class YouSignWebhookController {
       // SIGNED en dernier dans la même transaction.
       if (signature.ordreId === null) {
         const out = await this.executeInvestmentSignature(em, signature);
-        signature.statut = SignatureStatus.SIGNED;
-        signature.signedAt = new Date();
-        await em.save(SignatureEntity, signature);
+        await this.acterSignature(em, signature);
         return out;
       }
 
@@ -404,9 +403,7 @@ export class YouSignWebhookController {
       }
 
       // Statut SIGNED posé en DERNIER, dans la même transaction que l'exécution.
-      signature.statut = SignatureStatus.SIGNED;
-      signature.signedAt = new Date();
-      await em.save(SignatureEntity, signature);
+      await this.acterSignature(em, signature);
 
       return { branch: 'secondary', buyerInvestId: buyerInvest.id, fusionnee: !!existingInvest };
     });
@@ -663,10 +660,14 @@ export class YouSignWebhookController {
     const signature = await this.signatureRepo.findOne({
       where: { youSignRequestId },
     });
-    if (!signature || signature.statut !== SignatureStatus.PENDING) return;
+    if (!signature) return;
 
-    signature.statut = SignatureStatus.EXPIRED;
-    await this.signatureRepo.save(signature);
+    const demande = SignatureOrmMapper.toDomain(signature);
+    if (!demande.estEnAttente) return; // livraison rejouée : rien à faire
+    demande.expirer();
+    await this.signatureRepo.save(
+      SignatureOrmMapper.appliquerSur(signature, demande),
+    );
 
     this.notificationService.push({
       utilisateurId: signature.userId,
@@ -677,5 +678,22 @@ export class YouSignWebhookController {
     }).catch(() => {});
 
     this.logger.log(`Signature expired: ${signature.id} ordreId=${signature.ordreId}`);
+  }
+
+  /**
+   * Acte la signature : c'est l'entité de `documents` qui refuse un second
+   * passage, plus un `if` recopié ici. Posé en dernier, dans la transaction de
+   * l'exécution — une panne laisse la demande PENDING, donc rejouable.
+   */
+  private async acterSignature(
+    em: EntityManager,
+    ligne: SignatureEntity,
+  ): Promise<void> {
+    const signature = SignatureOrmMapper.toDomain(ligne);
+    signature.signer();
+    await em.save(
+      SignatureEntity,
+      SignatureOrmMapper.appliquerSur(ligne, signature),
+    );
   }
 }

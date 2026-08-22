@@ -7,8 +7,8 @@ import { InvestmentEntity } from '../../infrastructure/persistence/entities/inve
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 import { EcheanceStatus } from 'src/servicing/domain/enums/echeance.enum';
 import { CloudStorageService } from 'src/shared/cloud-storage/cloud-storage.service';
-import { DocumentEntity } from 'src/documents/infrastructure/persistences/entities/document.entity';
-import { DocumentType, DocumentRelatedTo } from 'src/documents/domains/enums/document-type.enum';
+import { DocumentEntity } from 'src/documents/infrastructure/persistence/entities/document.entity';
+import { DocumentType, DocumentRelatedTo } from 'src/documents/domain/enums/document-type.enum';
 import { NotificationEventService } from 'src/notifications/applications/notification-event.service';
 import { formatEur } from 'src/shared/money/format-eur';
 import PDFDocument from 'pdfkit';
