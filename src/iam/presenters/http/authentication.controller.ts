@@ -8,8 +8,10 @@ import {
   Query,
   Req,
   Res,
+  UseFilters,
   UseGuards,
 } from '@nestjs/common';
+import { IamErrorFilter } from './filters/iam-error.filter';
 import type { Request, Response } from 'express';
 import {
   ApiBearerAuth,
@@ -87,6 +89,10 @@ import { emailVerifiedPage } from './views/email-verified.view';
  * par email).
  */
 @ApiTags('Authentication')
+// Portée contrôleur : garantit la traduction des IamError en HTTP (400/401/409...)
+// quel que soit l'ordre des filtres globaux (le SentryExceptionFilter attrape-tout
+// enregistré dans main.ts passerait sinon avant le filtre APP_FILTER du module).
+@UseFilters(IamErrorFilter)
 @Controller('auth')
 export class AuthenticationController {
   constructor(

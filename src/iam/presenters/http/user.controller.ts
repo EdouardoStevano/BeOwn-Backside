@@ -14,7 +14,9 @@ import {
   UseGuards,
   Inject,
   BadRequestException,
+  UseFilters,
 } from '@nestjs/common';
+import { IamErrorFilter } from './filters/iam-error.filter';
 import { IsEnum } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { UserType } from 'src/iam/domains/enums/user.enum';
@@ -65,6 +67,10 @@ const MANAGE_ROLES: string[] = rolesWithPermission('users:manage');
 @SkipThrottle()
 @ApiTags('Users')
 @ApiBearerAuth()
+// Portée contrôleur : garantit la traduction des IamError en HTTP (400/401/409...)
+// quel que soit l'ordre des filtres globaux (le SentryExceptionFilter attrape-tout
+// enregistré dans main.ts passerait sinon avant le filtre APP_FILTER du module).
+@UseFilters(IamErrorFilter)
 @Controller('users')
 @UseGuards(JwtAuthGuard)
 export class UserController {
