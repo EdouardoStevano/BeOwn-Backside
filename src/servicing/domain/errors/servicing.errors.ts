@@ -53,6 +53,26 @@ export class EchelonnementImpossibleError extends ServicingError {
   }
 }
 
+/**
+ * L'investissement dont on demande l'échéancier n'existe pas.
+ *
+ * Homonyme de l'erreur de `subscription`, et c'est voulu : chaque contexte
+ * nomme dans sa propre langue ce qu'il ne trouve pas, plutôt que de partager
+ * une classe d'erreur à travers une frontière (§3). Le contrat rendu au front
+ * — statut et code — est le même des deux côtés.
+ */
+export class InvestissementIntrouvableError extends ServicingError {
+  readonly kind = ServicingErrorKind.NOT_FOUND;
+
+  constructor(investissementId?: string) {
+    super('Investissement introuvable', {
+      code: 'INVESTMENT_NOT_FOUND',
+      details:
+        investissementId !== undefined ? { investissementId } : undefined,
+    });
+  }
+}
+
 // ── Le règlement ────────────────────────────────────────────────────────────
 
 /**

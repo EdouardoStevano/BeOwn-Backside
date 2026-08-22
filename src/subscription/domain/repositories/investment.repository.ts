@@ -1,5 +1,4 @@
 import type { Investment, InvestmentNaissant } from '../aggregates/investment';
-import type { Echeance, EcheanceNaissante } from 'src/servicing/domain/entities/echeance';
 
 export const INVESTMENT_REPOSITORY = Symbol('INVESTMENT_REPOSITORY');
 
@@ -14,6 +13,13 @@ export const INVESTMENT_REPOSITORY = Symbol('INVESTMENT_REPOSITORY');
  * sans passer par l'agrégat (§6) — « mettre à jour le statut » n'est pas une
  * intention métier (§4). Leurs appelants jouent désormais la transition
  * correspondante sur l'agrégat, puis le sauvent.
+ *
+ * Les trois méthodes d'échéancier ont disparu à leur tour : ce port servait
+ * la collection d'un autre contexte, en rendant les entités d'un autre
+ * modèle. La lecture est passée à `RepaymentScheduleRepository`
+ * (`servicing`) ; les deux écritures n'avaient plus d'appelant — la
+ * souscription persiste ses échéances par l'`EntityManager` de sa propre
+ * transaction.
  *
  * Les lectures de fractions vendues restent ici bien qu'elles servent surtout
  * à peupler `CollecteCapacity` : ce sont des projections sur la collection
@@ -41,14 +47,4 @@ export interface InvestmentRepository {
   countFractionsVenduesBatch(
     projetIds: string[],
   ): Promise<Record<string, number>>;
-
-  // ── Échéancier ────────────────────────────────────────────────────────────
-  // Entités internes de l'agrégat, mais persistées en lot : un échéancier se
-  // régénère entièrement quand le capital souscrit change.
-
-  saveEcheances(echeances: EcheanceNaissante[]): Promise<Echeance[]>;
-
-  deleteEcheancesByInvestissementId(investissementId: string): Promise<void>;
-
-  findEcheancesByInvestissement(investissementId: string): Promise<Echeance[]>;
 }

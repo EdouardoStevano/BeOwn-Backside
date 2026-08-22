@@ -8,6 +8,12 @@ import { PayEcheanceUseCase } from './application/usecases/pay-echeance.usecase'
 import { EcheancesCronService } from './application/services/echeances-cron.service';
 import { ProjectScheduleGeneratorService } from './application/services/project-schedule-generator.service';
 import { ServicingErrorFilter } from './presentation/http/filters/servicing-error.filter';
+import { RepaymentScheduleController } from './presentation/http/repayment-schedule.controller';
+import { REPAYMENT_SCHEDULE_REPOSITORY } from './domain/repositories/repayment-schedule.repository';
+import { TypeOrmRepaymentScheduleRepository } from './infrastructure/repositories/typeorm-repayment-schedule.repository';
+import { TITULAIRE_INVESTISSEMENT_PORT } from './application/ports/titulaire-investissement.port';
+import { TypeOrmTitulaireInvestissementAdapter } from './infrastructure/repositories/typeorm-titulaire-investissement.adapter';
+import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructure.module';
 import { InvestmentEntity } from 'src/subscription/infrastructure/persistence/entities/investment.entity';
 import { ProjectEntity } from 'src/catalog/infrastructure/persistence/entities/project.entity';
 import { WalletEntity } from 'src/treasury/infrastructure/persistence/entities/wallet.entity';
@@ -43,12 +49,14 @@ import { NotificationsModule } from 'src/notifications/notifications.module';
  *   montants fiscaux, calculés ici une seule fois (§3.3 — l'IFU ne les
  *   recalcule pas).
  *
- * Ce module donne au contexte son nom et sa forme (§5) : ses erreurs propres
- * (`ServicingError`), son filtre, son vocabulaire (`EcheanceStatus`,
- * `RemboursementMode`) et son mapper. Le modèle riche — `RepaymentSchedule` en
- * agrégat racine, propriétaire de la numérotation et de la qualification des
- * retards (RG-ECH-11) — est l'étape suivante, comme pour `catalog`,
- * `subscription` et `treasury`.
+ * Le contexte a son modèle : `RepaymentSchedule` est l'agrégat racine (§6) —
+ * la série ordonnée des coupons d'un investissement, par laquelle on
+ * l'interroge (capital restant dû, intérêts perçus, prochaine échéance) et on
+ * la règle. Il a son port (`RepaymentScheduleRepository`), ses erreurs
+ * (`ServicingError`) et leur filtre, son vocabulaire (`EcheanceStatus`,
+ * `RemboursementMode`), son mapper, et une Anti-Corruption Layer vers
+ * `subscription` qui ne demande qu'une chose : à qui appartient
+ * l'investissement (§20).
  *
  * Écarts temporaires, assumés et à résorber (§3.3) :
  *
@@ -57,8 +65,12 @@ import { NotificationsModule } from 'src/notifications/notifications.module';
  *   `treasury` (wallets, ledger) : le règlement d'un coupon est une
  *   transaction unique faute d'unité de travail partagée entre contextes —
  *   la résorber demande un port de transaction, pas un remodelage du domaine ;
- * - l'échéancier reste lisible par `GET /investments/:id/schedule`, servi par
- *   le contrôleur de `subscription` via `InvestmentRepository` ;
+ * - **RG-ECH-11 n'est pas appliquée.** `EcheanceStatus` distingue
+ *   `RETARD_LEGER` (J+1→J+30), `RETARD_SIGNIFICATIF` (J+31→J+90) et `DEFAUT`
+ *   (au-delà), mais aucun code ne les calcule : le CRON pose le statut hérité
+ *   `RETARD` et l'échéance y reste. La qualifier changerait la payabilité
+ *   d'échéances en cours (`DEFAUT` n'est pas payable) — c'est un arbitrage
+ *   métier, pas un refactoring, et il se décide avec le RCCI ;
  * - `EcheanceEntity` porte encore une relation ORM vers `InvestmentEntity` :
  *   couplage d'infrastructure, pas de domaine — le domaine, lui, ne connaît de
  *   l'investissement que son identifiant (§6.2).
@@ -79,16 +91,32 @@ import { NotificationsModule } from 'src/notifications/notifications.module';
       TransactionEntity,
     ]),
     ServicingInfrastructureModule,
+    // `TokenService` pour le JwtAuthGuard monté par le contrôleur.
+    IamInfrastructureModule,
     NotificationsModule,
   ],
+  controllers: [RepaymentScheduleController],
   providers: [
     PayEcheanceUseCase,
     EcheancesCronService,
     ProjectScheduleGeneratorService,
+    {
+      provide: REPAYMENT_SCHEDULE_REPOSITORY,
+      useClass: TypeOrmRepaymentScheduleRepository,
+    },
+    // Anti-Corruption Layer vers `subscription` : le titulaire, et rien d'autre.
+    {
+      provide: TITULAIRE_INVESTISSEMENT_PORT,
+      useClass: TypeOrmTitulaireInvestissementAdapter,
+    },
     // Traduit les erreurs métier du contexte en réponses HTTP : le domaine ne
     // connaît aucun statut (§21), la présentation s'en charge.
     { provide: APP_FILTER, useClass: ServicingErrorFilter },
   ],
-  exports: [PayEcheanceUseCase, ProjectScheduleGeneratorService],
+  exports: [
+    PayEcheanceUseCase,
+    ProjectScheduleGeneratorService,
+    REPAYMENT_SCHEDULE_REPOSITORY,
+  ],
 })
 export class ServicingModule {}

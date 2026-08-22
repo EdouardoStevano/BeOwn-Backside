@@ -6,15 +6,9 @@ import {
   Investment,
   type InvestmentNaissant,
 } from 'src/subscription/domain/aggregates/investment';
-import {
-  Echeance,
-  type EcheanceNaissante,
-} from 'src/servicing/domain/entities/echeance';
 import { InvestmentStatus } from 'src/subscription/domain/enums/investment-status.enum';
 import { InvestmentEntity } from '../persistence/entities/investment.entity';
-import { EcheanceEntity } from 'src/servicing/infrastructure/persistence/entities/echeance.entity';
 import { InvestmentOrmMapper } from '../persistence/mappers/investment.orm-mapper';
-import { EcheanceOrmMapper } from 'src/servicing/infrastructure/persistence/mappers/echeance.orm-mapper';
 import { ProjectEntity } from 'src/catalog/infrastructure/persistence/entities/project.entity';
 
 /** Statuts qui ne pèsent plus sur la collecte — le filtre du recompte de fractions. */
@@ -25,8 +19,6 @@ export class TypeOrmInvestmentRepository implements InvestmentRepository {
   constructor(
     @InjectRepository(InvestmentEntity)
     private readonly investRepo: Repository<InvestmentEntity>,
-    @InjectRepository(EcheanceEntity)
-    private readonly echeanceRepo: Repository<EcheanceEntity>,
   ) {}
 
   async creer(naissant: InvestmentNaissant): Promise<Investment> {
@@ -100,28 +92,5 @@ export class TypeOrmInvestmentRepository implements InvestmentRepository {
       .groupBy('i.projetId')
       .getRawMany<{ projetId: string; total: string }>();
     return Object.fromEntries(rows.map((r) => [r.projetId, Number(r.total)]));
-  }
-
-  async deleteEcheancesByInvestissementId(
-    investissementId: string,
-  ): Promise<void> {
-    await this.echeanceRepo.delete({ investissementId });
-  }
-
-  async saveEcheances(echeances: EcheanceNaissante[]): Promise<Echeance[]> {
-    const saved = await this.echeanceRepo.save(
-      echeances.map(EcheanceOrmMapper.naissanteToEntity),
-    );
-    return saved.map(EcheanceOrmMapper.toDomain);
-  }
-
-  async findEcheancesByInvestissement(
-    investissementId: string,
-  ): Promise<Echeance[]> {
-    const entities = await this.echeanceRepo.find({
-      where: { investissementId },
-      order: { numero: 'ASC' },
-    });
-    return entities.map(EcheanceOrmMapper.toDomain);
   }
 }

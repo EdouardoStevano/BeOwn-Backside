@@ -178,19 +178,6 @@ export class InvestmentController {
     return inv.snapshot();
   }
 
-  @ApiOperation({ summary: "Echéancier d'un investissement" })
-  @ApiParam({ name: 'id', description: "UUID de l'investissement" })
-  @ApiResponse({ status: 200, description: 'Echéancier de remboursement' })
-  @Get(':id/schedule')
-  async getSchedule(@Param('id') id: string, @CurrentUser() user: ActiveUser) {
-    const inv = await this.investmentRepository.findById(id);
-    if (!inv) throw new InvestissementIntrouvableError(id);
-    this.assertCanReadInvestment(user, inv.utilisateurId);
-    const echeances =
-      await this.investmentRepository.findEcheancesByInvestissement(id);
-    return echeances.map((e) => e.snapshot());
-  }
-
   @ApiOperation({
     summary: "Mettre à jour le statut d'un investissement (admin)",
   })
