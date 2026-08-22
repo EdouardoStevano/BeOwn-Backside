@@ -5,7 +5,8 @@ import { NotFoundException } from '@nestjs/common';
 import { ProjectKpiService } from './project-kpi.service';
 import { ProjectEntity } from 'src/catalog/infrastructure/persistence/entities/project.entity';
 import { InvestmentEntity } from 'src/subscription/infrastructure/persistence/entities/investment.entity';
-import { EcheanceStatus, InvestmentStatus } from 'src/subscription/domain/enums/investment-status.enum';
+import { InvestmentStatus } from 'src/subscription/domain/enums/investment-status.enum';
+import { EcheanceStatus } from 'src/servicing/domain/enums/echeance.enum';
 import { ProjectStatus } from 'src/catalog/domain/enums/project-status.enum';
 
 describe('ProjectKpiService', () => {

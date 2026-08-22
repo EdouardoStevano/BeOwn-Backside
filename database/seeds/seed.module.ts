@@ -9,7 +9,7 @@ import { ProjectEntity } from 'src/catalog/infrastructure/persistence/entities/p
 import { WalletEntity } from 'src/treasury/infrastructure/persistence/entities/wallet.entity';
 import { TransactionEntity } from 'src/treasury/infrastructure/persistence/entities/transaction.entity';
 import { InvestmentEntity } from 'src/subscription/infrastructure/persistence/entities/investment.entity';
-import { EcheanceEntity } from 'src/subscription/infrastructure/persistence/entities/echeance.entity';
+import { EcheanceEntity } from 'src/servicing/infrastructure/persistence/entities/echeance.entity';
 import { ReservationEntity } from 'src/reservation/infrastructure/persistence/entities/reservation.entity';
 import { ProfilPPEntity } from 'src/compliance/infrastructure/persistence/entities/profil-pp.entity';
 import { ProfilPMEntity } from 'src/compliance/infrastructure/persistence/entities/profil-pm.entity';

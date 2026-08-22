@@ -15,7 +15,7 @@ import { EmailTemplateEntity } from 'src/shared/email/entities/email-template.en
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 import { ProjectEntity } from 'src/catalog/infrastructure/persistence/entities/project.entity';
 import { InvestmentEntity } from 'src/subscription/infrastructure/persistence/entities/investment.entity';
-import { EcheanceEntity } from 'src/subscription/infrastructure/persistence/entities/echeance.entity';
+import { EcheanceEntity } from 'src/servicing/infrastructure/persistence/entities/echeance.entity';
 import { KycEntity } from 'src/compliance/infrastructure/persistence/entities/kyc.entity';
 import { OrdreMarcheEntity } from 'src/secondarymarket/infrastructure/persistences/entities/ordre-marche.entity';
 import { WalletEntity } from 'src/treasury/infrastructure/persistence/entities/wallet.entity';
@@ -25,6 +25,7 @@ import { AdminSettingsEntity } from './entities/admin-settings.entity';
 import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructure.module';
 import { NotificationsModule } from 'src/notifications/notifications.module';
 import { SubscriptionModule } from 'src/subscription/subscription.module';
+import { ServicingModule } from 'src/servicing/servicing.module';
 import { ProfilesModule } from 'src/compliance/application/profiles.module';
 import { UsersModule } from 'src/iam/application/users.module';
 import { TriggerEcheancePaymentUseCase } from './usecases/trigger-echeance-payment.usecase';
@@ -49,6 +50,9 @@ import { PatchAggregatedEcheanceUseCase } from './usecases/patch-aggregated-eche
     IamInfrastructureModule,
     NotificationsModule,
     SubscriptionModule,
+    // `PayEcheanceUseCase`, `ProjectScheduleGeneratorService` : l'échéancier
+    // que les écrans d'administration pilotent appartient à `servicing`.
+    ServicingModule,
     ProfilesModule,
     UsersModule,
   ],

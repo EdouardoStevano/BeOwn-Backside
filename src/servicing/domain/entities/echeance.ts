@@ -1,5 +1,5 @@
-import { EcheanceStatus } from '../enums/investment-status.enum';
-import { EcheanceNonPayableError } from '../errors/subscription.errors';
+import { EcheanceStatus } from '../enums/echeance.enum';
+import { EcheanceNonPayableError } from '../errors';
 import { PrelevementForfaitaire } from '../value-objects/prelevement-forfaitaire.vo';
 
 /** État complet d'une échéance, tel qu'il transite depuis/vers la persistance. */
@@ -28,9 +28,10 @@ export type EcheanceNaissante = Omit<EcheanceSnapshot, 'id'>;
  * date prévue, l'émetteur verse à l'investisseur une part de capital et les
  * intérêts courus, nets de la retenue à la source.
  *
- * Entité interne de l'agrégat {@link Investment} (§7) : elle a une identité
- * stable mais ne vit pas seule — un échéancier n'existe que rattaché à un
- * investissement, et se régénère entièrement quand celui-ci change de montant.
+ * Entité interne de l'échéancier (§7) : elle a une identité stable mais ne vit
+ * pas seule — un échéancier n'existe que rattaché à un investissement, et se
+ * régénère entièrement quand celui-ci change de montant. Elle ne connaît de
+ * l'investissement que son identifiant (§6.2).
  *
  * Le règlement se joue en deux temps, et c'est délibéré :
  *
@@ -43,10 +44,7 @@ export type EcheanceNaissante = Omit<EcheanceSnapshot, 'id'>;
  * La seconde ne remplace pas la première : le verrou protège contre la
  * concurrence, l'entité protège la règle. Un `PAYE` qui repasserait au
  * paiement perdrait la trace fiscale de son premier règlement.
- *
- * > À terme, cette entité et son agrégat `RepaymentSchedule` appartiennent au
- * > contexte `servicing` (M8, §3.2). Elle vit encore ici — écart temporaire
- * > déjà signalé par `SubscriptionModule`.
+
  */
 export class Echeance {
   /**
@@ -73,7 +71,7 @@ export class Echeance {
     'statut' | 'payeLe' | 'statutChangeLe' | 'prelevementIR' | 'prelevementCSG'
   >;
 
-  /** @internal Réservé à `EcheancierGenerator` et `InvestmentOrmMapper`. */
+  /** @internal Réservé à `EcheancierGenerator` et `EcheanceOrmMapper`. */
   constructor(etat: EcheanceSnapshot) {
     const {
       statut,

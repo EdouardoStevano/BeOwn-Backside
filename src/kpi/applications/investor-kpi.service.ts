@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Not, Repository } from 'typeorm';
 import { InvestmentEntity } from 'src/subscription/infrastructure/persistence/entities/investment.entity';
-import { EcheanceEntity } from 'src/subscription/infrastructure/persistence/entities/echeance.entity';
+import { EcheanceEntity } from 'src/servicing/infrastructure/persistence/entities/echeance.entity';
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 import { InvestmentStatus } from 'src/subscription/domain/enums/investment-status.enum';
 import {

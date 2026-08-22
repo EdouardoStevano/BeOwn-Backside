@@ -27,11 +27,8 @@ import { WalletEntity } from 'src/treasury/infrastructure/persistence/entities/w
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 import { UserEmailEntity } from 'src/iam/infrastructure/persistence/entities/user-email.entity';
 import { KycModule } from 'src/compliance/application/kyc.module';
-import { EcheanceEntity } from 'src/subscription/infrastructure/persistence/entities/echeance.entity';
-import { EcheancesCronService } from './application/services/echeances-cron.service';
+import { EcheanceEntity } from 'src/servicing/infrastructure/persistence/entities/echeance.entity';
 import { IfuGenerationService } from './application/services/ifu-generation.service';
-import { PayEcheanceUseCase } from './application/usecases/pay-echeance.usecase';
-import { ProjectScheduleGeneratorService } from './application/services/project-schedule-generator.service';
 import { CollecteCloseCronService } from './application/services/collecte-close-cron.service';
 import { RefundCollecteService } from './application/services/refund-collecte.service';
 import { TransactionEntity } from 'src/treasury/infrastructure/persistence/entities/transaction.entity';
@@ -50,7 +47,9 @@ import { TransactionEntity } from 'src/treasury/infrastructure/persistence/entit
  *   `ReservationConvertie` est le contrat par lequel une réservation deviendra
  *   un investissement en tête de file ; sa consommation n'est pas encore
  *   branchée (la conversion reste un geste manuel du back-office) ;
- * - **amont** de `servicing` : la signature déclenche l'échéancier.
+ * - **amont** de `servicing` : la signature déclenche l'échéancier. La
+ *   souscription lui passe une *demande* (capital, TRI, durée) et reçoit des
+ *   coupons à persister ; elle ne connaît ni `Echeance` ni ses statuts.
  *
  * Le modèle riche est en place : `Investment` est un agrégat à transitions
  * (rétractation PSFP, complément de fractions), `CollecteCapacity` possède
@@ -60,13 +59,11 @@ import { TransactionEntity } from 'src/treasury/infrastructure/persistence/entit
  *
  * Écarts temporaires, assumés et à résorber (§3.3) :
  *
- * - l'échéancier vit encore ici (`Echeance`, `PayEcheanceUseCase`, crons de
- *   retard) alors qu'il appartient à `servicing` (M8, `RepaymentSchedule`) ;
  * - `IfuGenerationService` appartient à `regulatory-reporting` (M11) ;
  * - le module enregistre encore des entités d'autres contextes
  *   (`TypeOrmModule.forFeature` sur Project, Wallet, User, Document,
- *   Signature, Transaction) : les sections transactionnelles y accèdent par
- *   l'`EntityManager`, faute d'unité de travail partagée — résorber cela
+ *   Signature, Transaction, Echeance) : les sections transactionnelles y
+ *   accèdent par l'`EntityManager`, faute d'unité de travail partagée — résorber cela
  *   demande un port de transaction, pas un remodelage du domaine ;
  * - les faits publiés le sont après commit, en best-effort : les rendre
  *   fiables demande l'Outbox (§19).
@@ -104,10 +101,7 @@ import { TransactionEntity } from 'src/treasury/infrastructure/persistence/entit
     TopUpInvestmentUseCase,
     InitiateInvestmentUseCase,
     RetractInvestmentUseCase,
-    EcheancesCronService,
     IfuGenerationService,
-    PayEcheanceUseCase,
-    ProjectScheduleGeneratorService,
     CollecteCloseCronService,
     RefundCollecteService,
     // Traduit les erreurs métier du contexte en réponses HTTP : le domaine ne
@@ -116,9 +110,7 @@ import { TransactionEntity } from 'src/treasury/infrastructure/persistence/entit
   ],
   controllers: [InvestmentController],
   exports: [
-    PayEcheanceUseCase,
     IfuGenerationService,
-    ProjectScheduleGeneratorService,
     RefundCollecteService,
   ],
 })

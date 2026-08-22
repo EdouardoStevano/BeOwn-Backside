@@ -1,8 +1,6 @@
 import type { EcheanceNaissante } from '../entities/echeance';
-import { RemboursementMode } from '../enums/investment-status.enum';
-import { EchelonnementImpossibleError } from '../errors/subscription.errors';
-import type { Investment } from '../aggregates/investment';
-import type { ProjetSouscriptible } from '../value-objects/projet-souscriptible';
+import { RemboursementMode } from '../enums/echeance.enum';
+import { EchelonnementImpossibleError } from '../errors';
 import {
   strategieDeRemboursement,
   type EchelonnementDemande,
@@ -10,7 +8,7 @@ import {
 
 /**
  * **Génération de l'échéancier** (§9) — la logique n'appartient ni à
- * `Investment` (elle a besoin des conditions du projet : TRI et durée) ni à
+ * l'investissement (elle a besoin des conditions du projet : TRI et durée) ni à
  * `Echeance` (elle en produit une série cohérente, pas une seule) : c'est un
  * Domain Service.
  *
@@ -21,33 +19,20 @@ import {
  *
  * Le service valide ce qui rendrait un échéancier absurde, puis délègue la
  * ventilation capital / intérêts à la stratégie du mode de remboursement
- * (§38.1). Les montants produits sont, à l'arrondi près, ceux des méthodes
- * remplacées : le refactoring ne redéfinit aucun coupon existant.
+ * (§38.1).
+ *
+ * **Il ne reçoit pas d'agrégat, seulement une demande.** Il prenait un
+ * `Investment` et un `ProjetSouscriptible` — deux modèles de `subscription` et
+ * de `catalog` importés dans le domaine d'un troisième contexte (§3). Ce dont un
+ * échéancier a besoin, ce sont quatre nombres et une date : `subscription` les
+ * extrait de son agrégat et les passe, c'est là son rôle d'amont (§3.4).
  */
 export class EcheancierGenerator {
   /**
-   * L'échéancier d'un investissement, aux conditions financières de son projet.
-   * `origine` ancre le calendrier : la première échéance tombe un mois après.
+   * L'échéancier correspondant à une demande, aux conditions financières du
+   * projet. `origine` ancre le calendrier : la première échéance tombe un mois
+   * après.
    */
-  static generer(
-    investment: Investment,
-    projet: Pick<ProjetSouscriptible, 'triCible' | 'dureeMois'>,
-    mode: RemboursementMode = RemboursementMode.IN_FINE,
-    origine: Date = new Date(),
-  ): EcheanceNaissante[] {
-    return EcheancierGenerator.genererPour(
-      {
-        investissementId: investment.id,
-        montant: investment.montant,
-        triAnnuel: projet.triCible,
-        dureeMois: projet.dureeMois,
-        origine,
-      },
-      mode,
-    );
-  }
-
-  /** La même génération, à partir de la demande brute. */
   static genererPour(
     demande: EchelonnementDemande,
     mode: RemboursementMode = RemboursementMode.IN_FINE,

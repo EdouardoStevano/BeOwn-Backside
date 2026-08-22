@@ -1,5 +1,5 @@
 import { PayEcheanceUseCase } from './pay-echeance.usecase';
-import { EcheanceStatus } from '../../domain/enums/investment-status.enum';
+import { EcheanceStatus } from '../../domain/enums/echeance.enum';
 import { EcheanceEntity } from '../../infrastructure/persistence/entities/echeance.entity';
 import { WalletEntity } from 'src/treasury/infrastructure/persistence/entities/wallet.entity';
 import { TransactionEntity } from 'src/treasury/infrastructure/persistence/entities/transaction.entity';

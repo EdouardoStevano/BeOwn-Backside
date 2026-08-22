@@ -46,8 +46,8 @@ import { RequirePermission } from 'src/iam/presentation/decorators/require-permi
 import { hasPermission } from 'src/iam/domain/policies/role-permissions.policy';
 import { UserRole } from 'src/iam/domain/enums/user.enum';
 import { SkipThrottle } from '@nestjs/throttler';
-import { EcheanceEntity } from 'src/subscription/infrastructure/persistence/entities/echeance.entity';
-import { EcheanceStatus } from 'src/subscription/domain/enums/investment-status.enum';
+import { EcheanceEntity } from 'src/servicing/infrastructure/persistence/entities/echeance.entity';
+import { EcheanceStatus } from 'src/servicing/domain/enums/echeance.enum';
 
 class InitiateInvestmentDto {
   @ApiProperty({ description: 'UUID du projet' })

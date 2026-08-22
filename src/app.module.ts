@@ -19,6 +19,7 @@ import { ComplianceModule } from './compliance/compliance.module';
 import { CatalogModule } from './catalog/catalog.module';
 import { ReservationModule } from './reservation/reservation.module';
 import { SubscriptionModule } from './subscription/subscription.module';
+import { ServicingModule } from './servicing/servicing.module';
 import { TreasuryModule } from './treasury/treasury.module';
 import { SecondaryMarketModule } from './secondarymarket/applications/secondary-market.module';
 import { NotificationsModule } from './notifications/notifications.module';
@@ -97,6 +98,7 @@ function requireEnv(name: string): string {
     CatalogModule,
     ReservationModule,
     SubscriptionModule,
+    ServicingModule,
     TreasuryModule,
     SecondaryMarketModule,
     NotificationsModule,

@@ -1,5 +1,5 @@
 import type { Investment, InvestmentNaissant } from '../aggregates/investment';
-import type { Echeance, EcheanceNaissante } from '../entities/echeance';
+import type { Echeance, EcheanceNaissante } from 'src/servicing/domain/entities/echeance';
 
 export const INVESTMENT_REPOSITORY = Symbol('INVESTMENT_REPOSITORY');
 

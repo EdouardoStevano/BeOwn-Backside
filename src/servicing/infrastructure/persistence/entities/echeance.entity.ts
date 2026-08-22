@@ -6,8 +6,8 @@ import {
   ManyToOne,
   PrimaryGeneratedColumn,
 } from 'typeorm';
-import { InvestmentEntity } from './investment.entity';
-import { EcheanceStatus } from 'src/subscription/domain/enums/investment-status.enum';
+import { InvestmentEntity } from 'src/subscription/infrastructure/persistence/entities/investment.entity';
+import { EcheanceStatus } from 'src/servicing/domain/enums/echeance.enum';
 
 @Entity('echeance')
 export class EcheanceEntity {

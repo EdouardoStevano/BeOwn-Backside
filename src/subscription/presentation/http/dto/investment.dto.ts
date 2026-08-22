@@ -9,10 +9,8 @@ import {
   Length,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import {
-  InvestmentStatus,
-  RemboursementMode,
-} from 'src/subscription/domain/enums/investment-status.enum';
+import { InvestmentStatus } from 'src/subscription/domain/enums/investment-status.enum';
+import { RemboursementMode } from 'src/servicing/domain/enums/echeance.enum';
 
 export class CreateInvestmentDto {
   @ApiPropertyOptional({ description: 'Clé idempotente fournie par le client' })

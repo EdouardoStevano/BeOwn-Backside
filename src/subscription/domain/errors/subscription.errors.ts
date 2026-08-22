@@ -1,9 +1,6 @@
 import { formatEur } from 'src/shared/money/format-eur';
 import { SubscriptionError, SubscriptionErrorKind } from './subscription.error';
-import type {
-  EcheanceStatus,
-  InvestmentStatus,
-} from '../enums/investment-status.enum';
+import type { InvestmentStatus } from '../enums/investment-status.enum';
 
 /*
  * Les messages reprennent ceux que les `BadRequestException`,
@@ -125,15 +122,6 @@ export class WalletIntrouvableError extends SubscriptionError {
         code: 'WALLET_NOT_FOUND',
       },
     );
-  }
-}
-
-/** Le wallet investisseur d'un bénéficiaire de coupon n'existe pas. */
-export class WalletInvestisseurIntrouvableError extends SubscriptionError {
-  readonly kind = SubscriptionErrorKind.NOT_FOUND;
-
-  constructor() {
-    super('Wallet investisseur introuvable', { code: 'WALLET_NOT_FOUND' });
   }
 }
 
@@ -298,57 +286,5 @@ export class InvestissementDejaSigneError extends SubscriptionError {
     super('Cet investissement est déjà signé.', {
       code: 'INVESTMENT_ALREADY_SIGNED',
     });
-  }
-}
-
-// ── L'échéancier ────────────────────────────────────────────────────────────
-
-/** L'échéance visée n'existe pas. */
-export class EcheanceIntrouvableError extends SubscriptionError {
-  readonly kind = SubscriptionErrorKind.NOT_FOUND;
-
-  constructor(echeanceId?: string) {
-    super('Échéance introuvable', {
-      code: 'ECHEANCE_NOT_FOUND',
-      details: echeanceId !== undefined ? { echeanceId } : undefined,
-    });
-  }
-}
-
-/** Une échéance déjà payée, annulée ou en perte définitive ne se règle pas. */
-export class EcheanceNonPayableError extends SubscriptionError {
-  readonly kind = SubscriptionErrorKind.CONFLICT;
-
-  constructor(statut: EcheanceStatus) {
-    super(`Échéance au statut "${statut}" non payable`, {
-      code: 'ECHEANCE_NOT_PAYABLE',
-      details: { statut },
-    });
-  }
-}
-
-/**
- * Un run concurrent (ou un retry du CRON) a déjà réglé cette échéance : le
- * claim conditionnel n'a affecté aucune ligne, aucun double-crédit n'a eu lieu.
- */
-export class EcheanceDejaPayeeError extends SubscriptionError {
-  readonly kind = SubscriptionErrorKind.CONFLICT;
-
-  constructor() {
-    super('Échéance déjà payée ou non payable', {
-      code: 'ECHEANCE_ALREADY_PAID',
-    });
-  }
-}
-
-/**
- * Une durée ou un montant impossible ne peut provenir que d'une donnée
- * corrompue ou d'un défaut de programmation — jamais d'une entrée utilisateur.
- */
-export class EchelonnementImpossibleError extends SubscriptionError {
-  readonly kind = SubscriptionErrorKind.UNEXPECTED;
-
-  constructor(raison: string, details?: Record<string, unknown>) {
-    super(`Échéancier impossible à générer : ${raison}.`, { details });
   }
 }

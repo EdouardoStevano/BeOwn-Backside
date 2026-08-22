@@ -9,11 +9,12 @@ import {
 import {
   Echeance,
   type EcheanceNaissante,
-} from 'src/subscription/domain/entities/echeance';
+} from 'src/servicing/domain/entities/echeance';
 import { InvestmentStatus } from 'src/subscription/domain/enums/investment-status.enum';
 import { InvestmentEntity } from '../persistence/entities/investment.entity';
-import { EcheanceEntity } from '../persistence/entities/echeance.entity';
+import { EcheanceEntity } from 'src/servicing/infrastructure/persistence/entities/echeance.entity';
 import { InvestmentOrmMapper } from '../persistence/mappers/investment.orm-mapper';
+import { EcheanceOrmMapper } from 'src/servicing/infrastructure/persistence/mappers/echeance.orm-mapper';
 import { ProjectEntity } from 'src/catalog/infrastructure/persistence/entities/project.entity';
 
 /** Statuts qui ne pèsent plus sur la collecte — le filtre du recompte de fractions. */
@@ -109,9 +110,9 @@ export class TypeOrmInvestmentRepository implements InvestmentRepository {
 
   async saveEcheances(echeances: EcheanceNaissante[]): Promise<Echeance[]> {
     const saved = await this.echeanceRepo.save(
-      echeances.map(InvestmentOrmMapper.echeanceNaissanteToEntity),
+      echeances.map(EcheanceOrmMapper.naissanteToEntity),
     );
-    return saved.map(InvestmentOrmMapper.echeanceToDomain);
+    return saved.map(EcheanceOrmMapper.toDomain);
   }
 
   async findEcheancesByInvestissement(
@@ -121,6 +122,6 @@ export class TypeOrmInvestmentRepository implements InvestmentRepository {
       where: { investissementId },
       order: { numero: 'ASC' },
     });
-    return entities.map(InvestmentOrmMapper.echeanceToDomain);
+    return entities.map(EcheanceOrmMapper.toDomain);
   }
 }
