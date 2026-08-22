@@ -1,9 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { AvisEntity } from '../entities/avis.entity';
-import { AvisRepository } from 'src/avis/applications/ports/repositories/avis.repository';
-import { Avis } from 'src/avis/domains/avis';
+import { AvisEntity } from '../persistence/entities/avis.entity';
+import { AvisRepository } from 'src/catalog/domain/repositories/avis.repository';
+import { Avis } from 'src/catalog/domain/aggregates/avis';
 
 type AvisRawRow = {
   id: string;
@@ -22,7 +22,7 @@ type StatsRawRow = {
 };
 
 @Injectable()
-export class AvisTypeOrmRepository implements AvisRepository {
+export class TypeOrmAvisRepository implements AvisRepository {
   constructor(
     @InjectRepository(AvisEntity)
     private readonly repo: Repository<AvisEntity>,

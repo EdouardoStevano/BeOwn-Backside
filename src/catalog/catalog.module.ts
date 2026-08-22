@@ -1,7 +1,6 @@
 import { Module } from '@nestjs/common';
 import { APP_FILTER } from '@nestjs/core';
 import { CqrsModule } from '@nestjs/cqrs';
-import { AvisInfrastructureModule } from 'src/avis/infrastructure/avis-infrastructure.module';
 import { AmlModule } from 'src/common/aml/aml.module';
 import { DocumentsInfrastructureModule } from 'src/documents/infrastructure/documents-infrastructure.module';
 import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructure.module';
@@ -11,6 +10,7 @@ import { CatalogInfrastructureModule } from './infrastructure/catalog-infrastruc
 import { AdminSortiesController } from './presentation/http/admin-sorties.controller';
 import { CatalogErrorFilter } from './presentation/http/filters/catalog-error.filter';
 import { ProjectController } from './presentation/http/project.controller';
+import { AvisController } from './presentation/http/avis.controller';
 import {
   CollecteOuverteEventHandler,
   ProjetAnnonceEventHandler,
@@ -63,7 +63,6 @@ import { ListSpvUseCase } from './application/usecases/spv/list-spv.usecase';
     // Read-models : la fiche projet agrège investissements, documents et avis.
     SubscriptionInfrastructureModule,
     DocumentsInfrastructureModule,
-    AvisInfrastructureModule,
     // Annonces, diffusions et journal d'audit.
     NotificationsModule,
     // Surveillance LCB-FT des versements de sortie.
@@ -98,7 +97,7 @@ import { ListSpvUseCase } from './application/usecases/spv/list-spv.usecase';
     // connaît aucun statut (§12.1), la présentation s'en charge.
     { provide: APP_FILTER, useClass: CatalogErrorFilter },
   ],
-  controllers: [ProjectController, AdminSortiesController],
+  controllers: [ProjectController, AvisController, AdminSortiesController],
   exports: [
     // Distributions et Locative Management composent avec la lecture des projets.
     GetProjectsUseCase,

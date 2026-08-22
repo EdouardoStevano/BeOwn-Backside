@@ -47,7 +47,7 @@ import {
   OrdreMarcheSens,
   OrdreMarcheStatus,
 } from 'src/secondary-market/domain/enums/ordre-marche.enum';
-import { AvisEntity } from 'src/avis/infrastructure/persistences/entities/avis.entity';
+import { AvisEntity } from 'src/catalog/infrastructure/persistence/entities/avis.entity';
 
 // Configuration interface pour le seed
 interface SeedConfig {

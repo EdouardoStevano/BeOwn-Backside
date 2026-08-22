@@ -18,7 +18,7 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import { CreateAvisDto } from 'src/avis/presenters/dto/avis.dto';
+import { CreateAvisDto } from 'src/catalog/presentation/http/dto/avis.dto';
 import { CurrentUser } from 'src/iam/presentation/decorators/current-user.decorator';
 import type { ActiveUser } from 'src/iam/presentation/decorators/current-user.decorator';
 import { Public } from 'src/iam/presentation/decorators/public.decorator';

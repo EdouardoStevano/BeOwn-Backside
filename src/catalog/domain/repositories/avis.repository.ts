@@ -1,4 +1,4 @@
-import { Avis } from 'src/avis/domains/avis';
+import { Avis } from 'src/catalog/domain/aggregates/avis';
 
 export const AVIS_REPOSITORY = Symbol('AVIS_REPOSITORY');
 

@@ -20,10 +20,10 @@ import { Public } from 'src/iam/presentation/decorators/public.decorator';
 import { CurrentUser } from 'src/iam/presentation/decorators/current-user.decorator';
 import type { ActiveUser } from 'src/iam/presentation/decorators/current-user.decorator';
 import { Inject } from '@nestjs/common';
-import { AVIS_REPOSITORY } from 'src/avis/applications/ports/repositories/avis.repository';
-import type { AvisRepository } from 'src/avis/applications/ports/repositories/avis.repository';
-import { Avis } from 'src/avis/domains/avis';
-import { CreateAvisDto } from '../dto/avis.dto';
+import { AVIS_REPOSITORY } from 'src/catalog/domain/repositories/avis.repository';
+import type { AvisRepository } from 'src/catalog/domain/repositories/avis.repository';
+import { Avis } from 'src/catalog/domain/aggregates/avis';
+import { CreateAvisDto } from './dto/avis.dto';
 import { SkipThrottle } from '@nestjs/throttler';
 
 @SkipThrottle()

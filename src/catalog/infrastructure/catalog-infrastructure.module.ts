@@ -1,15 +1,18 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { PROJECT_SHARE_TOKENIZER } from '../application/ports/project-share-tokenizer.port';
+import { AVIS_REPOSITORY } from '../domain/repositories/avis.repository';
 import { PROJECT_VIEW_REPOSITORY } from '../domain/repositories/project-view.repository';
 import { PROJECT_REPOSITORY } from '../domain/repositories/project.repository';
 import { SORTIE_PROJET_REPOSITORY } from '../domain/repositories/sortie-projet.repository';
 import { SPV_REPOSITORY } from '../domain/repositories/spv.repository';
 import { SORTIE_SETTLEMENT_PORT } from '../application/ports/sortie-settlement.port';
+import { AvisEntity } from './persistence/entities/avis.entity';
 import { ProjectViewEntity } from './persistence/entities/project-view.entity';
 import { ProjectEntity } from './persistence/entities/project.entity';
 import { SortieProjetEntity } from './persistence/entities/sortie-projet.entity';
 import { SpvEntity } from './persistence/entities/spv.entity';
+import { TypeOrmAvisRepository } from './repositories/typeorm-avis.repository';
 import { TypeOrmProjectViewRepository } from './repositories/typeorm-project-view.repository';
 import { TypeOrmProjectRepository } from './repositories/typeorm-project.repository';
 import { TypeOrmSortieProjetRepository } from './repositories/typeorm-sortie-projet.repository';
@@ -33,6 +36,7 @@ import { Sha256ProjectShareTokenizer } from './sharing/sha256-project-share.toke
       SpvEntity,
       SortieProjetEntity,
       ProjectViewEntity,
+      AvisEntity,
     ]),
   ],
   providers: [
@@ -46,6 +50,7 @@ import { Sha256ProjectShareTokenizer } from './sharing/sha256-project-share.toke
       provide: PROJECT_VIEW_REPOSITORY,
       useClass: TypeOrmProjectViewRepository,
     },
+    { provide: AVIS_REPOSITORY, useClass: TypeOrmAvisRepository },
     { provide: PROJECT_SHARE_TOKENIZER, useClass: Sha256ProjectShareTokenizer },
     {
       provide: SORTIE_SETTLEMENT_PORT,
@@ -57,6 +62,7 @@ import { Sha256ProjectShareTokenizer } from './sharing/sha256-project-share.toke
     SPV_REPOSITORY,
     SORTIE_PROJET_REPOSITORY,
     PROJECT_VIEW_REPOSITORY,
+    AVIS_REPOSITORY,
     PROJECT_SHARE_TOKENIZER,
     SORTIE_SETTLEMENT_PORT,
   ],

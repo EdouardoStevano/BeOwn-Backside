@@ -1,7 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { AVIS_REPOSITORY } from 'src/avis/applications/ports/repositories/avis.repository';
-import type { AvisRepository } from 'src/avis/applications/ports/repositories/avis.repository';
-import { Avis } from 'src/avis/domains/avis';
+import { AVIS_REPOSITORY } from 'src/catalog/domain/repositories/avis.repository';
+import type { AvisRepository } from 'src/catalog/domain/repositories/avis.repository';
+import { Avis } from 'src/catalog/domain/aggregates/avis';
 import {
   AvisDejaSoumisError,
   ProjetIntrouvableError,
