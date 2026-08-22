@@ -9,6 +9,18 @@ import { EcheancesCronService } from './application/services/echeances-cron.serv
 import { ProjectScheduleGeneratorService } from './application/services/project-schedule-generator.service';
 import { ServicingErrorFilter } from './presentation/http/filters/servicing-error.filter';
 import { RepaymentScheduleController } from './presentation/http/repayment-schedule.controller';
+import {
+  AdminEcheancesController,
+  AdminEcheancesItemController,
+} from './presentation/http/admin-echeances.controller';
+import { TriggerEcheancePaymentUseCase } from './application/usecases/trigger-echeance-payment.usecase';
+import { GetAggregatedScheduleUseCase } from './application/usecases/get-aggregated-schedule.usecase';
+import { PatchAggregatedEcheanceUseCase } from './application/usecases/patch-aggregated-echeance.usecase';
+import { VerifierEcheanceProjetUseCase } from './application/usecases/verifier-echeance-projet.usecase';
+import { SupprimerNumeroEcheanceUseCase } from './application/usecases/supprimer-numero-echeance.usecase';
+import { CorrigerEcheanceUseCase } from './application/usecases/corriger-echeance.usecase';
+import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
+import { UsersInfrastructureModule } from 'src/iam/infrastructure/users-infrastructure.module';
 import { REPAYMENT_SCHEDULE_REPOSITORY } from './domain/repositories/repayment-schedule.repository';
 import { TypeOrmRepaymentScheduleRepository } from './infrastructure/repositories/typeorm-repayment-schedule.repository';
 import { TITULAIRE_INVESTISSEMENT_PORT } from './application/ports/titulaire-investissement.port';
@@ -89,17 +101,30 @@ import { NotificationsModule } from 'src/notifications/notifications.module';
       ProjectEntity,
       WalletEntity,
       TransactionEntity,
+      // Les écrans d'administration relisent le rôle de l'appelant.
+      UserEntity,
     ]),
     ServicingInfrastructureModule,
     // `TokenService` pour le JwtAuthGuard monté par le contrôleur.
     IamInfrastructureModule,
+    UsersInfrastructureModule,
     NotificationsModule,
   ],
-  controllers: [RepaymentScheduleController],
+  controllers: [
+    RepaymentScheduleController,
+    AdminEcheancesController,
+    AdminEcheancesItemController,
+  ],
   providers: [
     PayEcheanceUseCase,
     EcheancesCronService,
     ProjectScheduleGeneratorService,
+    TriggerEcheancePaymentUseCase,
+    GetAggregatedScheduleUseCase,
+    PatchAggregatedEcheanceUseCase,
+    VerifierEcheanceProjetUseCase,
+    SupprimerNumeroEcheanceUseCase,
+    CorrigerEcheanceUseCase,
     {
       provide: REPAYMENT_SCHEDULE_REPOSITORY,
       useClass: TypeOrmRepaymentScheduleRepository,

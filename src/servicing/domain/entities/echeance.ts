@@ -1,5 +1,11 @@
 import { EcheanceStatus } from '../enums/echeance.enum';
-import { EcheanceNonPayableError } from '../errors';
+import {
+  EcheanceNonPayableError,
+  EcheanceNonVerifiableError,
+  EcheanceRegleeNonModifiableError,
+  EcheanceRegleeNonSupprimableError,
+  VerificationNonAnnulableError,
+} from '../errors';
 import { PrelevementForfaitaire } from '../value-objects/prelevement-forfaitaire.vo';
 
 /** État complet d'une échéance, tel qu'il transite depuis/vers la persistance. */
@@ -66,9 +72,21 @@ export class Echeance {
   private _statutChangeLe: Date | null;
   private _prelevementIR: number;
   private _prelevementCSG: number;
+  private _datePrevue: Date;
+  private _montantCapital: number;
+  private _montantInterets: number;
+  private _montantTotal: number;
   private readonly _entete: Omit<
     EcheanceSnapshot,
-    'statut' | 'payeLe' | 'statutChangeLe' | 'prelevementIR' | 'prelevementCSG'
+    | 'statut'
+    | 'payeLe'
+    | 'statutChangeLe'
+    | 'prelevementIR'
+    | 'prelevementCSG'
+    | 'datePrevue'
+    | 'montantCapital'
+    | 'montantInterets'
+    | 'montantTotal'
   >;
 
   /** @internal Réservé à `EcheancierGenerator` et `EcheanceOrmMapper`. */
@@ -79,6 +97,10 @@ export class Echeance {
       statutChangeLe,
       prelevementIR,
       prelevementCSG,
+      datePrevue,
+      montantCapital,
+      montantInterets,
+      montantTotal,
       ...entete
     } = etat;
     this._statut = statut;
@@ -86,6 +108,10 @@ export class Echeance {
     this._statutChangeLe = statutChangeLe;
     this._prelevementIR = prelevementIR;
     this._prelevementCSG = prelevementCSG;
+    this._datePrevue = datePrevue;
+    this._montantCapital = montantCapital;
+    this._montantInterets = montantInterets;
+    this._montantTotal = montantTotal;
     this._entete = entete;
   }
 
@@ -102,8 +128,8 @@ export class Echeance {
     }
 
     const prelevement = PrelevementForfaitaire.surEcheance(
-      this._entete.montantInterets,
-      this._entete.montantTotal,
+      this._montantInterets,
+      this._montantTotal,
     );
 
     this._statut = EcheanceStatus.PAYE;
@@ -115,10 +141,84 @@ export class Echeance {
     return prelevement;
   }
 
+  /**
+   * **Vérifier** — la finance a contrôlé l'échéance : elle passe de `A_VENIR` à
+   * `EN_ATTENTE_PAIEMENT`, ce qui autorise le CRON quotidien à la régler à sa
+   * date sans nouvelle intervention humaine.
+   *
+   * C'est le geste qui engage l'argent. Il vivait dans un `update` de colonne
+   * au milieu d'un contrôleur d'administration, sans qu'aucun code ne dise
+   * qu'on ne vérifie qu'une échéance encore à venir.
+   */
+  verifier(maintenant: Date = new Date()): void {
+    if (this._statut !== EcheanceStatus.A_VENIR) {
+      throw new EcheanceNonVerifiableError(this._statut);
+    }
+
+    this._statut = EcheanceStatus.EN_ATTENTE_PAIEMENT;
+    this._statutChangeLe = maintenant;
+  }
+
+  /** La finance revient sur sa vérification, tant que le CRON n'a pas payé. */
+  annulerVerification(maintenant: Date = new Date()): void {
+    if (this._statut !== EcheanceStatus.EN_ATTENTE_PAIEMENT) {
+      throw new VerificationNonAnnulableError(this._statut);
+    }
+
+    this._statut = EcheanceStatus.A_VENIR;
+    this._statutChangeLe = maintenant;
+  }
+
+  /**
+   * Corrige la date et les montants d'une échéance à venir.
+   *
+   * **Le total se dérive, il ne se fournit pas** : c'est l'invariant que la
+   * correction manuelle menaçait le plus, et le contrôleur le recalculait à la
+   * main, en trois lignes, seulement quand l'un des deux montants changeait.
+   */
+  corriger(correction: {
+    datePrevue?: Date;
+    montantCapital?: number;
+    montantInterets?: number;
+    statut?: EcheanceStatus;
+  }): void {
+    this.assertNonReglee(new EcheanceRegleeNonModifiableError());
+
+    if (correction.datePrevue) this._datePrevue = correction.datePrevue;
+    if (correction.montantCapital !== undefined) {
+      this._montantCapital = correction.montantCapital;
+    }
+    if (correction.montantInterets !== undefined) {
+      this._montantInterets = correction.montantInterets;
+    }
+    if (correction.statut) this._statut = correction.statut;
+
+    this._montantTotal = this._montantCapital + this._montantInterets;
+  }
+
+  /** Éprouve la suppression sans la jouer : c'est le repository qui efface. */
+  assertSupprimable(): void {
+    this.assertNonReglee(new EcheanceRegleeNonSupprimableError());
+  }
+
+  private assertNonReglee(siReglee: Error): void {
+    if (this.estReglee) throw siReglee;
+  }
+
   // ── Interrogations ────────────────────────────────────────────────────────
 
   get estPayable(): boolean {
     return Echeance.STATUTS_PAYABLES.includes(this._statut);
+  }
+
+  /** Le coupon a été versé : plus rien ne se corrige ni ne s'efface. */
+  get estReglee(): boolean {
+    return this._statut === EcheanceStatus.PAYE;
+  }
+
+  /** L'échéance attend encore sa vérification par la finance. */
+  get estAVenir(): boolean {
+    return this._statut === EcheanceStatus.A_VENIR;
   }
 
   get id(): string {
@@ -134,19 +234,19 @@ export class Echeance {
   }
 
   get datePrevue(): Date {
-    return this._entete.datePrevue;
+    return this._datePrevue;
   }
 
   get montantCapital(): number {
-    return this._entete.montantCapital;
+    return this._montantCapital;
   }
 
   get montantInterets(): number {
-    return this._entete.montantInterets;
+    return this._montantInterets;
   }
 
   get montantTotal(): number {
-    return this._entete.montantTotal;
+    return this._montantTotal;
   }
 
   get prelevementIR(): number {
@@ -181,6 +281,10 @@ export class Echeance {
   snapshot(): EcheanceSnapshot {
     return {
       ...this._entete,
+      datePrevue: this._datePrevue,
+      montantCapital: this._montantCapital,
+      montantInterets: this._montantInterets,
+      montantTotal: this._montantTotal,
       statut: this._statut,
       payeLe: this._payeLe,
       statutChangeLe: this._statutChangeLe,

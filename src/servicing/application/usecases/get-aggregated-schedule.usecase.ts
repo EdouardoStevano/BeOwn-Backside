@@ -99,10 +99,10 @@ export class GetAggregatedScheduleUseCase {
       const statut = anyUnpaid
         ? EcheanceStatus.IMPAYE
         : anyLate
-        ? EcheanceStatus.RETARD
-        : allPaid
-        ? EcheanceStatus.PAYE
-        : EcheanceStatus.A_VENIR;
+          ? EcheanceStatus.RETARD
+          : allPaid
+            ? EcheanceStatus.PAYE
+            : EcheanceStatus.A_VENIR;
 
       return {
         numero: r.numero,

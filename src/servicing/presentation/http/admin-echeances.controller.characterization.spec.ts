@@ -1,8 +1,8 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { AdminEcheancesController } from './admin-echeances.controller';
-import { TriggerEcheancePaymentUseCase } from './usecases/trigger-echeance-payment.usecase';
-import { GetAggregatedScheduleUseCase } from './usecases/get-aggregated-schedule.usecase';
-import { PatchAggregatedEcheanceUseCase } from './usecases/patch-aggregated-echeance.usecase';
+import { TriggerEcheancePaymentUseCase } from '../../application/usecases/trigger-echeance-payment.usecase';
+import { GetAggregatedScheduleUseCase } from '../../application/usecases/get-aggregated-schedule.usecase';
+import { PatchAggregatedEcheanceUseCase } from '../../application/usecases/patch-aggregated-echeance.usecase';
 import { rolesWithPermission } from 'src/iam/domain/policies/role-permissions.policy';
 import { InvestmentStatus } from 'src/subscription/domain/enums/investment-status.enum';
 import { EcheanceStatus } from 'src/servicing/domain/enums/echeance.enum';
@@ -79,19 +79,18 @@ describe('AdminEcheancesController — caractérisation (vague 4)', () => {
       echeanceRepo,
     );
 
+    // Le contrôleur ne tient plus de repository métier : les trois use cases
+    // ajoutés couvrent les routes que les tests ci-dessous ne touchent pas.
     controller = new AdminEcheancesController(
       userRepo,
-      echeanceRepo,
-      investRepo,
-      walletRepo,
-      txRepo,
-      dataSource,
-      notifications,
       payEcheance,
       scheduleGenerator,
       triggerEcheancePayment,
       aggregatedSchedule,
       patchAggregatedEcheance,
+      {} as never,
+      {} as never,
+      {} as never,
     );
   });
 

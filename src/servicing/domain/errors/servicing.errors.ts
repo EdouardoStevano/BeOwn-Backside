@@ -42,6 +42,99 @@ export class EcheanceDejaPayeeError extends ServicingError {
 }
 
 /**
+ * On ne vérifie qu'une échéance encore `A_VENIR`. Vérifier, c'est autoriser le
+ * CRON à régler sans nouvelle intervention humaine : le geste n'a de sens que
+ * sur une échéance qui n'a pas déjà été engagée.
+ */
+export class EcheanceNonVerifiableError extends ServicingError {
+  readonly kind = ServicingErrorKind.CONFLICT;
+
+  constructor(statut: EcheanceStatus) {
+    super(
+      `Échéance au statut "${statut}" : seule une échéance à venir se vérifie.`,
+      {
+        code: 'ECHEANCE_NOT_VERIFIABLE',
+        details: { statut },
+      },
+    );
+  }
+}
+
+/** On n'annule que la vérification d'une échéance encore en attente de paiement. */
+export class VerificationNonAnnulableError extends ServicingError {
+  readonly kind = ServicingErrorKind.CONFLICT;
+
+  constructor(statut: EcheanceStatus) {
+    super(
+      `Échéance au statut "${statut}" : sa vérification ne peut plus être annulée.`,
+      { code: 'VERIFICATION_NOT_CANCELLABLE', details: { statut } },
+    );
+  }
+}
+
+/** Une échéance réglée ne se corrige plus : sa trace fiscale est arrêtée. */
+export class EcheanceRegleeNonModifiableError extends ServicingError {
+  readonly kind = ServicingErrorKind.CONFLICT;
+
+  constructor() {
+    super('Une échéance payée ne peut plus être modifiée.', {
+      code: 'ECHEANCE_ALREADY_PAID',
+    });
+  }
+}
+
+/** Ni ne s'efface. */
+export class EcheanceRegleeNonSupprimableError extends ServicingError {
+  readonly kind = ServicingErrorKind.CONFLICT;
+
+  constructor() {
+    super('Une échéance payée ne peut pas être supprimée.', {
+      code: 'ECHEANCE_ALREADY_PAID',
+    });
+  }
+}
+
+/**
+ * On ne retire un numéro de l'échéancier d'un projet que si aucune de ses
+ * échéances n'a bougé : une seule vérifiée ou payée, et la renumérotation des
+ * suivantes décalerait un calendrier déjà engagé.
+ */
+export class NumeroDEcheanceNonSupprimableError extends ServicingError {
+  readonly kind = ServicingErrorKind.CONFLICT;
+
+  constructor() {
+    super(
+      "Impossible de supprimer ce numéro : au moins une échéance n'est plus A_VENIR.",
+      { code: 'ECHEANCE_NUMERO_NOT_DELETABLE' },
+    );
+  }
+}
+
+/** Le projet visé n'a aucun investissement, donc aucun échéancier. */
+export class AucunInvestissementSurLeProjetError extends ServicingError {
+  readonly kind = ServicingErrorKind.NOT_FOUND;
+
+  constructor(projetId?: string) {
+    super('Aucun investissement sur ce projet', {
+      code: 'NO_INVESTMENT_ON_PROJECT',
+      details: projetId !== undefined ? { projetId } : undefined,
+    });
+  }
+}
+
+/** Aucune échéance ne porte ce numéro sur ce projet. */
+export class NumeroDEcheanceIntrouvableError extends ServicingError {
+  readonly kind = ServicingErrorKind.NOT_FOUND;
+
+  constructor(numero: number) {
+    super(`Aucune échéance #${numero} sur ce projet`, {
+      code: 'ECHEANCE_NUMERO_NOT_FOUND',
+      details: { numero },
+    });
+  }
+}
+
+/**
  * Une durée ou un montant impossible ne peut provenir que d'une donnée
  * corrompue ou d'un défaut de programmation — jamais d'une entrée utilisateur.
  */

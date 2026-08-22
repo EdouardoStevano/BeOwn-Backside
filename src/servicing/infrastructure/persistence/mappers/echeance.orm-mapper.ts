@@ -61,4 +61,29 @@ export class EcheanceOrmMapper {
     entity.id = etat.id;
     return entity;
   }
+
+  /**
+   * Reporte l'état d'une échéance sur la ligne dont elle provient.
+   *
+   * Muter la ligne chargée plutôt que d'en construire une neuve est délibéré :
+   * les appelants la relisent parfois avec ses relations, et `save` doit écrire
+   * *cette* ligne-là. Ne sont reportés que les champs qu'une transition peut
+   * changer — un investissement ni un numéro ne se réattribuent.
+   */
+  static appliquerSur(
+    entity: EcheanceEntity,
+    echeance: Echeance,
+  ): EcheanceEntity {
+    const etat = echeance.snapshot();
+    entity.datePrevue = etat.datePrevue;
+    entity.montantCapital = etat.montantCapital;
+    entity.montantInterets = etat.montantInterets;
+    entity.montantTotal = etat.montantTotal;
+    entity.prelevementIR = etat.prelevementIR;
+    entity.prelevementCSG = etat.prelevementCSG;
+    entity.statut = etat.statut;
+    entity.payeLe = etat.payeLe;
+    entity.statutChangeLe = etat.statutChangeLe;
+    return entity;
+  }
 }

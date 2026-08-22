@@ -14,7 +14,13 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
-import { IsDateString, IsEnum, IsNumber, IsOptional, Min } from 'class-validator';
+import {
+  IsDateString,
+  IsEnum,
+  IsNumber,
+  IsOptional,
+  Min,
+} from 'class-validator';
 import {
   ApiBearerAuth,
   ApiOperation,
@@ -48,9 +54,12 @@ import { NotificationService } from 'src/notifications/applications/notification
 import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
 import { PayEcheanceUseCase } from 'src/servicing/application/usecases/pay-echeance.usecase';
 import { ProjectScheduleGeneratorService } from 'src/servicing/application/services/project-schedule-generator.service';
-import { TriggerEcheancePaymentUseCase } from './usecases/trigger-echeance-payment.usecase';
-import { GetAggregatedScheduleUseCase } from './usecases/get-aggregated-schedule.usecase';
-import { PatchAggregatedEcheanceUseCase } from './usecases/patch-aggregated-echeance.usecase';
+import { TriggerEcheancePaymentUseCase } from '../../application/usecases/trigger-echeance-payment.usecase';
+import { GetAggregatedScheduleUseCase } from '../../application/usecases/get-aggregated-schedule.usecase';
+import { PatchAggregatedEcheanceUseCase } from '../../application/usecases/patch-aggregated-echeance.usecase';
+import { VerifierEcheanceProjetUseCase } from '../../application/usecases/verifier-echeance-projet.usecase';
+import { SupprimerNumeroEcheanceUseCase } from '../../application/usecases/supprimer-numero-echeance.usecase';
+import { CorrigerEcheanceUseCase } from '../../application/usecases/corriger-echeance.usecase';
 
 const ADMIN_ROLES = rolesWithPermission('echeancier:read');
 const PAY_ROLES: string[] = rolesWithPermission('echeancier:pay');
@@ -82,18 +91,16 @@ class InitializeScheduleDto {
 @RequirePermission('echeancier:read')
 export class AdminEcheancesController {
   constructor(
-    @InjectRepository(UserEntity) private readonly userRepo: Repository<UserEntity>,
-    @InjectRepository(EcheanceEntity) private readonly echeanceRepo: Repository<EcheanceEntity>,
-    @InjectRepository(InvestmentEntity) private readonly investRepo: Repository<InvestmentEntity>,
-    @InjectRepository(WalletEntity) private readonly walletRepo: Repository<WalletEntity>,
-    @InjectRepository(TransactionEntity) private readonly txRepo: Repository<TransactionEntity>,
-    private readonly dataSource: DataSource,
-    private readonly notifications: NotificationService,
+    @InjectRepository(UserEntity)
+    private readonly userRepo: Repository<UserEntity>,
     private readonly payEcheance: PayEcheanceUseCase,
     private readonly scheduleGenerator: ProjectScheduleGeneratorService,
     private readonly triggerEcheancePayment: TriggerEcheancePaymentUseCase,
     private readonly aggregatedSchedule: GetAggregatedScheduleUseCase,
     private readonly patchAggregatedEcheance: PatchAggregatedEcheanceUseCase,
+    private readonly verifierEcheance: VerifierEcheanceProjetUseCase,
+    private readonly supprimerNumero: SupprimerNumeroEcheanceUseCase,
+    private readonly corrigerEcheance: CorrigerEcheanceUseCase,
   ) {}
 
   private async assertAdmin(user: ActiveUser): Promise<void> {
@@ -111,11 +118,15 @@ export class AdminEcheancesController {
   }
 
   @ApiOperation({
-    summary: "Déclencher manuellement le paiement d'une échéance pour tous les investisseurs",
+    summary:
+      "Déclencher manuellement le paiement d'une échéance pour tous les investisseurs",
   })
   @ApiParam({ name: 'projectId', description: 'UUID du projet' })
   @ApiParam({ name: 'numero', description: "Numéro de l'échéance (1-based)" })
-  @ApiResponse({ status: 200, description: 'Récap : nb investisseurs payés + montant total' })
+  @ApiResponse({
+    status: 200,
+    description: 'Récap : nb investisseurs payés + montant total',
+  })
   @HttpCode(HttpStatus.OK)
   @RequirePermission('echeancier:pay')
   @Post(':numero/trigger-payment')
@@ -129,7 +140,9 @@ export class AdminEcheancesController {
     return this.triggerEcheancePayment.execute(projectId, numero, admin);
   }
 
-  @ApiOperation({ summary: "Marquer une échéance comme payée (crédite le wallet)" })
+  @ApiOperation({
+    summary: 'Marquer une échéance comme payée (crédite le wallet)',
+  })
   @ApiParam({ name: 'id', description: "UUID de l'échéance" })
   @HttpCode(HttpStatus.OK)
   @RequirePermission('echeancier:pay')
@@ -140,9 +153,10 @@ export class AdminEcheancesController {
   }
 
   @ApiOperation({
-    summary: "Vérifier une échéance (numero) : la marque prête à l'auto-paiement",
+    summary:
+      "Vérifier une échéance (numero) : la marque prête à l'auto-paiement",
     description:
-      "Passe les EcheanceEntity A_VENIR du projet ayant ce numéro à EN_ATTENTE_PAIEMENT. Le CRON quotidien paiera automatiquement ces échéances à leur date.",
+      'Passe les EcheanceEntity A_VENIR du projet ayant ce numéro à EN_ATTENTE_PAIEMENT. Le CRON quotidien paiera automatiquement ces échéances à leur date.',
   })
   @ApiParam({ name: 'projectId', description: 'UUID du projet' })
   @ApiParam({ name: 'numero', description: "Numéro d'échéance (1-based)" })
@@ -155,30 +169,7 @@ export class AdminEcheancesController {
     @CurrentUser() admin: ActiveUser,
   ): Promise<{ verified: number }> {
     await this.assertPay(admin);
-    const investments = await this.investRepo.find({ where: { projetId: projectId } });
-    const investmentIds = investments.map((i) => i.id);
-    if (investmentIds.length === 0) {
-      throw new NotFoundException('Aucun investissement sur ce projet');
-    }
-    const targets = await this.echeanceRepo.find({
-      where: { investissementId: In(investmentIds), numero, statut: EcheanceStatus.A_VENIR },
-    });
-    for (const e of targets) {
-      await this.echeanceRepo.update({ id: e.id }, {
-        statut: EcheanceStatus.EN_ATTENTE_PAIEMENT,
-        statutChangeLe: new Date(),
-      });
-    }
-    this.notifications
-      .pushToAdmins({
-        type: NotificationType.ECHEANCE,
-        titre: `Échéance #${numero} vérifiée`,
-        message: `L'échéance ${numero} est vérifiée : elle sera payée automatiquement à sa date (${targets.length} investisseur(s)).`,
-        roles: [UserRole.SUPER_ADMIN, UserRole.FINANCIER],
-        metadata: { projectId, numero, verified: targets.length, by: admin.userId },
-      })
-      .catch(() => {});
-    return { verified: targets.length };
+    return this.verifierEcheance.verifier(projectId, numero, admin.userId);
   }
 
   @ApiOperation({ summary: "Annuler la vérification d'une échéance (numero)" })
@@ -193,23 +184,11 @@ export class AdminEcheancesController {
     @CurrentUser() admin: ActiveUser,
   ): Promise<{ reverted: number }> {
     await this.assertPay(admin);
-    const investments = await this.investRepo.find({ where: { projetId: projectId } });
-    const investmentIds = investments.map((i) => i.id);
-    if (investmentIds.length === 0) return { reverted: 0 };
-    const targets = await this.echeanceRepo.find({
-      where: { investissementId: In(investmentIds), numero, statut: EcheanceStatus.EN_ATTENTE_PAIEMENT },
-    });
-    for (const e of targets) {
-      await this.echeanceRepo.update({ id: e.id }, {
-        statut: EcheanceStatus.A_VENIR,
-        statutChangeLe: new Date(),
-      });
-    }
-    return { reverted: targets.length };
+    return this.verifierEcheance.annuler(projectId, numero);
   }
 
   @ApiOperation({
-    summary: "Échéancier agrégé du projet (vue admin, une ligne par numéro)",
+    summary: 'Échéancier agrégé du projet (vue admin, une ligne par numéro)',
     description:
       "Retourne l'échéancier emprunteur en agrégeant les EcheanceEntity de tous les investissements par numéro : somme des capitaux/intérêts/totaux, date partagée, statut le plus avancé.",
   })
@@ -239,7 +218,7 @@ export class AdminEcheancesController {
   @ApiOperation({
     summary: 'Modifier une échéance agrégée (date et/ou montants totaux)',
     description:
-      "Met à jour les EcheanceEntity du projet ayant ce numéro (A_VENIR uniquement). Si un montant total est fourni (capital, intérêts ou total), il est réparti au prorata des fractions détenues entre les investisseurs.",
+      'Met à jour les EcheanceEntity du projet ayant ce numéro (A_VENIR uniquement). Si un montant total est fourni (capital, intérêts ou total), il est réparti au prorata des fractions détenues entre les investisseurs.',
   })
   @ApiParam({ name: 'projectId', description: 'UUID du projet' })
   @ApiParam({ name: 'numero', description: "Numéro d'échéance (1-based)" })
@@ -255,9 +234,9 @@ export class AdminEcheancesController {
   }
 
   @ApiOperation({
-    summary: 'Supprimer toutes les échéances d\'un numéro pour ce projet',
+    summary: "Supprimer toutes les échéances d'un numéro pour ce projet",
     description:
-      "Supprime les EcheanceEntity du projet ayant ce numéro (uniquement si toutes A_VENIR). Renumérote les suivantes pour combler le trou.",
+      'Supprime les EcheanceEntity du projet ayant ce numéro (uniquement si toutes A_VENIR). Renumérote les suivantes pour combler le trou.',
   })
   @ApiParam({ name: 'projectId', description: 'UUID du projet' })
   @ApiParam({ name: 'numero', description: "Numéro d'échéance (1-based)" })
@@ -269,49 +248,14 @@ export class AdminEcheancesController {
     @CurrentUser() admin: ActiveUser,
   ): Promise<{ deleted: number; renumbered: number }> {
     await this.assertAdmin(admin);
-    const investments = await this.investRepo.find({
-      where: { projetId: projectId },
-    });
-    if (investments.length === 0) {
-      throw new NotFoundException('Aucun investissement sur ce projet');
-    }
-    const investmentIds = investments.map((i) => i.id);
-
-    const targets = await this.echeanceRepo.find({
-      where: { investissementId: In(investmentIds), numero },
-    });
-    if (targets.length === 0) {
-      throw new NotFoundException(`Aucune échéance #${numero} sur ce projet`);
-    }
-    const blocked = targets.find((e) => e.statut !== EcheanceStatus.A_VENIR);
-    if (blocked) {
-      throw new BadRequestException(
-        "Impossible de supprimer ce numéro : au moins une échéance n'est plus A_VENIR.",
-      );
-    }
-
-    const del = await this.echeanceRepo.delete({
-      id: In(targets.map((e) => e.id)),
-    });
-
-    const later = await this.echeanceRepo
-      .createQueryBuilder()
-      .update(EcheanceEntity)
-      .set({ numero: () => '"numero" - 1' })
-      .where('"investissementId" IN (:...ids)', { ids: investmentIds })
-      .andWhere('"numero" > :n', { n: numero })
-      .execute();
-
-    return {
-      deleted: del.affected ?? 0,
-      renumbered: later.affected ?? 0,
-    };
+    return this.supprimerNumero.execute(projectId, numero);
   }
 
   @ApiOperation({
-    summary: "Créer l'échéancier emprunteur (admin) à partir d'une date de début",
+    summary:
+      "Créer l'échéancier emprunteur (admin) à partir d'une date de début",
     description:
-      "Crée les EcheanceEntity pour tous les investissements actifs du projet : N lignes mensuelles (= dureeMois) ancrées sur dateDebut, montants pré-calculés au prorata des fractions détenues. In-fine : intérêts mensuels constants, capital à la dernière échéance. Refusé si un échéancier existe déjà.",
+      'Crée les EcheanceEntity pour tous les investissements actifs du projet : N lignes mensuelles (= dureeMois) ancrées sur dateDebut, montants pré-calculés au prorata des fractions détenues. In-fine : intérêts mensuels constants, capital à la dernière échéance. Refusé si un échéancier existe déjà.',
   })
   @ApiParam({ name: 'projectId', description: 'UUID du projet' })
   @HttpCode(HttpStatus.OK)
@@ -338,14 +282,21 @@ export class AdminEcheancesController {
       "Supprime les échéances A_VENIR et les recalcule à partir d'une nouvelle date. Préserve les échéances payées/retard.",
   })
   @ApiParam({ name: 'projectId', description: 'UUID du projet' })
-  @ApiResponse({ status: 200, description: "Résumé : nb investissements + nb générées + nb supprimées" })
+  @ApiResponse({
+    status: 200,
+    description: 'Résumé : nb investissements + nb générées + nb supprimées',
+  })
   @HttpCode(HttpStatus.OK)
   @Post('recompute')
   async recompute(
     @Param('projectId') projectId: string,
     @Body() dto: InitializeScheduleDto,
     @CurrentUser() admin: ActiveUser,
-  ): Promise<{ investmentsProcessed: number; echeancesGenerated: number; echeancesDeleted: number }> {
+  ): Promise<{
+    investmentsProcessed: number;
+    echeancesGenerated: number;
+    echeancesDeleted: number;
+  }> {
     await this.assertAdmin(admin);
     return this.scheduleGenerator.regenerateForProject(
       projectId,
@@ -361,8 +312,9 @@ export class AdminEcheancesController {
 @RequirePermission('echeancier:read')
 export class AdminEcheancesItemController {
   constructor(
-    @InjectRepository(UserEntity) private readonly userRepo: Repository<UserEntity>,
-    @InjectRepository(EcheanceEntity) private readonly echeanceRepo: Repository<EcheanceEntity>,
+    @InjectRepository(UserEntity)
+    private readonly userRepo: Repository<UserEntity>,
+    private readonly corrigerEcheance: CorrigerEcheanceUseCase,
   ) {}
 
   private async assertAdmin(user: ActiveUser): Promise<void> {
@@ -379,7 +331,7 @@ export class AdminEcheancesItemController {
     }
   }
 
-  @ApiOperation({ summary: "Mettre à jour une échéance" })
+  @ApiOperation({ summary: 'Mettre à jour une échéance' })
   @ApiParam({ name: 'id', description: "UUID de l'échéance" })
   @RequirePermission('echeancier:pay')
   @Patch(':id')
@@ -389,36 +341,18 @@ export class AdminEcheancesItemController {
     @CurrentUser() user: ActiveUser,
   ): Promise<EcheanceEntity> {
     await this.assertPay(user);
-    const ech = await this.echeanceRepo.findOne({ where: { id } });
-    if (!ech) throw new NotFoundException('Échéance introuvable.');
-    if (ech.statut === EcheanceStatus.PAYE) {
-      throw new BadRequestException("Une échéance payée ne peut plus être modifiée.");
-    }
-    const patch: Partial<EcheanceEntity> = {};
-    if (dto.datePrevue) patch.datePrevue = new Date(dto.datePrevue);
-    if (dto.montantCapital !== undefined) patch.montantCapital = dto.montantCapital;
-    if (dto.montantInterets !== undefined) patch.montantInterets = dto.montantInterets;
-    if (dto.statut) patch.statut = dto.statut;
-    if (patch.montantCapital !== undefined || patch.montantInterets !== undefined) {
-      const cap = patch.montantCapital ?? Number(ech.montantCapital);
-      const int = patch.montantInterets ?? Number(ech.montantInterets);
-      patch.montantTotal = Number(cap) + Number(int);
-    }
-    await this.echeanceRepo.update({ id }, patch);
-    return this.echeanceRepo.findOneOrFail({ where: { id } });
+    return this.corrigerEcheance.corriger(id, dto);
   }
 
-  @ApiOperation({ summary: "Supprimer une échéance (uniquement si non payée)" })
+  @ApiOperation({ summary: 'Supprimer une échéance (uniquement si non payée)' })
   @ApiParam({ name: 'id', description: "UUID de l'échéance" })
   @HttpCode(HttpStatus.NO_CONTENT)
   @Delete(':id')
-  async remove(@Param('id') id: string, @CurrentUser() user: ActiveUser): Promise<void> {
+  async remove(
+    @Param('id') id: string,
+    @CurrentUser() user: ActiveUser,
+  ): Promise<void> {
     await this.assertAdmin(user);
-    const ech = await this.echeanceRepo.findOne({ where: { id } });
-    if (!ech) throw new NotFoundException('Échéance introuvable.');
-    if (ech.statut === EcheanceStatus.PAYE) {
-      throw new BadRequestException("Une échéance payée ne peut pas être supprimée.");
-    }
-    await this.echeanceRepo.delete({ id });
+    await this.corrigerEcheance.supprimer(id);
   }
 }

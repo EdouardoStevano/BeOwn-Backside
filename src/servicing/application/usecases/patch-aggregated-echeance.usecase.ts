@@ -53,12 +53,14 @@ export class PatchAggregatedEcheanceUseCase {
     const editable = targets.filter((e) => e.statut === EcheanceStatus.A_VENIR);
     if (editable.length === 0) {
       throw new BadRequestException(
-        "Aucune échéance modifiable pour ce numéro (toutes sont payées ou en retard).",
+        'Aucune échéance modifiable pour ce numéro (toutes sont payées ou en retard).',
       );
     }
 
     const editableInvestIds = new Set(editable.map((e) => e.investissementId));
-    const editableInvests = investments.filter((i) => editableInvestIds.has(i.id));
+    const editableInvests = investments.filter((i) =>
+      editableInvestIds.has(i.id),
+    );
     const totalFractions = editableInvests.reduce(
       (s, i) => s + Number(i.nbTitres),
       0,

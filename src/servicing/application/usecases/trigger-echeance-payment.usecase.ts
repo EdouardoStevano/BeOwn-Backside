@@ -56,7 +56,9 @@ export class TriggerEcheancePaymentUseCase {
       where: { projetId: projectId, statut: InvestmentStatus.CONFIRME },
     });
     if (investments.length === 0) {
-      throw new NotFoundException('Aucun investissement confirmé sur ce projet');
+      throw new NotFoundException(
+        'Aucun investissement confirmé sur ce projet',
+      );
     }
 
     const investmentIds = investments.map((i) => i.id);
@@ -66,7 +68,9 @@ export class TriggerEcheancePaymentUseCase {
       where: { investissementId: In(investmentIds), numero },
     });
     if (echeances.length === 0) {
-      throw new NotFoundException(`Aucune échéance #${numero} trouvée pour ce projet`);
+      throw new NotFoundException(
+        `Aucune échéance #${numero} trouvée pour ce projet`,
+      );
     }
 
     const investmentByid = new Map(investments.map((i) => [i.id, i]));
@@ -96,28 +100,37 @@ export class TriggerEcheancePaymentUseCase {
       try {
         await this.dataSource.transaction(async (em) => {
           const wallet = await em.findOne(WalletEntity, {
-            where: { proprietaireUserId: invest.utilisateurId, type: WalletType.INVESTISSEUR },
+            where: {
+              proprietaireUserId: invest.utilisateurId,
+              type: WalletType.INVESTISSEUR,
+            },
           });
-          if (!wallet) throw new Error(`Wallet introuvable pour user ${invest.utilisateurId}`);
+          if (!wallet)
+            throw new Error(
+              `Wallet introuvable pour user ${invest.utilisateurId}`,
+            );
 
           wallet.solde = Number(wallet.solde) + montant;
           await em.save(WalletEntity, wallet);
 
-          await em.save(TransactionEntity, em.create(TransactionEntity, {
-            walletId: wallet.id,
-            walletSource: null,
-            walletDestination: wallet.id,
-            type: TransactionType.REMBOURSEMENT_CAPITAL,
-            montant,
-            devise: wallet.devise,
-            statut: TransactionStatus.REUSSI,
-            fournisseur: TransactionFournisseur.INTERNE,
-            investissementId: invest.id,
-            projetId: projectId,
-            idempotencyKey: `echeance-pay:${ech.id}`,
-            fraisPsp: 0,
-            fraisPlateforme: 0,
-          }));
+          await em.save(
+            TransactionEntity,
+            em.create(TransactionEntity, {
+              walletId: wallet.id,
+              walletSource: null,
+              walletDestination: wallet.id,
+              type: TransactionType.REMBOURSEMENT_CAPITAL,
+              montant,
+              devise: wallet.devise,
+              statut: TransactionStatus.REUSSI,
+              fournisseur: TransactionFournisseur.INTERNE,
+              investissementId: invest.id,
+              projetId: projectId,
+              idempotencyKey: `echeance-pay:${ech.id}`,
+              fraisPsp: 0,
+              fraisPlateforme: 0,
+            }),
+          );
 
           ech.statut = EcheanceStatus.PAYE;
           ech.payeLe = new Date();
@@ -133,7 +146,12 @@ export class TriggerEcheancePaymentUseCase {
             type: NotificationType.ECHEANCE,
             titre: `Échéance #${numero} reçue`,
             message: `Vous avez reçu ${formatEur(montant)} sur votre wallet (échéance ${numero} du projet).`,
-            metadata: { investissementId: invest.id, echeanceId: ech.id, montant, numero },
+            metadata: {
+              investissementId: invest.id,
+              echeanceId: ech.id,
+              montant,
+              numero,
+            },
           })
           .catch(() => {});
       } catch {
@@ -147,7 +165,13 @@ export class TriggerEcheancePaymentUseCase {
         titre: `Échéance #${numero} déclenchée`,
         message: `Admin a déclenché l'échéance ${numero} : ${paidCount} investisseur(s) crédité(s) pour ${formatEur(totalAmount)}.`,
         roles: [UserRole.SUPER_ADMIN, UserRole.FINANCIER, UserRole.COMPLIANCE],
-        metadata: { projectId, numero, paidCount, totalAmount, triggeredBy: admin.userId },
+        metadata: {
+          projectId,
+          numero,
+          paidCount,
+          totalAmount,
+          triggeredBy: admin.userId,
+        },
       })
       .catch(() => {});
 
