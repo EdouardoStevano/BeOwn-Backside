@@ -90,6 +90,14 @@ import { ComplianceErrorFilter } from '../presentation/http/filters/compliance-e
     // Monté par Investments, Reservations, SecondaryMarket et Payments sur les
     // routes qui exigent un dossier validé.
     KycValidatedGuard,
+    // Avec son port. Un garde référencé par `@UseGuards(KycValidatedGuard)` est
+    // instancié par Nest dans le module du **contrôleur**, pas dans celui qui le
+    // déclare : `INVESTOR_COMPLIANCE_PROFILE_REPOSITORY` doit donc être visible
+    // depuis les quatre contextes consommateurs. Sans ce réexport, chacun devrait
+    // importer lui-même l'infrastructure de `compliance` pour poser le garde —
+    // exactement la connaissance de la table d'un autre contexte que le garde a
+    // été refait pour supprimer (§13).
+    ComplianceInfrastructureModule,
     // Par réexport : le port du dossier, pour les contextes qui composent avec
     // (Profiles, Account Overview).
     KycInfrastructureModule,
