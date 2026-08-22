@@ -7,9 +7,8 @@ import {
   Param,
   HttpCode,
   HttpStatus,
-  BadRequestException,
-  NotFoundException,
   ForbiddenException,
+  NotFoundException,
   UseGuards,
 } from '@nestjs/common';
 import {
@@ -20,39 +19,39 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource } from 'typeorm';
+import { Repository } from 'typeorm';
 import { SkipThrottle } from '@nestjs/throttler';
 import { OrdreMarcheEntity } from 'src/secondary-market/infrastructure/persistence/entities/ordre-marche.entity';
 import { InvestmentEntity } from 'src/subscription/infrastructure/persistence/entities/investment.entity';
 import { ProjectEntity } from 'src/catalog/infrastructure/persistence/entities/project.entity';
 import { CreateOrdreMarcheDto, ExecuteOrderDto } from '../dto/ordre-marche.dto';
-import {
-  OrdreMarcheStatus,
-  OrdreMarcheSens,
-} from 'src/secondary-market/domain/enums/ordre-marche.enum';
-import { InvestmentStatus } from 'src/subscription/domain/enums/investment-status.enum';
+import { OrdreMarcheStatus } from 'src/secondary-market/domain/enums/ordre-marche.enum';
 import { CurrentUser } from 'src/iam/presentation/decorators/current-user.decorator';
 import type { ActiveUser } from 'src/iam/presentation/decorators/current-user.decorator';
 import { JwtAuthGuard } from 'src/iam/presentation/guards/jwt-auth.guard';
 import { KycValidatedGuard } from 'src/compliance/presentation/guards/kyc-validated.guard';
 import { Public } from 'src/iam/presentation/decorators/public.decorator';
-import { NotificationService } from 'src/notifications/applications/notification.service';
-import { NotificationEventService } from 'src/notifications/applications/notification-event.service';
-import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
+import { PasserOrdreDeVenteUseCase } from 'src/secondary-market/application/usecases/passer-ordre-de-vente.usecase';
+import { ExecuterOrdreUseCase } from 'src/secondary-market/application/usecases/executer-ordre.usecase';
+import { AnnulerOrdreUseCase } from 'src/secondary-market/application/usecases/annuler-ordre.usecase';
 import { InitiateBuyUseCase } from 'src/secondary-market/application/usecases/initiate-buy.usecase';
 import { CancelInitiationUseCase } from 'src/secondary-market/application/usecases/cancel-initiation.usecase';
 import { SignatureEntity } from 'src/signatures/infrastructure/persistences/entities/signature.entity';
-import { SignatureStatus } from 'src/signatures/domains/enums/signature-status.enum';
-import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
-import { WalletEntity } from 'src/treasury/infrastructure/persistence/entities/wallet.entity';
-import { TransactionEntity } from 'src/treasury/infrastructure/persistence/entities/transaction.entity';
-import {
-  TransactionFournisseur,
-  TransactionStatus,
-  TransactionType,
-  WalletType,
-} from 'src/treasury/domain/enums/wallet.enum';
 
+/**
+ * Adaptateur d'entrée HTTP du contexte — et rien de plus.
+ *
+ * Il portait 478 lignes : la propriété des fractions, l'anti-survente du
+ * carnet, les bornes de quantité, le règlement financier, le transfert de
+ * titres et les notifications, dans deux transactions écrites à même le
+ * contrôleur. Toutes ces décisions sont revenues au domaine et à ses use
+ * cases (§14) ; ce qui reste ici est ce qu'un contrôleur doit faire : router,
+ * porter le RBAC, et servir les lectures.
+ *
+ * Les lectures du carnet restent des requêtes directes : ce sont des read
+ * models (§11), avec leurs jointures pour le front, pas des agrégats à
+ * reconstruire.
+ */
 @SkipThrottle()
 @ApiTags('Marché Secondaire')
 @ApiBearerAuth()
@@ -61,19 +60,13 @@ export class SecondaryMarketController {
   constructor(
     @InjectRepository(OrdreMarcheEntity)
     private readonly ordreRepo: Repository<OrdreMarcheEntity>,
-    @InjectRepository(InvestmentEntity)
-    private readonly investRepo: Repository<InvestmentEntity>,
-    @InjectRepository(ProjectEntity)
-    private readonly projectRepo: Repository<ProjectEntity>,
-    @InjectRepository(UserEntity)
-    private readonly userRepo: Repository<UserEntity>,
-    private readonly dataSource: DataSource,
-    private readonly notificationService: NotificationService,
-    private readonly notificationEvents: NotificationEventService,
-    private readonly initiateBuyUseCase: InitiateBuyUseCase,
-    private readonly cancelInitiationUseCase: CancelInitiationUseCase,
     @InjectRepository(SignatureEntity)
     private readonly signatureRepo: Repository<SignatureEntity>,
+    private readonly passerOrdreDeVente: PasserOrdreDeVenteUseCase,
+    private readonly executerOrdre: ExecuterOrdreUseCase,
+    private readonly annulerOrdre: AnnulerOrdreUseCase,
+    private readonly initiateBuyUseCase: InitiateBuyUseCase,
+    private readonly cancelInitiationUseCase: CancelInitiationUseCase,
   ) {}
 
   @Public()
@@ -87,7 +80,9 @@ export class SecondaryMarketController {
   }
 
   @UseGuards(JwtAuthGuard)
-  @ApiOperation({ summary: "Mes annonces de vente (ordres du vendeur connecté)" })
+  @ApiOperation({
+    summary: 'Mes annonces de vente (ordres du vendeur connecté)',
+  })
   @Get('orders/mine')
   async myOrders(@CurrentUser() user: ActiveUser) {
     return this.ordresWithRelations()
@@ -121,70 +116,16 @@ export class SecondaryMarketController {
     @Body() dto: CreateOrdreMarcheDto,
     @CurrentUser() user: ActiveUser,
   ) {
-    // Phase 10 — Pessimistic lock sur l'investissement vendeur pour empêcher
-    // les race conditions : si deux requêtes concurrentes tentent de créer
-    // des ordres sur le même investissement, SELECT FOR UPDATE garantit
-    // la sérialisation des lectures de fractions disponibles. Sans lock,
-    // les deux validations pouvaient passer et créer un overselling.
-    const saved = await this.dataSource.transaction(async (em) => {
-      const investment = await em
-        .createQueryBuilder(InvestmentEntity, 'inv')
-        .setLock('pessimistic_write')
-        .where('inv.id = :id', { id: dto.investissementId })
-        .getOne();
-      if (!investment) throw new NotFoundException('Investissement introuvable');
-      if (investment.utilisateurId !== user.userId) {
-        throw new ForbiddenException("Cet investissement ne vous appartient pas");
-      }
-
-      // Compter les fractions déjà en carnet — la lecture est sérialisée par
-      // le lock acquis ci-dessus sur l'investment row.
-      const activeOrders = await em.find(OrdreMarcheEntity, {
-        where: {
-          investissementId: dto.investissementId,
-          statut: OrdreMarcheStatus.EN_CARNET,
-        },
-      });
-      const alreadyListed = activeOrders.reduce(
-        (sum, o) => sum + Number(o.nbFractions),
-        0,
-      );
-      const available = Number(investment.nbTitres ?? 0) - alreadyListed;
-
-      if (dto.nbFractions > available) {
-        throw new BadRequestException(
-          `Seulement ${available} fraction(s) disponible(s) pour la vente (${alreadyListed} déjà en carnet)`,
-        );
-      }
-
-      const montant = dto.nbFractions * dto.prixUnitaire;
-      const ordre = em.create(OrdreMarcheEntity, {
+    return this.passerOrdreDeVente.execute(
+      {
         investissementId: dto.investissementId,
-        vendeurId: user.userId,
-        sens: OrdreMarcheSens.VENTE,
+        sens: dto.sens,
         nbFractions: dto.nbFractions,
         prixUnitaire: dto.prixUnitaire,
-        montant,
-        statut: OrdreMarcheStatus.EN_CARNET,
-        valideJusquAu: dto.valideJusquAu ? new Date(dto.valideJusquAu) : null,
-      });
-      return em.save(OrdreMarcheEntity, ordre);
-    });
-
-    const investment = await this.investRepo.findOne({
-      where: { id: dto.investissementId },
-    });
-    const [project, vendeur] = await Promise.all([
-      investment
-        ? this.projectRepo.findOne({ where: { id: investment.projetId } })
-        : null,
-      this.userRepo.findOne({ where: { userId: user.userId } }),
-    ]);
-    if (project && vendeur) {
-      this.notificationEvents.secondaryOrderCreated(saved, project, vendeur);
-    }
-
-    return saved;
+        valideJusquAu: dto.valideJusquAu,
+      },
+      user.userId,
+    );
   }
 
   @UseGuards(JwtAuthGuard, KycValidatedGuard)
@@ -198,197 +139,7 @@ export class SecondaryMarketController {
     @Body() dto: ExecuteOrderDto,
     @CurrentUser() user: ActiveUser,
   ) {
-    const ordre = await this.ordreRepo.findOne({
-      where: { id },
-      relations: ['investissement', 'investissement.projet'],
-    });
-
-    if (!ordre) throw new NotFoundException('Ordre introuvable');
-    if (ordre.statut !== OrdreMarcheStatus.EN_CARNET) {
-      throw new BadRequestException('Ordre non disponible');
-    }
-    if (ordre.vendeurId === user.userId) {
-      throw new ForbiddenException('Vous ne pouvez pas acheter votre propre ordre');
-    }
-
-    const qtyToBuy = dto.nbFractions ?? ordre.nbFractions;
-
-    if (qtyToBuy < 1 || qtyToBuy > ordre.nbFractions) {
-      throw new BadRequestException(
-        `Quantité invalide : doit être entre 1 et ${ordre.nbFractions}`,
-      );
-    }
-
-    const investOriginal = ordre.investissement;
-    if (!investOriginal) throw new NotFoundException('Investissement source introuvable');
-
-    const vendeurId = ordre.vendeurId;
-    const totalCost = qtyToBuy * Number(ordre.prixUnitaire);
-
-    const result = await this.dataSource.transaction(async (em) => {
-      // ── Verrou + re-validation de l'ordre (anti survente concurrente) ────────
-      // On recharge l'ordre SOUS VERROU dans la transaction : deux achats
-      // concurrents (total/partiel) sur le même ordre sont ainsi sérialisés,
-      // impossible de survendre au-delà des fractions restantes.
-      const lockedOrdre = await em.findOne(OrdreMarcheEntity, {
-        where: { id },
-        lock: { mode: 'pessimistic_write' },
-      });
-      if (!lockedOrdre || lockedOrdre.statut !== OrdreMarcheStatus.EN_CARNET) {
-        throw new BadRequestException('Ordre non disponible');
-      }
-      if (qtyToBuy > lockedOrdre.nbFractions) {
-        throw new BadRequestException(
-          `Quantité invalide : doit être entre 1 et ${lockedOrdre.nbFractions}`,
-        );
-      }
-
-      // ── Règlement financier ATOMIQUE (correctif C-1) ─────────────────────────
-      // Avant tout transfert de fractions : débit du wallet acheteur (garde de
-      // solde conditionnelle) + crédit du wallet vendeur, dans la même
-      // transaction. Sans ce règlement, `execute` transférait des titres
-      // GRATUITEMENT (acheteur non débité, vendeur non payé).
-      const buyerWallet = await em.findOne(WalletEntity, {
-        where: { proprietaireUserId: user.userId, type: WalletType.INVESTISSEUR },
-        lock: { mode: 'pessimistic_write' },
-      });
-      if (!buyerWallet) {
-        throw new BadRequestException(
-          "Wallet introuvable. Alimentez votre compte avant d'acheter.",
-        );
-      }
-      if (Number(buyerWallet.solde) < totalCost) {
-        throw new BadRequestException('Solde insuffisant pour cet achat.');
-      }
-      // Débit conditionnel (anti double-débit / solde négatif).
-      const debit = await em
-        .createQueryBuilder()
-        .update(WalletEntity)
-        .set({ solde: () => 'solde - :cost' })
-        .setParameter('cost', totalCost)
-        .where('id = :id AND solde >= :cost', { id: buyerWallet.id, cost: totalCost })
-        .execute();
-      if (!debit.affected) {
-        throw new BadRequestException('Solde insuffisant pour cet achat.');
-      }
-
-      // Crédit du vendeur (wallet créé au besoin).
-      let sellerWallet = await em.findOne(WalletEntity, {
-        where: { proprietaireUserId: vendeurId, type: WalletType.INVESTISSEUR },
-      });
-      if (!sellerWallet) {
-        sellerWallet = await em.save(
-          em.create(WalletEntity, {
-            type: WalletType.INVESTISSEUR,
-            proprietaireUserId: vendeurId,
-            fournisseurRef: `INV-${vendeurId}-auto`,
-            devise: buyerWallet.devise,
-            solde: 0,
-          }),
-        );
-      }
-      await em
-        .createQueryBuilder()
-        .update(WalletEntity)
-        .set({ solde: () => 'solde + :cost' })
-        .setParameter('cost', totalCost)
-        .where('id = :id', { id: sellerWallet.id })
-        .execute();
-
-      // Traces ledger acheteur (débit) + vendeur (crédit).
-      await em.save(TransactionEntity, em.create(TransactionEntity, {
-        walletSource: buyerWallet.id,
-        type: TransactionType.SOUSCRIPTION,
-        montant: totalCost,
-        devise: buyerWallet.devise,
-        statut: TransactionStatus.REUSSI,
-        fournisseur: TransactionFournisseur.INTERNE,
-        projetId: investOriginal.projetId,
-        metadata: { kind: 'achat_marche_secondaire', ordreId: id, vendeurId, nbFractions: qtyToBuy },
-      }));
-      await em.save(TransactionEntity, em.create(TransactionEntity, {
-        walletDestination: sellerWallet.id,
-        type: TransactionType.INTERNE,
-        montant: totalCost,
-        devise: sellerWallet.devise,
-        statut: TransactionStatus.REUSSI,
-        fournisseur: TransactionFournisseur.INTERNE,
-        projetId: investOriginal.projetId,
-        metadata: { kind: 'vente_marche_secondaire', ordreId: id, acheteurId: user.userId, nbFractions: qtyToBuy },
-      }));
-
-      // 1. Merge with existing buyer investment in same project, or create new
-      const buyerExisting = await em.findOne(InvestmentEntity, {
-        where: {
-          utilisateurId: user.userId,
-          projetId: investOriginal.projetId,
-          statut: InvestmentStatus.CONFIRME,
-        },
-      });
-
-      let buyerInvestId: string;
-      if (buyerExisting) {
-        buyerExisting.nbTitres = (buyerExisting.nbTitres ?? 0) + qtyToBuy;
-        buyerExisting.montant = Number(buyerExisting.montant) + qtyToBuy * Number(ordre.prixUnitaire);
-        await em.save(InvestmentEntity, buyerExisting);
-        buyerInvestId = buyerExisting.id;
-      } else {
-        const newInvest = em.create(InvestmentEntity, {
-          projetId: investOriginal.projetId,
-          utilisateurId: user.userId,
-          montant: qtyToBuy * Number(ordre.prixUnitaire),
-          instrument: investOriginal.instrument,
-          nbTitres: qtyToBuy,
-          valeurTitre: Number(ordre.prixUnitaire),
-          statut: InvestmentStatus.CONFIRME,
-        });
-        await em.save(InvestmentEntity, newInvest);
-        buyerInvestId = newInvest.id;
-      }
-
-      // 2. Reduce seller's investment fractions
-      const sellerInvest = await em.findOne(InvestmentEntity, { where: { id: ordre.investissementId } });
-      if (sellerInvest && sellerInvest.nbTitres != null) {
-        const remaining = Number(sellerInvest.nbTitres) - qtyToBuy;
-        sellerInvest.nbTitres = Math.max(0, remaining);
-        sellerInvest.montant = remaining > 0
-          ? Number(sellerInvest.montant) - qtyToBuy * Number(sellerInvest.valeurTitre ?? ordre.prixUnitaire)
-          : 0;
-        await em.save(InvestmentEntity, sellerInvest);
-      }
-
-      // 3. Update order status (sur l'ordre VERROUILLÉ).
-      if (qtyToBuy === lockedOrdre.nbFractions) {
-        lockedOrdre.acheteurId = user.userId;
-        lockedOrdre.statut = OrdreMarcheStatus.EXECUTE;
-      } else {
-        lockedOrdre.nbFractions = lockedOrdre.nbFractions - qtyToBuy;
-        lockedOrdre.montant = lockedOrdre.nbFractions * Number(lockedOrdre.prixUnitaire);
-      }
-      await em.save(OrdreMarcheEntity, lockedOrdre);
-
-      return {
-        success: true,
-        investissementId: buyerInvestId,
-        fractionsAchetees: qtyToBuy,
-        restantDansOrdre:
-          lockedOrdre.statut === OrdreMarcheStatus.EXECUTE ? 0 : lockedOrdre.nbFractions,
-        fusionnee: !!buyerExisting,
-      };
-    });
-
-    const [project, buyerUser, sellerUser] = await Promise.all([
-      this.projectRepo.findOne({ where: { id: investOriginal.projetId } }),
-      this.userRepo.findOne({ where: { userId: user.userId } }),
-      this.userRepo.findOne({ where: { userId: vendeurId } }),
-    ]);
-    if (project && buyerUser && sellerUser) {
-      await this.notificationEvents.secondaryTradeExecuted(
-        ordre, project, buyerUser, sellerUser, qtyToBuy,
-      );
-    }
-
-    return result;
+    return this.executerOrdre.execute(id, user.userId, dto.nbFractions);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -397,16 +148,7 @@ export class SecondaryMarketController {
   @HttpCode(HttpStatus.OK)
   @Delete('orders/:id/cancel')
   async cancelOrder(@Param('id') id: string, @CurrentUser() user: ActiveUser) {
-    const ordre = await this.ordreRepo.findOne({ where: { id } });
-    if (!ordre) throw new NotFoundException('Ordre introuvable');
-    if (ordre.vendeurId !== user.userId) {
-      throw new ForbiddenException('Non autorisé');
-    }
-    if (ordre.statut !== OrdreMarcheStatus.EN_CARNET) {
-      throw new BadRequestException("Cet ordre ne peut plus être annulé");
-    }
-    ordre.statut = OrdreMarcheStatus.ANNULE;
-    return this.ordreRepo.save(ordre);
+    return this.annulerOrdre.execute(id, user.userId);
   }
 
   @UseGuards(JwtAuthGuard, KycValidatedGuard)
@@ -420,11 +162,15 @@ export class SecondaryMarketController {
     @Body() dto: ExecuteOrderDto,
     @CurrentUser() user: ActiveUser,
   ) {
-    return this.initiateBuyUseCase.execute(id, user.userId, dto.nbFractions ?? 1);
+    return this.initiateBuyUseCase.execute(
+      id,
+      user.userId,
+      dto.nbFractions ?? 1,
+    );
   }
 
   @UseGuards(JwtAuthGuard)
-  @ApiOperation({ summary: 'Annuler une initiation d\'achat (avant signature)' })
+  @ApiOperation({ summary: "Annuler une initiation d'achat (avant signature)" })
   @HttpCode(HttpStatus.NO_CONTENT)
   @Post('signatures/:signatureId/cancel')
   async cancelInitiation(
@@ -450,7 +196,7 @@ export class SecondaryMarketController {
 
   @UseGuards(JwtAuthGuard)
   @ApiOperation({
-    summary: 'Statut d\'une signature (polling fallback pour le client web)',
+    summary: "Statut d'une signature (polling fallback pour le client web)",
   })
   @ApiParam({ name: 'signatureId', description: 'UUID de la signature' })
   @Get('signatures/:signatureId/status')
@@ -460,7 +206,15 @@ export class SecondaryMarketController {
   ) {
     const signature = await this.signatureRepo.findOne({
       where: { id: signatureId },
-      select: ['id', 'statut', 'userId', 'signedAt', 'expiresAt', 'investmentId', 'ordreId'],
+      select: [
+        'id',
+        'statut',
+        'userId',
+        'signedAt',
+        'expiresAt',
+        'investmentId',
+        'ordreId',
+      ],
     });
     if (!signature) throw new NotFoundException('Signature introuvable');
     if (signature.userId !== user.userId) {

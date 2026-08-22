@@ -1,8 +1,13 @@
 import { Module } from '@nestjs/common';
+import { APP_FILTER } from '@nestjs/core';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { SecondaryMarketInfrastructureModule } from './infrastructure/secondary-market-infrastructure.module';
 import { SecondaryMarketController } from './presentation/http/secondary-market.controller';
 import { YouSignWebhookController } from './presentation/http/yousign-webhook.controller';
+import { SecondaryMarketErrorFilter } from './presentation/http/filters/secondary-market-error.filter';
+import { PasserOrdreDeVenteUseCase } from './application/usecases/passer-ordre-de-vente.usecase';
+import { ExecuterOrdreUseCase } from './application/usecases/executer-ordre.usecase';
+import { AnnulerOrdreUseCase } from './application/usecases/annuler-ordre.usecase';
 import { InitiateBuyUseCase } from './application/usecases/initiate-buy.usecase';
 import { CancelInitiationUseCase } from './application/usecases/cancel-initiation.usecase';
 import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructure.module';
@@ -44,23 +49,29 @@ import { UsersInfrastructureModule } from 'src/iam/infrastructure/users-infrastr
  * - **Anti-Corruption Layer** vers YouSign, dont le webhook entre par
  *   `YouSignWebhookController`.
  *
- * Ce module donne au contexte son nom et sa forme (§5). Le modèle riche —
- * `SecondaryMarketOrder` en agrégat protégeant son cycle de vie, la capacité
- * de cession portant l'anti-survente, les erreurs de domaine et leur filtre —
- * est l'étape suivante, même découpage en deux temps que `catalog`,
- * `subscription`, `treasury` et `servicing`.
+ * Le contexte a son modèle : `SecondaryMarketOrder` est l'agrégat racine (§6),
+ * propriétaire du cycle de vie d'une annonce, et `CapaciteDeCession` porte
+ * l'invariant d'anti-double-mise-en-vente — celui qui empêche un porteur de
+ * dix fractions d'en offrir vingt. Il a ses erreurs (`SecondaryMarketError`)
+ * et leur filtre, son mapper, et trois use cases là où le contrôleur écrivait
+ * ses transactions lui-même.
  *
  * Écarts temporaires, assumés et à résorber (§3.3) :
  *
- * - `SecondaryMarketController` porte encore la règle métier — propriété des
- *   fractions, anti-survente du carnet, quantité achetable, règlement,
- *   transfert — en 478 lignes d'`EntityManager` : la logique vit dans un
- *   adaptateur d'entrée, pas dans un agrégat (§14) ;
+ * - les use cases manipulent directement les entités ORM et l'`EntityManager`,
+ *   y compris celles de `subscription` (positions) et de `treasury` (wallets,
+ *   ledger) : le règlement d'une cession est une transaction unique faute
+ *   d'unité de travail partagée entre contextes — la résorber demande un port
+ *   de transaction, pas un remodelage du domaine ;
+ * - le décrément de la position vendeuse retranche le prix de vente et non le
+ *   coût d'acquisition, dérive que `computeCoutAcquisition` documente déjà et
+ *   que seul un historique d'acquisition par lot corrigerait ;
  * - `YouSignWebhookController` traite aussi les signatures de **souscription
  *   primaire**, qui appartiennent à `subscription` : un webhook partagé, monté
  *   ici pour des raisons d'historique et non de domaine ;
- * - le module enregistre les entités de cinq autres contextes, le règlement
- *   d'une cession étant une transaction unique (voir le module d'infrastructure).
+ * - `MATCH_PROPOSE`, `ACCEPTE` et `EXPIRE` restent des statuts qu'aucun code
+ *   ne pose : l'appariement négocié n'a jamais été implémenté, et l'expiration
+ *   attend un CRON qui lirait `valideJusquAu`.
  */
 @Module({
   imports: [
@@ -77,8 +88,14 @@ import { UsersInfrastructureModule } from 'src/iam/infrastructure/users-infrastr
   ],
   providers: [
     ContractGeneratorService,
+    PasserOrdreDeVenteUseCase,
+    ExecuterOrdreUseCase,
+    AnnulerOrdreUseCase,
     InitiateBuyUseCase,
     CancelInitiationUseCase,
+    // Traduit les erreurs métier du contexte en réponses HTTP : le domaine ne
+    // connaît aucun statut (§21), la présentation s'en charge.
+    { provide: APP_FILTER, useClass: SecondaryMarketErrorFilter },
   ],
   controllers: [SecondaryMarketController, YouSignWebhookController],
 })

@@ -32,9 +32,17 @@ export class CreateOrdreMarcheDto {
   @IsPositive()
   prixUnitaire: number;
 
+  /**
+   * @deprecated Ignoré. Le montant est dérivé par `SecondaryMarketOrder` —
+   * il l'était déjà, silencieusement, par le contrôleur. Le champ reste exigé
+   * pour ne pas casser les clients qui l'envoient ; à retirer quand le front
+   * aura cessé de le fournir.
+   */
   @ApiProperty({
     example: 5000,
-    description: 'Montant total = nbFractions × prixUnitaire',
+    description:
+      'Ignoré — le montant est calculé côté serveur (nbFractions × prixUnitaire).',
+    deprecated: true,
   })
   @IsNumber()
   @IsPositive()
