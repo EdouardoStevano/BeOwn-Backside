@@ -26,10 +26,7 @@ export class IfuPdfService {
   ): void {
     const filename = `IFU-${doc.annee}-user${doc.userId}.pdf`;
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader(
-      'Content-Disposition',
-      `attachment; filename="${filename}"`,
-    );
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
 
     const pdf = new PDFDocument({ margin: 48, size: 'A4' });
     pdf.pipe(res);
@@ -53,7 +50,10 @@ export class IfuPdfService {
     pdf.moveDown(1.5);
 
     // ─── Bénéficiaire ───────────────────────────────────────────────────────
-    pdf.fontSize(11).fillColor('#1A2E35').text('Bénéficiaire', { underline: true });
+    pdf
+      .fontSize(11)
+      .fillColor('#1A2E35')
+      .text('Bénéficiaire', { underline: true });
     pdf.moveDown(0.3);
     const fullName =
       `${investor.firstName ?? ''} ${investor.lastName ?? ''}`.trim() ||
@@ -64,17 +64,35 @@ export class IfuPdfService {
     pdf.moveDown(1.2);
 
     // ─── Récapitulatif fiscal ───────────────────────────────────────────────
-    pdf.fontSize(11).fillColor('#1A2E35').text('Récapitulatif fiscal', { underline: true });
+    pdf
+      .fontSize(11)
+      .fillColor('#1A2E35')
+      .text('Récapitulatif fiscal', { underline: true });
     pdf.moveDown(0.5);
 
     const fmt = (n: number) =>
-      new Intl.NumberFormat('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
+      new Intl.NumberFormat('fr-FR', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }).format(n);
 
     const rows: Array<[string, string, string]> = [
-      ['Montant brut perçu', fmt(doc.montantBrut), 'Somme des distributions equity-locatif sur l\'année'],
-      ['Prélèvement IR (12,8%)', `−${fmt(doc.montantIR)}`, 'Impôt sur le revenu – Prélèvement Forfaitaire Unique'],
+      [
+        'Montant brut perçu',
+        fmt(doc.montantBrut),
+        "Somme des distributions equity-locatif sur l'année",
+      ],
+      [
+        'Prélèvement IR (12,8%)',
+        `−${fmt(doc.montantIR)}`,
+        'Impôt sur le revenu – Prélèvement Forfaitaire Unique',
+      ],
       ['CSG / CRDS (17,2%)', `−${fmt(doc.montantCSG)}`, 'Cotisations sociales'],
-      ['Montant net versé', fmt(doc.montantNet), 'Crédité sur le wallet investisseur'],
+      [
+        'Montant net versé',
+        fmt(doc.montantNet),
+        'Crédité sur le wallet investisseur',
+      ],
     ];
 
     pdf.fontSize(10);
@@ -85,11 +103,7 @@ export class IfuPdfService {
         .font(isTotal ? 'Helvetica-Bold' : 'Helvetica')
         .text(`${label} : `, { continued: true })
         .text(value, { continued: false });
-      pdf
-        .font('Helvetica')
-        .fillColor('#94a3b8')
-        .fontSize(8)
-        .text(hint);
+      pdf.font('Helvetica').fillColor('#94a3b8').fontSize(8).text(hint);
       pdf.fontSize(10);
       pdf.moveDown(0.4);
     });
@@ -97,28 +111,37 @@ export class IfuPdfService {
     pdf.moveDown(1);
 
     // ─── Mentions légales ───────────────────────────────────────────────────
-    pdf.fontSize(11).fillColor('#1A2E35').text('Mentions légales', { underline: true });
+    pdf
+      .fontSize(11)
+      .fillColor('#1A2E35')
+      .text('Mentions légales', { underline: true });
     pdf.moveDown(0.3);
     pdf
       .fontSize(8)
       .fillColor('#475569')
       .text(
         'Ce document est fourni à titre informatif. Les montants déclarés correspondent ' +
-          'aux distributions equity-locatif effectivement versées au cours de l\'année civile ' +
+          "aux distributions equity-locatif effectivement versées au cours de l'année civile " +
           `${doc.annee}. Les prélèvements IR et CSG ont été effectués à la source par la plateforme ` +
           'BeOwn et reversés aux administrations compétentes via les comptes séquestres dédiés.',
         { align: 'justify' },
       );
     pdf.moveDown(0.5);
     pdf.text(
-      'L\'investisseur reste responsable de la déclaration de ses revenus auprès de l\'administration fiscale. ' +
+      "L'investisseur reste responsable de la déclaration de ses revenus auprès de l'administration fiscale. " +
         'En cas de divergence avec un IFU officiel transmis par voie réglementaire, ce document doit être considéré comme ' +
         'un récapitulatif interne BeOwn.',
       { align: 'justify' },
     );
 
     pdf.moveDown(2);
-    pdf.fontSize(8).fillColor('#94a3b8').text('— BeOwn · Plateforme d\'investissement immobilier equity-locatif —', { align: 'center' });
+    pdf
+      .fontSize(8)
+      .fillColor('#94a3b8')
+      .text(
+        "— BeOwn · Plateforme d'investissement immobilier equity-locatif —",
+        { align: 'center' },
+      );
 
     pdf.end();
   }

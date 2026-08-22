@@ -50,7 +50,9 @@ export class IfuCronService {
     const allUnpaid = await this.partRepo.findUnpaid(); // pas idéal, on prendra tous
     // Stratégie simple : on parcourt tous les investments et déduplique
     // les userIds. À optimiser en Phase 10 avec un repo dédié.
-    const investments = await this.investmentRepo.findByUserId(0).catch(() => []);
+    const investments = await this.investmentRepo
+      .findByUserId(0)
+      .catch(() => []);
     // Fallback brutal — itération sur les parts payées
     // (en MVP on accepte la simplification ; l'admin peut aussi
     // déclencher la génération individuellement)
@@ -59,9 +61,12 @@ export class IfuCronService {
     // Récupérer les userIds via les investissements liés aux parts
     // On parcourt les parts, on récupère l'investissement, on extrait
     // l'utilisateur. Pour limiter le nombre de requêtes, on agrège.
-    const allParts = [...allUnpaid, ...(await this.partRepo.findByInvestissementIds(
-      investments.map((i) => i.id),
-    ))];
+    const allParts = [
+      ...allUnpaid,
+      ...(await this.partRepo.findByInvestissementIds(
+        investments.map((i) => i.id),
+      )),
+    ];
 
     // Pour cron : on fait simple — on parcourt les parts payées qui
     // tombent dans l'année et on collecte les userIds via investmentId.
@@ -71,7 +76,8 @@ export class IfuCronService {
     const paidInYearInvestmentIds = new Set<string>();
     for (const part of allParts) {
       if (!part.payeLe) continue;
-      const d = part.payeLe instanceof Date ? part.payeLe : new Date(part.payeLe);
+      const d =
+        part.payeLe instanceof Date ? part.payeLe : new Date(part.payeLe);
       if (d >= yearStart && d < yearEnd) {
         paidInYearInvestmentIds.add(part.investissementId);
       }

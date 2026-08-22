@@ -8,18 +8,20 @@ import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.ent
 import { EcheanceStatus } from 'src/servicing/domain/enums/echeance.enum';
 import { CloudStorageService } from 'src/shared/cloud-storage/cloud-storage.service';
 import { DocumentEntity } from 'src/documents/infrastructure/persistence/entities/document.entity';
-import { DocumentType, DocumentRelatedTo } from 'src/documents/domain/enums/document-type.enum';
+import {
+  DocumentType,
+  DocumentRelatedTo,
+} from 'src/documents/domain/enums/document-type.enum';
 import { NotificationEventService } from 'src/notifications/applications/notification-event.service';
 import { formatEur } from 'src/shared/money/format-eur';
 import PDFDocument from 'pdfkit';
+import { SyntheseFiscaleAnnuelle } from 'src/regulatory-reporting/domain/value-objects/synthese-fiscale-annuelle';
+import type { LigneImposable } from 'src/regulatory-reporting/domain/value-objects/synthese-fiscale-annuelle';
 
 interface IfuAggregate {
   userId: number;
   user: UserEntity;
-  totalInterets: number;
-  totalIR: number;
-  totalCSG: number;
-  nbEcheances: number;
+  synthese: SyntheseFiscaleAnnuelle;
 }
 
 @Injectable()
@@ -61,36 +63,68 @@ export class IfuGenerationService {
     const end = new Date(`${year + 1}-01-01T00:00:00Z`);
     const rows = await this.echeanceRepo
       .createQueryBuilder('e')
-      .innerJoinAndMapOne('e.investissement', InvestmentEntity, 'inv', 'inv.id = e.investissementId')
-      .innerJoinAndMapOne('inv.utilisateur', UserEntity, 'u', 'u.userId = inv.utilisateurId')
-      .leftJoinAndMapOne('u.userEmail', 'user_email', 'ue', 'ue.userId = u.userId')
+      .innerJoinAndMapOne(
+        'e.investissement',
+        InvestmentEntity,
+        'inv',
+        'inv.id = e.investissementId',
+      )
+      .innerJoinAndMapOne(
+        'inv.utilisateur',
+        UserEntity,
+        'u',
+        'u.userId = inv.utilisateurId',
+      )
+      .leftJoinAndMapOne(
+        'u.userEmail',
+        'user_email',
+        'ue',
+        'ue.userId = u.userId',
+      )
       .where('e.statut = :statut', { statut: EcheanceStatus.PAYE })
       .andWhere('e.payeLe >= :start AND e.payeLe < :end', { start, end })
       .getMany();
 
-    const map = new Map<number, IfuAggregate>();
+    // Les coupons de l'année, par bénéficiaire ; la synthèse fait la somme.
+    const lignesParUser = new Map<
+      number,
+      { user: UserEntity; lignes: LigneImposable[] }
+    >();
     for (const e of rows) {
       const inv = (e as any).investissement;
       const user = inv?.utilisateur;
       if (!user) continue;
-      const existing = map.get(user.userId) ?? {
-        userId: user.userId,
+
+      const brut = Number(e.montantInterets ?? 0);
+      const prelevementIR = Number(e.prelevementIR ?? 0);
+      const prelevementCSG = Number(e.prelevementCSG ?? 0);
+
+      const entree = lignesParUser.get(user.userId) ?? {
         user,
-        totalInterets: 0,
-        totalIR: 0,
-        totalCSG: 0,
-        nbEcheances: 0,
+        lignes: [] as LigneImposable[],
       };
-      existing.totalInterets += Number(e.montantInterets ?? 0);
-      existing.totalIR += Number(e.prelevementIR ?? 0);
-      existing.totalCSG += Number(e.prelevementCSG ?? 0);
-      existing.nbEcheances += 1;
-      map.set(user.userId, existing);
+      entree.lignes.push({
+        brut,
+        prelevementIR,
+        prelevementCSG,
+        // Le coupon ne porte pas son net en colonne : il se déduit du brut,
+        // comme le PDF le faisait déjà au moment d'imprimer.
+        net: brut - prelevementIR - prelevementCSG,
+      });
+      lignesParUser.set(user.userId, entree);
     }
-    return Array.from(map.values());
+
+    return Array.from(lignesParUser.entries()).map(([userId, e]) => ({
+      userId,
+      user: e.user,
+      synthese: SyntheseFiscaleAnnuelle.cumuler(year, e.lignes),
+    }));
   }
 
-  private async generateAndStoreIfu(agg: IfuAggregate, year: number): Promise<void> {
+  private async generateAndStoreIfu(
+    agg: IfuAggregate,
+    year: number,
+  ): Promise<void> {
     const pdfBuffer = await this.buildIfuPdf(agg, year);
     const filename = `ifu_${year}_${agg.userId}.pdf`;
     const { objectName, publicUrl } = await this.cloudStorage.upload(
@@ -120,7 +154,9 @@ export class IfuGenerationService {
     try {
       await this.notificationEvents.ifuGenerated(agg.userId, year, doc.id);
     } catch (err) {
-      this.logger.warn(`IFU notification failed for user ${agg.userId}: ${(err as Error)?.message}`);
+      this.logger.warn(
+        `IFU notification failed for user ${agg.userId}: ${(err as Error)?.message}`,
+      );
     }
   }
 
@@ -149,19 +185,27 @@ export class IfuGenerationService {
       doc.fontSize(14).text('Récapitulatif fiscal', { underline: true });
       doc.moveDown(0.5);
       doc.fontSize(11);
-      doc.text(`Nombre d'échéances perçues : ${agg.nbEcheances}`);
-      doc.text(`Total intérêts bruts perçus : ${formatEur(agg.totalInterets)}`);
-      doc.text(`Prélèvement à la source — IR (12,8 %) : ${formatEur(agg.totalIR)}`);
-      doc.text(`Prélèvement à la source — CSG/CRDS (17,2 %) : ${formatEur(agg.totalCSG)}`);
+      const { synthese } = agg;
+      doc.text(`Nombre d'échéances perçues : ${synthese.nbLignes}`);
       doc.text(
-        `Intérêts nets crédités : ${formatEur(agg.totalInterets - agg.totalIR - agg.totalCSG)}`,
+        `Total intérêts bruts perçus : ${formatEur(synthese.montantBrut)}`,
       );
+      doc.text(
+        `Prélèvement à la source — IR (12,8 %) : ${formatEur(synthese.montantIR)}`,
+      );
+      doc.text(
+        `Prélèvement à la source — CSG/CRDS (17,2 %) : ${formatEur(synthese.montantCSG)}`,
+      );
+      doc.text(`Intérêts nets crédités : ${formatEur(synthese.montantNet)}`);
       doc.moveDown(2);
 
-      doc.fontSize(9).fillColor('gray').text(
-        "Ce document est généré automatiquement par BeOwn. Les montants indiqués correspondent aux versements effectivement réalisés sur votre compte au cours de l'année fiscale ci-dessus. Pour toute question, contactez support@beown.fr.",
-        { align: 'justify' },
-      );
+      doc
+        .fontSize(9)
+        .fillColor('gray')
+        .text(
+          "Ce document est généré automatiquement par BeOwn. Les montants indiqués correspondent aux versements effectivement réalisés sur votre compte au cours de l'année fiscale ci-dessus. Pour toute question, contactez support@beown.fr.",
+          { align: 'justify' },
+        );
       doc.end();
     });
   }

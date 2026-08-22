@@ -13,8 +13,7 @@ import {
   type InvestmentRepository,
 } from 'src/subscription/domain/repositories/investment.repository';
 import { InvestmentStatus } from 'src/subscription/domain/enums/investment-status.enum';
-
-const round2 = (n: number) => Math.round(n * 100) / 100;
+import { SyntheseFiscaleAnnuelle } from 'src/regulatory-reporting/domain/value-objects/synthese-fiscale-annuelle';
 
 /**
  * Agrège pour un investisseur sur une année civile donnée :
@@ -50,26 +49,26 @@ export class GenerateInvestisseurIfuUseCase {
       (i) => i.statut === InvestmentStatus.CONFIRME,
     );
 
-    let montantBrut = 0;
-    let montantIR = 0;
-    let montantCSG = 0;
-    let montantNet = 0;
+    let synthese = SyntheseFiscaleAnnuelle.vide(annee);
 
     if (confirmes.length > 0) {
       const invIds = confirmes.map((i) => i.id);
       const parts = await this.partRepo.findByInvestissementIds(invIds);
-      const partsAnnee = parts.filter((p) => {
-        if (!p.payeLe) return false;
-        const y =
-          p.payeLe instanceof Date
-            ? p.payeLe.getUTCFullYear()
-            : new Date(p.payeLe).getUTCFullYear();
-        return y === annee;
-      });
-      montantBrut = partsAnnee.reduce((s, p) => s + p.montantBrut, 0);
-      montantIR = partsAnnee.reduce((s, p) => s + p.prelevementIR, 0);
-      montantCSG = partsAnnee.reduce((s, p) => s + p.prelevementCSG, 0);
-      montantNet = partsAnnee.reduce((s, p) => s + p.montantNet, 0);
+      const partsAnnee = parts.filter((p) =>
+        versementDeLAnnee(p.payeLe, annee),
+      );
+
+      // Le net vient de la colonne : c'est ce qui a été crédité, et il fait
+      // foi — ce contexte agrège, il ne recalcule pas (§3.3).
+      synthese = SyntheseFiscaleAnnuelle.cumuler(
+        annee,
+        partsAnnee.map((p) => ({
+          brut: p.montantBrut,
+          prelevementIR: p.prelevementIR,
+          prelevementCSG: p.prelevementCSG,
+          net: p.montantNet,
+        })),
+      );
     }
 
     // Upsert
@@ -77,10 +76,10 @@ export class GenerateInvestisseurIfuUseCase {
     const doc = existing ?? new DocumentFiscal();
     doc.userId = userId;
     doc.annee = annee;
-    doc.montantBrut = round2(montantBrut);
-    doc.montantIR = round2(montantIR);
-    doc.montantCSG = round2(montantCSG);
-    doc.montantNet = round2(montantNet);
+    doc.montantBrut = synthese.montantBrut;
+    doc.montantIR = synthese.montantIR;
+    doc.montantCSG = synthese.montantCSG;
+    doc.montantNet = synthese.montantNet;
     doc.pdfUrl = null;
     doc.genereeLe = new Date();
     const saved = await this.docRepo.save(doc);
@@ -91,3 +90,13 @@ export class GenerateInvestisseurIfuUseCase {
     return saved;
   }
 }
+
+/** Le versement tombe-t-il dans l'année civile visée ? */
+const versementDeLAnnee = (
+  payeLe: Date | string | null,
+  annee: number,
+): boolean => {
+  if (!payeLe) return false;
+  const date = payeLe instanceof Date ? payeLe : new Date(payeLe);
+  return date.getUTCFullYear() === annee;
+};
