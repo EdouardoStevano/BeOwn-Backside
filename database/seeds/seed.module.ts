@@ -20,12 +20,6 @@ import { DocumentEntity } from 'src/documents/infrastructure/persistence/entitie
 import { OrdreMarcheEntity } from 'src/secondary-market/infrastructure/persistence/entities/ordre-marche.entity';
 import { AvisEntity } from 'src/catalog/infrastructure/persistence/entities/avis.entity';
 import { SignatureEntity } from 'src/documents/infrastructure/persistence/entities/signature.entity';
-import { UniteLouableEntity } from 'src/locative-management/infrastructure/persistences/entities/unite-louable.entity';
-import { LocataireEntity } from 'src/locative-management/infrastructure/persistences/entities/locataire.entity';
-import { BailEntity } from 'src/locative-management/infrastructure/persistences/entities/bail.entity';
-import { LoyerEncaisseEntity } from 'src/locative-management/infrastructure/persistences/entities/loyer-encaisse.entity';
-import { PeriodeDistributionEntity } from 'src/distributions/infrastructure/persistences/entities/periode-distribution.entity';
-import { DistributionPartEntity } from 'src/distributions/infrastructure/persistences/entities/distribution-part.entity';
 import { SeedService } from './seed.service';
 
 const SEED_ENTITIES = [
@@ -48,12 +42,6 @@ const SEED_ENTITIES = [
   OrdreMarcheEntity,
   AvisEntity,
   SignatureEntity,
-  UniteLouableEntity,
-  LocataireEntity,
-  BailEntity,
-  LoyerEncaisseEntity,
-  PeriodeDistributionEntity,
-  DistributionPartEntity,
 ];
 
 @Module({

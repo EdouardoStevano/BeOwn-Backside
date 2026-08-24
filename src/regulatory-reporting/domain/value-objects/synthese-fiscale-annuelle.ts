@@ -1,13 +1,13 @@
 /**
- * Une ligne de revenu imposable, quelle qu'en soit la source : un coupon
- * obligataire réglé par `servicing`, une part de distribution versée par
- * `distributions`.
+ * Une ligne de revenu imposable : aujourd'hui un coupon obligataire réglé par
+ * `servicing`, seule source de revenu de la plateforme (§1.4.3 — BeOwn est
+ * exclusivement obligataire).
  *
- * Le `net` est fourni par l'appelant, et ce n'est pas un oubli : les deux
- * sources ne l'obtiennent pas de la même façon — l'une le porte en colonne, et
- * fait foi ; l'autre le déduit du brut. Le recalculer ici imposerait une
- * formule à des montants déjà arrêtés ailleurs, ce que ce contexte ne doit
- * précisément pas faire (§3.3).
+ * Le `net` reste fourni par l'appelant plutôt que déduit du brut, et ce n'est
+ * pas un oubli : le recalculer ici imposerait une formule à des montants déjà
+ * arrêtés ailleurs, ce que ce contexte ne doit précisément pas faire (§3.3).
+ * Une source qui porterait son net en colonne — et ferait foi — s'ajouterait
+ * sans toucher à ce calcul.
  */
 export interface LigneImposable {
   /** Revenu brut de la ligne — intérêts, ou part de revenu locatif. */
@@ -26,14 +26,16 @@ export interface LigneImposable {
  * valeur, sans identité. C'est le seul concept que ce contexte modélise
  * vraiment — et c'est voulu. §3.3 et §44 lui demandent des projections, pas des
  * agrégats riches : les montants qu'il additionne ont **déjà** été calculés par
- * `servicing` (RG-ECH-04/05) et par `distributions`, et les recalculer ici
- * serait la faute que ces sections nomment.
+ * `servicing` (RG-ECH-04/05), et les recalculer ici serait la faute que ces
+ * sections nomment.
  *
  * Ce qui appartient donc à ce contexte, c'est l'addition et l'arrondi — et rien
- * d'autre. Ils étaient écrits deux fois, différemment : quatre `reduce` et un
- * `round2` local dans `GenerateInvestisseurIfuUseCase`, une accumulation à la
- * main dans une `Map` sans arrondi dans `IfuGenerationService`, dont le net se
- * redéduisait une troisième fois au moment d'imprimer le PDF.
+ * d'autre. Ils étaient écrits deux fois, différemment, du temps où deux chaînes
+ * IFU coexistaient : une accumulation à la main dans une `Map` sans arrondi
+ * d'un côté, quatre `reduce` et un `round2` local de l'autre. La seconde est
+ * partie avec la ligne de produit locative ; l'objet reste, parce que
+ * l'addition annuelle est un concept du contexte, pas un détail de l'une des
+ * deux implémentations.
  */
 export class SyntheseFiscaleAnnuelle {
   private constructor(

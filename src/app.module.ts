@@ -30,8 +30,6 @@ import { AdminModule } from './admin/admin.module';
 import { CgpModule } from './iam/application/cgp.module';
 import { NewsModule } from './news/news.module';
 import { KpiModule } from './kpi/kpi.module';
-import { LocativeManagementModule } from './locative-management/applications/locative-management.module';
-import { DistributionsModule } from './distributions/applications/distributions.module';
 import { RegulatoryReportingModule } from './regulatory-reporting/regulatory-reporting.module';
 import { AmlModule } from './compliance/application/aml.module';
 import { PlatformFeesModule } from './treasury/application/platform-fees.module';
@@ -111,8 +109,6 @@ function requireEnv(name: string): string {
     KpiModule,
     AdminModule,
     CgpModule,
-    LocativeManagementModule,
-    DistributionsModule,
     RegulatoryReportingModule,
     AmlModule,
     PlatformFeesModule,

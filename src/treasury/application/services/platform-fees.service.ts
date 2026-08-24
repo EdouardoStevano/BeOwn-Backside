@@ -9,9 +9,17 @@ import { round2 } from 'src/shared/money/round2';
  * via les settings admin — voir AdminSettingsBlob.commissions).
  */
 export interface PlatformFeeRates {
-  /** % par an du capital initial investi du SPV, prélevé 1/12 par mois sur les distributions */
+  /**
+   * % par an du capital initial du SPV.
+   *
+   * @deprecated Plus aucun calcul ne l'utilise : il servait à la gestion
+   * locative, sortie du périmètre (§1.4.3). La clé reste dans l'interface et
+   * dans `DEFAULT_FEE_RATES` parce qu'elle est **stockée** en base
+   * (`admin_settings.commissions`) et éditable par l'écran de paramétrage — la
+   * retirer d'ici casserait la lecture des lignes existantes.
+   */
   annualPlatformFeePct: number;
-  /** % des loyers encaissés, prélevé à chaque distribution */
+  /** @deprecated Idem : frais de gestion locative, hors périmètre. */
   rentManagementFeePct: number;
   /** % de la plus-value brute à la vente du bien (sortie) */
   propertySaleGainFeePct: number;
@@ -71,27 +79,6 @@ export class PlatformFeesService {
    * et passer ce snapshot à chaque helper (pas de dérive de taux en cours
    * d'opération si un admin modifie les commissions entre deux calculs).
    */
-  async computeMonthlyPlatformFee(
-    capitalInitial: number,
-    rates?: PlatformFeeRates,
-  ): Promise<number> {
-    const r = rates ?? (await this.getRates());
-    return round2((capitalInitial * (r.annualPlatformFeePct / 100)) / 12);
-  }
-
-  /**
-   * Frais de gestion locative : loyers encaissés × taux / 100.
-   * Pas de frais si aucun loyer encaissé.
-   */
-  async computeRentManagementFee(
-    loyers: number,
-    rates?: PlatformFeeRates,
-  ): Promise<number> {
-    if (loyers <= 0) return 0;
-    const r = rates ?? (await this.getRates());
-    return round2(loyers * (r.rentManagementFeePct / 100));
-  }
-
   /**
    * Frais sur plus-value à la vente du bien (sortie).
    * Pas de frais sur une moins-value.

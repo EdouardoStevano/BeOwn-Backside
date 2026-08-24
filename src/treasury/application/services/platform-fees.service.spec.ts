@@ -111,70 +111,6 @@ describe('PlatformFeesService', () => {
     });
   });
 
-  describe('computeMonthlyPlatformFee', () => {
-    it('calcule capital × (taux annuel / 100) / 12, arrondi à 2 décimales', async () => {
-      mockSettingsRepo.findOne.mockResolvedValue(null); // défaut 1 %/an
-
-      // 120 000 × 1 % / 12 = 100
-      await expect(service.computeMonthlyPlatformFee(120_000)).resolves.toBe(
-        100,
-      );
-    });
-
-    it('arrondit à 2 décimales', async () => {
-      mockSettingsRepo.findOne.mockResolvedValue(null);
-
-      // 100 000 × 1 % / 12 = 83.333… → 83.33
-      await expect(service.computeMonthlyPlatformFee(100_000)).resolves.toBe(
-        83.33,
-      );
-    });
-
-    it('utilise le taux configuré en base', async () => {
-      withCommissions({ annualPlatformFeePct: 2.4 });
-
-      // 100 000 × 2.4 % / 12 = 200
-      await expect(service.computeMonthlyPlatformFee(100_000)).resolves.toBe(
-        200,
-      );
-    });
-
-    it('renvoie 0 pour un capital de 0', async () => {
-      mockSettingsRepo.findOne.mockResolvedValue(null);
-
-      await expect(service.computeMonthlyPlatformFee(0)).resolves.toBe(0);
-    });
-  });
-
-  describe('computeRentManagementFee', () => {
-    it('calcule loyers × taux / 100', async () => {
-      mockSettingsRepo.findOne.mockResolvedValue(null); // défaut 7 %
-
-      await expect(service.computeRentManagementFee(1000)).resolves.toBe(70);
-    });
-
-    it('arrondit à 2 décimales', async () => {
-      mockSettingsRepo.findOne.mockResolvedValue(null);
-
-      // 333.33 × 7 % = 23.3331 → 23.33
-      await expect(service.computeRentManagementFee(333.33)).resolves.toBe(
-        23.33,
-      );
-    });
-
-    it('renvoie 0 si loyers = 0', async () => {
-      mockSettingsRepo.findOne.mockResolvedValue(null);
-
-      await expect(service.computeRentManagementFee(0)).resolves.toBe(0);
-    });
-
-    it('renvoie 0 si loyers négatifs', async () => {
-      mockSettingsRepo.findOne.mockResolvedValue(null);
-
-      await expect(service.computeRentManagementFee(-500)).resolves.toBe(0);
-    });
-  });
-
   describe('computePropertySaleGainFee', () => {
     it('calcule plus-value × taux / 100', async () => {
       mockSettingsRepo.findOne.mockResolvedValue(null); // défaut 15 %
@@ -253,22 +189,22 @@ describe('PlatformFeesService', () => {
 
   describe('snapshot de taux (cohérence multi-frais — R1)', () => {
     it('ne relit pas la base quand un snapshot est fourni', async () => {
-      const snapshot = { ...DEFAULT_FEE_RATES, annualPlatformFeePct: 2.4 };
+      const snapshot = { ...DEFAULT_FEE_RATES, propertySaleGainFeePct: 20 };
 
-      const fee = await service.computeMonthlyPlatformFee(100_000, snapshot);
+      const fee = await service.computePropertySaleGainFee(1_000, snapshot);
 
-      expect(fee).toBe(200); // 100 000 × 2.4 % / 12
+      expect(fee).toBe(200); // 1 000 × 20 %
       expect(mockSettingsRepo.findOne).not.toHaveBeenCalled();
     });
 
     it('le snapshot prime sur les taux en base (pas de dérive mi-opération)', async () => {
-      // La base dit 50 %, mais l'opération a été démarrée avec un snapshot à 7 %
-      withCommissions({ rentManagementFeePct: 50 });
-      const snapshot = { ...DEFAULT_FEE_RATES, rentManagementFeePct: 7 };
+      // La base dit 50 %, mais l'opération a été démarrée avec un snapshot à 15 %
+      withCommissions({ propertySaleGainFeePct: 50 });
+      const snapshot = { ...DEFAULT_FEE_RATES, propertySaleGainFeePct: 15 };
 
       await expect(
-        service.computeRentManagementFee(1000, snapshot),
-      ).resolves.toBe(70);
+        service.computePropertySaleGainFee(1_000, snapshot),
+      ).resolves.toBe(150);
       expect(mockSettingsRepo.findOne).not.toHaveBeenCalled();
     });
 

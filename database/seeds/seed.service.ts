@@ -26,7 +26,10 @@ import { InvestmentStatus } from 'src/subscription/domain/enums/investment-statu
 import { ProfilPPEntity } from 'src/compliance/infrastructure/persistence/entities/profil-pp.entity';
 import { ProfilPMEntity } from 'src/compliance/infrastructure/persistence/entities/profil-pm.entity';
 import { KycEntity } from 'src/compliance/infrastructure/persistence/entities/kyc.entity';
-import { KycStatus, KycNiveau } from 'src/compliance/domain/enums/kyc-status.enum';
+import {
+  KycStatus,
+  KycNiveau,
+} from 'src/compliance/domain/enums/kyc-status.enum';
 import { CategoriePsfp } from 'src/compliance/domain/enums/categorie-psfp.enum';
 import {
   NotificationEntity,
@@ -35,15 +38,6 @@ import {
 import { AuditLogEntity } from 'src/notifications/infrastructure/persistences/entities/audit-log.entity';
 import { SignatureEntity } from 'src/documents/infrastructure/persistence/entities/signature.entity';
 import { SignatureStatus } from 'src/documents/domain/enums/signature-status.enum';
-import { UniteLouableEntity } from 'src/locative-management/infrastructure/persistences/entities/unite-louable.entity';
-import { LocataireEntity } from 'src/locative-management/infrastructure/persistences/entities/locataire.entity';
-import { BailEntity } from 'src/locative-management/infrastructure/persistences/entities/bail.entity';
-import { LoyerEncaisseEntity } from 'src/locative-management/infrastructure/persistences/entities/loyer-encaisse.entity';
-import { StatutBail } from 'src/locative-management/domains/enums/statut-bail.enum';
-import { StatutDeclaration } from 'src/locative-management/domains/enums/statut-declaration.enum';
-import { PeriodeDistributionEntity } from 'src/distributions/infrastructure/persistences/entities/periode-distribution.entity';
-import { DistributionPartEntity } from 'src/distributions/infrastructure/persistences/entities/distribution-part.entity';
-import { StatutPeriodeDistribution } from 'src/distributions/domains/enums/statut-periode-distribution.enum';
 
 /**
  * ════════════════════════════════════════════════════════════════════════════
@@ -99,18 +93,6 @@ export class SeedService {
     private readonly investmentRepo: Repository<InvestmentEntity>,
     @InjectRepository(SignatureEntity)
     private readonly signatureRepo: Repository<SignatureEntity>,
-    @InjectRepository(UniteLouableEntity)
-    private readonly uniteRepo: Repository<UniteLouableEntity>,
-    @InjectRepository(LocataireEntity)
-    private readonly locataireRepo: Repository<LocataireEntity>,
-    @InjectRepository(BailEntity)
-    private readonly bailRepo: Repository<BailEntity>,
-    @InjectRepository(LoyerEncaisseEntity)
-    private readonly loyerRepo: Repository<LoyerEncaisseEntity>,
-    @InjectRepository(PeriodeDistributionEntity)
-    private readonly periodeRepo: Repository<PeriodeDistributionEntity>,
-    @InjectRepository(DistributionPartEntity)
-    private readonly distributionPartRepo: Repository<DistributionPartEntity>,
     @InjectRepository(NotificationEntity)
     private readonly notificationRepo: Repository<NotificationEntity>,
     @InjectRepository(AuditLogEntity)
@@ -848,199 +830,6 @@ Financement **obligataire** d'un plateau de bureaux loué à un locataire unique
     });
     this.logger.log(
       `✅ Collecte clôturée : ${totalCollecte.toLocaleString('fr-FR')} / ${CAPITAL_CIBLE.toLocaleString('fr-FR')} € (100 %)`,
-    );
-
-    // ════════════════════════════════════════════════════════════════════════
-    // 7. LOYER (côté porteur) — unité louée, bail, loyer encaissé
-    // ════════════════════════════════════════════════════════════════════════
-    this.logger.log('🏠 Gestion locative & déclaration des loyers...');
-
-    const LOYER_MENSUEL = 4_500; // 4 500 €/mois — immeuble de 600 000 € (9 % brut/an)
-
-    const unite = await this.uniteRepo.save(
-      this.uniteRepo.create({
-        projetId: projetA.id,
-        reference: 'RLJ-IMMEUBLE',
-        surfaceM2: 420,
-        loyerMensuelCible: LOYER_MENSUEL,
-      }),
-    );
-
-    const locataire = await this.locataireRepo.save(
-      this.locataireRepo.create({
-        nomComplet: 'Cabinet Diop & Associés',
-        email: 'contact@diop-associes.sn',
-        telephone: '+221 33 821 00 00',
-        spvId: spv.id,
-      }),
-    );
-
-    const bail = await this.bailRepo.save(
-      this.bailRepo.create({
-        uniteLouableId: unite.id,
-        locataireId: locataire.id,
-        loyerMensuel: LOYER_MENSUEL,
-        dateDebut: this.daysAgo(50),
-        dateFin: null,
-        statut: StatutBail.ACTIF,
-        contratPdfUrl: null,
-      }),
-    );
-
-    // Loyer du mois précédent : déclaré par le porteur PUIS validé par l'admin
-    const periodeDistribuee = this.periode(-1);
-    await this.loyerRepo.save(
-      this.loyerRepo.create({
-        bailId: bail.id,
-        periode: periodeDistribuee,
-        montant: LOYER_MENSUEL,
-        dateEncaissement: this.daysAgo(8),
-        preuves: ['recu-loyer-' + periodeDistribuee + '.pdf'],
-        statut: StatutDeclaration.VALIDE,
-        declareParUserId: porteur1.userId,
-        valideParUserId: admin.userId,
-        valideLe: this.daysAgo(6),
-        motifRejet: null,
-      }),
-    );
-    await this.audit(porteur1, 'LOYER_DECLARE', 'LOYER', bail.id);
-    await this.audit(admin, 'LOYER_VALIDATE', 'LOYER', bail.id);
-
-    // Loyer du mois courant : déclaré par le porteur, EN ATTENTE de validation admin
-    const periodeEnAttente = this.periode(0);
-    await this.loyerRepo.save(
-      this.loyerRepo.create({
-        bailId: bail.id,
-        periode: periodeEnAttente,
-        montant: LOYER_MENSUEL,
-        dateEncaissement: this.daysAgo(2),
-        preuves: ['recu-loyer-' + periodeEnAttente + '.pdf'],
-        statut: StatutDeclaration.DECLARE,
-        declareParUserId: porteur1.userId,
-        valideParUserId: null,
-        valideLe: null,
-        motifRejet: null,
-      }),
-    );
-    await this.audit(porteur1, 'LOYER_DECLARE', 'LOYER', bail.id);
-    this.logger.log(
-      `✅ Loyers : ${periodeDistribuee} (validé) + ${periodeEnAttente} (en attente admin)`,
-    );
-
-    // ════════════════════════════════════════════════════════════════════════
-    // 8. DISTRIBUTION / « PAIEMENT D'ÉCHÉANCE » — validation admin + virement auto
-    //    Le loyer net validé est réparti au prorata vers chaque investisseur,
-    //    puis crédité automatiquement sur son wallet.
-    // ════════════════════════════════════════════════════════════════════════
-    this.logger.log(
-      '💸 Distribution du loyer (validation admin + virement)...',
-    );
-
-    const totalLoyers = LOYER_MENSUEL;
-    const totalCharges = 0;
-    const revenuNet = totalLoyers - totalCharges;
-
-    const periodeDist = await this.periodeRepo.save(
-      this.periodeRepo.create({
-        projetId: projetA.id,
-        periode: periodeDistribuee,
-        totalLoyers,
-        totalCharges,
-        revenuNet,
-        statut: StatutPeriodeDistribution.DISTRIBUEE,
-        calculeeLe: this.daysAgo(5),
-        valideeLe: this.daysAgo(5), // validée par l'admin
-        distribueeLe: this.daysAgo(5),
-      }),
-    );
-    await this.audit(
-      admin,
-      'DISTRIBUTION_VALIDATE',
-      'DISTRIBUTION',
-      periodeDist.id,
-    );
-
-    // Répartition au prorata des parts détenues + virement automatique
-    let totalVerse = 0;
-    for (let i = 0; i < savedInvestments.length; i++) {
-      const inv = savedInvestments[i];
-      const wallet = investorWallets[i];
-      const pourcentage = (inv.nbTitres ?? 0) / NB_FRACTIONS; // 0.50 / 0.30 / 0.20
-      const montantBrut = Math.round(revenuNet * pourcentage);
-      const montantNet = montantBrut; // pas de prélèvement à la source dans ce seed (hors PFU)
-      totalVerse += montantNet;
-
-      await this.distributionPartRepo.save(
-        this.distributionPartRepo.create({
-          periodeDistributionId: periodeDist.id,
-          investissementId: inv.id,
-          pourcentageDetention: pourcentage,
-          montantBrut,
-          prelevementIR: 0,
-          prelevementCSG: 0,
-          montantNet,
-          payeLe: this.daysAgo(5),
-        }),
-      );
-
-      // Virement automatique : wallet projet → wallet investisseur
-      await this.transactionRepo.save(
-        this.transactionRepo.create({
-          walletSource: projetWallet.id,
-          walletDestination: wallet.id,
-          montant: montantNet,
-          devise: 'EUR',
-          type: TransactionType.PAIEMENT_INTERETS,
-          fournisseur: TransactionFournisseur.INTERNE,
-          fournisseurRef: `distrib_${periodeDist.id.slice(0, 8)}_${inv.utilisateurId}`,
-          statut: TransactionStatus.REUSSI,
-          investissementId: inv.id,
-          projetId: projetA.id,
-          metadata: {
-            periodeDistributionId: periodeDist.id,
-            periode: periodeDistribuee,
-          },
-        }),
-      );
-
-      wallet.solde = Number(wallet.solde) + montantNet;
-      await this.walletRepo.save(wallet);
-      projetWallet.solde = Number(projetWallet.solde) - montantNet;
-      await this.walletRepo.save(projetWallet);
-
-      await this.notify(inv.utilisateurId, 'DISTRIBUTION_RECUE', {
-        projetId: projetA.id,
-        periode: periodeDistribuee,
-        montantNet,
-      });
-    }
-    await this.audit(
-      admin,
-      'DISTRIBUTION_EXECUTE',
-      'DISTRIBUTION',
-      periodeDist.id,
-    );
-
-    // Frais de plateforme prélevés sur la distribution (1 %)
-    const frais = Math.round(revenuNet * 0.01);
-    await this.transactionRepo.save(
-      this.transactionRepo.create({
-        walletSource: projetWallet.id,
-        walletDestination: fraisWallet.id,
-        montant: frais,
-        devise: 'EUR',
-        type: TransactionType.FRAIS,
-        fournisseur: TransactionFournisseur.INTERNE,
-        fournisseurRef: `frais_${periodeDist.id.slice(0, 8)}`,
-        statut: TransactionStatus.REUSSI,
-        projetId: projetA.id,
-      }),
-    );
-    fraisWallet.solde = Number(fraisWallet.solde) + frais;
-    await this.walletRepo.save(fraisWallet);
-
-    this.logger.log(
-      `✅ Distribution ${periodeDistribuee} : ${totalVerse.toLocaleString('fr-FR')} € versés (50/30/20 %) + ${frais.toLocaleString('fr-FR')} € de frais`,
     );
 
     // ════════════════════════════════════════════════════════════════════════
