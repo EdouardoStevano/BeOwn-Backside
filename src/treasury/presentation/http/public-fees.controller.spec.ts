@@ -6,7 +6,7 @@ import {
   DEFAULT_FEE_RATES,
   PlatformFeeRates,
   PlatformFeesService,
-} from './platform-fees.service';
+} from '../../application/services/platform-fees.service';
 
 describe('PublicFeesController', () => {
   let controller: PublicFeesController;

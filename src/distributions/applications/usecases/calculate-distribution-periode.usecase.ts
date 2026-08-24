@@ -36,7 +36,7 @@ import {
 import { ModeleEconomique } from 'src/catalog/domain/enums/modele-economique.enum';
 import { ProjectStatus } from 'src/catalog/domain/enums/project-status.enum';
 import { InvestmentStatus } from 'src/subscription/domain/enums/investment-status.enum';
-import { PlatformFeesService } from 'src/common/platform-fees/platform-fees.service';
+import { PlatformFeesService } from 'src/treasury/application/services/platform-fees.service';
 
 const PERIODE_REGEX = /^\d{4}-(0[1-9]|1[0-2])$/;
 const TAUX_IR = 0.128;

@@ -6,7 +6,7 @@ import { SecondaryMarketController } from './presentation/http/secondary-market.
 import { AdminSecondaryMarketController } from './presentation/http/admin-secondary-market.controller';
 import { AnnulerOrdreParAdministrationUseCase } from './application/usecases/annuler-ordre-par-administration.usecase';
 import { ForcerExecutionOrdreUseCase } from './application/usecases/forcer-execution-ordre.usecase';
-import { PlatformFeesModule } from 'src/common/platform-fees/platform-fees.module';
+import { PlatformFeesModule } from 'src/treasury/application/platform-fees.module';
 import { YouSignWebhookController } from './presentation/http/yousign-webhook.controller';
 import { SecondaryMarketErrorFilter } from './presentation/http/filters/secondary-market-error.filter';
 import { PasserOrdreDeVenteUseCase } from './application/usecases/passer-ordre-de-vente.usecase';

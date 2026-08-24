@@ -3,7 +3,7 @@ import { StatutPeriodeDistribution } from '../../domains/enums/statut-periode-di
 import { ModeleEconomique } from 'src/catalog/domain/enums/modele-economique.enum';
 import { ProjectStatus } from 'src/catalog/domain/enums/project-status.enum';
 import { InvestmentStatus } from 'src/subscription/domain/enums/investment-status.enum';
-import { DEFAULT_FEE_RATES } from 'src/common/platform-fees/platform-fees.service';
+import { DEFAULT_FEE_RATES } from 'src/treasury/application/services/platform-fees.service';
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 

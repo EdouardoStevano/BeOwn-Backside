@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AdminSettingsEntity } from 'src/admin/entities/admin-settings.entity';
-import { round2 } from './platform-fees.constants';
+import { round2 } from 'src/shared/money/round2';
 
 /**
  * Taux de commissions de la plateforme (en %, éditables par le super_admin

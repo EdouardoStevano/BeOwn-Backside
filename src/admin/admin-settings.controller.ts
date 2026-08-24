@@ -27,7 +27,7 @@ import {
   DEFAULT_BROADCAST_SETTINGS,
   mergeBroadcastSettings,
 } from './entities/admin-settings.entity';
-import { DEFAULT_FEE_RATES } from 'src/common/platform-fees/platform-fees.service';
+import { DEFAULT_FEE_RATES } from 'src/treasury/application/services/platform-fees.service';
 
 const ADMIN_ROLES: string[] = rolesWithPermission('settings:manage');
 

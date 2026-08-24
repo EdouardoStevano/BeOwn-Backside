@@ -34,7 +34,7 @@ import { LocativeManagementModule } from './locative-management/applications/loc
 import { DistributionsModule } from './distributions/applications/distributions.module';
 import { RegulatoryReportingModule } from './regulatory-reporting/regulatory-reporting.module';
 import { AmlModule } from './compliance/application/aml.module';
-import { PlatformFeesModule } from './common/platform-fees/platform-fees.module';
+import { PlatformFeesModule } from './treasury/application/platform-fees.module';
 import { PlatformSettingsModule } from './common/platform-settings/platform-settings.module';
 import { ContactModule } from './common/contact/contact.module';
 import { SmsModule } from './shared/sms/sms.module';

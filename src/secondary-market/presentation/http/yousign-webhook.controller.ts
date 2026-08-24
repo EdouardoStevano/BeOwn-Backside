@@ -27,8 +27,8 @@ import { TransactionEntity } from 'src/treasury/infrastructure/persistence/entit
 import { InvestmentStatus } from 'src/subscription/domain/enums/investment-status.enum';
 import { EcheanceStatus } from 'src/servicing/domain/enums/echeance.enum';
 import { OrdreMarcheStatus } from 'src/secondary-market/domain/enums/ordre-marche.enum';
-import { PlatformFeesService } from 'src/common/platform-fees/platform-fees.service';
-import { round2 } from 'src/common/platform-fees/platform-fees.constants';
+import { PlatformFeesService } from 'src/treasury/application/services/platform-fees.service';
+import { round2 } from 'src/shared/money/round2';
 import { formatEur } from 'src/shared/money/format-eur';
 import { computeCoutAcquisition } from 'src/secondary-market/domain/services/cout-acquisition';
 import {

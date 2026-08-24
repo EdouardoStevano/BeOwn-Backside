@@ -20,7 +20,7 @@ import {
   TransactionType,
   WalletType,
 } from 'src/treasury/domain/enums/wallet.enum';
-import { PlatformFeesService } from 'src/common/platform-fees/platform-fees.service';
+import { PlatformFeesService } from 'src/treasury/application/services/platform-fees.service';
 import { NotificationEventService } from 'src/notifications/applications/notification-event.service';
 
 /**

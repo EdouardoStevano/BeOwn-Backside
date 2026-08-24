@@ -1,4 +1,4 @@
-import { round2 } from 'src/common/platform-fees/platform-fees.constants';
+import { round2 } from 'src/shared/money/round2';
 
 /**
  * Coût d'acquisition des fractions vendues sur le marché secondaire —
