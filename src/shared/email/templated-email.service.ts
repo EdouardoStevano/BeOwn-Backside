@@ -2,6 +2,7 @@ import { Logger } from '@nestjs/common';
 import { EmailService } from './email.service';
 import { EmailTemplateService } from './email-template.service';
 import { formatEur } from 'src/shared/money/format-eur';
+import { wrapInLayout } from './layout';
 
 /**
  * Socle commun aux transports email : rendu des templates et composition des
@@ -43,12 +44,46 @@ export abstract class TemplatedEmailService implements EmailService {
     });
   }
 
+  /**
+   * **Réinitialisation du mot de passe** — le seul email métier qui
+   * court-circuitait le rendu.
+   *
+   * Il passait du HTML brut à `sendHtml` : ni layout, ni charte, ni logo, ni
+   * mention légale, et le lien collé en clair au milieu du texte. Il arrivait
+   * donc aux styles par défaut du client de messagerie, là où les dix autres
+   * arrivent à la charte BeOwn. Il a désormais son template, éditable au
+   * back-office comme les autres.
+   *
+   * **Il ne se saute pas, lui.** `sendTemplated` renonce en silence quand un
+   * template est désactivé ou introuvable — acceptable pour une annonce, pas
+   * ici : ce lien est le seul chemin de récupération d'un compte, et ne pas
+   * l'envoyer enfermerait dehors quelqu'un qui a perdu son mot de passe. Si le
+   * rendu ne donne rien, on envoie quand même, dans le layout maison.
+   */
   async sendPasswordResetEmail(email: string, token: string): Promise<void> {
     const resetLink = `${this.frontendUrl}/auth/reset-password?token=${token}`;
+    const expiresIn = '30 minutes';
+
+    const rendered = await this.templates.render('password-reset', {
+      appUrl: this.appUrl,
+      resetLink,
+      expiresIn,
+    });
+    if (rendered) {
+      await this.sendHtml(email, rendered.sujet, rendered.html);
+      return;
+    }
+
+    this.logger.warn(
+      `Template "password-reset" indisponible — envoi du message de secours (destinataire : ${email})`,
+    );
     await this.sendHtml(
       email,
-      'Réinitialisation de votre mot de passe BeOwn',
-      `<h2>Réinitialisation de mot de passe</h2><p>Cliquez sur le lien ci-dessous pour réinitialiser votre mot de passe :</p><p><a href="${resetLink}">${resetLink}</a></p><p>Ce lien expire dans 30 minutes.</p>`,
+      SUJET_REINITIALISATION,
+      wrapInLayout(
+        corpsDeSecoursReinitialisation(resetLink, expiresIn),
+        SUJET_REINITIALISATION,
+      ),
     );
   }
 
@@ -174,3 +209,21 @@ export abstract class TemplatedEmailService implements EmailService {
     await this.sendHtml(email, rendered.sujet, rendered.html);
   }
 }
+
+const SUJET_REINITIALISATION = 'Réinitialisation de votre mot de passe BeOwn';
+
+/**
+ * Le corps de secours, si le template venait à manquer — mêmes classes que le
+ * `.hbs`, donc même charte une fois passé dans `wrapInLayout`. Il dit le
+ * strict nécessaire : le bouton, le lien brut au cas où le bouton ne passe
+ * pas, et la durée de validité.
+ */
+const corpsDeSecoursReinitialisation = (
+  resetLink: string,
+  expiresIn: string,
+): string =>
+  `<p class="h1">Réinitialisation de votre mot de passe</p>` +
+  `<p class="p">Cliquez sur le bouton ci-dessous pour choisir un nouveau mot de passe.</p>` +
+  `<a href="${resetLink}" class="btn">Choisir un nouveau mot de passe</a>` +
+  `<p class="note">Ce lien expire dans <strong>${expiresIn}</strong> et ne peut servir qu'une fois.</p>` +
+  `<div class="card"><a href="${resetLink}">${resetLink}</a></div>`;

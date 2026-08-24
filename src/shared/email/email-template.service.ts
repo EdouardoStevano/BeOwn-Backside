@@ -49,6 +49,12 @@ export const DEFAULT_TEMPLATE_META: Record<string, TemplateMeta> = {
       "Code à usage unique envoyé lors d'une connexion avec double authentification.",
     sujet: 'Votre code de connexion BeOwn',
   },
+  'password-reset': {
+    nom: 'Réinitialisation du mot de passe',
+    description:
+      'Lien à usage unique permettant de choisir un nouveau mot de passe, valable 30 minutes.',
+    sujet: 'Réinitialisation de votre mot de passe BeOwn',
+  },
   'kyc-validated': {
     nom: 'KYC validé',
     description: "Confirmation de la vérification d'identité.",
