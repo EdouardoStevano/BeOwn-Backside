@@ -8,7 +8,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { SignatureEntity } from 'src/documents/infrastructure/persistence/entities/signature.entity';
 import { SignatureOrmMapper } from 'src/documents/infrastructure/persistence/mappers/signature.orm-mapper';
-import { YouSignService } from 'src/common/yousign/yousign.service';
+import { YouSignService } from 'src/documents/infrastructure/external-services/yousign.service';
 
 @Injectable()
 export class CancelInitiationUseCase {

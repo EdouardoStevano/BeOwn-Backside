@@ -17,7 +17,7 @@ import { CancelInitiationUseCase } from './application/usecases/cancel-initiatio
 import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructure.module';
 import { NotificationsModule } from 'src/notifications/notifications.module';
 import { CloudStorageModule } from 'src/shared/cloud-storage/cloud-storage.module';
-import { YouSignModule } from 'src/common/yousign/yousign.module';
+import { YouSignModule } from 'src/documents/infrastructure/external-services/yousign.module';
 import { ContractGeneratorService } from 'src/subscription/application/services/contract-generator.service';
 import { KycModule } from 'src/compliance/application/kyc.module';
 import { ProjectEntity } from 'src/catalog/infrastructure/persistence/entities/project.entity';

@@ -38,7 +38,7 @@ import {
   WalletType,
 } from 'src/treasury/domain/enums/wallet.enum';
 import { ProjectStatus } from 'src/catalog/domain/enums/project-status.enum';
-import { YouSignService } from 'src/common/yousign/yousign.service';
+import { YouSignService } from 'src/documents/infrastructure/external-services/yousign.service';
 import { CloudStorageService } from 'src/shared/cloud-storage/cloud-storage.service';
 import { NotificationService } from 'src/notifications/applications/notification.service';
 import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';

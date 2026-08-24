@@ -9,7 +9,7 @@ import { DocumentsInfrastructureModule } from 'src/documents/infrastructure/docu
 import { UsersInfrastructureModule } from 'src/iam/infrastructure/users-infrastructure.module';
 import { ProfilesInfrastructureModule } from 'src/compliance/infrastructure/profiles-infrastructure.module';
 import { CloudStorageModule } from 'src/shared/cloud-storage/cloud-storage.module';
-import { YouSignModule } from 'src/common/yousign/yousign.module';
+import { YouSignModule } from 'src/documents/infrastructure/external-services/yousign.module';
 import { CreateInvestmentUseCase } from './application/usecases/create-investment.usecase';
 import { ContractGeneratorService } from './application/services/contract-generator.service';
 import { TopUpInvestmentUseCase } from './application/usecases/top-up-investment.usecase';

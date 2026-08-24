@@ -31,7 +31,7 @@ import { SignatureOrmMapper } from 'src/documents/infrastructure/persistence/map
 import { WalletType } from 'src/treasury/domain/enums/wallet.enum';
 import { CloudStorageService } from 'src/shared/cloud-storage/cloud-storage.service';
 import { ContractGeneratorService } from '../services/contract-generator.service';
-import { YouSignService } from 'src/common/yousign/yousign.service';
+import { YouSignService } from 'src/documents/infrastructure/external-services/yousign.service';
 import { ProjetSouscriptibleTranslator } from '../acl/projet-souscriptible.translator';
 
 /** Durée de validité d'une demande de signature envoyée au prestataire. */
