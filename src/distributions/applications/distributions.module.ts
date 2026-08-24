@@ -5,7 +5,7 @@ import { LocativeManagementInfrastructureModule } from 'src/locative-management/
 import { CatalogInfrastructureModule } from 'src/catalog/infrastructure/catalog-infrastructure.module';
 import { SubscriptionInfrastructureModule } from 'src/subscription/infrastructure/subscription-infrastructure.module';
 import { NotificationsModule } from 'src/notifications/notifications.module';
-import { AmlModule } from 'src/common/aml/aml.module';
+import { AmlModule } from 'src/compliance/application/aml.module';
 import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructure.module';
 import { WalletEntity } from 'src/treasury/infrastructure/persistence/entities/wallet.entity';
 import { TransactionEntity } from 'src/treasury/infrastructure/persistence/entities/transaction.entity';

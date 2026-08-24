@@ -1,5 +1,5 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { AmlMonitorService } from 'src/common/aml/aml-monitor.service';
+import { AmlMonitorService } from 'src/compliance/application/services/aml-monitor.service';
 import { PlatformFeesService } from 'src/common/platform-fees/platform-fees.service';
 import { UserRole } from 'src/iam/domain/enums/user.enum';
 import { InvestmentStatus } from 'src/subscription/domain/enums/investment-status.enum';

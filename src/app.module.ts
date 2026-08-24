@@ -33,7 +33,7 @@ import { KpiModule } from './kpi/kpi.module';
 import { LocativeManagementModule } from './locative-management/applications/locative-management.module';
 import { DistributionsModule } from './distributions/applications/distributions.module';
 import { RegulatoryReportingModule } from './regulatory-reporting/regulatory-reporting.module';
-import { AmlModule } from './common/aml/aml.module';
+import { AmlModule } from './compliance/application/aml.module';
 import { PlatformFeesModule } from './common/platform-fees/platform-fees.module';
 import { PlatformSettingsModule } from './common/platform-settings/platform-settings.module';
 import { ContactModule } from './common/contact/contact.module';
