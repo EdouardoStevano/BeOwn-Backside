@@ -1,4 +1,4 @@
-import type { IEvent } from '@nestjs/cqrs';
+import type { DomainEvent } from 'src/shared/kernel/domain/domain-event';
 
 /**
  * Une réservation active vient d'être retirée de la file — par son titulaire
@@ -7,7 +7,7 @@ import type { IEvent } from '@nestjs/cqrs';
  * Le rang et le montant qu'elle occupait sont libérés de fait : la capacité
  * se recalcule sur les réservations actives (RG-RES-05).
  */
-export class ReservationAnnuleeDomainEvent implements IEvent {
+export class ReservationAnnuleeDomainEvent implements DomainEvent {
   constructor(
     public readonly reservationId: string,
     public readonly projetId: string,

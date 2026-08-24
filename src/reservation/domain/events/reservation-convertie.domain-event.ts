@@ -1,4 +1,4 @@
-import type { IEvent } from '@nestjs/cqrs';
+import type { DomainEvent } from 'src/shared/kernel/domain/domain-event';
 
 /**
  * **Le fait central du Core Domain** (§3.4) : à l'ouverture de la collecte,
@@ -15,7 +15,7 @@ import type { IEvent } from '@nestjs/cqrs';
  * du back-office. Le fait est défini ici pour que `subscription` se construise
  * contre le contrat, pas contre l'agrégat.
  */
-export class ReservationConvertieDomainEvent implements IEvent {
+export class ReservationConvertieDomainEvent implements DomainEvent {
   constructor(
     public readonly reservationId: string,
     public readonly projetId: string,

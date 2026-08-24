@@ -1,4 +1,4 @@
-import type { IEvent } from '@nestjs/cqrs';
+import type { DomainEvent } from 'src/shared/kernel/domain/domain-event';
 import { ProjectType } from '../enums/project-status.enum';
 
 /**
@@ -12,7 +12,7 @@ import { ProjectType } from '../enums/project-status.enum';
  * Distinct de {@link ProjetPublieDomainEvent} : celui-ci s'adresse aux
  * administrateurs et ne dit rien au catalogue.
  */
-export class ProjetSoumisDomainEvent implements IEvent {
+export class ProjetSoumisDomainEvent implements DomainEvent {
   constructor(
     public readonly projetId: string,
     public readonly slug: string,

@@ -1,4 +1,3 @@
-import { Inject, Injectable } from '@nestjs/common';
 import { User } from 'src/iam/domain/aggregates/user';
 import { Password } from 'src/iam/domain/value-objects/password.vo';
 import {
@@ -15,11 +14,20 @@ export interface CreateUserProps {
   emailVerified?: boolean;
 }
 
-@Injectable()
+/**
+ * **Fabrique de comptes** (§23) — elle éprouve le mot de passe, le hache, puis
+ * laisse `User.register` porter les invariants du compte.
+ *
+ * **Elle n'est plus décorée.** Elle portait `@Injectable()` et `@Inject()`, ce
+ * que §32 interdit dans `domain/` — c'en est l'exemple littéral. Une fabrique
+ * est bien un concept de domaine (§23), et elle a le droit de dépendre d'un
+ * **port** du domaine (`HashingService`, §33) : ce qui n'allait pas, c'était le
+ * moyen de l'injection, pas la dépendance. `UsersModule` la construit donc
+ * explicitement, en lui passant l'adaptateur — c'est le rôle d'un module (§36.4
+ * : le conteneur DI gère les instances, il n'a pas à marquer le domaine).
+ */
 export class UserFactory {
-  constructor(
-    @Inject(HASHING_SERVICE) private readonly hashingService: HashingService,
-  ) {}
+  constructor(private readonly hashingService: HashingService) {}
   async create(props: CreateUserProps): Promise<User> {
     // Le hachage reste ici : c'est la seule responsabilité de cette factory que
     // le domaine ne peut pas assumer (il ignore bcrypt). `User.register` reçoit

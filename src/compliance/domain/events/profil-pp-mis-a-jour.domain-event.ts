@@ -1,4 +1,4 @@
-import type { IEvent } from '@nestjs/cqrs';
+import type { DomainEvent } from 'src/shared/kernel/domain/domain-event';
 
 /**
  * Un profil investisseur personne physique vient d'être modifié.
@@ -14,7 +14,7 @@ import type { IEvent } from '@nestjs/cqrs';
  * formulaire n'en portait pas », ce qui n'est pas `null` — voir
  * `User.changerTelephone`.
  */
-export class ProfilPPMisAJourDomainEvent implements IEvent {
+export class ProfilPPMisAJourDomainEvent implements DomainEvent {
   constructor(
     public readonly utilisateurId: number,
     public readonly telephoneDeclare: string | undefined,

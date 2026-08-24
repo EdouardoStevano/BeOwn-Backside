@@ -1,4 +1,4 @@
-import type { IEvent } from '@nestjs/cqrs';
+import type { DomainEvent } from 'src/shared/kernel/domain/domain-event';
 
 /**
  * L'investisseur a exercé son droit de rétractation PSFP dans la fenêtre de
@@ -7,7 +7,7 @@ import type { IEvent } from '@nestjs/cqrs';
  * Les fractions qu'il occupait retournent de fait à la collecte — la capacité
  * se recalcule sur les investissements actifs (cf. `CollecteCapacity`).
  */
-export class InvestissementRetracteDomainEvent implements IEvent {
+export class InvestissementRetracteDomainEvent implements DomainEvent {
   constructor(
     public readonly investissementId: string,
     public readonly projetId: string,

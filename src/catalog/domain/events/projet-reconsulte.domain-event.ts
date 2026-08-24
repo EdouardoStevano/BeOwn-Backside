@@ -1,4 +1,4 @@
-import type { IEvent } from '@nestjs/cqrs';
+import type { DomainEvent } from 'src/shared/kernel/domain/domain-event';
 
 /**
  * Un investisseur vient de consulter le même projet une deuxième fois.
@@ -12,7 +12,7 @@ import type { IEvent } from '@nestjs/cqrs';
  * `Repository<ProjectViewEntity>` TypeORM injecté à même la présentation (§12.9)
  * et un appel direct au service de notifications.
  */
-export class ProjetReconsulteDomainEvent implements IEvent {
+export class ProjetReconsulteDomainEvent implements DomainEvent {
   constructor(
     public readonly projetId: string,
     public readonly projetTitre: string,

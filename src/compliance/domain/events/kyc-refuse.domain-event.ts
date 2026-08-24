@@ -1,4 +1,4 @@
-import type { IEvent } from '@nestjs/cqrs';
+import type { DomainEvent } from 'src/shared/kernel/domain/domain-event';
 
 /**
  * Un dossier vient d'être refusé par une décision humaine.
@@ -14,7 +14,7 @@ import type { IEvent } from '@nestjs/cqrs';
  * `IEvent` est le seul emprunt de ce fichier à NestJS ; interface marqueur,
  * importée en `import type`, donc absente du code compilé (§6 / §12.1).
  */
-export class KycRefuseDomainEvent implements IEvent {
+export class KycRefuseDomainEvent implements DomainEvent {
   constructor(
     public readonly kycId: string,
     public readonly utilisateurId: number,

@@ -1,4 +1,4 @@
-import type { IEvent } from '@nestjs/cqrs';
+import type { DomainEvent } from 'src/shared/kernel/domain/domain-event';
 
 /**
  * Un profil investisseur personne physique vient d'être complété.
@@ -21,7 +21,7 @@ import type { IEvent } from '@nestjs/cqrs';
  * `IEvent` est le seul emprunt de ce fichier à NestJS ; interface marqueur,
  * importée en `import type`, donc absente du code compilé (§6 / §12.1).
  */
-export class ProfilPPCreeDomainEvent implements IEvent {
+export class ProfilPPCreeDomainEvent implements DomainEvent {
   constructor(
     public readonly utilisateurId: number,
     public readonly telephoneDeclare: string | undefined,

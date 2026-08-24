@@ -1,11 +1,11 @@
-import type { IEvent } from '@nestjs/cqrs';
+import type { DomainEvent } from 'src/shared/kernel/domain/domain-event';
 
 /**
  * Un investisseur a ajouté des fractions à une souscription déjà confirmée :
  * son wallet est débité du complément et son échéancier régénéré sur le
  * nouveau capital.
  */
-export class InvestissementCompleteDomainEvent implements IEvent {
+export class InvestissementCompleteDomainEvent implements DomainEvent {
   constructor(
     public readonly investissementId: string,
     public readonly projetId: string,

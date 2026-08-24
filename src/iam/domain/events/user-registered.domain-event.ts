@@ -1,4 +1,4 @@
-import type { IEvent } from '@nestjs/cqrs';
+import type { DomainEvent } from 'src/shared/kernel/domain/domain-event';
 
 /**
  * Un compte vient d'être créé — le fait métier, pas l'ordre de faire quelque
@@ -16,7 +16,7 @@ import type { IEvent } from '@nestjs/cqrs';
  * domaine reste sans dépendance à l'exécution (§6 l'admet explicitement pour
  * les Domain Events, §12.1 l'interdit pour tout le reste).
  */
-export class UserRegisteredDomainEvent implements IEvent {
+export class UserRegisteredDomainEvent implements DomainEvent {
   constructor(
     public readonly userId: number,
     public readonly email: string,

@@ -6,11 +6,7 @@ import {
   FirstName,
   LastName,
 } from 'src/iam/domain/value-objects/person-name.vo';
-import {
-  UserRole,
-  UserStatus,
-  UserType,
-} from 'src/iam/domain/enums/user.enum';
+import { UserRole, UserStatus, UserType } from 'src/iam/domain/enums/user.enum';
 import {
   InvalidUserStatusError,
   InvalidUserTypeError,
@@ -28,7 +24,6 @@ import {
   type PublicUser,
   type PublicUserMfa,
 } from 'src/iam/domain/mappers/user.mapper';
-import { AggregateRoot } from '@nestjs/cqrs';
 
 /**
  * Ordre dans lequel un facteur est retenu quand le compte en a plusieurs.
@@ -144,8 +139,15 @@ export interface RegisterUserProps {
  * La conversion vers les représentations sortantes (snapshot de persistance,
  * projection publiable) appartient à `UserMapper` — cette classe ne porte plus
  * que le métier (§4 — SRP).
+ *
+ * **Elle n'hérite plus de rien.** Elle étendait `AggregateRoot` de
+ * `@nestjs/cqrs`, ce que §32 interdit explicitement — un agrégat ne connaît
+ * pas le framework. L'héritage était de surcroît inutile : ni `apply()`, ni
+ * `commit()`, ni `getUncommittedEvents()` n'étaient appelés nulle part. Les
+ * événements de ce contexte sont publiés par les use cases, comme dans les neuf
+ * autres. Seul `super()` en témoignait.
  */
-export class User extends AggregateRoot {
+export class User {
   private _userId: number;
   private _firstname: FirstName;
   private _lastname: LastName | null;
@@ -218,7 +220,6 @@ export class User extends AggregateRoot {
    * **création** d'un compte : passer par ici, c'est se déclarer mapper.
    */
   constructor(state: UserState) {
-    super();
     this._userId = state.userId;
     this._firstname = state.firstname;
     this._lastname = state.lastname;

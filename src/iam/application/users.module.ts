@@ -10,7 +10,10 @@ import {
 } from 'src/iam/application/usecases/account/update-my-account.usecase';
 import { UpdateUserByAdminUseCase } from 'src/iam/application/usecases/account/update-user-by-admin.usecase';
 import { UserFactory } from '../domain/factories/user.factory';
-import { HASHING_SERVICE } from 'src/iam/domain/ports/hashing.service';
+import {
+  HASHING_SERVICE,
+  type HashingService,
+} from 'src/iam/domain/ports/hashing.service';
 import { BcryptService } from 'src/iam/infrastructure/crypto/bcrypt.service';
 import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructure.module';
 import { NotificationsModule } from 'src/notifications/notifications.module';
@@ -64,7 +67,14 @@ import { TransactionEntity } from 'src/treasury/infrastructure/persistence/entit
     UpdateUserByAdminUseCase,
     DeleteMyAccountUseCase,
     InvestorInactivityCronService,
-    UserFactory,
+    // Construite à la main : le domaine ne porte pas de décorateur NestJS
+    // (§32), c'est donc au module de lui passer l'adaptateur de hachage.
+    {
+      provide: UserFactory,
+      useFactory: (hashingService: HashingService) =>
+        new UserFactory(hashingService),
+      inject: [HASHING_SERVICE],
+    },
     { provide: HASHING_SERVICE, useClass: BcryptService },
   ],
   controllers: [UserController],

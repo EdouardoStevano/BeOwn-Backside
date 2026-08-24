@@ -1,4 +1,4 @@
-import type { IEvent } from '@nestjs/cqrs';
+import type { DomainEvent } from 'src/shared/kernel/domain/domain-event';
 
 /**
  * Un investisseur vient de souscrire : les fonds sont débités, les fractions
@@ -7,7 +7,7 @@ import type { IEvent } from '@nestjs/cqrs';
  * C'est le fait dont `servicing` a besoin pour déclencher l'échéancier (§3.4,
  * §18) et `notifications` pour prévenir l'investisseur et le back-office.
  */
-export class InvestissementSouscritDomainEvent implements IEvent {
+export class InvestissementSouscritDomainEvent implements DomainEvent {
   constructor(
     public readonly investissementId: string,
     public readonly projetId: string,

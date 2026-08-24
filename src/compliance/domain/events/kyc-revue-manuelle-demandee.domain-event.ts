@@ -1,4 +1,4 @@
-import type { IEvent } from '@nestjs/cqrs';
+import type { DomainEvent } from 'src/shared/kernel/domain/domain-event';
 
 /**
  * Le titulaire d'un dossier vient de demander une revue manuelle — le fait
@@ -18,7 +18,7 @@ import type { IEvent } from '@nestjs/cqrs';
  * domaine reste sans dépendance à l'exécution (§6 l'admet explicitement pour
  * les Domain Events, §12.1 l'interdit pour tout le reste).
  */
-export class KycRevueManuelleDemandeeDomainEvent implements IEvent {
+export class KycRevueManuelleDemandeeDomainEvent implements DomainEvent {
   constructor(
     public readonly kycId: string,
     public readonly utilisateurId: number,

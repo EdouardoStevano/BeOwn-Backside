@@ -1,4 +1,4 @@
-import type { IEvent } from '@nestjs/cqrs';
+import type { DomainEvent } from 'src/shared/kernel/domain/domain-event';
 import { ProjectStatus, ProjectType } from '../enums/project-status.enum';
 
 /**
@@ -17,7 +17,7 @@ import { ProjectStatus, ProjectType } from '../enums/project-status.enum';
  * `IEvent` est le seul emprunt de ce fichier à NestJS ; interface marqueur,
  * importée en `import type`, donc absente du code compilé (§6 / §12.1).
  */
-export class ProjetPublieDomainEvent implements IEvent {
+export class ProjetPublieDomainEvent implements DomainEvent {
   constructor(
     public readonly projetId: string,
     public readonly slug: string,

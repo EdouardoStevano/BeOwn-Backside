@@ -1,4 +1,4 @@
-import type { IEvent } from '@nestjs/cqrs';
+import type { DomainEvent } from 'src/shared/kernel/domain/domain-event';
 
 /**
  * Une échéance a été réglée : l'investisseur a été crédité du net, et la
@@ -8,7 +8,7 @@ import type { IEvent } from '@nestjs/cqrs';
  * `regulatory-reporting` consomme ce fait pour l'IFU (§3.3) — les montants
  * fiscaux sont calculés ici, une fois, et jamais recalculés en aval.
  */
-export class EcheancePayeeDomainEvent implements IEvent {
+export class EcheancePayeeDomainEvent implements DomainEvent {
   constructor(
     public readonly echeanceId: string,
     public readonly investissementId: string,

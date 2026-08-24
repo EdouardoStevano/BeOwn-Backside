@@ -1,4 +1,4 @@
-import type { IEvent } from '@nestjs/cqrs';
+import type { DomainEvent } from 'src/shared/kernel/domain/domain-event';
 
 /**
  * La collecte vient d'ouvrir sur un projet : il est passé en `EN_COLLECTE`.
@@ -9,7 +9,7 @@ import type { IEvent } from '@nestjs/cqrs';
  * `BroadcastService` (claim atomique sur `broadcastCollecteAt`), pas à
  * l'émission du fait.
  */
-export class CollecteOuverteDomainEvent implements IEvent {
+export class CollecteOuverteDomainEvent implements DomainEvent {
   constructor(
     public readonly projetId: string,
     /** Compte à l'origine de la transition, tracé pour l'audit. */

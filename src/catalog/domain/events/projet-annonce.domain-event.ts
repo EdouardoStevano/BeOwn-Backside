@@ -1,4 +1,4 @@
-import type { IEvent } from '@nestjs/cqrs';
+import type { DomainEvent } from 'src/shared/kernel/domain/domain-event';
 
 /**
  * Les réservations viennent d'ouvrir sur un projet : il est passé en `ANNONCE`.
@@ -10,7 +10,7 @@ import type { IEvent } from '@nestjs/cqrs';
  * atomique sur `broadcastAnnonceAt`. Un fait métier se produit à chaque
  * transition, même si l'annonce ne part qu'une fois.
  */
-export class ProjetAnnonceDomainEvent implements IEvent {
+export class ProjetAnnonceDomainEvent implements DomainEvent {
   constructor(
     public readonly projetId: string,
     /**
