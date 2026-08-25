@@ -10,8 +10,16 @@ import {
 } from 'src/compliance/domain/repositories/profil-pp.repository';
 import { CreateProfilPPDto } from 'src/compliance/presentation/http/dto/profil.dto';
 import { ProfilPPCreeDomainEvent } from 'src/compliance/domain/events/profil-pp-cree.domain-event';
+import {
+  NATURE_DU_DOSSIER_REPOSITORY,
+  type NatureDuDossierRepository,
+} from 'src/compliance/domain/repositories/nature-du-dossier.repository';
+import { NatureDeDossier } from 'src/compliance/domain/enums/nature-de-dossier.enum';
 import { ProfilPPFactory } from 'src/compliance/domain/factories/profil-pp.factory';
-import { ProfilPPDejaExistantError } from 'src/compliance/domain/errors';
+import {
+  NatureDeDossierIncompatibleError,
+  ProfilPPDejaExistantError,
+} from 'src/compliance/domain/errors';
 import { champsDeclaresDepuisDto } from '../../mappers/profil-pp-champs.mapper';
 import { VueProfilPP, vueProfilPP } from '../../mappers/profil-pp-vue.mapper';
 
@@ -44,6 +52,8 @@ export class CreateProfilPPUseCase {
     // (§12.3).
     @Inject(USER_REPOSITORY)
     private readonly userRepository: UserRepository,
+    @Inject(NATURE_DU_DOSSIER_REPOSITORY)
+    private readonly natureDuDossier: NatureDuDossierRepository,
     private readonly eventBus: EventBus,
   ) {}
 
@@ -51,12 +61,24 @@ export class CreateProfilPPUseCase {
     const existing = await this.profilPPRepository.findByUserId(userId);
     if (existing) throw new ProfilPPDejaExistantError();
 
-    const profil = await this.profilPPRepository.save(
-      ProfilPPFactory.creer({
-        userId,
-        ...champsDeclaresDepuisDto(dto),
-      }),
+    const naissant = ProfilPPFactory.creer({
+      userId,
+      ...champsDeclaresDepuisDto(dto),
+    });
+
+    // Après la fabrique, avant l'écriture : un formulaire refusé ne doit pas
+    // fixer la nature du compte, et rien ne doit être écrit si elle est déjà
+    // fixée à l'autre. L'appel pose la nature ou rend celle qui fait foi — il
+    // n'y a pas de fenêtre entre lire et écrire (§13).
+    const nature = await this.natureDuDossier.declarer(
+      userId,
+      NatureDeDossier.PP,
     );
+    if (nature !== NatureDeDossier.PP) {
+      throw new NatureDeDossierIncompatibleError(NatureDeDossier.PP, nature);
+    }
+
+    const profil = await this.profilPPRepository.save(naissant);
 
     // Le fait est annoncé, les réactions ne sont pas orchestrées ici (§8).
     // Publié après la sauvegarde uniquement — un abonné ne doit pas réagir à un

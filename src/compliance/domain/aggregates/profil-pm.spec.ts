@@ -11,7 +11,7 @@ const AUTRE_SIREN = '552100554';
 
 function creer(champs: Partial<CreerProfilPMProps> = {}): ProfilPM {
   return ProfilPMFactory.creer({
-    utilisateurId: 42,
+    userId: 42,
     raisonSociale: 'BeOwn',
     ...champs,
   });
@@ -126,6 +126,6 @@ describe('ProfilPM.mettreAJour', () => {
     } as unknown as ChampsDeclaresProfilPM);
 
     expect(profil.aUnRepresentant()).toBe(true);
-    expect(profil.utilisateurId).toBe(42);
+    expect(profil.userId).toBe(42);
   });
 });

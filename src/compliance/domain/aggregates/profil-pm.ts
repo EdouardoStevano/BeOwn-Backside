@@ -26,9 +26,24 @@ export type ChampsDeclaresProfilPM = ChampsIdentiteLegale & {
   representantId?: number | null;
 };
 
-/** Ce que le profil ajoute à son bloc : sa clé et ses dates. */
+/** Ce que le profil ajoute à son bloc : ses clés et ses dates. */
 export interface EnteteProfilPM {
-  utilisateurId: number;
+  /** Identité propre du dossier, attribuée par la persistance. */
+  id: string;
+  /**
+   * Le compte qui déclare cette société.
+   *
+   * **Sans unicité, contrairement au dossier physique** : un même dirigeant
+   * gère souvent plusieurs sociétés d'investissement, et rien ne justifie de
+   * lui faire ouvrir autant de comptes. C'est ce qui a forcé le dossier moral
+   * à quitter la relation 1:1 où `utilisateurId` lui tenait lieu de clé — un
+   * compte ne pouvait alors porter qu'une société, et la seconde écrasait
+   * silencieusement la première.
+   *
+   * Ce que le compte ne peut pas faire, en revanche, c'est porter en plus un
+   * dossier personne physique — voir `NatureDeDossier`.
+   */
+  userId: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -79,7 +94,8 @@ export interface ProfilPMSnapshotBrut extends Omit<
  * capital négatif atterrissaient tels quels en base.
  */
 export class ProfilPM {
-  private readonly _utilisateurId: number;
+  private readonly _id: string;
+  private readonly _userId: number;
   private _identiteLegale: IdentiteLegale;
   private _capitalSocial: CapitalSocial | null;
   private _siegeAdresse: Libelle | null;
@@ -105,7 +121,8 @@ export class ProfilPM {
     secteurActivite: Libelle | null;
     representantId: number | null;
   }) {
-    this._utilisateurId = etat.entete.utilisateurId;
+    this._id = etat.entete.id;
+    this._userId = etat.entete.userId;
     this._createdAt = etat.entete.createdAt;
     this._updatedAt = etat.entete.updatedAt;
     this._identiteLegale = etat.identiteLegale;
@@ -189,8 +206,11 @@ export class ProfilPM {
 
   // ── Lectures ──────────────────────────────────────────────────────────────
 
-  get utilisateurId(): number {
-    return this._utilisateurId;
+  get id(): string {
+    return this._id;
+  }
+  get userId(): number {
+    return this._userId;
   }
   get identiteLegale(): IdentiteLegale {
     return this._identiteLegale;

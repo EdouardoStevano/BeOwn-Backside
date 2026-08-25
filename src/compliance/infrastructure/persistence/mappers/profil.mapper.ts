@@ -97,7 +97,8 @@ export class ProfilMapper {
 
   static pmToDomain(entity: ProfilPMEntity): ProfilPM {
     return ProfilPMDomainMapper.restore({
-      utilisateurId: entity.utilisateurId,
+      id: entity.id,
+      userId: entity.userId,
       raisonSociale: entity.raisonSociale,
       formeJuridique: entity.formeJuridique,
       siren: entity.siren,
@@ -114,7 +115,9 @@ export class ProfilMapper {
   static pmToEntity(domain: ProfilPM): ProfilPMEntity {
     const snapshot = ProfilPMDomainMapper.toSnapshot(domain);
     const entity = new ProfilPMEntity();
-    entity.utilisateurId = snapshot.utilisateurId;
+    // Cf. `ppToEntity` : absent tant que la ligne n'a pas été écrite.
+    entity.id = snapshot.id;
+    entity.userId = snapshot.userId;
     entity.raisonSociale = snapshot.raisonSociale;
     entity.formeJuridique = snapshot.formeJuridique;
     entity.siren = snapshot.siren;

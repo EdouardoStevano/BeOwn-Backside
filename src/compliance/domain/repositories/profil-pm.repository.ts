@@ -12,6 +12,21 @@ export const PROFIL_PM_REPOSITORY = Symbol('PROFIL_PM_REPOSITORY');
  */
 export interface ProfilPMRepository {
   save(profil: ProfilPM): Promise<ProfilPM>;
-  findByUserId(userId: number): Promise<ProfilPM | null>;
+
+  /** Un dossier précis, désigné par sa propre identité. */
+  findById(id: string): Promise<ProfilPM | null>;
+
+  /**
+   * Toutes les sociétés déclarées par un compte, des plus anciennes aux plus
+   * récentes.
+   *
+   * Rend une liste et non un dossier : la méthode s'appelait `findByUserId` et
+   * rendait `ProfilPM | null` du temps où un compte n'en portait qu'un. Garder
+   * cette forme aurait fait choisir arbitrairement une société parmi
+   * plusieurs — et le choix se serait fait dans le `LIMIT 1` implicite d'un
+   * `findOne`, là où personne ne l'aurait cherché.
+   */
+  listerParUtilisateur(userId: number): Promise<ProfilPM[]>;
+
   update(profil: ProfilPM): Promise<ProfilPM>;
 }

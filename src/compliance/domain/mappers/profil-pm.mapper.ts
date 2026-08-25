@@ -32,7 +32,8 @@ export class ProfilPMMapper {
   static restore(snapshot: ProfilPMSnapshotBrut): ProfilPM {
     return new ProfilPM({
       entete: {
-        utilisateurId: snapshot.utilisateurId,
+        id: snapshot.id,
+        userId: snapshot.userId,
         createdAt: snapshot.createdAt,
         updatedAt: snapshot.updatedAt,
       },
@@ -59,7 +60,8 @@ export class ProfilPMMapper {
    */
   static toSnapshot(profil: ProfilPM): ProfilPMSnapshot {
     return {
-      utilisateurId: profil.utilisateurId,
+      id: profil.id,
+      userId: profil.userId,
       createdAt: profil.createdAt,
       updatedAt: profil.updatedAt,
       ...profil.identiteLegale.toSnapshot(),

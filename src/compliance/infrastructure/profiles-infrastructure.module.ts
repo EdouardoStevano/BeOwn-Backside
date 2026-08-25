@@ -3,12 +3,15 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { ProfilPPEntity } from './persistence/entities/profil-pp.entity';
 import { ProfilPMEntity } from './persistence/entities/profil-pm.entity';
 import { QuestionnaireAdequationEntity } from './persistence/entities/questionnaire-adequation.entity';
+import { DossierInvestisseurEntity } from './persistence/entities/dossier-investisseur.entity';
 import { ProfilPPTypeOrmRepository } from './repositories/profil-pp.repository';
 import { ProfilPMTypeOrmRepository } from './repositories/profil-pm.repository';
 import { QuestionnaireAdequationTypeOrmRepository } from './repositories/questionnaire-adequation.repository';
+import { NatureDuDossierTypeOrmRepository } from './repositories/nature-du-dossier.repository';
 import { PROFIL_PP_REPOSITORY } from '../domain/repositories/profil-pp.repository';
 import { PROFIL_PM_REPOSITORY } from '../domain/repositories/profil-pm.repository';
 import { QUESTIONNAIRE_ADEQUATION_REPOSITORY } from '../domain/repositories/questionnaire-adequation.repository';
+import { NATURE_DU_DOSSIER_REPOSITORY } from '../domain/repositories/nature-du-dossier.repository';
 
 /**
  * Câblage des adapters de sortie du contexte Profiles (§4 — DIP) : un port par
@@ -23,6 +26,7 @@ import { QUESTIONNAIRE_ADEQUATION_REPOSITORY } from '../domain/repositories/ques
       ProfilPPEntity,
       ProfilPMEntity,
       QuestionnaireAdequationEntity,
+      DossierInvestisseurEntity,
     ]),
   ],
   providers: [
@@ -32,11 +36,16 @@ import { QUESTIONNAIRE_ADEQUATION_REPOSITORY } from '../domain/repositories/ques
       provide: QUESTIONNAIRE_ADEQUATION_REPOSITORY,
       useClass: QuestionnaireAdequationTypeOrmRepository,
     },
+    {
+      provide: NATURE_DU_DOSSIER_REPOSITORY,
+      useClass: NatureDuDossierTypeOrmRepository,
+    },
   ],
   exports: [
     PROFIL_PP_REPOSITORY,
     PROFIL_PM_REPOSITORY,
     QUESTIONNAIRE_ADEQUATION_REPOSITORY,
+    NATURE_DU_DOSSIER_REPOSITORY,
   ],
 })
 export class ProfilesInfrastructureModule {}

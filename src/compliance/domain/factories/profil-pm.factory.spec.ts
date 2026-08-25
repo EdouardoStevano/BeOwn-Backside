@@ -7,7 +7,7 @@ const SIREN = '404833048';
 
 function creer(champs: Partial<CreerProfilPMProps> = {}): ProfilPM {
   return ProfilPMFactory.creer({
-    utilisateurId: 42,
+    userId: 42,
     raisonSociale: 'BeOwn',
     ...champs,
   });
@@ -57,12 +57,8 @@ describe('ProfilPMFactory — répartition', () => {
 
 describe('ProfilPMFactory — ce que la fabrique décide seule', () => {
   it('refuse un identifiant utilisateur qui ne désigne aucun compte', () => {
-    expect(champFautif(() => creer({ utilisateurId: 0 }))).toBe(
-      'utilisateurId',
-    );
-    expect(champFautif(() => creer({ utilisateurId: -1 }))).toBe(
-      'utilisateurId',
-    );
+    expect(champFautif(() => creer({ userId: 0 }))).toBe('userId');
+    expect(champFautif(() => creer({ userId: -1 }))).toBe('userId');
   });
 
   it('refuse un représentant légal qui ne désigne aucun compte', () => {

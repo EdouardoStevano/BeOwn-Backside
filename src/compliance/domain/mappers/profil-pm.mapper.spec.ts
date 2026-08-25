@@ -9,7 +9,8 @@ import { ProfilPMFactory } from 'src/compliance/domain/factories/profil-pm.facto
  * avant que les règles n'existent.
  */
 const LIGNE: ProfilPMSnapshotBrut = {
-  utilisateurId: 42,
+  id: 'c4e8b1a6-9d70-4f23-8a51-6b2e0f7c9d34',
+  userId: 42,
   raisonSociale: 'X',
   formeJuridique: 'sas',
   siren: '123',
@@ -64,7 +65,7 @@ describe('ProfilPMMapper.toSnapshot', () => {
 
   it('assemble à plat ce que le bloc a regroupé', () => {
     const profil = ProfilPMFactory.creer({
-      utilisateurId: 42,
+      userId: 42,
       raisonSociale: 'BeOwn',
       formeJuridique: 'sas',
       siren: '404833048',
@@ -75,7 +76,7 @@ describe('ProfilPMMapper.toSnapshot', () => {
 
     // La forme de la table est reconstituée sans que la persistance ait à
     // connaître `IdentiteLegale`.
-    expect(snapshot.utilisateurId).toBe(42);
+    expect(snapshot.userId).toBe(42);
     expect(snapshot.raisonSociale).toBe('BeOwn');
     expect(snapshot.formeJuridique).toBe('SAS');
     expect(snapshot.siren).toBe('404833048');
@@ -92,6 +93,7 @@ describe('ProfilPM.toJSON', () => {
     expect(Object.keys(json).sort()).toEqual(
       [
         'capitalSocial',
+        'id',
         'createdAt',
         'formeJuridique',
         'raisonSociale',
@@ -101,7 +103,7 @@ describe('ProfilPM.toJSON', () => {
         'siegeAdresse',
         'siren',
         'updatedAt',
-        'utilisateurId',
+        'userId',
       ].sort(),
     );
     // Le découpage en bloc ne doit pas fuir dans la réponse HTTP.

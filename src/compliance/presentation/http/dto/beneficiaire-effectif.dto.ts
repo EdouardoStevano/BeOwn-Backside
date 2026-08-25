@@ -11,6 +11,15 @@ import {
 } from 'class-validator';
 
 export class CreateBeneficiaireEffectifDto {
+  @ApiProperty({
+    description:
+      'UUID de la société à laquelle rattacher ce bénéficiaire. Obligatoire : ' +
+      'un compte peut en déclarer plusieurs, et rien ne permet de deviner ' +
+      'laquelle est visée.',
+  })
+  @IsUUID()
+  pmId: string;
+
   @ApiProperty() @IsString() @IsNotEmpty() prenom: string;
   @ApiProperty() @IsString() @IsNotEmpty() nom: string;
   @ApiPropertyOptional() @IsOptional() @IsDateString() dateNaissance?: string;

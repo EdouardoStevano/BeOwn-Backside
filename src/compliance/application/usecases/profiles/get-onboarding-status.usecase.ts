@@ -37,7 +37,8 @@ export interface OnboardingStatus {
   /** Type effectif — déduit du dossier ouvert, `null` s'il n'y en a aucun. */
   userType: TypeInvestisseur | null;
   profilPP: ProfilPP | null;
-  profilPM: ProfilPM | null;
+  /** Les sociétés déclarées, vide si le compte n'en a aucune. */
+  profilsPM: ProfilPM[];
   kyc: KycCase | null;
   completionStep: number;
   completionSteps: EtapeOnboarding[];
@@ -89,18 +90,25 @@ export class GetOnboardingStatusUseCase {
 
     // Un dossier absent n'est pas une erreur : c'est l'état de départ. Les
     // quatre lectures sont indépendantes, donc menées de front.
-    const [profilPP, profilPM, kyc, questionnaire] = await Promise.all([
+    const [profilPP, profilsPM, kyc, questionnaire] = await Promise.all([
       this.profilPPRepository.findByUserId(utilisateurId).catch(() => null),
-      this.profilPMRepository.findByUserId(utilisateurId).catch(() => null),
+      this.profilPMRepository
+        .listerParUtilisateur(utilisateurId)
+        // Le type de repli est explicite : un `[]` nu s'infère `never[]`, et
+        // l'union avec `ProfilPM[]` prive `some` du type de son paramètre.
+        .catch((): ProfilPM[] => []),
       this.kycRepository.findByUserId(utilisateurId).catch(() => null),
       this.questionnaireRepository
         .findByUserId(utilisateurId)
         .catch(() => null),
     ]);
 
+    // Une seule société suffit à établir la nature du compte, et il ne peut
+    // pas en exister en même temps qu'un dossier physique — voir
+    // `NatureDeDossier`.
     const typeEffectif: TypeInvestisseur | null = profilPP
       ? 'PP'
-      : profilPM
+      : profilsPM.length > 0
         ? 'PM'
         : null;
 
@@ -109,8 +117,11 @@ export class GetOnboardingStatusUseCase {
     // donc jamais s'afficher franchie tant qu'on la déduisait du dossier.
     const typeChoisi = typeEffectif ?? input.typeDeclare ?? null;
 
+    // Le parcours est commencé dès qu'une société est nommée : celui qui en
+    // déclare plusieurs n'a pas à toutes les remplir pour avancer.
     const aCommenceSonProfil = !!(
-      profilPP?.aRenseigneSonProfil() ?? profilPM?.identiteLegale.raisonSociale
+      profilPP?.aRenseigneSonProfil() ??
+      profilsPM.some((pm) => pm.identiteLegale.raisonSociale)
     );
 
     // Le questionnaire est répondu quand il **existe**. La condition lisait
@@ -122,7 +133,7 @@ export class GetOnboardingStatusUseCase {
     // Le raccourci « une personne morale n'a pas à répondre » est conservé tel
     // quel : le corriger changerait l'affichage de tous les comptes PM, ce qui
     // est une décision métier, pas un correctif.
-    const questionnaireRepondu = questionnaire !== null || profilPM !== null;
+    const questionnaireRepondu = questionnaire !== null || profilsPM.length > 0;
 
     const kycValide = kyc?.statut === KycStatus.VALIDE;
     const kycRefuse = kyc?.statut === KycStatus.REFUSE;
@@ -196,7 +207,7 @@ export class GetOnboardingStatusUseCase {
     return {
       userType: typeEffectif,
       profilPP,
-      profilPM,
+      profilsPM,
       kyc,
       completionStep: etapeCourante({
         typeChoisi: !!typeChoisi,

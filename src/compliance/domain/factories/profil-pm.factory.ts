@@ -11,7 +11,7 @@ import { IdentiteLegale } from 'src/compliance/domain/value-objects/identite-leg
 
 /** Ce qu'il faut pour faire naître un profil moral, en plus des déclarations. */
 export interface CreerProfilPMProps extends ChampsDeclaresProfilPM {
-  utilisateurId: number;
+  userId: number;
 }
 
 /**
@@ -30,8 +30,9 @@ export class ProfilPMFactory {
   static creer(props: CreerProfilPMProps): ProfilPM {
     return new ProfilPM({
       entete: {
-        utilisateurId: eprouverUtilisateurId(props.utilisateurId),
-        // Attribuées par la persistance.
+        // Attribuées par la persistance, comme les dates.
+        id: undefined as unknown as string,
+        userId: eprouverUtilisateurId(props.userId, 'userId'),
         createdAt: undefined as unknown as Date,
         updatedAt: undefined as unknown as Date,
       },

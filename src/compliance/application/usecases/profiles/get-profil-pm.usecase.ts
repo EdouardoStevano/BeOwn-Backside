@@ -7,12 +7,17 @@ import { ProfilPM } from 'src/compliance/domain/aggregates/profil-pm';
 import { ProfilPMIntrouvableError } from 'src/compliance/domain/errors';
 
 /**
- * Détail du profil investisseur — personne morale.
+ * Une société précise, dont on vérifie qu'elle appartient bien au demandeur.
  *
- * Pendant de `GetProfilPPUseCase` : jusqu'ici le profil moral n'était lisible
- * qu'incidemment, noyé dans la réponse de `GET /users/me`. Un écran qui ne veut
- * que la fiche société devait donc charger le compte, le KYC, les documents et
- * le wallet pour en extraire un objet.
+ * Le contrôle d'appartenance est né avec le pluriel : tant qu'un compte n'avait
+ * qu'un dossier moral, on le retrouvait *par* le compte, et la question ne se
+ * posait pas. On le désigne désormais par son identité, qui ne dit rien de son
+ * propriétaire — sans ce contrôle, l'uuid d'une société suffirait à lire la
+ * fiche de quelqu'un d'autre.
+ *
+ * `ProfilPMIntrouvableError` et non une erreur d'autorisation : un 403
+ * confirmerait au demandeur que l'identifiant existe. Pour qui n'en est pas le
+ * titulaire, ce dossier n'existe pas.
  */
 @Injectable()
 export class GetProfilPMUseCase {
@@ -21,9 +26,9 @@ export class GetProfilPMUseCase {
     private readonly profilPMRepository: ProfilPMRepository,
   ) {}
 
-  async execute(userId: number): Promise<ProfilPM> {
-    const profil = await this.profilPMRepository.findByUserId(userId);
-    if (!profil) {
+  async execute(userId: number, profilPMId: string): Promise<ProfilPM> {
+    const profil = await this.profilPMRepository.findById(profilPMId);
+    if (!profil || profil.userId !== userId) {
       throw new ProfilPMIntrouvableError();
     }
     return profil;

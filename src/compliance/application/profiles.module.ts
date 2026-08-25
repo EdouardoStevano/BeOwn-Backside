@@ -9,6 +9,7 @@ import { GetProfilPPUseCase } from './usecases/profiles/get-profil-pp.usecase';
 import { UpdateProfilPPUseCase } from './usecases/profiles/update-profil-pp.usecase';
 import { CreateProfilPMUseCase } from './usecases/profiles/create-profil-pm.usecase';
 import { GetProfilPMUseCase } from './usecases/profiles/get-profil-pm.usecase';
+import { ListProfilsPMUseCase } from './usecases/profiles/list-profils-pm.usecase';
 import { UpdateProfilPMUseCase } from './usecases/profiles/update-profil-pm.usecase';
 import { SaveQuestionnaireUseCase } from './usecases/profiles/save-questionnaire.usecase';
 import { GetQuestionnaireUseCase } from './usecases/profiles/get-questionnaire.usecase';
@@ -80,6 +81,7 @@ import { BeneficiaireEffectifController } from '../presentation/http/beneficiair
     UpdateProfilPPUseCase,
     CreateProfilPMUseCase,
     GetProfilPMUseCase,
+    ListProfilsPMUseCase,
     UpdateProfilPMUseCase,
     SaveQuestionnaireUseCase,
     GetQuestionnaireUseCase,

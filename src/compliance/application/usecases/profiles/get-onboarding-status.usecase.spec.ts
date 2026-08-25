@@ -50,7 +50,11 @@ function monter(
       findByUserId: jest.fn().mockResolvedValue(etat.profilPP ?? null),
     } as unknown as ProfilPPRepository,
     {
-      findByUserId: jest.fn().mockResolvedValue(etat.profilPM ?? null),
+      // Le port rend la liste des sociétés du compte : le montage n'en pose
+      // qu'une, ce qui suffit à établir la nature du dossier.
+      listerParUtilisateur: jest
+        .fn()
+        .mockResolvedValue(etat.profilPM ? [etat.profilPM] : []),
     } as unknown as ProfilPMRepository,
     {
       findByUserId: jest.fn().mockResolvedValue(etat.kyc ?? null),
@@ -96,7 +100,7 @@ describe('GetOnboardingStatusUseCase', () => {
   it('déduit le type du dossier réellement ouvert', async () => {
     const statut = await monter({
       profilPM: ProfilPMFactory.creer({
-        utilisateurId: UTILISATEUR,
+        userId: UTILISATEUR,
         raisonSociale: 'BeOwn',
       }),
     }).execute({ utilisateurId: UTILISATEUR, typeDeclare: 'PP' });
@@ -138,7 +142,7 @@ describe('GetOnboardingStatusUseCase', () => {
     // correctif.
     const statut = await monter({
       profilPM: ProfilPMFactory.creer({
-        utilisateurId: UTILISATEUR,
+        userId: UTILISATEUR,
         raisonSociale: 'BeOwn',
       }),
       kyc: kycAuStatut(KycStatus.VALIDE),
@@ -197,7 +201,7 @@ describe('GetOnboardingStatusUseCase', () => {
         findByUserId: jest.fn().mockRejectedValue(new Error('base HS')),
       } as unknown as ProfilPPRepository,
       {
-        findByUserId: jest.fn().mockResolvedValue(null),
+        listerParUtilisateur: jest.fn().mockResolvedValue([]),
       } as unknown as ProfilPMRepository,
       {
         findByUserId: jest

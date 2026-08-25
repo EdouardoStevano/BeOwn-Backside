@@ -8,10 +8,12 @@ import { ProfilPP } from 'src/compliance/domain/aggregates/profil-pp';
 import { ProfilPPFactory } from 'src/compliance/domain/factories/profil-pp.factory';
 import {
   ChampProfilInvalideError,
+  NatureDeDossierIncompatibleError,
   ProfilPPDejaExistantError,
 } from 'src/compliance/domain/errors';
 import { CategoriePsfp } from 'src/compliance/domain/enums/categorie-psfp.enum';
 import { ProfilPPCreeDomainEvent } from 'src/compliance/domain/events/profil-pp-cree.domain-event';
+import { NatureDeDossier } from 'src/compliance/domain/enums/nature-de-dossier.enum';
 import { CreateProfilPPDto } from 'src/compliance/presentation/http/dto/profil.dto';
 
 /**
@@ -24,6 +26,12 @@ function monter(
   options: {
     existant?: ProfilPP | null;
     compte?: User | null;
+    /**
+     * Ce que le registre des natures oppose au compte. `PP` par défaut : le
+     * compte n'a rien déclaré d'autre, et le registre rend donc la nature
+     * qu'on vient d'y poser.
+     */
+    natureEtablie?: NatureDeDossier;
   } = {},
 ) {
   const compte =
@@ -40,14 +48,27 @@ function monter(
   };
 
   const eventBus = { publish: jest.fn() };
+  const natureDuDossier = {
+    declarer: jest
+      .fn()
+      .mockResolvedValue(options.natureEtablie ?? NatureDeDossier.PP),
+  };
 
   const useCase = new CreateProfilPPUseCase(
     profilPPRepository as ProfilPPRepository,
     userRepository as unknown as UserRepository,
+    natureDuDossier,
     eventBus as unknown as EventBus,
   );
 
-  return { useCase, profilPPRepository, userRepository, eventBus, compte };
+  return {
+    useCase,
+    profilPPRepository,
+    userRepository,
+    natureDuDossier,
+    eventBus,
+    compte,
+  };
 }
 
 const DTO_VIDE = {} as CreateProfilPPDto;
@@ -75,6 +96,30 @@ describe('CreateProfilPPUseCase', () => {
 
     expect(vue.prenom).toBe('Awa');
     expect(vue.nom).toBe('Koné');
+  });
+
+  it('refuse un dossier physique sur un compte déjà personne morale', async () => {
+    // Un titulaire est soit l'un, soit l'autre : ce qu'il faut vérifier de lui
+    // en dépend entièrement (KYC ou KYB).
+    const { useCase, profilPPRepository } = monter({
+      natureEtablie: NatureDeDossier.PM,
+    });
+
+    await expect(useCase.execute(42, DTO_VIDE)).rejects.toBeInstanceOf(
+      NatureDeDossierIncompatibleError,
+    );
+    expect(profilPPRepository.save).not.toHaveBeenCalled();
+  });
+
+  it('ne fixe pas la nature du compte quand le formulaire est refusé', async () => {
+    // Un premier essai fautif ne doit pas engager le titulaire : il pourrait
+    // encore vouloir déclarer une société.
+    const { useCase, natureDuDossier } = monter();
+
+    await expect(
+      useCase.execute(42, { nationalite: 'ZZ' } as CreateProfilPPDto),
+    ).rejects.toBeInstanceOf(ChampProfilInvalideError);
+    expect(natureDuDossier.declarer).not.toHaveBeenCalled();
   });
 
   it('crée le profil même si le compte est introuvable', async () => {

@@ -14,9 +14,18 @@ export class BeneficiaireEffectifEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ type: 'integer' })
+  /**
+   * La société dont cette personne est bénéficiaire.
+   *
+   * Portait le `utilisateurId` du titulaire, du temps où celui-ci tenait lieu
+   * de clé au dossier moral. Un compte pouvant désormais en déclarer
+   * plusieurs, l'ancienne valeur ne désignait plus une société mais un
+   * ensemble : les bénéficiaires de toutes les sociétés d'un même dirigeant se
+   * seraient confondus.
+   */
+  @Column({ type: 'uuid' })
   @Index()
-  profilPMId: number;
+  profilPMId: string;
 
   @ManyToOne(() => ProfilPMEntity, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'profilPMId' })

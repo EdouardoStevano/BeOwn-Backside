@@ -78,7 +78,7 @@ export class GetMyAccountUseCase {
       // réellement ouvert qui fait foi, et lui seul est opposable.
       userType: dossier.userType ?? compte.userType,
       profilPP: dossier.profilPP,
-      profilPM: dossier.profilPM,
+      profilsPM: dossier.profilsPM,
       kyc: dossier.kyc,
       wallet: wallet ?? null,
       documents,

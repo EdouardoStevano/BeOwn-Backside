@@ -4,9 +4,9 @@ import {
   type ProfilPMRepository,
 } from 'src/compliance/domain/repositories/profil-pm.repository';
 import { ProfilPM } from 'src/compliance/domain/aggregates/profil-pm';
-import { ProfilPMIntrouvableError } from 'src/compliance/domain/errors';
 import { UpdateProfilPMDto } from '../../../presentation/http/dto/profil.dto';
 import { champsDeclaresDepuisDto } from '../../mappers/profil-pm-champs.mapper';
+import { GetProfilPMUseCase } from './get-profil-pm.usecase';
 
 /**
  * Mise à jour du profil investisseur — personne morale.
@@ -25,13 +25,18 @@ export class UpdateProfilPMUseCase {
   constructor(
     @Inject(PROFIL_PM_REPOSITORY)
     private readonly profilPMRepository: ProfilPMRepository,
+    private readonly getProfilPM: GetProfilPMUseCase,
   ) {}
 
-  async execute(userId: number, dto: UpdateProfilPMDto): Promise<ProfilPM> {
-    const profil = await this.profilPMRepository.findByUserId(userId);
-    if (!profil) {
-      throw new ProfilPMIntrouvableError();
-    }
+  async execute(
+    userId: number,
+    profilPMId: string,
+    dto: UpdateProfilPMDto,
+  ): Promise<ProfilPM> {
+    // La société est désignée par son identité, et non déduite du compte : il
+    // peut y en avoir plusieurs. Le contrôle d'appartenance vit dans
+    // `GetProfilPMUseCase` — un seul endroit où il puisse être oublié.
+    const profil = await this.getProfilPM.execute(userId, profilPMId);
 
     profil.mettreAJour(champsDeclaresDepuisDto(dto));
     return this.profilPMRepository.update(profil);

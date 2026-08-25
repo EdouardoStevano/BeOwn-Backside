@@ -1,25 +1,39 @@
 import { CreateProfilPMUseCase } from './create-profil-pm.usecase';
 import type { ProfilPMRepository } from 'src/compliance/domain/repositories/profil-pm.repository';
+import type { NatureDuDossierRepository } from 'src/compliance/domain/repositories/nature-du-dossier.repository';
 import { ProfilPM } from 'src/compliance/domain/aggregates/profil-pm';
-import { ProfilPMFactory } from 'src/compliance/domain/factories/profil-pm.factory';
-import { ChampProfilInvalideError } from 'src/compliance/domain/errors';
+import { NatureDeDossier } from 'src/compliance/domain/enums/nature-de-dossier.enum';
+import {
+  ChampProfilInvalideError,
+  NatureDeDossierIncompatibleError,
+} from 'src/compliance/domain/errors';
 import { CreateProfilPMDto } from 'src/compliance/presentation/http/dto/profil.dto';
 
 /** SIREN valide au sens de la clé de Luhn — voir `siren.vo.spec.ts`. */
 const SIREN = '404833048';
 
-function monter(existant: ProfilPM | null = null) {
+/**
+ * @param natureEtablie ce que le registre oppose au compte : `PM` s'il n'a rien
+ * déclaré d'autre — le registre rend alors la nature qu'on vient d'y poser.
+ */
+function monter(natureEtablie: NatureDeDossier = NatureDeDossier.PM) {
   // Les mocks sont tenus à part plutôt que relus sur le port : lire une
   // méthode d'interface pour l'inspecter la détache de son objet.
   const mocks = {
-    findByUserId: jest.fn().mockResolvedValue(existant),
+    findById: jest.fn().mockResolvedValue(null),
+    listerParUtilisateur: jest.fn().mockResolvedValue([]),
     // Le repository rend ce qu'il a reçu : la persistance n'est pas le sujet.
     save: jest.fn((profil: ProfilPM) => Promise.resolve(profil)),
     update: jest.fn((profil: ProfilPM) => Promise.resolve(profil)),
+    declarer: jest.fn().mockResolvedValue(natureEtablie),
   };
   const profilPMRepository: ProfilPMRepository = mocks;
+  const natureDuDossier: NatureDuDossierRepository = mocks;
 
-  return { useCase: new CreateProfilPMUseCase(profilPMRepository), mocks };
+  return {
+    useCase: new CreateProfilPMUseCase(profilPMRepository, natureDuDossier),
+    mocks,
+  };
 }
 
 const DTO = { raisonSociale: 'BeOwn' } as CreateProfilPMDto;
@@ -35,7 +49,7 @@ describe('CreateProfilPMUseCase', () => {
       capitalSocial: 50_000,
     } as CreateProfilPMDto);
 
-    expect(profil.utilisateurId).toBe(42);
+    expect(profil.userId).toBe(42);
     expect(profil.identiteLegale.raisonSociale).toBe('BeOwn SAS');
     expect(profil.identiteLegale.formeJuridique).toBe('SAS');
     expect(profil.identiteLegale.siren).toBe(SIREN);
@@ -54,6 +68,20 @@ describe('CreateProfilPMUseCase', () => {
     expect(mocks.save).not.toHaveBeenCalled();
   });
 
+  it('ne fixe pas la nature du compte quand le formulaire est refusé', async () => {
+    // Un premier essai fautif ne doit pas engager le titulaire pour la suite :
+    // il pourrait encore vouloir ouvrir un dossier personne physique.
+    const { useCase, mocks } = monter();
+
+    await expect(
+      useCase.execute(42, {
+        raisonSociale: 'BeOwn',
+        siren: '404833049',
+      } as CreateProfilPMDto),
+    ).rejects.toBeInstanceOf(ChampProfilInvalideError);
+    expect(mocks.declarer).not.toHaveBeenCalled();
+  });
+
   it("n'expose pas le représentant légal au formulaire", async () => {
     const { useCase } = monter();
 
@@ -67,34 +95,40 @@ describe('CreateProfilPMUseCase', () => {
     expect(profil.aUnRepresentant()).toBe(false);
   });
 
-  it('est idempotent : un second appel rend le profil existant', async () => {
-    const existant = ProfilPMFactory.creer({
-      utilisateurId: 42,
-      raisonSociale: 'BeOwn',
-    });
-    const { useCase, mocks } = monter(existant);
+  it('déclare une société de plus à chaque appel', async () => {
+    // Le repli idempotent a disparu avec la relation 1:1 : un compte peut
+    // déclarer plusieurs sociétés, et le second appel n'est plus un doublon à
+    // absorber mais une seconde déclaration.
+    const { useCase, mocks } = monter();
 
-    const profil = await useCase.execute(42, DTO);
+    await useCase.execute(42, DTO);
+    const second = await useCase.execute(42, {
+      raisonSociale: 'BeOwn Capital',
+    } as CreateProfilPMDto);
 
-    expect(profil).toBe(existant);
+    expect(mocks.save).toHaveBeenCalledTimes(2);
+    expect(second.identiteLegale.raisonSociale).toBe('BeOwn Capital');
+  });
+
+  it('refuse une société sur un compte déjà personne physique', async () => {
+    const { useCase, mocks } = monter(NatureDeDossier.PP);
+
+    await expect(useCase.execute(42, DTO)).rejects.toBeInstanceOf(
+      NatureDeDossierIncompatibleError,
+    );
     expect(mocks.save).not.toHaveBeenCalled();
   });
 
-  it('ignore silencieusement les données du second appel', async () => {
-    // Comportement conservé de l'implémentation d'origine, mais c'est un
-    // piège : corriger sa raison sociale par ce chemin ne produit aucun effet
-    // et rend pourtant un 201. À traiter le jour où une route de mise à jour
-    // du profil moral existera.
-    const existant = ProfilPMFactory.creer({
-      utilisateurId: 42,
-      raisonSociale: 'Ancien nom',
-    });
-    const { useCase } = monter(existant);
+  it('rend compte des deux natures dans son erreur', async () => {
+    // « C'est interdit » n'aide personne ; « votre compte est un dossier
+    // personne physique » se lit à l'écran.
+    const { useCase } = monter(NatureDeDossier.PP);
 
-    const profil = await useCase.execute(42, {
-      raisonSociale: 'Nouveau nom',
-    } as CreateProfilPMDto);
+    const erreur = (await useCase
+      .execute(42, DTO)
+      .catch((e: unknown) => e)) as NatureDeDossierIncompatibleError;
 
-    expect(profil.identiteLegale.raisonSociale).toBe('Ancien nom');
+    expect(erreur.demandee).toBe(NatureDeDossier.PM);
+    expect(erreur.etablie).toBe(NatureDeDossier.PP);
   });
 });

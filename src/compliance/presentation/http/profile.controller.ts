@@ -1,7 +1,16 @@
-import { Body, Controller, Patch, Post, Get, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import {
   ApiTags,
   ApiOperation,
+  ApiParam,
   ApiResponse,
   ApiBearerAuth,
 } from '@nestjs/swagger';
@@ -10,6 +19,7 @@ import { GetProfilPPUseCase } from 'src/compliance/application/usecases/profiles
 import { UpdateProfilPPUseCase } from 'src/compliance/application/usecases/profiles/update-profil-pp.usecase';
 import { CreateProfilPMUseCase } from 'src/compliance/application/usecases/profiles/create-profil-pm.usecase';
 import { GetProfilPMUseCase } from 'src/compliance/application/usecases/profiles/get-profil-pm.usecase';
+import { ListProfilsPMUseCase } from 'src/compliance/application/usecases/profiles/list-profils-pm.usecase';
 import { UpdateProfilPMUseCase } from 'src/compliance/application/usecases/profiles/update-profil-pm.usecase';
 import { SaveQuestionnaireUseCase } from 'src/compliance/application/usecases/profiles/save-questionnaire.usecase';
 import { GetQuestionnaireUseCase } from 'src/compliance/application/usecases/profiles/get-questionnaire.usecase';
@@ -42,6 +52,7 @@ export class ProfileController {
     private readonly updateProfilPP: UpdateProfilPPUseCase,
     private readonly createProfilPM: CreateProfilPMUseCase,
     private readonly getProfilPM: GetProfilPMUseCase,
+    private readonly listProfilsPM: ListProfilsPMUseCase,
     private readonly updateProfilPM: UpdateProfilPMUseCase,
     private readonly saveQuestionnaireUseCase: SaveQuestionnaireUseCase,
     private readonly getQuestionnaire: GetQuestionnaireUseCase,
@@ -72,19 +83,43 @@ export class ProfileController {
     return this.updateProfilPP.execute(user.userId, dto);
   }
 
-  @ApiOperation({ summary: 'Créer mon profil personne morale' })
-  @ApiResponse({ status: 201, description: 'Profil PM créé' })
+  @ApiOperation({
+    summary: 'Déclarer une société',
+    description:
+      'Chaque appel crée une société de plus : un compte peut en déclarer ' +
+      'plusieurs. Refusé si le compte porte déjà un dossier personne ' +
+      'physique — un titulaire est soit une personne physique, soit une ' +
+      'personne morale.',
+  })
+  @ApiResponse({ status: 201, description: 'Société déclarée' })
+  @ApiResponse({
+    status: 409,
+    description: 'Ce compte a déjà un dossier personne physique',
+  })
   @Post('pm/me')
   createPM(@CurrentUser() user: ActiveUser, @Body() dto: CreateProfilPMDto) {
     return this.createProfilPM.execute(user.userId, dto);
   }
 
-  @ApiOperation({ summary: 'Obtenir le détail de mon profil personne morale' })
-  @ApiResponse({ status: 200, description: 'Profil PM retourné' })
-  @ApiResponse({ status: 404, description: 'Aucun profil PM pour ce compte' })
+  @ApiOperation({
+    summary: "Lister les sociétés que j'ai déclarées",
+    description:
+      "Rend un tableau, vide si le compte n'en a déclaré aucune — ne pas " +
+      "avoir de société n'est pas une erreur, c'est l'état de départ.",
+  })
+  @ApiResponse({ status: 200, description: 'Liste des profils PM' })
   @Get('pm/me')
-  getMyProfilePM(@CurrentUser() user: ActiveUser) {
-    return this.getProfilPM.execute(user.userId);
+  listMyProfilesPM(@CurrentUser() user: ActiveUser) {
+    return this.listProfilsPM.execute(user.userId);
+  }
+
+  @ApiOperation({ summary: "Obtenir le détail d'une de mes sociétés" })
+  @ApiParam({ name: 'id', description: 'UUID du profil PM' })
+  @ApiResponse({ status: 200, description: 'Profil PM retourné' })
+  @ApiResponse({ status: 404, description: 'Profil PM introuvable' })
+  @Get('pm/:id')
+  getMyProfilePM(@CurrentUser() user: ActiveUser, @Param('id') id: string) {
+    return this.getProfilPM.execute(user.userId, id);
   }
 
   @ApiOperation({
@@ -94,15 +129,17 @@ export class ProfileController {
       'modifiés, `null` efface la valeur. La raison sociale ne peut pas être ' +
       'effacée — une société sans dénomination ne désigne personne.',
   })
+  @ApiParam({ name: 'id', description: 'UUID du profil PM' })
   @ApiResponse({ status: 200, description: 'Profil PM mis à jour' })
   @ApiResponse({ status: 400, description: 'Donnée déclarée invalide' })
-  @ApiResponse({ status: 404, description: 'Aucun profil PM pour ce compte' })
-  @Patch('pm/me')
+  @ApiResponse({ status: 404, description: 'Profil PM introuvable' })
+  @Patch('pm/:id')
   updateMyProfilePM(
     @CurrentUser() user: ActiveUser,
+    @Param('id') id: string,
     @Body() dto: UpdateProfilPMDto,
   ) {
-    return this.updateProfilPM.execute(user.userId, dto);
+    return this.updateProfilPM.execute(user.userId, id, dto);
   }
 
   @ApiOperation({ summary: "Sauvegarder le questionnaire d'adéquation PSFP" })
