@@ -4,7 +4,6 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { ProfilesInfrastructureModule } from '../infrastructure/profiles-infrastructure.module';
 import { ComplianceInfrastructureModule } from '../infrastructure/compliance-infrastructure.module';
 import { CreateProfilPPUseCase } from './usecases/profiles/create-profil-pp.usecase';
-import { TelephoneDeclareEventHandler } from './handlers/telephone-declare.event-handler';
 import { ProfileController } from '../presentation/http/profile.controller';
 import { GetProfilPPUseCase } from './usecases/profiles/get-profil-pp.usecase';
 import { UpdateProfilPPUseCase } from './usecases/profiles/update-profil-pp.usecase';
@@ -17,8 +16,6 @@ import { GetOnboardingStatusUseCase } from './usecases/profiles/get-onboarding-s
 import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructure.module';
 import { UsersInfrastructureModule } from 'src/iam/infrastructure/users-infrastructure.module';
 import { KycInfrastructureModule } from 'src/compliance/infrastructure/kyc-infrastructure.module';
-import { AccountContactModule } from 'src/iam/application/account-contact.module';
-import { NotificationsModule } from 'src/notifications/notifications.module';
 import { RiskScoringService } from './services/risk-scoring.service';
 import { BeneficiaireEffectifEntity } from '../infrastructure/persistence/entities/beneficiaire-effectif.entity';
 import { ProfilPMEntity } from '../infrastructure/persistence/entities/profil-pm.entity';
@@ -31,15 +28,14 @@ import { BeneficiaireEffectifController } from '../presentation/http/beneficiair
  * Feature de `compliance`, aux côtés de `KycModule` — c'est le M3 du cahier
  * des charges, et le M2 est à côté (§3.2). Le module a transité par IAM le
  * temps de deux commits : ce qu'il décrit — qui est le titulaire, où il vit,
- * ce qu'il déclare — ressemble à de l'identité, et `profil_pp` a longtemps
- * porté le numéro de téléphone qui appartenait au compte (voir
- * `AccountContactModule`, resté dans IAM).
+ * ce qu'il déclare — ressemble à de l'identité.
  *
  * Ce n'en est pas. Ce que ce dossier établit, c'est l'**éligibilité** : la
  * catégorisation Averti / Non-averti (`QualificationPsfp`), la capacité de
  * perte (`EvaluationInvestisseur`), le plafond réglementaire
  * (`PlafondPsfpService`). L'identité, au sens d'`identity`, s'arrête au compte
- * — prénom, adresse email, téléphone, mot de passe, facteurs.
+ * — prénom, adresse email, mot de passe, facteurs. Ce que le titulaire
+ * **déclare** de lui, numéro de téléphone compris, est au dossier.
  *
  * La preuve par la dépendance : ce module importe `KycInfrastructureModule`
  * pour composer l'avancement du parcours d'entrée en relation, et RG-KYC-13
@@ -52,8 +48,8 @@ import { BeneficiaireEffectifController } from '../presentation/http/beneficiair
  */
 @Module({
   imports: [
-    // Bus d'événements du contexte : `TelephoneDeclareEventHandler` s'y abonne
-    // au fait métier levé par la complétion du profil (§8).
+    // Bus d'événements du contexte : la complétion du dossier annonce un fait
+    // métier, sans savoir qui y réagit (§8).
     CqrsModule,
     ProfilesInfrastructureModule,
     // `INVESTOR_COMPLIANCE_PROFILE_REPOSITORY` : le passage du questionnaire
@@ -72,10 +68,6 @@ import { BeneficiaireEffectifController } from '../presentation/http/beneficiair
     // contexte KYC, pas son module applicatif : Profiles lit un dossier, il
     // n'ouvre pas de session Stripe et n'écoute aucun de ses événements (§5).
     KycInfrastructureModule,
-    // Pour `ChangerTelephoneUseCase` : le numéro déclaré au formulaire de
-    // profil appartient au compte, et c'est IAM qui décide comment il s'écrit.
-    AccountContactModule,
-    NotificationsModule,
     // Ce qui reste ici est la seule table que la présentation lit encore en
     // direct : les bénéficiaires effectifs, et le profil moral auquel ils se
     // rattachent. Le questionnaire, le profil PP et le compte en sont sortis —
@@ -93,7 +85,6 @@ import { BeneficiaireEffectifController } from '../presentation/http/beneficiair
     GetQuestionnaireUseCase,
     GetOnboardingStatusUseCase,
     RiskScoringService,
-    TelephoneDeclareEventHandler,
     // Plus de filtre propre : les erreurs du dossier investisseur sont des
     // `IamError` depuis qu'elles ont rejoint le contexte, et `IamErrorFilter`
     // — enregistré globalement par `IamModule` — les traduit avec les mêmes

@@ -7,16 +7,11 @@ import type { DomainEvent } from 'src/shared/kernel/domain/domain-event';
  * annoncer, et un abonné agirait sur un profil dont la création peut encore
  * échouer.
  *
- * **Pourquoi il porte un numéro de téléphone.** Le formulaire de complétion
- * alimente deux propriétaires : le dossier réglementaire, et le compte — qui
- * détient l'état civil et le numéro de rappel depuis qu'ils ont quitté
- * `profil_pp`. Le dossier ne garde pas ce numéro ; sans le transporter ici,
- * l'abonné n'aurait aucun moyen de savoir ce qui a été déclaré. C'est donc
- * bien une donnée du **fait** — « voilà ce que le titulaire a déclaré en
- * complétant son profil » — et non un ordre d'écriture.
- *
- * `undefined` signifie « le formulaire n'en portait pas », ce qui n'est pas la
- * même chose que `null` — voir `User.changerTelephone`.
+ * **Il ne transporte que l'identifiant du dossier.** Il a porté un temps le
+ * numéro de téléphone déclaré, du temps où celui-ci vivait sur le compte et
+ * devait lui être relayé. Le dossier le garde désormais avec le reste de ses
+ * coordonnées : un abonné qui a besoin de ce qui a été déclaré relit le
+ * dossier, comme pour n'importe quel autre champ.
  *
  * `IEvent` est le seul emprunt de ce fichier à NestJS ; interface marqueur,
  * importée en `import type`, donc absente du code compilé (§6 / §12.1).
@@ -24,7 +19,6 @@ import type { DomainEvent } from 'src/shared/kernel/domain/domain-event';
 export class ProfilPPCreeDomainEvent implements DomainEvent {
   constructor(
     public readonly utilisateurId: number,
-    public readonly telephoneDeclare: string | undefined,
     public readonly occurredAt: Date = new Date(),
   ) {}
 }

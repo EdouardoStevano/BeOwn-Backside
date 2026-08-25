@@ -1,5 +1,4 @@
 import { Email } from 'src/iam/domain/value-objects/email.vo';
-import { NumeroTelephone } from 'src/iam/domain/value-objects/numero-telephone.vo';
 import {
   FirstName,
   LastName,
@@ -48,7 +47,6 @@ export interface PublicUser {
    * de tout ce qui lit un compte — `GET /users/me` le premier. C'est le compte
    * qui le porte, c'est donc lui qui le publie.
    */
-  telephone: string | null;
   role: UserRole;
   status: UserStatus;
   cguAccepteesLe: Date | null;
@@ -117,7 +115,6 @@ export class UserMapper {
       role: snapshot.role,
       status: snapshot.status,
       userType: snapshot.userType,
-      telephone: NumeroTelephone.restore(snapshot.telephone),
       cguAccepteesLe: snapshot.cguAccepteesLe,
       lastLoginAt: snapshot.lastLoginAt,
       createdAt: snapshot.createdAt,
@@ -155,7 +152,6 @@ export class UserMapper {
       role: user.role,
       status: user.status,
       userType: user.userType,
-      telephone: user.telephone,
       cguAccepteesLe: user.cguAccepteesLe,
       lastLoginAt: user.lastLoginAt,
       createdAt: user.createdAt,
@@ -187,7 +183,6 @@ export class UserMapper {
       firstname: user.firstname,
       lastname: user.lastname,
       socialId: user.socialId,
-      telephone: user.telephone,
       role: user.role,
       status: user.status,
       cguAccepteesLe: user.cguAccepteesLe,

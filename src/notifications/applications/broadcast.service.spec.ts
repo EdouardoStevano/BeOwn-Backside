@@ -26,20 +26,23 @@ function makeProject(overrides: Record<string, unknown> = {}) {
   };
 }
 
-/**
- * Le téléphone vient du compte depuis qu'il a quitté `profil_pp` : plus de
- * jointure, plus de titulaire injoignable faute de dossier.
- */
 function makeUser(userId: number, overrides: Record<string, unknown> = {}) {
   return {
     userId,
     firstname: `User${userId}`,
     status: UserStatus.ACTIF,
     role: 'investisseur',
-    telephone: '+33612345678',
     userEmail: { email: `user${userId}@test.fr` },
     ...overrides,
   };
+}
+
+/**
+ * Le numéro est déclaré au dossier investisseur, pas au compte : un
+ * destinataire n'est joignable par SMS que s'il a rempli le sien.
+ */
+function makeProfil(utilisateurId: number, telephone: string | null) {
+  return { utilisateurId, telephone };
 }
 
 /** Préférences opt-in complètes (ligne user_preferences existante). */
@@ -57,6 +60,7 @@ interface Deps {
   projectRepo: any;
   userRepo: any;
   prefsRepo: any;
+  profilRepo: any;
   settingsRepo: any;
   templates: any;
   emailService: any;
@@ -78,6 +82,9 @@ function makeDeps(overrides: Partial<Deps> = {}): Deps {
       findOne: jest.fn().mockResolvedValue({ userId: 99, role: 'super_admin' }),
     },
     prefsRepo: { find: jest.fn().mockResolvedValue([makePrefs(1)]) },
+    profilRepo: {
+      find: jest.fn().mockResolvedValue([makeProfil(1, '+33612345678')]),
+    },
     settingsRepo: { findOne: jest.fn().mockResolvedValue(null) },
     templates: {
       render: jest.fn().mockResolvedValue({
@@ -108,6 +115,7 @@ function makeService(deps: Deps): BroadcastService {
     deps.projectRepo,
     deps.userRepo,
     deps.prefsRepo,
+    deps.profilRepo,
     deps.settingsRepo,
     deps.templates,
     deps.emailService,
@@ -355,13 +363,28 @@ describe('BroadcastService — filtrage des destinataires', () => {
     expect(result.inAppOnly).toBe(1);
   });
 
+  it('canal SMS fermé → les dossiers ne sont même pas lus', async () => {
+    // Les numéros ne servent qu'au SMS : les charger quand le canal est fermé
+    // serait une requête de plus sur toute la base d'investisseurs, pour rien.
+    const deps = makeDeps();
+
+    await makeService(deps).announceProjectLaunched(PROJECT_ID, 99);
+
+    expect(deps.profilRepo.find).not.toHaveBeenCalled();
+  });
+
   it('téléphone absent ou non-E.164 → SMS skippé, email envoyé', async () => {
     const deps = makeDeps();
     deps.settingsRepo.findOne.mockResolvedValue(settingsWithSms());
     deps.userRepo.find.mockResolvedValue([
-      makeUser(1, { telephone: null }), // aucun numéro déclaré
-      makeUser(2, { telephone: '0612345678' }), // national, pas E.164
+      makeUser(1),
+      makeUser(2),
       makeUser(3),
+    ]);
+    deps.profilRepo.find.mockResolvedValue([
+      // Pas de dossier du tout pour le titulaire 1 : rien à joindre.
+      makeProfil(2, '0612345678'), // national, pas E.164
+      makeProfil(3, '+33612345678'),
     ]);
     deps.prefsRepo.find.mockResolvedValue([
       makePrefs(1),

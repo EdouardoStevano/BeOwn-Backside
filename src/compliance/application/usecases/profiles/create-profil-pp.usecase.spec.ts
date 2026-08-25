@@ -39,8 +39,6 @@ function monter(
     update: jest.fn((u: User) => Promise.resolve(u)),
   };
 
-  // Le report du téléphone sur le compte a quitté le use case : il est
-  // désormais le fait d'un abonné, et ce qu'on éprouve ici est l'annonce.
   const eventBus = { publish: jest.fn() };
 
   const useCase = new CreateProfilPPUseCase(
@@ -135,40 +133,44 @@ describe('CreateProfilPPUseCase', () => {
     expect(profil.situationFiscale.nif).toBe('1234567890');
   });
 
-  it('annonce le numéro déclaré plutôt que de le poser lui-même', async () => {
-    // Le compte n'est plus écrit ici : `ProfilPPCreeEventHandler` s'en charge.
-    const { useCase, userRepository, eventBus } = monter();
+  it('écrit le numéro déclaré dans le dossier, pas sur le compte', async () => {
+    // Le téléphone est une coordonnée du dossier, au même titre que l'adresse :
+    // aucun aller-retour vers `iam` n'est nécessaire pour l'enregistrer.
+    const { useCase, profilPPRepository, userRepository } = monter();
 
     await useCase.execute(42, {
       telephone: '0033612345678',
     } as CreateProfilPPDto);
 
     expect(userRepository.update).not.toHaveBeenCalled();
-    const [event] = eventBus.publish.mock.calls[0] as [ProfilPPCreeDomainEvent];
-    expect(event).toBeInstanceOf(ProfilPPCreeDomainEvent);
-    expect(event.utilisateurId).toBe(42);
-    expect(event.telephoneDeclare).toBe('0033612345678');
+    const [profil] = (profilPPRepository.save as jest.Mock).mock.calls[0] as [
+      ProfilPP,
+    ];
+    expect(profil.toJSON().telephone).toBe('+33612345678');
   });
 
-  it('rend le numéro déclaré, que le compte ne porte pas encore', async () => {
-    // Le report étant différé, relire la colonne rendrait l'ancien numéro à
-    // qui vient d'en saisir un nouveau.
+  it('rend le numéro tel que le dossier le retient', async () => {
+    // Normalisé, donc : ce que le titulaire relira est ce qui est stocké, pas
+    // la frappe brute.
     const { useCase } = monter();
 
     const vue = await useCase.execute(42, {
       telephone: '0033612345678',
     } as CreateProfilPPDto);
 
-    expect(vue.telephone).toBe('0033612345678');
+    expect(vue.telephone).toBe('+33612345678');
   });
 
-  it('annonce le fait même sans numéro déclaré', async () => {
+  it('annonce le fait, sans en recopier le contenu', async () => {
+    // L'événement ne transporte que l'identifiant : qui a besoin de ce qui a
+    // été déclaré relit le dossier.
     const { useCase, eventBus } = monter();
 
     await useCase.execute(42, DTO_VIDE);
 
     const [event] = eventBus.publish.mock.calls[0] as [ProfilPPCreeDomainEvent];
-    expect(event.telephoneDeclare).toBeUndefined();
+    expect(event).toBeInstanceOf(ProfilPPCreeDomainEvent);
+    expect(event.utilisateurId).toBe(42);
   });
 
   it("n'annonce rien quand le profil n'a pas pu naître", async () => {

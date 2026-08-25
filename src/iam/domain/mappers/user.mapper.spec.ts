@@ -28,19 +28,11 @@ describe('UserMapper.toPublic', () => {
     expect(publicUser).not.toHaveProperty('passwordHash');
   });
 
-  it('publie le numéro de rappel, que le compte porte désormais', () => {
-    // Il vivait sur le profil investisseur : le déplacer sans l'ajouter à la
-    // projection l'a fait disparaître de tout ce qui lit un compte —
-    // `GET /users/me` et `GET /users/:id` les premiers.
-    const user = buildUser({ telephone: '+33612345678' });
-
-    expect(UserMapper.toPublic(user).telephone).toBe('+33612345678');
-  });
-
-  it("publie `null` quand aucun numéro n'a été déclaré", () => {
-    // La clé existe quand même : le front distingue « pas de numéro » de
-    // « champ disparu de l'API ».
-    expect(UserMapper.toPublic(buildUser()).telephone).toBeNull();
+  it('ne publie aucun numéro de rappel : le compte n’en porte pas', () => {
+    // Le numéro est une coordonnée déclarée du dossier investisseur, aux côtés
+    // de l'adresse postale. Le compte l'a porté un temps ; le republier ici
+    // rouvrirait une seconde source pour la même donnée.
+    expect(UserMapper.toPublic(buildUser())).not.toHaveProperty('telephone');
   });
 
   it('n’expose rien d’un compte social dépourvu de mot de passe non plus', () => {

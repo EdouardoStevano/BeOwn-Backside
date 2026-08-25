@@ -9,15 +9,12 @@ import type { DomainEvent } from 'src/shared/kernel/domain/domain-event';
  * ceux de demain n'en voudront peut-être qu'un — une relance d'onboarding
  * n'a de sens qu'à la création.
  *
- * Il porte le numéro déclaré pour la même raison que son jumeau : le dossier
- * ne le garde pas, il appartient au compte. `undefined` signifie « le
- * formulaire n'en portait pas », ce qui n'est pas `null` — voir
- * `User.changerTelephone`.
+ * Comme son jumeau, il ne transporte que l'identifiant du dossier : un abonné
+ * qui a besoin de ce qui vient d'être déclaré relit le dossier.
  */
 export class ProfilPPMisAJourDomainEvent implements DomainEvent {
   constructor(
     public readonly utilisateurId: number,
-    public readonly telephoneDeclare: string | undefined,
     public readonly occurredAt: Date = new Date(),
   ) {}
 }

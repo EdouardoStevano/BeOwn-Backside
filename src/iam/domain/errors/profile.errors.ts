@@ -40,22 +40,3 @@ export class InvalidPersonNameError extends IamError {
     });
   }
 }
-
-/**
- * Numéro de téléphone vide, trop court, trop long ou non numérique.
- *
- * Le numéro était éprouvé côté Profiles, tant qu'il vivait sur le dossier
- * investisseur. Il appartient désormais au compte, et sa règle avec lui — même
- * bornes, même message, `field: 'telephone'` pour que le front surligne
- * l'entrée fautive.
- */
-export class InvalidTelephoneError extends IamError {
-  readonly kind = IamErrorKind.INVALID_INPUT;
-
-  constructor(reason: string) {
-    super(`Le numéro de téléphone ${reason}`, {
-      code: 'INVALID_TELEPHONE',
-      details: { field: 'telephone' },
-    });
-  }
-}

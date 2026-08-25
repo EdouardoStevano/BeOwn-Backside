@@ -3,12 +3,14 @@ import { siDeclare } from './champ-declare';
 import { CodePays } from './code-pays.vo';
 import { CodePostal } from './code-postal.vo';
 import { Libelle } from './libelle.vo';
+import { NumeroTelephone } from './numero-telephone.vo';
 
 const MAX_ADRESSE = 200;
 const MAX_VILLE = 100;
 
 /** L'adresse postale que le titulaire déclare. */
 export interface ChampsCoordonnees {
+  telephone?: string | null;
   adresseLigne1?: string | null;
   adresseLigne2?: string | null;
   codePostal?: string | null;
@@ -17,6 +19,7 @@ export interface ChampsCoordonnees {
 }
 
 export interface CoordonneesSnapshot {
+  telephone: string | null;
   adresseLigne1: string | null;
   adresseLigne2: string | null;
   codePostal: string | null;
@@ -25,6 +28,7 @@ export interface CoordonneesSnapshot {
 }
 
 interface EtatCoordonnees {
+  telephone: NumeroTelephone | null;
   adresseLigne1: Libelle | null;
   adresseLigne2: Libelle | null;
   codePostal: CodePostal | null;
@@ -33,16 +37,21 @@ interface EtatCoordonnees {
 }
 
 /**
- * Adresse postale du titulaire.
+ * Comment joindre le titulaire : son adresse postale et son téléphone.
  *
- * Le bloc portait aussi le téléphone, parti sur le compte avec le reste de
- * l'identité — un numéro joint une personne, pas un dossier. Ce qui reste
- * tient ensemble par un invariant précis : **un code postal n'a de sens que
+ * Les deux vont ensemble, et le nom du bloc le dit. Le téléphone a fait un
+ * détour par le compte, au motif qu'un numéro joint une personne et non un
+ * dossier ; il revient ici, où il est ce qu'il est vraiment — une coordonnée
+ * déclarée, du même ordre que l'adresse, et le canal de rappel obligatoire du
+ * conseil PSFP.
+ *
+ * L'adresse tient par un invariant précis : **un code postal n'a de sens que
  * rapporté à son pays**. « 1000 » est
  * un code belge parfaitement valide et un code français parfaitement faux ;
  * aucun des deux Value Objects atomiques ne peut trancher seul, et la règle
  * flottait donc au niveau de l'agrégat, où elle voisinait avec des sujets sans
- * rapport. Elle est ici chez elle.
+ * rapport. Elle est ici chez elle. Le téléphone, lui, ne dépend d'aucun autre
+ * champ : il se valide seul.
  *
  * **Immuable** — cf. `Identite`.
  */
@@ -52,6 +61,7 @@ export class Coordonnees {
   static declarer(champs: ChampsCoordonnees = {}): Coordonnees {
     return new Coordonnees(
       verifierCoherence({
+        telephone: NumeroTelephone.of(champs.telephone),
         adresseLigne1: Libelle.of(
           champs.adresseLigne1,
           "La première ligne d'adresse",
@@ -74,6 +84,7 @@ export class Coordonnees {
   /** Reconstitution depuis la persistance, sans contrôle (cf. `CodePays`). */
   static restore(snapshot: CoordonneesSnapshot): Coordonnees {
     return new Coordonnees({
+      telephone: NumeroTelephone.restore(snapshot.telephone),
       adresseLigne1: Libelle.restore(snapshot.adresseLigne1),
       adresseLigne2: Libelle.restore(snapshot.adresseLigne2),
       codePostal: CodePostal.restore(snapshot.codePostal),
@@ -92,6 +103,11 @@ export class Coordonnees {
   avec(champs: ChampsCoordonnees): Coordonnees {
     return new Coordonnees(
       verifierCoherence({
+        telephone: siDeclare(
+          champs.telephone,
+          (v) => NumeroTelephone.of(v),
+          this.etat.telephone,
+        ),
         adresseLigne1: siDeclare(
           champs.adresseLigne1,
           (v) =>
@@ -141,6 +157,9 @@ export class Coordonnees {
     return this.etat.adresseLigne1 !== null;
   }
 
+  get telephone(): string | null {
+    return this.etat.telephone?.value ?? null;
+  }
   get adresseLigne1(): string | null {
     return this.etat.adresseLigne1?.value ?? null;
   }
@@ -159,6 +178,7 @@ export class Coordonnees {
 
   equals(other: Coordonnees): boolean {
     return (
+      this.telephone === other.telephone &&
       this.adresseLigne1 === other.adresseLigne1 &&
       this.adresseLigne2 === other.adresseLigne2 &&
       this.codePostal === other.codePostal &&
@@ -169,6 +189,7 @@ export class Coordonnees {
 
   toSnapshot(): CoordonneesSnapshot {
     return {
+      telephone: this.telephone,
       adresseLigne1: this.adresseLigne1,
       adresseLigne2: this.adresseLigne2,
       codePostal: this.codePostal,

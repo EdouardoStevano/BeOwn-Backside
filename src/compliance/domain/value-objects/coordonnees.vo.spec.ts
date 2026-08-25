@@ -106,6 +106,7 @@ describe('Coordonnees.avec — révision', () => {
 describe('Coordonnees.restore', () => {
   it('relit une ligne incohérente écrite avant la règle', () => {
     const coordonnees = Coordonnees.restore({
+      telephone: null,
       adresseLigne1: null,
       adresseLigne2: null,
       codePostal: '1000',

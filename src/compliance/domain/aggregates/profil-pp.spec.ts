@@ -119,6 +119,7 @@ describe('ProfilPP.toJSON', () => {
         'profession',
         'residenceFiscale',
         'secteurActivite',
+        'telephone',
         'utilisateurId',
         'ville',
       ].sort(),

@@ -23,10 +23,9 @@ import { VueProfilPP, vueProfilPP } from '../../mappers/profil-pp-vue.mapper';
  * inexistant écrasait un pays correct. `mettreAJour` soumet chaque champ aux
  * mêmes règles qu'à la création.
  *
- * Comme à la création, le téléphone du formulaire n'est pas écrit ici : il
- * appartient au compte, et c'est `TelephoneDeclareEventHandler` qui l'y reporte
- * en réaction au fait levé (§8). Le compte reste lu — jamais écrit — parce que
- * la réponse publie son état civil.
+ * Le compte est lu — jamais écrit : la réponse publie son état civil, qui
+ * reste sa propriété. Tout ce que le formulaire déclare, téléphone compris,
+ * entre dans le dossier par `mettreAJour`.
  */
 @Injectable()
 export class UpdateProfilPPUseCase {
@@ -52,18 +51,10 @@ export class UpdateProfilPPUseCase {
 
     // Publié après l'écriture uniquement — un abonné ne doit pas réagir à une
     // mise à jour qui n'a pas eu lieu.
-    this.eventBus.publish(
-      new ProfilPPMisAJourDomainEvent(userId, dto.telephone),
-    );
+    this.eventBus.publish(new ProfilPPMisAJourDomainEvent(userId));
 
     const compte = await this.userRepository.findById(userId);
 
-    return {
-      ...vueProfilPP(misAJour, compte),
-      // Le numéro **déclaré** prime dans la réponse : le report sur le compte
-      // est différé, et relire la colonne ici rendrait l'ancien numéro à qui
-      // vient d'en saisir un nouveau.
-      telephone: dto.telephone ?? compte?.telephone ?? null,
-    };
+    return vueProfilPP(misAJour, compte);
   }
 }

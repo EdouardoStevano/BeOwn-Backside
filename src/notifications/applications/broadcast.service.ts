@@ -18,6 +18,7 @@ import { TokenService } from 'src/iam/application/services/token/token.service';
 import { ProjectEntity } from 'src/catalog/infrastructure/persistence/entities/project.entity';
 import { UserPreferencesEntity } from 'src/iam/infrastructure/persistence/entities/user-preferences.entity';
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
+import { ProfilPPEntity } from 'src/compliance/infrastructure/persistence/entities/profil-pp.entity';
 import { UserStatus } from 'src/iam/domain/enums/user.enum';
 import { NotificationType } from '../infrastructure/persistences/entities/notification.entity';
 import { AuditLogService } from './audit-log.service';
@@ -150,6 +151,8 @@ export class BroadcastService {
     private readonly userRepo: Repository<UserEntity>,
     @InjectRepository(UserPreferencesEntity)
     private readonly prefsRepo: Repository<UserPreferencesEntity>,
+    @InjectRepository(ProfilPPEntity)
+    private readonly profilRepo: Repository<ProfilPPEntity>,
     @InjectRepository(AdminSettingsEntity)
     private readonly settingsRepo: Repository<AdminSettingsEntity>,
     private readonly templates: EmailTemplateService,
@@ -216,7 +219,7 @@ export class BroadcastService {
       }
 
       const toggles = await this.loadToggles(campaign.event);
-      const recipients = await this.loadRecipients();
+      const recipients = await this.loadRecipients(toggles);
       stats.destinataires = recipients.length;
 
       const vars = this.templateVars(project);
@@ -342,12 +345,14 @@ export class BroadcastService {
    * email_verifie / suspendu / clos / supprime sont exclus), enrichis de leurs
    * préférences.
    *
-   * Le téléphone était lu sur `profil_pp` — une requête de plus, et des
-   * titulaires sans dossier injoignables par SMS alors que leur compte porte
-   * un numéro. Il vit sur `user` depuis qu'il a rejoint le reste de l'identité,
-   * donc il arrive avec le compte, sans jointure.
+   * Le téléphone est une coordonnée du dossier investisseur, pas du compte :
+   * il demande donc une seconde lecture, qu'on ne fait **que** si le canal SMS
+   * est ouvert. Un titulaire sans dossier n'a rien déclaré et reste joignable
+   * par email et in-app, comme n'importe quel destinataire sans numéro.
    */
-  private async loadRecipients(): Promise<Recipient[]> {
+  private async loadRecipients(
+    toggles: BroadcastChannelToggles,
+  ): Promise<Recipient[]> {
     const users = await this.userRepo.find({
       where: { status: UserStatus.ACTIF },
     });
@@ -357,13 +362,23 @@ export class BroadcastService {
     const prefs = await this.prefsRepo.find({ where: { userId: In(ids) } });
     const prefsByUser = new Map(prefs.map((p) => [p.userId, p]));
 
+    const phoneByUser = new Map<number, string | null>();
+    if (toggles.sms) {
+      const profils = await this.profilRepo.find({
+        where: { utilisateurId: In(ids) },
+      });
+      for (const p of profils) {
+        phoneByUser.set(p.utilisateurId, p.telephone ?? null);
+      }
+    }
+
     return users.map((u) => {
       const p = prefsByUser.get(u.userId);
       return {
         userId: u.userId,
         prenom: u.firstname?.trim() || 'investisseur',
         email: u.userEmail?.email ?? null,
-        telephone: u.telephone ?? null,
+        telephone: phoneByUser.get(u.userId) ?? null,
         notifEmail: p?.notifEmail ?? BROADCAST_PREF_DEFAULTS.notifEmail,
         notifSms: p?.notifSms ?? BROADCAST_PREF_DEFAULTS.notifSms,
         notifMarketing:

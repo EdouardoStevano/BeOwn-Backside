@@ -43,6 +43,10 @@ export class ProfilPPEntity {
   @Column({ type: 'char', length: 2, nullable: true })
   nationalite: string | null;
 
+  /** Canal de rappel du conseil PSFP — déclaré avec le reste des coordonnées. */
+  @Column({ type: 'varchar', nullable: true })
+  telephone: string | null;
+
   @Column({ type: 'varchar', nullable: true })
   adresseLigne1: string | null;
 

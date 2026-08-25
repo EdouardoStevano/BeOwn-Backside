@@ -61,17 +61,10 @@ export class CreateProfilPPUseCase {
     // Le fait est annoncé, les réactions ne sont pas orchestrées ici (§8).
     // Publié après la sauvegarde uniquement — un abonné ne doit pas réagir à un
     // profil qui n'existe pas.
-    this.eventBus.publish(new ProfilPPCreeDomainEvent(userId, dto.telephone));
+    this.eventBus.publish(new ProfilPPCreeDomainEvent(userId));
 
     const compte = await this.userRepository.findById(userId);
 
-    return {
-      ...vueProfilPP(profil, compte),
-      // Le numéro **déclaré** prime dans la réponse : le report sur le compte
-      // est différé, et relire la colonne ici rendrait l'ancien numéro à qui
-      // vient d'en saisir un nouveau. C'est ce que le titulaire a soumis, et
-      // ce que le compte portera.
-      telephone: dto.telephone ?? compte?.telephone ?? null,
-    };
+    return vueProfilPP(profil, compte);
   }
 }

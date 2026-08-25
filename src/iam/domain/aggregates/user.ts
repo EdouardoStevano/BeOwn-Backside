@@ -1,7 +1,6 @@
 import { MfaMethodType } from 'src/iam/domain/enums/mfa-method.enum';
 import { MfaMethod } from 'src/iam/domain/entities/mfa-method';
 import { Email } from 'src/iam/domain/value-objects/email.vo';
-import { NumeroTelephone } from 'src/iam/domain/value-objects/numero-telephone.vo';
 import {
   FirstName,
   LastName,
@@ -65,8 +64,6 @@ export interface UserSnapshot {
   status: UserStatus;
   /** Type d'investisseur annoncé à l'ouverture du compte — PP ou PM. */
   userType: UserType | null;
-  /** Moyen de joindre le titulaire — canal de rappel du conseil PSFP. */
-  telephone: string | null;
   cguAccepteesLe: Date | null;
   lastLoginAt: Date | null;
   createdAt: Date;
@@ -103,7 +100,6 @@ export interface UserState {
   role: UserRole;
   status: UserStatus;
   userType: UserType | null;
-  telephone: NumeroTelephone | null;
   cguAccepteesLe: Date | null;
   lastLoginAt: Date | null;
   createdAt: Date;
@@ -171,12 +167,6 @@ export class User {
    * précisément ce qu'aucune déduction ne peut exprimer.
    */
   private _userType: UserType | null;
-  /**
-   * Numéro de rappel. Il vivait sur le profil investisseur, où il faisait
-   * doublon avec un compte qui n'en portait pas : un titulaire sans dossier
-   * était injoignable, et supprimer son profil aurait effacé son numéro.
-   */
-  private _telephone: NumeroTelephone | null;
   private _cguAccepteesLe: Date | null;
   private _lastLoginAt: Date | null;
   private _createdAt: Date;
@@ -237,7 +227,6 @@ export class User {
     this._role = state.role;
     this._status = state.status;
     this._userType = state.userType;
-    this._telephone = state.telephone;
     this._cguAccepteesLe = state.cguAccepteesLe;
     this._lastLoginAt = state.lastLoginAt;
     this._createdAt = state.createdAt;
@@ -272,10 +261,8 @@ export class User {
       role: UserRole.VISITEUR,
       status: UserStatus.CREE,
       // Rien n'est annoncé à l'inscription : le titulaire choisit son type à
-      // la première étape du parcours d'onboarding, et donne son numéro en
-      // complétant son profil.
+      // la première étape du parcours d'onboarding.
       userType: null,
-      telephone: null,
       cguAccepteesLe: null,
       lastLoginAt: null,
       createdAt: undefined as unknown as Date,
@@ -313,9 +300,6 @@ export class User {
   /** Type annoncé, `null` tant que le titulaire n'a pas choisi. */
   get userType(): UserType | null {
     return this._userType;
-  }
-  get telephone(): string | null {
-    return this._telephone?.value ?? null;
   }
   get status(): UserStatus {
     return this._status;
@@ -590,25 +574,6 @@ export class User {
   private exigerFacteurs(): MfaMethod[] {
     if (this._facteurs === null) throw new FacteursMfaNonChargesError();
     return this._facteurs;
-  }
-
-  /**
-   * Enregistre le numéro de rappel du titulaire.
-   *
-   * Déclaré depuis le formulaire de complétion du profil investisseur, mais
-   * écrit ici : c'est le compte qui le porte. `null` l'efface, `undefined`
-   * n'y touche pas — la distinction que le formulaire progressif exige.
-   *
-   * @returns `true` si le numéro a changé.
-   */
-  changerTelephone(raw: string | null | undefined): boolean {
-    if (raw === undefined) return false;
-
-    const telephone = NumeroTelephone.of(raw);
-    if (telephone?.value === this._telephone?.value) return false;
-
-    this._telephone = telephone;
-    return true;
   }
 
   /**

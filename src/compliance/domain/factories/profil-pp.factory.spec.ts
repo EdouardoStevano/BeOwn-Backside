@@ -48,8 +48,9 @@ describe('ProfilPPFactory — répartition entre les blocs', () => {
   });
 
   it("n'accepte plus l'état civil, qui appartient au compte", () => {
-    // `prenom`, `nom` et `telephone` ne sont plus des props : le dossier ne
-    // peut donc plus en garder une copie divergente de `user`.
+    // `prenom` et `nom` ne sont plus des props : le dossier ne peut donc plus
+    // en garder une copie divergente de `user`. Le téléphone, lui, est une
+    // coordonnée déclarée du dossier — il y a sa place.
     const profil = creer({
       prenom: 'Awa',
       nom: 'Koné',
@@ -57,7 +58,13 @@ describe('ProfilPPFactory — répartition entre les blocs', () => {
     } as unknown as Partial<CreerProfilPPProps>);
 
     expect(Object.keys(profil.toJSON())).not.toContain('prenom');
-    expect(Object.keys(profil.toJSON())).not.toContain('telephone');
+    expect(Object.keys(profil.toJSON())).not.toContain('nom');
+  });
+
+  it('retient le téléphone déclaré, avec le reste des coordonnées', () => {
+    const profil = creer({ telephone: '06 12 34 56 78' });
+
+    expect(profil.toJSON().telephone).toBe('0612345678');
   });
 });
 

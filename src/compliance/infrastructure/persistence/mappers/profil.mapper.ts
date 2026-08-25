@@ -30,6 +30,7 @@ export class ProfilMapper {
       lieuNaissance: entity.lieuNaissance,
       paysNaissance: entity.paysNaissance,
       nationalite: entity.nationalite,
+      telephone: entity.telephone,
       adresseLigne1: entity.adresseLigne1,
       adresseLigne2: entity.adresseLigne2,
       codePostal: entity.codePostal,
@@ -75,6 +76,7 @@ export class ProfilMapper {
     entity.lieuNaissance = snapshot.lieuNaissance;
     entity.paysNaissance = snapshot.paysNaissance;
     entity.nationalite = snapshot.nationalite;
+    entity.telephone = snapshot.telephone;
     entity.adresseLigne1 = snapshot.adresseLigne1;
     entity.adresseLigne2 = snapshot.adresseLigne2;
     entity.codePostal = snapshot.codePostal;

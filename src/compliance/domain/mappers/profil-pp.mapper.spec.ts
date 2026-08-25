@@ -17,6 +17,7 @@ const LIGNE: ProfilPPSnapshotBrut = {
   dateNaissance: '2015-01-01',
   lieuNaissance: null,
   nationalite: 'ZZ',
+  telephone: '06',
   adresseLigne1: null,
   adresseLigne2: null,
   codePostal: '1000',

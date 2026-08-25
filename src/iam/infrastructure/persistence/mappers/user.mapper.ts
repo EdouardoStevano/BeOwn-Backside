@@ -29,7 +29,6 @@ export class UserMapper {
       role: entity.role,
       status: entity.status,
       userType: entity.userType,
-      telephone: entity.telephone,
       cguAccepteesLe: entity.cguAccepteesLe,
       lastLoginAt: entity.lastLoginAt,
       createdAt: entity.createdAt,
@@ -76,7 +75,6 @@ export class UserMapper {
     if (snapshot.userType) entity.userType = snapshot.userType;
     // `null` est une valeur ici — effacer son numéro doit s'écrire — donc pas
     // de garde `if` : seul `undefined` laisserait TypeORM ignorer la colonne.
-    entity.telephone = snapshot.telephone;
     // Le rattachement au conseiller et le code publié. Sans ces deux lignes,
     // `rattacherAu()` et `publierCodeParrainage()` ne laisseraient aucune trace
     // en base — c'est exactement le sort qu'avait `declarerType()` avant que le

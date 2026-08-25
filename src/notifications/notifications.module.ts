@@ -5,6 +5,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { NotificationEntity } from './infrastructure/persistences/entities/notification.entity';
 import { AuditLogEntity } from './infrastructure/persistences/entities/audit-log.entity';
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
+import { ProfilPPEntity } from 'src/compliance/infrastructure/persistence/entities/profil-pp.entity';
 import { UserPreferencesEntity } from 'src/iam/infrastructure/persistence/entities/user-preferences.entity';
 import { ProjectEntity } from 'src/catalog/infrastructure/persistence/entities/project.entity';
 import { AdminSettingsEntity } from 'src/admin/entities/admin-settings.entity';
@@ -28,8 +29,10 @@ import { PreferencesModule } from 'src/iam/application/preferences.module';
       AuditLogEntity,
       UserEntity,
       // Lecture seule pour BroadcastService : destinataires (préférences,
-      // téléphone), projet diffusé (horodatage anti-doublon) et toggles admin.
+      // téléphone déclaré au dossier), projet diffusé (horodatage anti-doublon)
+      // et toggles admin.
       UserPreferencesEntity,
+      ProfilPPEntity,
       ProjectEntity,
       AdminSettingsEntity,
     ]),
