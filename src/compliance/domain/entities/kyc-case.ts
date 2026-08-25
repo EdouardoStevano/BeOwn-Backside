@@ -1,4 +1,8 @@
 import { KycNiveau, KycStatus } from '../enums/kyc-status.enum';
+import {
+  SuiteDuVerdict,
+  VerdictIdentite,
+} from '../value-objects/verdict-identite';
 import { KycMapper } from '../mappers/kyc.mapper';
 import {
   DecisionKyc,
@@ -154,6 +158,101 @@ export class KycCase {
   /** @see DecisionKyc.estEnRevueManuelle */
   estEnRevueManuelle(): boolean {
     return this._decision.estEnRevueManuelle();
+  }
+
+  /**
+   * Depuis quels statuts un verdict a le droit de s'appliquer.
+   *
+   * **C'est une garde anti-rejeu, pas une optimisation.** Stripe redélivre ses
+   * événements Identity dans le désordre jusqu'à trois jours après leur
+   * émission. Sans ces tables, un `VERIFIEE` tardif pouvait revalider un
+   * dossier que le RCCI avait refusé entretemps — le fournisseur écrasait la
+   * décision humaine. Un dossier `VALIDE` ou `REFUSE` ne figure donc dans
+   * aucune liste : les décisions manuelles sont définitives vis-à-vis du
+   * fournisseur.
+   *
+   * `RENOUVELLEMENT` et `EXPIRE` y figurent bien qu'aucun code ne les
+   * positionne encore : ils sont réservés à la re-vérification périodique, et
+   * leur sens est déjà clair — le dossier repasse par une vérification
+   * complète, exactement comme s'il n'avait jamais été soumis. Les exclure
+   * bloquerait silencieusement ce parcours le jour où il sera branché.
+   *
+   * Les trois listes se lisent aussi en creux, et c'est là qu'est le métier :
+   * `EN_REVUE` accepte `VERIFIEE` — un titulaire dont les pièces étaient
+   * illisibles peut recommencer et réussir pendant que son dossier attend le
+   * RCCI — mais n'accepte pas `EN_TRAITEMENT`, qui le ferait régresser vers un
+   * statut moins avancé.
+   */
+  private static readonly STATUTS_AMONT: Readonly<
+    Record<VerdictIdentite, ReadonlySet<KycStatus>>
+  > = {
+    [VerdictIdentite.VERIFIEE]: new Set([
+      KycStatus.NON_DEMARRE,
+      KycStatus.EN_COURS,
+      KycStatus.EN_REVUE,
+      KycStatus.RENOUVELLEMENT,
+      KycStatus.EXPIRE,
+    ]),
+    [VerdictIdentite.EN_TRAITEMENT]: new Set([
+      KycStatus.NON_DEMARRE,
+      KycStatus.RENOUVELLEMENT,
+      KycStatus.EXPIRE,
+    ]),
+    [VerdictIdentite.REVUE_REQUISE]: new Set([
+      KycStatus.NON_DEMARRE,
+      KycStatus.EN_COURS,
+      KycStatus.RENOUVELLEMENT,
+      KycStatus.EXPIRE,
+    ]),
+  };
+
+  /** Le statut qu'atteint le dossier lorsqu'un verdict s'applique. */
+  private static readonly STATUT_ATTEINT: Readonly<
+    Record<VerdictIdentite, KycStatus>
+  > = {
+    [VerdictIdentite.VERIFIEE]: KycStatus.VALIDE,
+    [VerdictIdentite.EN_TRAITEMENT]: KycStatus.EN_COURS,
+    [VerdictIdentite.REVUE_REQUISE]: KycStatus.EN_REVUE,
+  };
+
+  /**
+   * Que faire du verdict que le fournisseur vient de rendre ?
+   *
+   * Toute la machine à états du parcours automatique tient ici : l'appelant
+   * n'a plus qu'à obéir à la réponse. Elle vivait auparavant dans le use case
+   * du webhook, sous forme de trois tables statiques et d'une garde recopiée
+   * dans chacun des trois traitements — donc hors d'atteinte des tests du
+   * domaine, et duplicable à la prochaine sorte d'événement (§7).
+   *
+   * `sessionRendue` sert à distinguer une redélivrance d'une nouvelle
+   * tentative : un dossier déjà `VALIDE` **pour cette session** est une
+   * redélivrance ; le même statut pour une autre session serait un verdict
+   * neuf, écarté par les tables ci-dessus.
+   */
+  accueille(
+    verdict: VerdictIdentite,
+    sessionRendue: string | null,
+  ): SuiteDuVerdict {
+    const atteint = KycCase.STATUT_ATTEINT[verdict];
+
+    // L'idempotence se juge avant les tables : `EN_TRAITEMENT` sur un dossier
+    // déjà `EN_COURS` est une redélivrance banale, alors que la table le
+    // classerait « écarté » et déclencherait une alerte pour rien.
+    if (this.statut === atteint) {
+      const memeSession =
+        verdict === VerdictIdentite.EN_TRAITEMENT ||
+        this._fournisseurRef === sessionRendue;
+      if (memeSession) return SuiteDuVerdict.DEJA_APPLIQUE;
+    }
+
+    return KycCase.STATUTS_AMONT[verdict].has(this.statut)
+      ? SuiteDuVerdict.A_APPLIQUER
+      : SuiteDuVerdict.ECARTE;
+  }
+
+  /** Le statut que ce dossier prendra si le verdict s'applique. */
+  static statutApres(verdict: VerdictIdentite): KycStatus {
+    return KycCase.STATUT_ATTEINT[verdict];
   }
 
   // ── Lectures ──────────────────────────────────────────────────────────────

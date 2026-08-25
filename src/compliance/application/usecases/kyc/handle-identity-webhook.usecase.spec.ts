@@ -1,5 +1,11 @@
 import { HandleIdentityWebhookUseCase } from './handle-identity-webhook.usecase';
-import { KycStatus } from 'src/compliance/domain/enums/kyc-status.enum';
+import { AnnoncesKycService } from 'src/compliance/application/services/annonces-kyc.service';
+import { ArchivageRapportKycService } from 'src/compliance/application/services/archivage-rapport-kyc.service';
+import {
+  KycNiveau,
+  KycStatus,
+} from 'src/compliance/domain/enums/kyc-status.enum';
+import { KycMapper } from 'src/compliance/domain/mappers/kyc.mapper';
 import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
 import { UserRole } from 'src/iam/domain/enums/user.enum';
 
@@ -23,6 +29,31 @@ import { UserRole } from 'src/iam/domain/enums/user.enum';
  *   statuts amont autorisés — une décision manuelle (VALIDE/REFUSE) n'est
  *   donc JAMAIS écrasée par un event tardif/redélivré.
  */
+/**
+ * Un vrai `KycCase`, et non un objet nu.
+ *
+ * Les montages posaient `{ id, statut, fournisseurRef }` : cela suffisait tant
+ * que le use case ne faisait que **lire** ces champs. La machine a etats vit
+ * maintenant dans l'entite (`KycCase.accueille`), donc un objet nu ne saurait
+ * pas repondre — et un test qui passe avec un faux dossier n'eprouverait plus
+ * la regle qu'il pretend verifier.
+ */
+const dossier = (etat: {
+  id?: string;
+  statut: KycStatus;
+  fournisseurRef?: string | null;
+}) =>
+  KycMapper.restore({
+    id: etat.id ?? 'kyc-1',
+    utilisateurId: 42,
+    statut: etat.statut,
+    niveau: KycNiveau.STANDARD,
+    fournisseur: 'stripeIdentity',
+    fournisseurRef: etat.fournisseurRef ?? null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
+
 describe('HandleIdentityWebhookUseCase — webhook Stripe Identity (KYC auto + fallback revue manuelle)', () => {
   let usecase: HandleIdentityWebhookUseCase;
   let identityService: any;
@@ -53,12 +84,15 @@ describe('HandleIdentityWebhookUseCase — webhook Stripe Identity (KYC auto + f
       updateReportData: jest.fn().mockResolvedValue(undefined),
     };
 
+    // Les deux services sont montes pour de vrai plutot que mockes : ce sont
+    // eux qui portent le detail que les tests eprouvent — le type de
+    // notification, les roles alertes, le contenu du journal d'audit. Les
+    // mocker reviendrait a verifier qu'on les appelle, pas ce qu'ils font.
     usecase = new HandleIdentityWebhookUseCase(
       updateKycStatus,
       kycRepository,
-      identityService,
-      notificationService,
-      auditLog,
+      new AnnoncesKycService(notificationService, auditLog),
+      new ArchivageRapportKycService(kycRepository, identityService),
     );
   });
   describe('identity.verification_session.verified', () => {
@@ -68,17 +102,20 @@ describe('HandleIdentityWebhookUseCase — webhook Stripe Identity (KYC auto + f
         'identity.verification_session.verified',
         session,
       );
-      kycRepository.findByUserId.mockResolvedValue({
-        id: 'kyc-1',
-        statut: KycStatus.EN_COURS,
-        fournisseurRef: 'vs_1',
-      });
+      kycRepository.findByUserId.mockResolvedValue(
+        dossier({
+          id: 'kyc-1',
+          statut: KycStatus.EN_COURS,
+          fournisseurRef: 'vs_1',
+        }),
+      );
 
       await usecase.handle(event);
 
       expect(updateKycStatus.execute).toHaveBeenCalledWith(
         42,
         KycStatus.VALIDE,
+        undefined,
       );
       expect(notificationService.push).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -108,11 +145,13 @@ describe('HandleIdentityWebhookUseCase — webhook Stripe Identity (KYC auto + f
         'identity.verification_session.verified',
         session,
       );
-      kycRepository.findByUserId.mockResolvedValue({
-        id: 'kyc-1',
-        statut: KycStatus.VALIDE,
-        fournisseurRef: 'vs_1', // même session déjà traitée
-      });
+      kycRepository.findByUserId.mockResolvedValue(
+        dossier({
+          id: 'kyc-1',
+          statut: KycStatus.VALIDE,
+          fournisseurRef: 'vs_1', // même session déjà traitée
+        }),
+      );
 
       await usecase.handle(event);
 
@@ -154,11 +193,13 @@ describe('HandleIdentityWebhookUseCase — webhook Stripe Identity (KYC auto + f
         session,
         'evt_late_verified',
       );
-      kycRepository.findByUserId.mockResolvedValue({
-        id: 'kyc-1',
-        statut: KycStatus.REFUSE,
-        fournisseurRef: 'vs_old', // event redélivré d'une session antérieure
-      });
+      kycRepository.findByUserId.mockResolvedValue(
+        dossier({
+          id: 'kyc-1',
+          statut: KycStatus.REFUSE,
+          fournisseurRef: 'vs_old', // event redélivré d'une session antérieure
+        }),
+      );
       const warnSpy = jest
         .spyOn((usecase as any).logger, 'warn')
         .mockImplementation(() => {});
@@ -179,11 +220,13 @@ describe('HandleIdentityWebhookUseCase — webhook Stripe Identity (KYC auto + f
         'identity.verification_session.verified',
         session,
       );
-      kycRepository.findByUserId.mockResolvedValue({
-        id: 'kyc-1',
-        statut: KycStatus.VALIDE,
-        fournisseurRef: 'vs_old', // session différente de celle de l'event
-      });
+      kycRepository.findByUserId.mockResolvedValue(
+        dossier({
+          id: 'kyc-1',
+          statut: KycStatus.VALIDE,
+          fournisseurRef: 'vs_old', // session différente de celle de l'event
+        }),
+      );
 
       await usecase.handle(event);
 
@@ -197,17 +240,20 @@ describe('HandleIdentityWebhookUseCase — webhook Stripe Identity (KYC auto + f
         'identity.verification_session.verified',
         session,
       );
-      kycRepository.findByUserId.mockResolvedValue({
-        id: 'kyc-55',
-        statut: KycStatus.EN_REVUE,
-        fournisseurRef: 'vs_2', // ancienne session en échec, celle-ci a réussi
-      });
+      kycRepository.findByUserId.mockResolvedValue(
+        dossier({
+          id: 'kyc-55',
+          statut: KycStatus.EN_REVUE,
+          fournisseurRef: 'vs_2', // ancienne session en échec, celle-ci a réussi
+        }),
+      );
 
       await usecase.handle(event);
 
       expect(updateKycStatus.execute).toHaveBeenCalledWith(
         55,
         KycStatus.VALIDE,
+        undefined,
       );
       expect(notificationService.push).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -225,17 +271,20 @@ describe('HandleIdentityWebhookUseCase — webhook Stripe Identity (KYC auto + f
           'identity.verification_session.verified',
           session,
         );
-        kycRepository.findByUserId.mockResolvedValue({
-          id: 'kyc-9',
-          statut,
-          fournisseurRef: 'vs_prev',
-        });
+        kycRepository.findByUserId.mockResolvedValue(
+          dossier({
+            id: 'kyc-9',
+            statut,
+            fournisseurRef: 'vs_prev',
+          }),
+        );
 
         await usecase.handle(event);
 
         expect(updateKycStatus.execute).toHaveBeenCalledWith(
           9,
           KycStatus.VALIDE,
+          undefined,
         );
       },
     );
@@ -252,11 +301,13 @@ describe('HandleIdentityWebhookUseCase — webhook Stripe Identity (KYC auto + f
         'identity.verification_session.requires_input',
         session,
       );
-      kycRepository.findByUserId.mockResolvedValue({
-        id: 'kyc-7',
-        statut: KycStatus.EN_COURS,
-        fournisseurRef: 'vs_2',
-      });
+      kycRepository.findByUserId.mockResolvedValue(
+        dossier({
+          id: 'kyc-7',
+          statut: KycStatus.EN_COURS,
+          fournisseurRef: 'vs_2',
+        }),
+      );
 
       await usecase.handle(event);
 
@@ -301,11 +352,13 @@ describe('HandleIdentityWebhookUseCase — webhook Stripe Identity (KYC auto + f
         'identity.verification_session.requires_input',
         session,
       );
-      kycRepository.findByUserId.mockResolvedValue({
-        id: 'kyc-7',
-        statut: KycStatus.EN_REVUE,
-        fournisseurRef: 'vs_2',
-      });
+      kycRepository.findByUserId.mockResolvedValue(
+        dossier({
+          id: 'kyc-7',
+          statut: KycStatus.EN_REVUE,
+          fournisseurRef: 'vs_2',
+        }),
+      );
 
       await usecase.handle(event);
 
@@ -325,11 +378,13 @@ describe('HandleIdentityWebhookUseCase — webhook Stripe Identity (KYC auto + f
         session,
         'evt_late_ri_valide',
       );
-      kycRepository.findByUserId.mockResolvedValue({
-        id: 'kyc-7',
-        statut: KycStatus.VALIDE,
-        fournisseurRef: 'vs_old',
-      });
+      kycRepository.findByUserId.mockResolvedValue(
+        dossier({
+          id: 'kyc-7',
+          statut: KycStatus.VALIDE,
+          fournisseurRef: 'vs_old',
+        }),
+      );
       const warnSpy = jest
         .spyOn((usecase as any).logger, 'warn')
         .mockImplementation(() => {});
@@ -355,11 +410,13 @@ describe('HandleIdentityWebhookUseCase — webhook Stripe Identity (KYC auto + f
         'identity.verification_session.requires_input',
         session,
       );
-      kycRepository.findByUserId.mockResolvedValue({
-        id: 'kyc-7',
-        statut: KycStatus.REFUSE,
-        fournisseurRef: 'vs_old',
-      });
+      kycRepository.findByUserId.mockResolvedValue(
+        dossier({
+          id: 'kyc-7',
+          statut: KycStatus.REFUSE,
+          fournisseurRef: 'vs_old',
+        }),
+      );
 
       await usecase.handle(event);
 
@@ -380,11 +437,13 @@ describe('HandleIdentityWebhookUseCase — webhook Stripe Identity (KYC auto + f
           'identity.verification_session.requires_input',
           session,
         );
-        kycRepository.findByUserId.mockResolvedValue({
-          id: 'kyc-9',
-          statut,
-          fournisseurRef: 'vs_prev',
-        });
+        kycRepository.findByUserId.mockResolvedValue(
+          dossier({
+            id: 'kyc-9',
+            statut,
+            fournisseurRef: 'vs_prev',
+          }),
+        );
 
         await usecase.handle(event);
 
@@ -404,17 +463,20 @@ describe('HandleIdentityWebhookUseCase — webhook Stripe Identity (KYC auto + f
         'identity.verification_session.processing',
         session,
       );
-      kycRepository.findByUserId.mockResolvedValue({
-        id: 'kyc-3',
-        statut: KycStatus.NON_DEMARRE,
-        fournisseurRef: null,
-      });
+      kycRepository.findByUserId.mockResolvedValue(
+        dossier({
+          id: 'kyc-3',
+          statut: KycStatus.NON_DEMARRE,
+          fournisseurRef: null,
+        }),
+      );
 
       await usecase.handle(event);
 
       expect(updateKycStatus.execute).toHaveBeenCalledWith(
         3,
         KycStatus.EN_COURS,
+        undefined,
       );
     });
 
@@ -424,11 +486,13 @@ describe('HandleIdentityWebhookUseCase — webhook Stripe Identity (KYC auto + f
         'identity.verification_session.processing',
         session,
       );
-      kycRepository.findByUserId.mockResolvedValue({
-        id: 'kyc-3',
-        statut: KycStatus.EN_COURS,
-        fournisseurRef: 'vs_4',
-      });
+      kycRepository.findByUserId.mockResolvedValue(
+        dossier({
+          id: 'kyc-3',
+          statut: KycStatus.EN_COURS,
+          fournisseurRef: 'vs_4',
+        }),
+      );
 
       await usecase.handle(event);
 
@@ -442,11 +506,13 @@ describe('HandleIdentityWebhookUseCase — webhook Stripe Identity (KYC auto + f
         session,
         'evt_late_processing',
       );
-      kycRepository.findByUserId.mockResolvedValue({
-        id: 'kyc-3',
-        statut: KycStatus.VALIDE,
-        fournisseurRef: 'vs_old',
-      });
+      kycRepository.findByUserId.mockResolvedValue(
+        dossier({
+          id: 'kyc-3',
+          statut: KycStatus.VALIDE,
+          fournisseurRef: 'vs_old',
+        }),
+      );
       const warnSpy = jest
         .spyOn((usecase as any).logger, 'warn')
         .mockImplementation(() => {});
@@ -467,11 +533,13 @@ describe('HandleIdentityWebhookUseCase — webhook Stripe Identity (KYC auto + f
           'identity.verification_session.processing',
           session,
         );
-        kycRepository.findByUserId.mockResolvedValue({
-          id: 'kyc-3',
-          statut,
-          fournisseurRef: 'vs_old',
-        });
+        kycRepository.findByUserId.mockResolvedValue(
+          dossier({
+            id: 'kyc-3',
+            statut,
+            fournisseurRef: 'vs_old',
+          }),
+        );
 
         await usecase.handle(event);
 
@@ -487,17 +555,20 @@ describe('HandleIdentityWebhookUseCase — webhook Stripe Identity (KYC auto + f
           'identity.verification_session.processing',
           session,
         );
-        kycRepository.findByUserId.mockResolvedValue({
-          id: 'kyc-9',
-          statut,
-          fournisseurRef: 'vs_prev',
-        });
+        kycRepository.findByUserId.mockResolvedValue(
+          dossier({
+            id: 'kyc-9',
+            statut,
+            fournisseurRef: 'vs_prev',
+          }),
+        );
 
         await usecase.handle(event);
 
         expect(updateKycStatus.execute).toHaveBeenCalledWith(
           9,
           KycStatus.EN_COURS,
+          undefined,
         );
       },
     );

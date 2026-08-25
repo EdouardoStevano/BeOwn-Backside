@@ -14,6 +14,8 @@ import { RequestKycManualReviewUseCase } from './usecases/kyc/request-kyc-manual
 import { DecideKycManualReviewUseCase } from './usecases/kyc/decide-kyc-manual-review.usecase';
 import { StartKycSessionUseCase } from './usecases/kyc/start-kyc-session.usecase';
 import { ConsultKycSessionUseCase } from './usecases/kyc/consult-kyc-session.usecase';
+import { AnnoncesKycService } from './services/annonces-kyc.service';
+import { ArchivageRapportKycService } from './services/archivage-rapport-kyc.service';
 import { HandleIdentityWebhookUseCase } from './usecases/kyc/handle-identity-webhook.usecase';
 import { KycValideEventHandler } from './handlers/kyc-valide.event-handler';
 import { KycRefuseEventHandler } from './handlers/kyc-refuse.event-handler';
@@ -69,6 +71,8 @@ import { ComplianceErrorFilter } from '../presentation/http/filters/compliance-e
     StartKycSessionUseCase,
     ConsultKycSessionUseCase,
     HandleIdentityWebhookUseCase,
+    AnnoncesKycService,
+    ArchivageRapportKycService,
     KycValideEventHandler,
     KycRefuseEventHandler,
     KycRevueManuelleDemandeeEventHandler,
