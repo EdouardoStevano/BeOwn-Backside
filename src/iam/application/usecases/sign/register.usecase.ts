@@ -32,7 +32,22 @@ export interface RegisterInput {
  * Le compte naît CREE ; c'est `GET /auth/email/verify?token=…` qui le fera
  * ensuite avancer CREE → EMAIL_VERIFIE.
  *
- * Ce use case ne fait que ça : créer le compte, puis lever
+ * **S'inscrire deux fois avec la même adresse non vérifiée reprend le premier
+ * compte au lieu d'en créer un second.** Qui laissait expirer son lien de
+ * vérification se retrouvait dehors : l'adresse était « déjà prise » par un
+ * compte dont personne n'avait prouvé la possession, et aucun parcours ne
+ * permettait de la récupérer. La reprise garde l'identifiant du compte — donc
+ * tout ce qui s'y rattacherait — et n'ouvre rien à personne : tant que
+ * l'adresse n'est pas vérifiée, `SignInUseCase` refuse la connexion, et le
+ * seul chemin qui mène quelque part reste le lien envoyé à cette adresse.
+ *
+ * La garde s'en trouve resserrée, pas relâchée : elle refusait sur
+ * `isEmailVerified()`, si bien qu'un compte non vérifié mais **suspendu ou
+ * clos** passait au travers et partait créer un doublon. C'est désormais
+ * `inscriptionInachevee()` qui tranche — vérifiée ou sanctionnée, l'adresse
+ * est refusée.
+ *
+ * Ce use case ne fait que ça : obtenir le compte, puis lever
  * `UserRegisteredDomainEvent`. Tout ce qui suit une inscription sans la
  * conditionner appartient aux abonnés (§8) — l'envoi du lien de vérification
  * comme la notification des administrateurs, tous deux dans
@@ -50,17 +65,25 @@ export class RegisterUseCase {
 
   async execute(registerDto: RegisterInput): Promise<User> {
     const existing = await this.userRepository.findByEmail(registerDto.email);
-    if (existing) {
+    if (existing && !existing.inscriptionInachevee()) {
       throw new EmailAlreadyRegisteredError();
     }
 
-    const user = await this.userFactory.create({
-      firstname: registerDto.firstname,
-      lastname: registerDto.lastname ?? null,
-      email: registerDto.email,
-      password: registerDto.password,
-      socialId: null,
-    });
+    // Une inscription restée en chemin se reprend sur le même compte : c'est
+    // son identifiant qui est réutilisé, pas un second compte qui naît.
+    const user = existing
+      ? await this.userFactory.reprendre(existing, {
+          firstname: registerDto.firstname,
+          lastname: registerDto.lastname ?? null,
+          password: registerDto.password,
+        })
+      : await this.userFactory.create({
+          firstname: registerDto.firstname,
+          lastname: registerDto.lastname ?? null,
+          email: registerDto.email,
+          password: registerDto.password,
+          socialId: null,
+        });
 
     const savedUser = await this.userRepository.save(user);
 

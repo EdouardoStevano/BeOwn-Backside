@@ -1,4 +1,5 @@
 import {
+  EmailAlreadyRegisteredError,
   InvalidEmailError,
   InvalidPersonNameError,
 } from 'src/iam/domain/errors';
@@ -124,5 +125,96 @@ describe('User — adresse email et sa vérification', () => {
       isVerified: true,
       verifiedDate: new Date('2026-01-01T00:00:00Z'),
     });
+  });
+});
+
+describe('User — reprise d’une inscription inachevée', () => {
+  const inachevee = () =>
+    buildUser({ status: UserStatus.CREE, emailVerified: false });
+
+  const reprise = {
+    firstname: 'Camille',
+    lastname: 'Durand',
+    passwordHash: 'nouvelle-empreinte',
+  };
+
+  it('reconnaît un compte qui n’a jamais confirmé son adresse', () => {
+    expect(inachevee().inscriptionInachevee()).toBe(true);
+  });
+
+  it('ne tient pas pour inachevée une inscription menée à son terme', () => {
+    const verifie = buildUser({
+      status: UserStatus.EMAIL_VERIFIE,
+      emailVerified: true,
+    });
+
+    expect(verifie.inscriptionInachevee()).toBe(false);
+  });
+
+  it.each([UserStatus.SUSPENDU, UserStatus.CLOS, UserStatus.SUPPRIME])(
+    'ne tient pas pour inachevé un compte %s, même non vérifié',
+    (status) => {
+      expect(
+        buildUser({ status, emailVerified: false }).inscriptionInachevee(),
+      ).toBe(false);
+    },
+  );
+
+  it('redeclare l’identité de celui qui se présente', () => {
+    const user = inachevee();
+
+    user.reprendreInscription(reprise);
+
+    expect(user.firstname).toBe('Camille');
+    expect(user.toJSON().lastname).toBe('Durand');
+  });
+
+  it('garde l’identifiant du compte : c’est le même, pas un second', () => {
+    const user = inachevee();
+    const identifiant = user.userId;
+
+    user.reprendreInscription(reprise);
+
+    expect(user.userId).toBe(identifiant);
+  });
+
+  it('laisse l’adresse non vérifiée — la reprise ne prouve rien', () => {
+    const user = inachevee();
+
+    user.reprendreInscription(reprise);
+
+    expect(user.isEmailVerified()).toBe(false);
+    expect(user.status).toBe(UserStatus.CREE);
+  });
+
+  it('refuse de reprendre un compte dont l’adresse est vérifiée', () => {
+    const verifie = buildUser({
+      status: UserStatus.EMAIL_VERIFIE,
+      emailVerified: true,
+    });
+
+    expect(() => verifie.reprendreInscription(reprise)).toThrow(
+      EmailAlreadyRegisteredError,
+    );
+  });
+
+  it('refuse de ressusciter un compte fermé', () => {
+    const clos = buildUser({ status: UserStatus.CLOS, emailVerified: false });
+
+    expect(() => clos.reprendreInscription(reprise)).toThrow(
+      EmailAlreadyRegisteredError,
+    );
+  });
+
+  it('ne change rien quand elle refuse', () => {
+    const clos = buildUser({
+      status: UserStatus.CLOS,
+      emailVerified: false,
+      firstname: 'Jean',
+    });
+
+    expect(() => clos.reprendreInscription(reprise)).toThrow();
+
+    expect(clos.firstname).toBe('Jean');
   });
 });

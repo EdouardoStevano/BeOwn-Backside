@@ -49,4 +49,35 @@ export class UserFactory {
       emailVerified: props.emailVerified,
     });
   }
+
+  /**
+   * **Reprendre une inscription restée inachevée** — le compte garde son
+   * identifiant, celui qui se présente redéclare son identité et son mot de
+   * passe.
+   *
+   * Ici pour la même raison que `create` : le mot de passe est éprouvé par
+   * `Password.of` **avant** d'être haché, et une fois l'empreinte calculée plus
+   * personne ne peut dire si la politique était respectée. Reprendre un compte
+   * n'est pas une occasion d'y entrer avec un mot de passe plus faible qu'à
+   * l'inscription.
+   *
+   * La décision de reprendre, elle, appartient à l'agrégat
+   * ({@link User.reprendreInscription}) : cette fabrique ne sait que hacher.
+   */
+  async reprendre(
+    user: User,
+    props: { firstname: string; lastname: string | null; password: string },
+  ): Promise<User> {
+    const passwordHash = await this.hashingService.hash(
+      Password.of(props.password).value,
+    );
+
+    user.reprendreInscription({
+      firstname: props.firstname,
+      lastname: props.lastname,
+      passwordHash,
+    });
+
+    return user;
+  }
 }

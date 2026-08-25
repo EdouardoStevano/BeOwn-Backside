@@ -13,6 +13,7 @@ import {
   STATUTS_ADMINISTRABLES,
 } from 'src/iam/domain/errors/user-administration.errors';
 import { FacteursMfaNonChargesError } from 'src/iam/domain/errors/mfa.errors';
+import { EmailAlreadyRegisteredError } from 'src/iam/domain/errors/authentication.errors';
 import {
   AccesReserveAuCgpError,
   DejaRattacheAUnCgpError,
@@ -593,6 +594,54 @@ export class User {
   /** `hash` est déjà haché par l'appelant (port de hachage). */
   changePassword(hash: string): void {
     this._passwordHash = hash;
+  }
+
+  /**
+   * Le compte existe mais n'a jamais confirmé son adresse : l'inscription
+   * n'est pas allée à son terme.
+   *
+   * Les deux conditions plutôt qu'une : `CREE` est bien l'état d'un compte non
+   * vérifié, mais c'est `emailVerified` qui fait foi — et un compte sanctionné
+   * ou clos n'est pas une inscription en chemin, c'est un compte qu'on a
+   * fermé. Aucun des deux ne se reprend.
+   */
+  inscriptionInachevee(): boolean {
+    return !this._emailVerified && this._status === UserStatus.CREE;
+  }
+
+  /**
+   * **Reprendre une inscription restée en chemin** — le compte garde son
+   * identifiant, mais celui qui se présente redéclare son identité et son mot
+   * de passe.
+   *
+   * Le besoin est concret : qui laisse expirer son lien de vérification se
+   * retrouvait dehors, l'adresse étant « déjà prise » par un compte dont
+   * personne n'avait prouvé la possession — et qu'aucun parcours ne permettait
+   * de récupérer.
+   *
+   * **Reprendre ce compte n'ouvre rien à personne**, et c'est ce qui rend
+   * l'opération sûre : tant que l'adresse n'est pas vérifiée, `SignInUseCase`
+   * refuse la connexion (`EmailNotVerifiedError`). Un compte resté à `CREE`
+   * n'a donc jamais pu ouvrir de session, ni enrôler de facteur, ni renseigner
+   * un téléphone ou un profil : c'est une coquille vide. Le seul chemin qui
+   * mène quelque part reste le lien envoyé à l'adresse — et il n'arrive qu'à
+   * celui qui la relève.
+   *
+   * > ⚠️ Cette sûreté tient à ce refus de connexion. Si un jour un compte non
+   * > vérifié pouvait ouvrir une session, il faudrait aussi effacer ici ce que
+   * > l'occupant précédent y aurait laissé.
+   */
+  reprendreInscription(props: {
+    firstname: string;
+    lastname: string | null;
+    passwordHash: string;
+  }): void {
+    if (!this.inscriptionInachevee()) {
+      throw new EmailAlreadyRegisteredError();
+    }
+
+    this.rename(props.firstname, props.lastname);
+    this.changePassword(props.passwordHash);
   }
 
   /**

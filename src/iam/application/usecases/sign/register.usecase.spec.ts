@@ -17,11 +17,16 @@ const makeUsecase = (existing: User | null = null) => {
     emailVerified: false,
   });
 
-  const userFactory = { create: jest.fn().mockResolvedValue(created) };
+  const userFactory = {
+    create: jest.fn().mockResolvedValue(created),
+    // `reprendre` rend le compte reçu : c'est bien le même agrégat qui
+    // ressort, pas un nouveau.
+    reprendre: jest.fn((user: User) => Promise.resolve(user)),
+  };
   const userRepository = {
     findByEmail: jest.fn().mockResolvedValue(existing),
     findById: jest.fn().mockResolvedValue(created),
-    save: jest.fn().mockResolvedValue(created),
+    save: jest.fn((user: User) => Promise.resolve(user)),
     update: jest.fn(),
     findOneBySocialId: jest.fn(),
     findPreferences: jest.fn(),
@@ -95,5 +100,80 @@ describe('RegisterUseCase', () => {
     );
     expect(userFactory.create).not.toHaveBeenCalled();
     expect(userRepository.save).not.toHaveBeenCalled();
+  });
+
+  describe('inscription restée inachevée sur cette adresse', () => {
+    const inachevee = () =>
+      buildUserFixture({
+        userId: 7,
+        status: UserStatus.CREE,
+        emailVerified: false,
+      });
+
+    it('reprend le compte existant au lieu d’en créer un second', async () => {
+      const { usecase, userFactory } = makeUsecase(inachevee());
+
+      await usecase.execute(INPUT);
+
+      expect(userFactory.reprendre).toHaveBeenCalled();
+      expect(userFactory.create).not.toHaveBeenCalled();
+    });
+
+    it('garde l’identifiant du compte d’origine', async () => {
+      const { usecase } = makeUsecase(inachevee());
+
+      const user = await usecase.execute(INPUT);
+
+      expect(user.userId).toBe(7);
+    });
+
+    it('redeclare l’identité et le mot de passe de celui qui se présente', async () => {
+      const { usecase, userFactory } = makeUsecase(inachevee());
+
+      await usecase.execute(INPUT);
+
+      expect(userFactory.reprendre).toHaveBeenCalledWith(
+        expect.any(User),
+        expect.objectContaining({
+          firstname: INPUT.firstname,
+          password: INPUT.password,
+        }),
+      );
+    });
+
+    it('annonce l’inscription, pour que le lien de vérification reparte', async () => {
+      const { usecase, eventBus } = makeUsecase(inachevee());
+
+      await usecase.execute(INPUT);
+
+      expect(eventBus.publish).toHaveBeenCalledWith(
+        expect.any(UserRegisteredDomainEvent),
+      );
+    });
+  });
+
+  /**
+   * La garde se resserre : elle refusait sur `isEmailVerified()`, si bien
+   * qu'un compte non vérifié mais sanctionné passait au travers et partait
+   * créer un doublon. Une inscription en chemin se reprend ; un compte qu'on a
+   * fermé ou suspendu, non.
+   */
+  describe.each([
+    ['suspendu', UserStatus.SUSPENDU],
+    ['clos', UserStatus.CLOS],
+    ['supprimé', UserStatus.SUPPRIME],
+  ])('compte %s bien que non vérifié', (_libelle, status) => {
+    it('refuse l’adresse, sans rien créer ni reprendre', async () => {
+      const { usecase, userFactory, userRepository } = makeUsecase(
+        buildUserFixture({ status, emailVerified: false }),
+      );
+
+      await expect(usecase.execute(INPUT)).rejects.toBeInstanceOf(
+        EmailAlreadyRegisteredError,
+      );
+      expect(userFactory.create).not.toHaveBeenCalled();
+      expect(userFactory.reprendre).not.toHaveBeenCalled();
+      expect(userRepository.save).not.toHaveBeenCalled();
+    });
   });
 });
