@@ -83,5 +83,6 @@ exports[`permissions.constants la matrice couvre tous les rôles (snapshot anti-
     "news:manage",
     "notifications:manage",
   ],
+  "visiteur": [],
 }
 `;

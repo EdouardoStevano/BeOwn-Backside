@@ -258,7 +258,10 @@ export class User {
       lastname: LastName.of(props.lastname),
       socialId: props.socialId,
       passwordHash: props.passwordHash,
-      role: UserRole.INVESTISSEUR,
+      // Visiteur, et non investisseur : le compte naît avant son dossier de
+      // conformité, et ne devient investisseur qu'une fois celui-ci validé
+      // (voir `devenirInvestisseur`).
+      role: UserRole.VISITEUR,
       status: UserStatus.CREE,
       // Rien n'est annoncé à l'inscription : le titulaire choisit son type à
       // la première étape du parcours d'onboarding, et donne son numéro en
@@ -589,6 +592,32 @@ export class User {
     if (this._status === UserStatus.CREE) {
       this._status = UserStatus.EMAIL_VERIFIE;
     }
+  }
+
+  /**
+   * **Le titulaire a mené son onboarding à son terme** : son dossier de
+   * conformité est validé, il devient investisseur.
+   *
+   * Le rôle **suit** la vérification d'identité, il ne la remplace pas. Ce qui
+   * autorise une opération financière reste `KycValidatedGuard`, qui interroge
+   * le dossier et non le rôle — un rôle désynchronisé ne peut donc pas ouvrir
+   * un accès, seulement en fermer un. C'est le sens de la dépendance, et il
+   * vaut mieux qu'elle penche de ce côté-là.
+   *
+   * **Seul un visiteur est promu.** Un compte de back-office qui ferait
+   * valider un dossier à son nom ne doit pas y perdre ses attributions, et un
+   * porteur ou un CGP n'a pas à devenir investisseur parce qu'il a justifié de
+   * son identité. Rejouer la validation d'un dossier déjà validé ne change
+   * rien non plus — la méthode est idempotente.
+   *
+   * @returns `true` si le rôle a changé — utile à l'appelant qui veut éviter
+   *   une écriture inutile.
+   */
+  devenirInvestisseur(): boolean {
+    if (this._role !== UserRole.VISITEUR) return false;
+
+    this._role = UserRole.INVESTISSEUR;
+    return true;
   }
 
   /** `hash` est déjà haché par l'appelant (port de hachage). */

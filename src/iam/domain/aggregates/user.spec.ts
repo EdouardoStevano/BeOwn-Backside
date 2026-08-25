@@ -3,7 +3,7 @@ import {
   InvalidEmailError,
   InvalidPersonNameError,
 } from 'src/iam/domain/errors';
-import { UserStatus } from 'src/iam/domain/enums/user.enum';
+import { UserRole, UserStatus } from 'src/iam/domain/enums/user.enum';
 import { User } from './user';
 import { buildUser } from './user.fixture';
 
@@ -216,5 +216,42 @@ describe('User — reprise d’une inscription inachevée', () => {
     expect(() => clos.reprendreInscription(reprise)).toThrow();
 
     expect(clos.firstname).toBe('Jean');
+  });
+});
+
+describe('User — du visiteur à l’investisseur', () => {
+  it('ouvre un compte visiteur à l’inscription', () => {
+    expect(User.register(registerProps).role).toBe(UserRole.VISITEUR);
+  });
+
+  it('promeut le visiteur dont le dossier vient d’être validé', () => {
+    const visiteur = buildUser({ role: UserRole.VISITEUR });
+
+    expect(visiteur.devenirInvestisseur()).toBe(true);
+    expect(visiteur.role).toBe(UserRole.INVESTISSEUR);
+  });
+
+  it('n’écrit rien pour un investisseur déjà promu — la validation se rejoue', () => {
+    const investisseur = buildUser({ role: UserRole.INVESTISSEUR });
+
+    expect(investisseur.devenirInvestisseur()).toBe(false);
+    expect(investisseur.role).toBe(UserRole.INVESTISSEUR);
+  });
+
+  /**
+   * Un compte de back-office qui ferait valider un dossier à son nom ne doit
+   * pas y perdre ses attributions, et un porteur ou un CGP n'a pas à devenir
+   * investisseur parce qu'il a justifié de son identité.
+   */
+  it.each([
+    UserRole.SUPER_ADMIN,
+    UserRole.RCCI,
+    UserRole.PORTEUR,
+    UserRole.CGP,
+  ])('ne déclasse pas un compte %s', (role) => {
+    const compte = buildUser({ role });
+
+    expect(compte.devenirInvestisseur()).toBe(false);
+    expect(compte.role).toBe(role);
   });
 });

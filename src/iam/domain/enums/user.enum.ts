@@ -10,6 +10,18 @@
 
 export enum UserRole {
   // Utilisateurs plateforme
+  /**
+   * Compte ouvert, mais qui n'a pas encore mené son onboarding KYC à son
+   * terme. C'est le rôle de départ de toute inscription.
+   *
+   * Il ne donne accès à rien de plus qu'un visiteur anonyme authentifié :
+   * consulter, compléter son dossier. Aucune opération financière — celles-ci
+   * sont de toute façon gardées par `KycValidatedGuard`, qui interroge le
+   * dossier de conformité et non le rôle. Le rôle **suit** cette vérification,
+   * il ne la remplace pas : `UpdateKycStatusUseCase` fait passer le compte à
+   * INVESTISSEUR quand le dossier devient VALIDE.
+   */
+  VISITEUR = 'visiteur',
   INVESTISSEUR = 'investisseur',
   PORTEUR = 'porteur',
   CGP = 'cgp',

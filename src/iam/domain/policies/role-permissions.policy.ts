@@ -105,6 +105,9 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[] | [Wildcard]> = {
     'market:manage',
   ],
   [UserRole.DPO]: ['users:read', 'data:export', 'audit:read'],
+  // Aucune permission de back-office pour les rôles de la plateforme — le
+  // visiteur compris, qui n'a pas même achevé son onboarding.
+  [UserRole.VISITEUR]: [],
   [UserRole.INVESTISSEUR]: [],
   [UserRole.PORTEUR]: [],
   [UserRole.CGP]: [],
