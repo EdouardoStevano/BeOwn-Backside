@@ -42,7 +42,8 @@ export class ProfilPPMapper {
   static restore(snapshot: ProfilPPSnapshotBrut): ProfilPP {
     return new ProfilPP({
       entete: {
-        utilisateurId: snapshot.utilisateurId,
+        id: snapshot.id,
+        userId: snapshot.userId,
         pep: snapshot.pep === true,
         createdAt: snapshot.createdAt,
         updatedAt: snapshot.updatedAt,
@@ -66,7 +67,8 @@ export class ProfilPPMapper {
    */
   static toSnapshot(profil: ProfilPP): ProfilPPSnapshot {
     return {
-      utilisateurId: profil.utilisateurId,
+      id: profil.id,
+      userId: profil.userId,
       pep: profil.pep,
       createdAt: profil.createdAt,
       updatedAt: profil.updatedAt,

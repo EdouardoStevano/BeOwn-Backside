@@ -11,7 +11,7 @@ import { SituationProfessionnelle } from 'src/compliance/domain/value-objects/si
 
 /** Ce qu'il faut pour faire naître un profil, en plus des champs déclarés. */
 export interface CreerProfilPPProps extends ChampsDeclaresProfilPP {
-  utilisateurId: number;
+  userId: number;
 }
 
 /**
@@ -42,8 +42,8 @@ export class ProfilPPFactory {
    * que de deux choses, et ce sont justement celles qu'aucun bloc ne peut
    * prendre seul :
    *
-   * - la **clé** du profil, éprouvée ici parce qu'elle n'appartient à aucun
-   *   bloc et conditionne l'existence de la ligne ;
+   * - le **rattachement au compte**, éprouvé ici parce qu'il n'appartient à
+   *   aucun bloc et conditionne l'existence de la ligne ;
    * - le fait que l'**évaluation réglementaire n'est pas déclarable**. Elle part
    *   de son état initial quoi qu'on lui passe, ce qui ferme la seule porte par
    *   laquelle on aurait pu naître « professionnel » sans questionnaire
@@ -52,7 +52,11 @@ export class ProfilPPFactory {
   static creer(props: CreerProfilPPProps): ProfilPP {
     return new ProfilPP({
       entete: {
-        utilisateurId: eprouverUtilisateurId(props.utilisateurId),
+        // Comme les dates : attribuée par la persistance. Un profil qui n'a
+        // jamais été sauvegardé n'a pas encore d'identité — c'est l'écriture
+        // qui la lui donne, et `save` rend l'agrégat rechargé.
+        id: undefined as unknown as string,
+        userId: eprouverUtilisateurId(props.userId, 'userId'),
         // Absence de réponse = pas de déclaration PEP. Le doute ne rend pas
         // quelqu'un politiquement exposé ; c'est le KYC qui tranche.
         pep: props.pep === true,

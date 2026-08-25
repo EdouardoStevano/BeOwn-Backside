@@ -56,15 +56,12 @@ export interface ProfilPPRepository {
    * avant d'avoir complété son profil reste permis.
    */
   enregistrerClassementPsfp(
-    utilisateurId: number,
+    userId: number,
     classement: ClassementPsfp,
   ): Promise<void>;
 
   /** Reporte le niveau de risque et la date du prochain contact. Mêmes raisons. */
-  enregistrerSuiviRisque(
-    utilisateurId: number,
-    suivi: SuiviRisque,
-  ): Promise<void>;
+  enregistrerSuiviRisque(userId: number, suivi: SuiviRisque): Promise<void>;
 
   /**
    * Profils dont la prise de contact périodique est due — surveillance PSFP.

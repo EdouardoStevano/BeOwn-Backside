@@ -45,9 +45,21 @@ export type ChampsDeclaresProfilPP = ChampsIdentite &
     pep?: boolean | null;
   };
 
-/** Ce que le profil ajoute à ses blocs : sa clé, le drapeau PEP, ses dates. */
+/** Ce que le profil ajoute à ses blocs : ses clés, le drapeau PEP, ses dates. */
 export interface EnteteProfilPP {
-  utilisateurId: number;
+  /**
+   * Identité propre du dossier, attribuée par la persistance.
+   *
+   * Le dossier n'en avait pas : sa table avait `utilisateurId` pour clé
+   * primaire, si bien que le dossier et son titulaire ne faisaient qu'une
+   * seule identité. Deux choses distinctes le méritaient — un compte existe
+   * sans dossier (il s'inscrit avant de le remplir), l'inverse n'est pas vrai.
+   * La relation 1:1 est désormais portée par la contrainte d'unicité sur
+   * `userId`, là où elle se dit, plutôt que par la confusion des deux clés.
+   */
+  id: string;
+  /** Le compte auquel il se rattache — un compte, au plus un dossier. */
+  userId: number;
   pep: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -122,7 +134,8 @@ export interface ProfilPPSnapshotBrut
  * 'professionnel'` et s'affranchissait du questionnaire d'adéquation.
  */
 export class ProfilPP {
-  private readonly _utilisateurId: number;
+  private readonly _id: string;
+  private readonly _userId: number;
   private _identite: Identite;
   private _coordonnees: Coordonnees;
   private _situationProfessionnelle: SituationProfessionnelle;
@@ -151,7 +164,8 @@ export class ProfilPP {
     situationFiscale: SituationFiscale;
     evaluation: EvaluationInvestisseur;
   }) {
-    this._utilisateurId = etat.entete.utilisateurId;
+    this._id = etat.entete.id;
+    this._userId = etat.entete.userId;
     this._pep = etat.entete.pep;
     this._createdAt = etat.entete.createdAt;
     this._updatedAt = etat.entete.updatedAt;
@@ -230,8 +244,11 @@ export class ProfilPP {
 
   // ── Lectures ──────────────────────────────────────────────────────────────
 
-  get utilisateurId(): number {
-    return this._utilisateurId;
+  get id(): string {
+    return this._id;
+  }
+  get userId(): number {
+    return this._userId;
   }
   get identite(): Identite {
     return this._identite;

@@ -4,9 +4,10 @@ import { ChampProfilInvalideError } from '../errors/champ-profil.errors';
 /**
  * Compte auquel se rattache une pièce du dossier de conformité.
  *
- * `utilisateurId` porte le rattachement au compte — clé primaire pour les
- * profils, index pour le dossier de vérification. Une valeur absente ou
- * négative produirait une ligne orpheline, ou écraserait celle d'un autre.
+ * Le rattachement au compte — clé primaire pour le profil moral, colonne
+ * unique pour le profil physique, index pour le dossier de vérification. Une
+ * valeur absente ou négative produirait une ligne orpheline, ou écraserait
+ * celle d'un autre.
  *
  * La règle existait en **deux exemplaires** identiques, un par contexte : le
  * commentaire de la version KYC assumait explicitement la recopie plutôt qu'un
@@ -24,10 +25,21 @@ const estIdentifiantRecevable = (raw: number): boolean =>
 const LIBELLE = "L'identifiant utilisateur";
 const RAISON = 'doit être un entier positif.';
 
-/** Pour un profil personne physique ou morale, et le questionnaire. */
-export function eprouverUtilisateurId(raw: number): number {
+/**
+ * Pour un profil personne physique ou morale, et le questionnaire.
+ *
+ * `champ` parce que les pièces du dossier ne nomment pas toutes ce
+ * rattachement pareil : le profil physique publie `userId`, comme le reste de
+ * l'API ; le profil moral et le questionnaire disent encore `utilisateurId`.
+ * C'est le nom que le front surligne — il doit désigner un champ que la
+ * réponse porte réellement.
+ */
+export function eprouverUtilisateurId(
+  raw: number,
+  champ = 'utilisateurId',
+): number {
   if (!estIdentifiantRecevable(raw)) {
-    throw new ChampProfilInvalideError(LIBELLE, RAISON, 'utilisateurId');
+    throw new ChampProfilInvalideError(LIBELLE, RAISON, champ);
   }
   return raw;
 }

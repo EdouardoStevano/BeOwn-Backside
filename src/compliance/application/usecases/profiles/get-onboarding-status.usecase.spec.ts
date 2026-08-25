@@ -1,5 +1,8 @@
 import { GetOnboardingStatusUseCase } from './get-onboarding-status.usecase';
-import { KycNiveau, KycStatus } from 'src/compliance/domain/enums/kyc-status.enum';
+import {
+  KycNiveau,
+  KycStatus,
+} from 'src/compliance/domain/enums/kyc-status.enum';
 import { KycFactory } from 'src/compliance/domain/factories/kyc.factory';
 import { ProfilPMFactory } from 'src/compliance/domain/factories/profil-pm.factory';
 import { ProfilPPFactory } from 'src/compliance/domain/factories/profil-pp.factory';
@@ -14,13 +17,12 @@ const UTILISATEUR = 42;
 
 const profilPPRenseigne = () =>
   ProfilPPFactory.creer({
-    utilisateurId: UTILISATEUR,
+    userId: UTILISATEUR,
     nationalite: 'FR',
   });
 
 /** Profil créé mais formulaire jamais ouvert : aucun champ du dossier rempli. */
-const profilPPVide = () =>
-  ProfilPPFactory.creer({ utilisateurId: UTILISATEUR });
+const profilPPVide = () => ProfilPPFactory.creer({ userId: UTILISATEUR });
 
 const kycAuStatut = (statut: KycStatus) =>
   KycMapper.restore({

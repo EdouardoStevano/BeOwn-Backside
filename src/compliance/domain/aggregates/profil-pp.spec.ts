@@ -14,7 +14,7 @@ function ilYA(annees: number): string {
 }
 
 function creer(champs: Partial<CreerProfilPPProps> = {}): ProfilPP {
-  return ProfilPPFactory.creer({ utilisateurId: 42, ...champs });
+  return ProfilPPFactory.creer({ userId: 42, ...champs });
 }
 
 /** Le champ fautif remonté au front, pour surligner la bonne entrée. */
@@ -120,12 +120,12 @@ describe('ProfilPP.toJSON', () => {
         'residenceFiscale',
         'secteurActivite',
         'telephone',
-        'utilisateurId',
+        'userId',
         'ville',
       ].sort(),
     );
-    // `createdAt` / `updatedAt` sont attribués par la persistance : absents du
-    // JSON tant que le profil n'a pas été sauvegardé.
+    // `id`, `createdAt` et `updatedAt` sont attribués par la persistance :
+    // absents du JSON tant que le profil n'a pas été sauvegardé.
     expect(json.nationalite).toBe('FR');
     // Le découpage en blocs ne doit pas fuir dans la réponse HTTP.
     expect(json.identite).toBeUndefined();

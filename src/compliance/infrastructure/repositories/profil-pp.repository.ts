@@ -25,18 +25,16 @@ export class ProfilPPTypeOrmRepository implements ProfilPPRepository {
   }
 
   async findByUserId(userId: number): Promise<ProfilPP | null> {
-    const entity = await this.ppRepo.findOne({
-      where: { utilisateurId: userId },
-    });
+    const entity = await this.ppRepo.findOne({ where: { userId } });
     return entity ? ProfilMapper.ppToDomain(entity) : null;
   }
 
   /**
-   * Identique à {@link save} — `utilisateurId` étant la clé primaire, TypeORM
-   * fait un UPDATE dès que la ligne existe. Les deux méthodes restent
-   * distinctes au port parce que l'intention de l'appelant, elle, diffère :
-   * créer un profil qui existe déjà est un conflit, le mettre à jour est
-   * normal, et c'est le use case qui tranche.
+   * Identique à {@link save} — un profil chargé porte son `id`, et TypeORM fait
+   * donc un UPDATE ; un profil qui vient de naître ne l'a pas, et c'est un
+   * INSERT. Les deux méthodes restent distinctes au port parce que l'intention
+   * de l'appelant, elle, diffère : créer un profil qui existe déjà est un
+   * conflit, le mettre à jour est normal, et c'est le use case qui tranche.
    */
   update(profil: ProfilPP): Promise<ProfilPP> {
     return this.save(profil);
@@ -49,11 +47,11 @@ export class ProfilPPTypeOrmRepository implements ProfilPPRepository {
    * port annonce.
    */
   async enregistrerClassementPsfp(
-    utilisateurId: number,
+    userId: number,
     classement: ClassementPsfp,
   ): Promise<void> {
     await this.ppRepo.update(
-      { utilisateurId },
+      { userId },
       {
         categoriePsfp: classement.categoriePsfp,
         patrimoineDeclare: classement.patrimoineDeclare,
@@ -63,11 +61,11 @@ export class ProfilPPTypeOrmRepository implements ProfilPPRepository {
   }
 
   async enregistrerSuiviRisque(
-    utilisateurId: number,
+    userId: number,
     suivi: SuiviRisque,
   ): Promise<void> {
     await this.ppRepo.update(
-      { utilisateurId },
+      { userId },
       {
         niveauRisque: suivi.niveauRisque,
         prochainContactDu: suivi.prochainContactDu,

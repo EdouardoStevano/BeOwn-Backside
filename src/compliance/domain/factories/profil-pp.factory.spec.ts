@@ -4,7 +4,7 @@ import { CategoriePsfp } from 'src/compliance/domain/enums/categorie-psfp.enum';
 import { ChampProfilInvalideError } from 'src/compliance/domain/errors';
 
 function creer(champs: Partial<CreerProfilPPProps> = {}): ProfilPP {
-  return ProfilPPFactory.creer({ utilisateurId: 42, ...champs });
+  return ProfilPPFactory.creer({ userId: 42, ...champs });
 }
 
 /** Le champ fautif remonté au front, pour surligner la bonne entrée. */
@@ -70,12 +70,8 @@ describe('ProfilPPFactory — répartition entre les blocs', () => {
 
 describe('ProfilPPFactory — ce que la fabrique décide seule', () => {
   it('refuse un identifiant utilisateur qui ne désigne aucun compte', () => {
-    expect(champFautif(() => creer({ utilisateurId: 0 }))).toBe(
-      'utilisateurId',
-    );
-    expect(champFautif(() => creer({ utilisateurId: -1 }))).toBe(
-      'utilisateurId',
-    );
+    expect(champFautif(() => creer({ userId: 0 }))).toBe('userId');
+    expect(champFautif(() => creer({ userId: -1 }))).toBe('userId');
   });
 
   it('naît toujours non averti, quelle que soit la demande', () => {

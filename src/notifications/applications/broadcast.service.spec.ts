@@ -41,8 +41,8 @@ function makeUser(userId: number, overrides: Record<string, unknown> = {}) {
  * Le numéro est déclaré au dossier investisseur, pas au compte : un
  * destinataire n'est joignable par SMS que s'il a rempli le sien.
  */
-function makeProfil(utilisateurId: number, telephone: string | null) {
-  return { utilisateurId, telephone };
+function makeProfil(userId: number, telephone: string | null) {
+  return { userId, telephone };
 }
 
 /** Préférences opt-in complètes (ligne user_preferences existante). */

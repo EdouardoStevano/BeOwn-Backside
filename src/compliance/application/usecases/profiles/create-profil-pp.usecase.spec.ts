@@ -55,7 +55,7 @@ const DTO_VIDE = {} as CreateProfilPPDto;
 describe('CreateProfilPPUseCase', () => {
   it('refuse un second profil pour le même compte', async () => {
     const { useCase, profilPPRepository } = monter({
-      existant: ProfilPPFactory.creer({ utilisateurId: 42 }),
+      existant: ProfilPPFactory.creer({ userId: 42 }),
     });
 
     await expect(useCase.execute(42, DTO_VIDE)).rejects.toBeInstanceOf(
@@ -82,7 +82,7 @@ describe('CreateProfilPPUseCase', () => {
 
     const vue = await useCase.execute(42, DTO_VIDE);
 
-    expect(vue.utilisateurId).toBe(42);
+    expect(vue.userId).toBe(42);
     expect(vue.prenom).toBeNull();
   });
 
@@ -128,7 +128,7 @@ describe('CreateProfilPPUseCase', () => {
     } as CreateProfilPPDto);
 
     const profil = jest.mocked(profilPPRepository.save).mock.calls[0][0];
-    expect(profil.utilisateurId).toBe(42);
+    expect(profil.userId).toBe(42);
     expect(profil.identite.civilite).toBe('Mme');
     expect(profil.situationFiscale.nif).toBe('1234567890');
   });

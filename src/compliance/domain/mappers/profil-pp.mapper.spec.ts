@@ -10,7 +10,8 @@ import { CategoriePsfp } from 'src/compliance/domain/enums/categorie-psfp.enum';
  * existent en base, écrites avant que les règles n'existent.
  */
 const LIGNE: ProfilPPSnapshotBrut = {
-  utilisateurId: 42,
+  id: '3f2a9c14-8b7e-4d61-9a05-2c6f8e1d4b77',
+  userId: 42,
   civilite: 'Monsieur',
   nomNaissance: null,
   paysNaissance: null,
@@ -78,7 +79,7 @@ describe('ProfilPPMapper.toSnapshot', () => {
 
   it('assemble à plat ce que le découpage en blocs a séparé', () => {
     const profil = ProfilPPFactory.creer({
-      utilisateurId: 42,
+      userId: 42,
       nationalite: 'FR',
       ville: 'Paris',
       profession: 'Ingénieur',
@@ -90,7 +91,7 @@ describe('ProfilPPMapper.toSnapshot', () => {
 
     // Un champ de chaque bloc, plus l'en-tête : la forme de la table est
     // reconstituée sans que la persistance ait à connaître les blocs.
-    expect(snapshot.utilisateurId).toBe(42);
+    expect(snapshot.userId).toBe(42);
     expect(snapshot.nationalite).toBe('FR');
     expect(snapshot.ville).toBe('Paris');
     expect(snapshot.profession).toBe('Ingénieur');

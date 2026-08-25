@@ -23,7 +23,8 @@ export class ProfilMapper {
    */
   static ppToDomain(entity: ProfilPPEntity): ProfilPP {
     return ProfilPPDomainMapper.restore({
-      utilisateurId: entity.utilisateurId,
+      id: entity.id,
+      userId: entity.userId,
       nomNaissance: entity.nomNaissance,
       civilite: entity.civilite,
       dateNaissance: entity.dateNaissance,
@@ -66,7 +67,10 @@ export class ProfilMapper {
   static ppToEntity(domain: ProfilPP): ProfilPPEntity {
     const snapshot = ProfilPPDomainMapper.toSnapshot(domain);
     const entity = new ProfilPPEntity();
-    entity.utilisateurId = snapshot.utilisateurId;
+    // `undefined` sur un profil qui n'a jamais été écrit : TypeORM insère et
+    // attribue l'uuid. Renseigné, il désigne la ligne à mettre à jour.
+    entity.id = snapshot.id;
+    entity.userId = snapshot.userId;
     entity.nomNaissance = snapshot.nomNaissance;
     entity.civilite = snapshot.civilite;
     // Une colonne Postgres `date` se renseigne aussi bien avec la chaîne

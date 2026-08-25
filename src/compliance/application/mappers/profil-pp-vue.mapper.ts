@@ -26,6 +26,15 @@ export interface EtatCivilPublie {
  * Ce que publient les routes du profil personne physique : le dossier, plus
  * l'état civil que porte le compte. Le téléphone, lui, est dans le dossier —
  * il arrive donc par `profil.toJSON()`, sans composition.
+ *
+ * Deux identifiants, et ils ne disent pas la même chose : `id` est celui du
+ * dossier, `userId` celui de son titulaire. Le second s'appelait
+ * `utilisateurId` — le dossier nomme sa référence au compte dans sa propre
+ * langue à l'intérieur du contexte (§4), mais à la sortie l'API n'en a qu'une,
+ * et c'est celle qu'`identity` a posée : le même entier s'appelle `userId`
+ * dans le token, dans `GET /users/me` et dans toutes les routes qui en
+ * dépendent. Deux noms pour un identifiant, c'est un front qui finit par
+ * croire à deux identifiants.
  */
 export type VueProfilPP = ProfilPPSnapshot & EtatCivilPublie;
 

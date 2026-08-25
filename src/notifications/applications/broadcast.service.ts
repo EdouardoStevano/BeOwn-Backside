@@ -365,10 +365,10 @@ export class BroadcastService {
     const phoneByUser = new Map<number, string | null>();
     if (toggles.sms) {
       const profils = await this.profilRepo.find({
-        where: { utilisateurId: In(ids) },
+        where: { userId: In(ids) },
       });
       for (const p of profils) {
-        phoneByUser.set(p.utilisateurId, p.telephone ?? null);
+        phoneByUser.set(p.userId, p.telephone ?? null);
       }
     }
 

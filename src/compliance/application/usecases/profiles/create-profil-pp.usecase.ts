@@ -53,7 +53,7 @@ export class CreateProfilPPUseCase {
 
     const profil = await this.profilPPRepository.save(
       ProfilPPFactory.creer({
-        utilisateurId: userId,
+        userId,
         ...champsDeclaresDepuisDto(dto),
       }),
     );

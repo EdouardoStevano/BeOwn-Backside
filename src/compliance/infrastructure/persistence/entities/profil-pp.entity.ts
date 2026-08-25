@@ -2,13 +2,17 @@ import {
   Column,
   CreateDateColumn,
   Entity,
-  PrimaryColumn,
+  PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
 import { CategoriePsfp } from 'src/compliance/domain/enums/categorie-psfp.enum';
 
 @Entity('profil_personne_physique')
 export class ProfilPPEntity {
+  /** Identité propre du dossier — voir `EnteteProfilPP.id`. */
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
   /**
    * Le titulaire est référencé **par son identité seule** — pas par une
    * relation vers `UserEntity`.
@@ -19,11 +23,20 @@ export class ProfilPPEntity {
    * référence un autre agrégat par identifiant, jamais par objet — la frontière
    * d'agrégat est aussi la frontière du chargement.
    *
-   * La clé étrangère en base est **inchangée** : elle est posée par migration,
-   * pas déduite de ce décorateur.
+   * `unique` porte le 1:1 : un compte a au plus un dossier personne physique.
+   * C'était auparavant la clé primaire qui l'imposait, en confondant les deux
+   * identités.
+   *
+   * Ce décorateur ne dit rien de la **référence** : c'est
+   * `ProfilPPOwnIdentity1783700000000` qui pose la clé étrangère vers
+   * `users("userId")`, en `ON DELETE NO ACTION`. La garantie est en base et non
+   * dans le mapping, délibérément — un `@OneToOne` vers `UserEntity` ferait
+   * dépendre ce contexte de l'infrastructure d'IAM pour une jointure qu'il ne
+   * fait jamais, ce que la note ci-dessus a justement défait. Le schéma protège
+   * l'invariant, l'agrégat ne charge que ce qui le regarde.
    */
-  @PrimaryColumn()
-  utilisateurId: number;
+  @Column({ unique: true })
+  userId: number;
 
   @Column({ type: 'varchar', nullable: true })
   civilite: string | null;
