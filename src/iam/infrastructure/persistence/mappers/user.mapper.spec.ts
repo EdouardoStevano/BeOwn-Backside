@@ -84,4 +84,42 @@ describe('UserMapper (persistance) — couture user_emails ↔ agrégat', () => 
     expect(domain.isEmailVerified()).toBe(false);
     expect(UserMapper.toEntity(domain).userEmail).toBeUndefined();
   });
+
+  /**
+   * Le rôle a longtemps été absent de `toEntity`, sans que rien ne le
+   * signale : la valeur posée à l'inscription — INVESTISSEUR — était
+   * exactement le défaut de la colonne, si bien que l'oubli n'avait aucun
+   * effet observable. Il en a pris un le jour où un compte est né VISITEUR.
+   *
+   * C'était le troisième champ dans ce cas après le statut et le type de
+   * compte. Ces trois tests sont là pour qu'il n'y en ait pas un quatrième.
+   */
+  describe('ce que décide le domaine arrive jusqu’à la ligne', () => {
+    it('écrit le rôle', () => {
+      const domain = UserMapper.toDomain(buildEntity());
+
+      domain.devenirInvestisseur();
+
+      expect(UserMapper.toEntity(domain).role).toBe(UserRole.INVESTISSEUR);
+    });
+
+    it('écrit un rôle qui n’est pas le défaut de la colonne', () => {
+      const entity = buildEntity();
+      entity.role = UserRole.VISITEUR;
+
+      const domain = UserMapper.toDomain(entity);
+
+      expect(UserMapper.toEntity(domain).role).toBe(UserRole.VISITEUR);
+    });
+
+    it('écrit le statut', () => {
+      const entity = buildEntity();
+      entity.status = UserStatus.CREE;
+
+      const domain = UserMapper.toDomain(entity);
+      domain.markEmailAsVerified();
+
+      expect(UserMapper.toEntity(domain).status).toBe(UserStatus.EMAIL_VERIFIE);
+    });
+  });
 });

@@ -55,6 +55,17 @@ export class UserMapper {
     entity.lastname = snapshot.lastname;
     entity.socialId = snapshot.socialId;
     entity.password = snapshot.passwordHash;
+    // Le rôle, et pour la troisième fois la même histoire que le statut et le
+    // type ci-dessous : sans ce mapping, ce que décide le domaine se perd au
+    // save(). Personne ne l'avait vu parce que la valeur posée à l'inscription
+    // — INVESTISSEUR — était exactement le défaut de la colonne : l'oubli
+    // n'avait aucun effet observable. Il en a pris un le jour où un compte est
+    // né VISITEUR, et il en aurait pris un autre à la promotion
+    // (`devenirInvestisseur()`), qui n'aurait rien écrit non plus.
+    //
+    // Pas de garde `if` : un compte a toujours un rôle, contrairement au
+    // statut et au type que le snapshot peut rendre absents.
+    entity.role = snapshot.role;
     // Sans ce mapping, un changement de statut au niveau domaine (ex.
     // CREE → EMAIL_VERIFIE lors de la confirmation d'email) était perdu au
     // save(). Undefined reste ignoré par TypeORM (insert → défaut CREE).
