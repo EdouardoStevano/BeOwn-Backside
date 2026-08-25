@@ -13,7 +13,15 @@ import {
   STATUTS_ADMINISTRABLES,
 } from 'src/iam/domain/errors/user-administration.errors';
 import { FacteursMfaNonChargesError } from 'src/iam/domain/errors/mfa.errors';
-import { EmailAlreadyRegisteredError } from 'src/iam/domain/errors/authentication.errors';
+import {
+  EmailAlreadyRegisteredError,
+  InvalidCredentialsError,
+} from 'src/iam/domain/errors/authentication.errors';
+import {
+  AccountClosedError,
+  AccountSuspendedError,
+  EmailNotVerifiedError,
+} from 'src/iam/domain/errors/account.errors';
 import {
   AccesReserveAuCgpError,
   DejaRattacheAUnCgpError,
@@ -389,6 +397,57 @@ export class User {
    */
   canOpenSession(): boolean {
     return !this.isSuspended() && !this.isClosed();
+  }
+
+  /**
+   * **Tout ce qui conditionne l'ouverture d'une session par mot de passe**, en
+   * une seule question posée au compte : l'empreinte correspond-elle, l'adresse
+   * est-elle vérifiée, le compte n'est-il ni suspendu ni fermé ?
+   *
+   * Version explicite de {@link canOpenSession} : là où celui-ci rend un
+   * verdict binaire, celle-ci dit *pourquoi* elle refuse — chaque cause a son
+   * erreur, et son code stable côté front.
+   *
+   * Ces quatre contrôles vivaient dépliés dans `SignInUsecase`. Les réunir ici
+   * n'est pas un rangement : **leur ordre est une règle de sécurité**, et une
+   * règle de sécurité qui n'existe que sous forme de quatre `if` successifs
+   * dans un use case est une règle qu'un cinquième `if` mal placé défait sans
+   * bruit.
+   *
+   * **L'ordre, donc, et sa raison.** Le mot de passe d'abord. Les trois causes
+   * suivantes sont bien plus bavardes que « identifiants invalides » : elles
+   * disent qu'un compte existe à cette adresse, et dans quel état il se trouve.
+   * Les éprouver avant le mot de passe permettrait à quiconque devine une
+   * adresse d'apprendre si elle correspond à un compte, s'il est vérifié, s'il
+   * est suspendu — sans jamais présenter d'identifiant valable. Derrière le mot
+   * de passe, ce détail ne parvient qu'à qui détient déjà de quoi entrer.
+   *
+   * Le compte inexistant reste au use case : il n'y a pas d'agrégat à qui
+   * poser la question, et c'est la même `InvalidCredentialsError` qui sort —
+   * précisément pour qu'on ne puisse pas distinguer les deux cas.
+   *
+   * @param compare injecté à l'appel : le domaine sait *qu'il faut* comparer,
+   *   il ignore bcrypt (§33).
+   */
+  async assertPeutOuvrirSession(
+    motDePasse: string,
+    compare: PasswordComparator,
+  ): Promise<void> {
+    if (!(await this.verifyPassword(motDePasse, compare))) {
+      throw new InvalidCredentialsError();
+    }
+
+    if (!this.isEmailVerified()) {
+      throw new EmailNotVerifiedError();
+    }
+
+    if (this.isSuspended()) {
+      throw new AccountSuspendedError();
+    }
+
+    if (this.isClosed()) {
+      throw new AccountClosedError();
+    }
   }
 
   // ── Transitions ───────────────────────────────────────────────────────────

@@ -13,9 +13,6 @@ import {
   type UserRepository,
 } from 'src/iam/domain/repositories/user.repository';
 import {
-  AccountClosedError,
-  AccountSuspendedError,
-  EmailNotVerifiedError,
   InvalidCredentialsError,
   MfaRequiredError,
 } from 'src/iam/domain/errors';
@@ -51,45 +48,21 @@ export class SignInUsecase {
   async execute(command: SignInCommand): Promise<AuthSession> {
     const user = await this.usersRepository.findByEmail(command.email);
 
+    // Le compte inexistant est le seul contrôle qui reste ici : il n'y a pas
+    // d'agrégat à qui poser la question. Même erreur que le mot de passe faux,
+    // précisément pour qu'on ne puisse pas distinguer les deux cas.
     if (!user) {
       throw new InvalidCredentialsError();
     }
 
-    // L'empreinte ne sort jamais de l'entité : on lui prête seulement de quoi
-    // comparer. Un compte social sans mot de passe échoue ici proprement, là
-    // où le `user.password!` précédent déréférençait un null.
-    const isValidPassword = await user.verifyPassword(
-      command.password,
-      (plain, hash) => this.hashingService.compare(plain, hash),
+    // Tout ce qui conditionne l'ouverture d'une session en une question posée
+    // au compte : empreinte, adresse vérifiée, ni suspendu ni fermé.
+    // L'ordre de ces contrôles est une règle de sécurité — anti-énumération —
+    // et il est énoncé dans l'agrégat, avec sa raison. L'empreinte, elle, ne
+    // sort jamais de l'entité : on lui prête seulement de quoi comparer.
+    await user.assertPeutOuvrirSession(command.password, (plain, hash) =>
+      this.hashingService.compare(plain, hash),
     );
-
-    if (!isValidPassword) {
-      throw new InvalidCredentialsError();
-    }
-
-    // Anti-enumeration: OTP_REQUIRED / ACCOUNT_SUSPENDED / ACCOUNT_CLOSED
-    // are only checked *after* the password has matched. These codes are
-    // more informative than the generic "invalid credentials" message, so
-    // if they fired before the password check, anyone who merely knows (or
-    // guesses) an email address could learn that account's verification or
-    // suspension status without ever supplying a correct password. Gating
-    // them behind a successful password check means this detail only
-    // reaches someone who already holds valid credentials for the account.
-    if (!user.isEmailVerified()) {
-      throw new EmailNotVerifiedError();
-    }
-
-    // Un compte suspendu/clos/supprimé ne doit jamais pouvoir se reconnecter,
-    // sinon il obtiendrait un nouveau JWT valide malgré la sanction — même
-    // contrat d'erreur (401 + code stable) que le contrôle par requête fait
-    // par AccountStatusGuard, pour une expérience front cohérente.
-    if (user.isSuspended()) {
-      throw new AccountSuspendedError();
-    }
-
-    if (user.isClosed()) {
-      throw new AccountClosedError();
-    }
 
     // Le second facteur n'est éprouvé qu'ici, une fois le mot de passe validé
     // et le compte jugé en état d'ouvrir une session : émettre un challenge

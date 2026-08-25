@@ -1,5 +1,9 @@
 import {
+  AccountClosedError,
+  AccountSuspendedError,
   EmailAlreadyRegisteredError,
+  EmailNotVerifiedError,
+  InvalidCredentialsError,
   InvalidEmailError,
   InvalidPersonNameError,
 } from 'src/iam/domain/errors';
@@ -253,5 +257,89 @@ describe('User — du visiteur à l’investisseur', () => {
 
     expect(compte.devenirInvestisseur()).toBe(false);
     expect(compte.role).toBe(role);
+  });
+});
+
+describe('User — ouverture d’une session', () => {
+  /** Comparateur de test : l'empreinte du fixture est `hashed-password`. */
+  const compare = (clair: string, empreinte: string) =>
+    Promise.resolve(`${clair}-password` === empreinte);
+
+  const compte = (overrides = {}) =>
+    buildUser({
+      status: UserStatus.ACTIF,
+      emailVerified: true,
+      ...overrides,
+    });
+
+  it('laisse passer un compte en règle', async () => {
+    await expect(
+      compte().assertPeutOuvrirSession('hashed', compare),
+    ).resolves.toBeUndefined();
+  });
+
+  it('refuse un mot de passe qui ne correspond pas', async () => {
+    await expect(
+      compte().assertPeutOuvrirSession('mauvais', compare),
+    ).rejects.toBeInstanceOf(InvalidCredentialsError);
+  });
+
+  it('refuse un compte social, qui n’a pas de mot de passe', async () => {
+    const social = compte({ passwordHash: null });
+
+    await expect(
+      social.assertPeutOuvrirSession('hashed', compare),
+    ).rejects.toBeInstanceOf(InvalidCredentialsError);
+  });
+
+  it('refuse une adresse non vérifiée', async () => {
+    const nonVerifie = compte({
+      status: UserStatus.CREE,
+      emailVerified: false,
+    });
+
+    await expect(
+      nonVerifie.assertPeutOuvrirSession('hashed', compare),
+    ).rejects.toBeInstanceOf(EmailNotVerifiedError);
+  });
+
+  it('refuse un compte suspendu', async () => {
+    await expect(
+      compte({ status: UserStatus.SUSPENDU }).assertPeutOuvrirSession(
+        'hashed',
+        compare,
+      ),
+    ).rejects.toBeInstanceOf(AccountSuspendedError);
+  });
+
+  it.each([UserStatus.CLOS, UserStatus.SUPPRIME])(
+    'refuse un compte %s',
+    async (status) => {
+      await expect(
+        compte({ status }).assertPeutOuvrirSession('hashed', compare),
+      ).rejects.toBeInstanceOf(AccountClosedError);
+    },
+  );
+
+  /**
+   * L'ordre est une règle de sécurité, pas une préférence de lecture : les
+   * trois causes qui suivent le mot de passe disent qu'un compte existe à
+   * cette adresse et dans quel état il se trouve. Les éprouver avant
+   * laisserait qui devine une adresse apprendre tout cela sans jamais
+   * présenter d'identifiant valable.
+   */
+  describe('anti-énumération : le mot de passe est éprouvé en premier', () => {
+    it.each([
+      ['non vérifié', { status: UserStatus.CREE, emailVerified: false }],
+      ['suspendu', { status: UserStatus.SUSPENDU }],
+      ['clos', { status: UserStatus.CLOS }],
+    ])(
+      'ne trahit pas un compte %s quand le mot de passe est faux',
+      async (_libelle, overrides) => {
+        await expect(
+          compte(overrides).assertPeutOuvrirSession('mauvais', compare),
+        ).rejects.toBeInstanceOf(InvalidCredentialsError);
+      },
+    );
   });
 });
