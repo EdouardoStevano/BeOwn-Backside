@@ -111,13 +111,13 @@ export interface KycCaseSnapshotBrut
 export class KycCase {
   private readonly _id: string;
   private readonly _utilisateurId: number;
-  private readonly _decision: DecisionKyc;
+  private _decision: DecisionKyc;
   private readonly _niveau: KycNiveau;
   private readonly _scoreRisque: number | null;
-  private readonly _fournisseur: string;
-  private readonly _fournisseurRef: string | null;
-  private readonly _stripeReportId: string | null;
-  private readonly _identiteExtrait: KycIdentiteExtrait | null;
+  private _fournisseur: string;
+  private _fournisseurRef: string | null;
+  private _stripeReportId: string | null;
+  private _identiteExtrait: KycIdentiteExtrait | null;
   private readonly _createdAt: Date;
   private readonly _updatedAt: Date;
 
@@ -253,6 +253,38 @@ export class KycCase {
   /** Le statut que ce dossier prendra si le verdict s'applique. */
   static statutApres(verdict: VerdictIdentite): KycStatus {
     return KycCase.STATUT_ATTEINT[verdict];
+  }
+
+  // ── Transitions ───────────────────────────────────────────────────────────
+  //
+  // Ces trois gestes étaient trois `UPDATE` ciblés du repository, appelés
+  // directement par les use cases : le dossier ne décidait rien de son propre
+  // état, et la couche de persistance portait des règles réglementaires (§7).
+  // Ils sont ici, et ne sont atteignables qu'à travers la racine — c'est elle
+  // que l'application manipule, jamais cette entité (§6).
+
+  /** Le dossier passe à un nouveau statut, avec le motif qui l'explique. */
+  changerStatut(statut: KycStatus, motif?: string | null): void {
+    this._decision = this._decision.tranchee(statut, motif);
+  }
+
+  /**
+   * Rattache la session ouverte chez le fournisseur.
+   *
+   * Ne touche pas au statut : ouvrir une session ne prouve rien, seul le
+   * verdict du fournisseur fait avancer le dossier. L'ancien `updateSession`
+   * écrivait les deux d'un coup, ce qui remettait à `NON_DEMARRE` un dossier
+   * déjà validé dès qu'une session était rouverte.
+   */
+  rattacherSession(sessionId: string, fournisseur: string): void {
+    this._fournisseurRef = sessionId;
+    this._fournisseur = fournisseur;
+  }
+
+  /** Enregistre le rapport de vérification et l'identité qu'il a extraite. */
+  enregistrerRapport(reportId: string, identite: KycIdentiteExtrait): void {
+    this._stripeReportId = reportId;
+    this._identiteExtrait = identite;
   }
 
   // ── Lectures ──────────────────────────────────────────────────────────────

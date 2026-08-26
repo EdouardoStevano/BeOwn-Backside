@@ -6,9 +6,9 @@ import {
   type ProfilPPRepository,
 } from 'src/compliance/domain/repositories/profil-pp.repository';
 import {
-  QUESTIONNAIRE_ADEQUATION_REPOSITORY,
-  type QuestionnaireAdequationRepository,
-} from 'src/compliance/domain/repositories/questionnaire-adequation.repository';
+  INVESTOR_COMPLIANCE_PROFILE_REPOSITORY,
+  type InvestorComplianceProfileRepository,
+} from 'src/compliance/domain/repositories/investor-compliance-profile.repository';
 import { ProfilPP } from 'src/compliance/domain/aggregates/profil-pp';
 import { prochainContactApres } from 'src/compliance/domain/domain-services/suivi-investisseur.domain-service';
 
@@ -36,8 +36,8 @@ export class RiskScoringService {
   constructor(
     @Inject(PROFIL_PP_REPOSITORY)
     private readonly profilPPRepository: ProfilPPRepository,
-    @Inject(QUESTIONNAIRE_ADEQUATION_REPOSITORY)
-    private readonly questionnaireRepository: QuestionnaireAdequationRepository,
+    @Inject(INVESTOR_COMPLIANCE_PROFILE_REPOSITORY)
+    private readonly profils: InvestorComplianceProfileRepository,
   ) {}
 
   /**
@@ -48,10 +48,10 @@ export class RiskScoringService {
    * de trop.
    */
   async computeAndStore(userId: number): Promise<NiveauRisque> {
-    const questionnaire =
-      await this.questionnaireRepository.findByUserId(userId);
-    const niveauRisque =
-      questionnaire?.niveauRisque() ?? NiveauRisque.VULNERABLE;
+    const profil = await this.profils.findByInvestorId(userId);
+    // `niveauSuivi()` est le niveau que les réponses appellent : la racine le
+    // demande à la pièce qui le calcule, sans la rendre.
+    const niveauRisque = profil.niveauSuivi() ?? NiveauRisque.VULNERABLE;
 
     await this.profilPPRepository.enregistrerSuiviRisque(userId, {
       niveauRisque,

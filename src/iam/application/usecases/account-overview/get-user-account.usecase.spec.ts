@@ -6,7 +6,7 @@ import {
 } from 'src/iam/domain/errors';
 import { buildUser } from 'src/iam/domain/aggregates/user.fixture';
 import type { UserRepository } from 'src/iam/domain/repositories/user.repository';
-import type { KycRepository } from 'src/compliance/domain/repositories/kyc.repository';
+import type { DossierKycQuery } from 'src/compliance/application/ports/dossier-kyc.query';
 import type { WalletRepository } from 'src/treasury/domain/repositories/wallet.repository';
 
 const CIBLE = 7;
@@ -26,7 +26,7 @@ function monter(roleAppelant: UserRole = UserRole.INVESTISSEUR) {
 
   const useCase = new GetUserAccountUseCase(
     { findById: mocks.findById } as unknown as UserRepository,
-    { findByUserId: mocks.findKyc } as unknown as KycRepository,
+    { parTitulaire: mocks.findKyc } as unknown as DossierKycQuery,
     { findByUser: mocks.findWallet } as unknown as WalletRepository,
   );
 

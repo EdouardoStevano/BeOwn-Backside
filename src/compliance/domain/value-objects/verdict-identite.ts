@@ -1,3 +1,5 @@
+import { KycStatus } from '../enums/kyc-status.enum';
+
 /**
  * Ce qu'un fournisseur de vérification d'identité nous apprend sur un dossier.
  *
@@ -32,4 +34,19 @@ export enum SuiteDuVerdict {
   A_APPLIQUER = 'A_APPLIQUER',
   DEJA_APPLIQUE = 'DEJA_APPLIQUE',
   ECARTE = 'ECARTE',
+}
+
+/**
+ * Le statut qu'un dossier atteint lorsqu'un verdict s'applique.
+ *
+ * Une table de traduction, et non un comportement : elle ne dépend d'aucun
+ * dossier en particulier. Elle vivait sur `KycCase`, ce qui obligeait la couche
+ * application à importer une entité interne pour une simple correspondance.
+ */
+export function statutPourVerdict(verdict: VerdictIdentite): KycStatus {
+  return {
+    [VerdictIdentite.VERIFIEE]: KycStatus.VALIDE,
+    [VerdictIdentite.EN_TRAITEMENT]: KycStatus.EN_COURS,
+    [VerdictIdentite.REVUE_REQUISE]: KycStatus.EN_REVUE,
+  }[verdict];
 }

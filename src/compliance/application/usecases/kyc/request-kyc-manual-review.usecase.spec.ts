@@ -5,20 +5,30 @@ import {
   RequestKycManualReviewUseCase,
 } from './request-kyc-manual-review.usecase';
 import type { UpdateKycStatusUseCase } from './update-kyc-status.usecase';
-import { KycNiveau, KycStatus } from 'src/compliance/domain/enums/kyc-status.enum';
+import {
+  KycNiveau,
+  KycStatus,
+} from 'src/compliance/domain/enums/kyc-status.enum';
 import { KycRevueManuelleDemandeeDomainEvent } from 'src/compliance/domain/events/kyc-revue-manuelle-demandee.domain-event';
 import { KycMapper } from 'src/compliance/domain/mappers/kyc.mapper';
+import { InvestorComplianceProfile } from 'src/compliance/domain/aggregates/investor-compliance-profile';
 
+// `UpdateKycStatusUseCase` rend la racine, pas le dossier : c'est elle qui
+// porte le changement de statut (§6, §10).
 const dossierEnRevue = () =>
-  KycMapper.restore({
-    id: 'kyc-1',
-    utilisateurId: 42,
-    statut: KycStatus.EN_REVUE,
-    niveau: KycNiveau.STANDARD,
-    fournisseur: 'stripeIdentity',
-    motifRefus: MOTIF_REVUE_MANUELLE,
-    createdAt: new Date(),
-    updatedAt: new Date(),
+  new InvestorComplianceProfile({
+    investorId: 42,
+    kycCase: KycMapper.restore({
+      id: 'kyc-1',
+      utilisateurId: 42,
+      statut: KycStatus.EN_REVUE,
+      niveau: KycNiveau.STANDARD,
+      fournisseur: 'stripeIdentity',
+      motifRefus: MOTIF_REVUE_MANUELLE,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }),
+    adequacy: null,
   });
 
 function monter() {
@@ -46,7 +56,7 @@ describe('RequestKycManualReviewUseCase', () => {
       KycStatus.EN_REVUE,
       MOTIF_REVUE_MANUELLE,
     );
-    expect(kyc.statut).toBe(KycStatus.EN_REVUE);
+    expect(kyc.statutKyc).toBe(KycStatus.EN_REVUE);
   });
 
   it('annonce le fait métier une fois le dossier écrit', async () => {

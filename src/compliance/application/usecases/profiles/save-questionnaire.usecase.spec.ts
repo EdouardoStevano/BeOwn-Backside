@@ -64,8 +64,8 @@ describe('SaveQuestionnaireUseCase', () => {
     const questionnaire = await useCase.execute(42, DTO_NON_AVERTI);
 
     expect(questionnaire.utilisateurId).toBe(42);
-    expect(questionnaire.categoriePsfp).toBe(CategoriePsfp.NON_AVERTI);
-    expect(questionnaire.montantMaxConseille).toBe(20_000);
+    expect(questionnaire.resultCategorie).toBe(CategoriePsfp.NON_AVERTI);
+    expect(questionnaire.resultMontantMaxConseille).toBe(20_000);
     expect(mocks.save).toHaveBeenCalledTimes(1);
   });
 
@@ -79,12 +79,14 @@ describe('SaveQuestionnaireUseCase', () => {
 
     const questionnaire = await useCase.execute(42, DTO_NON_AVERTI);
 
-    expect(questionnaire).toBe(existant);
-    expect(questionnaire.categoriePsfp).toBe(CategoriePsfp.NON_AVERTI);
+    // La réponse publie l'instantané du questionnaire, pas l'entité : c'est
+    // son contenu qui doit correspondre, et non son identité en mémoire.
+    expect(questionnaire).toEqual(existant.toJSON());
+    expect(questionnaire.resultCategorie).toBe(CategoriePsfp.NON_AVERTI);
     // La racine est enregistrée d'un bloc, en portant le questionnaire relu et
     // non un second exemplaire.
     expect(mocks.save).toHaveBeenCalledTimes(1);
-    expect(mocks.save.mock.calls[0][0].adequacy).toBe(existant);
+    expect(mocks.save.mock.calls[0][0].pieces.adequacy).toBe(existant);
   });
 
   it('reporte le classement sur le profil', async () => {
@@ -144,7 +146,7 @@ describe('SaveQuestionnaireUseCase', () => {
       resultMontantMaxConseille: 10_000_000,
     } as unknown as SaveQuestionnaireDto);
 
-    expect(questionnaire.categoriePsfp).toBe(CategoriePsfp.NON_AVERTI);
-    expect(questionnaire.montantMaxConseille).toBe(20_000);
+    expect(questionnaire.resultCategorie).toBe(CategoriePsfp.NON_AVERTI);
+    expect(questionnaire.resultMontantMaxConseille).toBe(20_000);
   });
 });

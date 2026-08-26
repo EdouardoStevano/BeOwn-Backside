@@ -1,9 +1,9 @@
 import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import {
-  KYC_REPOSITORY,
-  type KycRepository,
-} from 'src/compliance/domain/repositories/kyc.repository';
-import { KycCase } from 'src/compliance/domain/entities/kyc-case';
+  INVESTOR_COMPLIANCE_PROFILE_REPOSITORY,
+  type InvestorComplianceProfileRepository,
+} from 'src/compliance/domain/repositories/investor-compliance-profile.repository';
+import { InvestorComplianceProfile } from 'src/compliance/domain/aggregates/investor-compliance-profile';
 import { KycStatus } from 'src/compliance/domain/enums/kyc-status.enum';
 import {
   USER_REPOSITORY,
@@ -35,8 +35,8 @@ export class UpdateKycStatusUseCase {
   private readonly logger = new Logger(UpdateKycStatusUseCase.name);
 
   constructor(
-    @Inject(KYC_REPOSITORY)
-    private readonly kycRepository: KycRepository,
+    @Inject(INVESTOR_COMPLIANCE_PROFILE_REPOSITORY)
+    private readonly profils: InvestorComplianceProfileRepository,
     @Inject(USER_REPOSITORY)
     private readonly userRepository: UserRepository,
   ) {}
@@ -45,15 +45,14 @@ export class UpdateKycStatusUseCase {
     userId: number,
     status: KycStatus,
     motifRefus?: string,
-  ): Promise<KycCase> {
-    const kyc = await this.kycRepository.findByUserId(userId);
-    if (!kyc) throw new NotFoundException('KYC introuvable.');
+  ): Promise<InvestorComplianceProfile> {
+    const profil = await this.profils.findByInvestorId(userId);
+    if (!profil.aUnDossierKyc()) {
+      throw new NotFoundException('KYC introuvable.');
+    }
 
-    const misAJour = await this.kycRepository.updateStatus(
-      kyc.id,
-      status,
-      motifRefus,
-    );
+    profil.changerStatutKyc(status, motifRefus);
+    const misAJour = await this.profils.save(profil);
 
     if (status === KycStatus.VALIDE) {
       await this.promouvoirEnInvestisseur(userId);

@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { InvestorComplianceProfile } from 'src/compliance/domain/aggregates/investor-compliance-profile';
-import { AdequacyAssessment } from 'src/compliance/domain/entities/adequacy-assessment';
+import { AdequacyAssessmentSnapshot } from 'src/compliance/domain/entities/adequacy-assessment';
 import { QuestionnaireAdequationFactory } from 'src/compliance/domain/factories/questionnaire-adequation.factory';
 import {
   INVESTOR_COMPLIANCE_PROFILE_REPOSITORY,
@@ -41,31 +41,20 @@ export class SaveQuestionnaireUseCase {
   async execute(
     userId: number,
     dto: SaveQuestionnaireDto,
-  ): Promise<AdequacyAssessment> {
+  ): Promise<AdequacyAssessmentSnapshot> {
     const reponses = reponsesDepuisDto(dto);
     const profil = await this.profils.findByInvestorId(userId);
 
-    // Un titulaire n'a qu'un questionnaire : repasser le formulaire remplace
-    // ses réponses et son classement, il n'en crée pas un second.
-    const existant = profil.adequacy;
-    if (existant) {
-      existant.repondre(reponses);
-      profil.repondreAuQuestionnaire(existant);
-    } else {
-      profil.repondreAuQuestionnaire(
-        QuestionnaireAdequationFactory.repondre({
-          utilisateurId: userId,
-          ...reponses,
-        }),
-      );
-    }
+    profil.repondreAuQuestionnaire(reponses);
 
     const enregistre = await this.profils.save(profil);
 
     await this.reporterSurLeProfil(userId, enregistre);
     await this.riskScoringService.computeAndStore(userId);
 
-    return enregistre.adequacy as AdequacyAssessment;
+    // Le questionnaire tel qu'il se publie, pas l'entité : le contrôleur ne
+    // doit pas tenir de quoi appeler `repondre()` hors de la racine.
+    return enregistre.questionnairePublie as AdequacyAssessmentSnapshot;
   }
 
   /**
@@ -87,9 +76,6 @@ export class SaveQuestionnaireUseCase {
     const classement = profil.classement;
     if (classement === null) return;
 
-    await this.profilPPRepository.enregistrerClassementPsfp(
-      userId,
-      classement,
-    );
+    await this.profilPPRepository.enregistrerClassementPsfp(userId, classement);
   }
 }

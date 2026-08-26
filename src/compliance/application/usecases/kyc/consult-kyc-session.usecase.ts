@@ -1,8 +1,8 @@
 import { ForbiddenException, Inject, Injectable } from '@nestjs/common';
 import {
-  KYC_REPOSITORY,
-  type KycRepository,
-} from 'src/compliance/domain/repositories/kyc.repository';
+  INVESTOR_COMPLIANCE_PROFILE_REPOSITORY,
+  type InvestorComplianceProfileRepository,
+} from 'src/compliance/domain/repositories/investor-compliance-profile.repository';
 import {
   IDENTITY_VERIFICATION_PORT,
   type IdentityVerificationPort,
@@ -36,8 +36,8 @@ export interface DemandeurDeSession {
 @Injectable()
 export class ConsultKycSessionUseCase {
   constructor(
-    @Inject(KYC_REPOSITORY)
-    private readonly kycRepository: KycRepository,
+    @Inject(INVESTOR_COMPLIANCE_PROFILE_REPOSITORY)
+    private readonly profils: InvestorComplianceProfileRepository,
     @Inject(IDENTITY_VERIFICATION_PORT)
     private readonly identity: IdentityVerificationPort,
   ) {}
@@ -64,8 +64,8 @@ export class ConsultKycSessionUseCase {
   ): Promise<void> {
     if (demandeur.peutConsulterToutDossier) return;
 
-    const kyc = await this.kycRepository.findByUserId(demandeur.utilisateurId);
-    if (kyc?.fournisseurRef === sessionId) return;
+    const profil = await this.profils.findByInvestorId(demandeur.utilisateurId);
+    if (profil.sessionDeVerification === sessionId) return;
 
     throw new ForbiddenException('Acces refuse.');
   }

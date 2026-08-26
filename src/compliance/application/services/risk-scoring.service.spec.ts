@@ -2,7 +2,8 @@ import { RiskScoringService } from './risk-scoring.service';
 import { NiveauRisque } from 'src/compliance/domain/enums/niveau-risque.enum';
 import { QuestionnaireAdequationFactory } from 'src/compliance/domain/factories/questionnaire-adequation.factory';
 import type { ProfilPPRepository } from 'src/compliance/domain/repositories/profil-pp.repository';
-import type { QuestionnaireAdequationRepository } from 'src/compliance/domain/repositories/questionnaire-adequation.repository';
+import type { InvestorComplianceProfileRepository } from 'src/compliance/domain/repositories/investor-compliance-profile.repository';
+import { InvestorComplianceProfile } from 'src/compliance/domain/aggregates/investor-compliance-profile';
 import {
   AdequacyAssessment,
   ReponsesQuestionnaire,
@@ -13,7 +14,15 @@ const repondre = (reponses: ReponsesQuestionnaire) =>
 
 function monter(questionnaire: AdequacyAssessment | null) {
   const mocks = {
-    findByUserId: jest.fn().mockResolvedValue(questionnaire),
+    // Le service interroge la racine, qui demande son niveau à la pièce qui le
+    // calcule — sans la rendre.
+    findByInvestorId: jest.fn().mockResolvedValue(
+      new InvestorComplianceProfile({
+        investorId: 42,
+        kycCase: null,
+        adequacy: questionnaire,
+      }),
+    ),
     enregistrerSuiviRisque: jest.fn().mockResolvedValue(undefined),
     listerContactsDus: jest.fn().mockResolvedValue([]),
   };
@@ -24,8 +33,8 @@ function monter(questionnaire: AdequacyAssessment | null) {
       listerContactsDus: mocks.listerContactsDus,
     } as unknown as ProfilPPRepository,
     {
-      findByUserId: mocks.findByUserId,
-    } as unknown as QuestionnaireAdequationRepository,
+      findByInvestorId: mocks.findByInvestorId,
+    } as unknown as InvestorComplianceProfileRepository,
   );
 
   return { service, mocks };

@@ -1,11 +1,14 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { EventBus } from '@nestjs/cqrs';
 import { KycStatus } from 'src/compliance/domain/enums/kyc-status.enum';
 import { KycPasEnRevueManuelleError } from 'src/compliance/domain/errors';
 import { KycRefuseDomainEvent } from 'src/compliance/domain/events/kyc-refuse.domain-event';
 import { KycValideDomainEvent } from 'src/compliance/domain/events/kyc-valide.domain-event';
-import { KycCase } from 'src/compliance/domain/entities/kyc-case';
-import { GetKycUseCase } from './get-kyc.usecase';
+import { InvestorComplianceProfile } from 'src/compliance/domain/aggregates/investor-compliance-profile';
+import {
+  INVESTOR_COMPLIANCE_PROFILE_REPOSITORY,
+  type InvestorComplianceProfileRepository,
+} from 'src/compliance/domain/repositories/investor-compliance-profile.repository';
 import { UpdateKycStatusUseCase } from './update-kyc-status.usecase';
 
 /**
@@ -52,14 +55,17 @@ export interface DecisionKycManuelle {
 @Injectable()
 export class DecideKycManualReviewUseCase {
   constructor(
-    private readonly getKyc: GetKycUseCase,
+    @Inject(INVESTOR_COMPLIANCE_PROFILE_REPOSITORY)
+    private readonly profils: InvestorComplianceProfileRepository,
     private readonly updateKycStatus: UpdateKycStatusUseCase,
     private readonly eventBus: EventBus,
   ) {}
 
-  async execute(decision: DecisionKycManuelle): Promise<KycCase> {
-    const dossier = await this.getKyc.execute(decision.utilisateurId);
-    if (!dossier.estEnRevueManuelle()) {
+  async execute(
+    decision: DecisionKycManuelle,
+  ): Promise<InvestorComplianceProfile> {
+    const profil = await this.profils.findByInvestorId(decision.utilisateurId);
+    if (!profil.estEnRevueManuelle()) {
       throw new KycPasEnRevueManuelleError();
     }
 
@@ -82,11 +88,14 @@ export class DecideKycManualReviewUseCase {
    * acceptait déjà sans notifier personne, et il n'y a pas de fait métier à
    * annoncer quand un admin repositionne un dossier en cours d'examen.
    */
-  private annoncer(kyc: KycCase, decision: DecisionKycManuelle): void {
+  private annoncer(
+    kyc: InvestorComplianceProfile,
+    decision: DecisionKycManuelle,
+  ): void {
     if (decision.decision === KycStatus.VALIDE) {
       this.eventBus.publish(
         new KycValideDomainEvent(
-          kyc.id,
+          kyc.dossierKycId as string,
           decision.utilisateurId,
           decision.decidePar,
         ),
@@ -97,7 +106,7 @@ export class DecideKycManualReviewUseCase {
     if (decision.decision === KycStatus.REFUSE) {
       this.eventBus.publish(
         new KycRefuseDomainEvent(
-          kyc.id,
+          kyc.dossierKycId as string,
           decision.utilisateurId,
           decision.motifRefus ?? null,
           decision.decidePar,

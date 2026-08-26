@@ -1,40 +1,35 @@
 import { Inject, Injectable } from '@nestjs/common';
+import { InvestorComplianceProfile } from 'src/compliance/domain/aggregates/investor-compliance-profile';
 import { KycFactory } from 'src/compliance/domain/factories/kyc.factory';
-import { KycCase } from 'src/compliance/domain/entities/kyc-case';
 import {
-  KYC_REPOSITORY,
-  type KycRepository,
-} from 'src/compliance/domain/repositories/kyc.repository';
+  INVESTOR_COMPLIANCE_PROFILE_REPOSITORY,
+  type InvestorComplianceProfileRepository,
+} from 'src/compliance/domain/repositories/investor-compliance-profile.repository';
 
 /**
- * Initialisation du dossier de vérification d'identité.
+ * Ouvre le dossier de vérification d'un titulaire, s'il n'en a pas déjà un.
  *
- * Ce use case n'orchestre plus que des accès (§6 — Application Service) :
- * regarder si le dossier existe, le faire naître sinon, le persister. L'état de
- * départ — statut, niveau de diligence, fournisseur, absence de score et de
- * session — est passé dans `KycFactory.creer` : il vaut pour tout point
- * d'entrée, et non pour la seule route HTTP qui l'écrivait à la main.
+ * **Idempotent** : un second appel rend le dossier existant sans rien écrire.
+ * C'est ce qui permet à `StartKycSessionUseCase` de l'appeler sans se demander
+ * si le titulaire a déjà commencé, et à une reprise de parcours de ne pas
+ * effacer ce qui a été vérifié.
  *
- * **Idempotent**, contrairement aux `CreateProfilPP/PM` du contexte Profiles qui
- * refusent un doublon. Ce n'est pas un oubli : ouvrir un dossier n'apporte
- * aucune donnée de l'appelant, donc un second appel ne peut rien écraser, et
- * deux chemins comptent dessus — le front rappelle `POST /kyc/me` à chaque
- * reprise du parcours, et {@link StartKycSessionUseCase} ouvre le dossier au
- * démarrage d'une session Stripe Identity sans savoir s'il existe déjà. Rendre
- * un 409 y obligerait chaque appelant à rattraper l'erreur pour relire le
- * dossier.
+ * Il passait par un `KycRepository` propre à l'entité `KycCase` ; il passe
+ * désormais par la racine, seule à savoir si le titulaire a un dossier et
+ * seule habilitée à lui en déposer un (§6, §10).
  */
 @Injectable()
 export class CreateKycUseCase {
   constructor(
-    @Inject(KYC_REPOSITORY)
-    private readonly kycRepository: KycRepository,
+    @Inject(INVESTOR_COMPLIANCE_PROFILE_REPOSITORY)
+    private readonly profils: InvestorComplianceProfileRepository,
   ) {}
 
-  async execute(userId: number): Promise<KycCase> {
-    const existant = await this.kycRepository.findByUserId(userId);
-    if (existant) return existant;
+  async execute(userId: number): Promise<InvestorComplianceProfile> {
+    const profil = await this.profils.findByInvestorId(userId);
+    if (profil.aUnDossierKyc()) return profil;
 
-    return this.kycRepository.save(KycFactory.creer({ utilisateurId: userId }));
+    profil.deposerDossierKyc(KycFactory.creer({ utilisateurId: userId }));
+    return this.profils.save(profil);
   }
 }

@@ -1,7 +1,20 @@
-import { AdequacyAssessment } from 'src/compliance/domain/entities/adequacy-assessment';
-import { KycCase } from 'src/compliance/domain/entities/kyc-case';
+import {
+  AdequacyAssessment,
+  AdequacyAssessmentSnapshot,
+  ReponsesQuestionnaire,
+} from 'src/compliance/domain/entities/adequacy-assessment';
+import { QuestionnaireAdequationFactory } from 'src/compliance/domain/factories/questionnaire-adequation.factory';
+import {
+  KycCase,
+  KycCaseSnapshot,
+  KycIdentiteExtrait,
+} from 'src/compliance/domain/entities/kyc-case';
 import { CategoriePsfp } from 'src/compliance/domain/enums/categorie-psfp.enum';
 import { KycStatus } from 'src/compliance/domain/enums/kyc-status.enum';
+import {
+  SuiteDuVerdict,
+  VerdictIdentite,
+} from 'src/compliance/domain/value-objects/verdict-identite';
 import { NiveauRisque } from 'src/compliance/domain/enums/niveau-risque.enum';
 
 /**
@@ -99,6 +112,7 @@ export class InvestorComplianceProfile {
    */
   peutOperer(maintenant: Date = new Date()): boolean {
     if (this._kycCase === null) return false;
+
     if (this._kycCase.statut !== KycStatus.VALIDE) return false;
 
     const echeance = this._kycCase.valideJusquAu;
@@ -110,18 +124,72 @@ export class InvestorComplianceProfile {
   /**
    * Enregistre le passage du questionnaire d'adéquation.
    *
-   * L'appelant fournit soit les nouvelles réponses à donner au questionnaire
-   * existant, soit — au premier passage — le questionnaire que sa fabrique
-   * vient de produire. Dans les deux cas le classement est recalculé par
-   * l'entité, jamais déclaré.
+   * **Un titulaire n'a qu'un questionnaire** : repasser le formulaire remplace
+   * ses réponses et son classement, il n'en crée pas un second. Cette règle
+   * était écrite dans le use case, qui lisait le questionnaire existant sur la
+   * racine, le mutait, puis le lui rendait — un aller-retour qui n'avait de
+   * sens que parce que l'entité sortait. Elle est ici, où elle vaut pour tout
+   * appelant.
+   *
+   * Le classement, lui, est recalculé par l'entité à chaque passage, jamais
+   * déclaré : c'est ce qui interdit de se prétendre « averti ».
    */
-  repondreAuQuestionnaire(assessment: AdequacyAssessment): void {
-    this._adequacy = assessment;
+  repondreAuQuestionnaire(reponses: ReponsesQuestionnaire): void {
+    if (this._adequacy !== null) {
+      this._adequacy.repondre(reponses);
+      return;
+    }
+
+    this._adequacy = QuestionnaireAdequationFactory.repondre({
+      utilisateurId: this._investorId,
+      ...reponses,
+    });
   }
 
   /** Ouvre ou remplace le dossier de vérification d'identité. */
   deposerDossierKyc(kycCase: KycCase): void {
     this._kycCase = kycCase;
+  }
+
+  /**
+   * Les trois gestes du parcours de vérification, relayés à la pièce qui les
+   * porte.
+   *
+   * Ce relais est la raison d'être d'une racine (§6) : `KycCase` est une
+   * **entité interne**, elle n'a ni port ni existence hors de ce dossier.
+   * L'application manipulait auparavant chacune de ses colonnes par des
+   * `UPDATE` ciblés, ce qui revenait à écrire dans une pièce sans passer par
+   * son propriétaire — et rendait impossible d'opposer, un jour, une règle qui
+   * lise les deux pièces à la fois.
+   *
+   * Chacun est sans effet si le titulaire n'a pas encore de dossier : c'est un
+   * état normal du parcours, pas une erreur à lever.
+   */
+  rattacherSessionDeVerification(sessionId: string, fournisseur: string): void {
+    this._kycCase?.rattacherSession(sessionId, fournisseur);
+  }
+
+  changerStatutKyc(statut: KycStatus, motif?: string | null): void {
+    this._kycCase?.changerStatut(statut, motif);
+  }
+
+  enregistrerRapportKyc(reportId: string, identite: KycIdentiteExtrait): void {
+    this._kycCase?.enregistrerRapport(reportId, identite);
+  }
+
+  /**
+   * Que faire du verdict que le fournisseur vient de rendre ?
+   *
+   * `ECARTE` quand il n'y a pas de dossier : un verdict qui ne se rattache à
+   * rien ne s'applique à rien.
+   */
+  accueillirVerdict(
+    verdict: VerdictIdentite,
+    sessionRendue: string | null,
+  ): SuiteDuVerdict {
+    return (
+      this._kycCase?.accueille(verdict, sessionRendue) ?? SuiteDuVerdict.ECARTE
+    );
   }
 
   // ── Ce que le classement impose ───────────────────────────────────────────
@@ -159,12 +227,82 @@ export class InvestorComplianceProfile {
   get investorId(): number {
     return this._investorId;
   }
-  /** `null` tant que le titulaire n'a pas ouvert de dossier. */
-  get kycCase(): KycCase | null {
-    return this._kycCase;
+
+  // Ce que la racine publie de ses pièces, ce sont des **valeurs**.
+  //
+  // Elle rendait `KycCase` et `AdequacyAssessment` par deux getters, si bien
+  // que l'application, la présentation et jusqu'au contexte `iam` tenaient une
+  // entité interne et pouvaient en appeler les transitions. Une racine qui
+  // tend ses pièces ne protège plus rien (§6) : ce qui sort désormais ne se
+  // modifie pas.
+
+  /** `false` tant que le titulaire n'a pas ouvert de dossier. */
+  aUnDossierKyc(): boolean {
+    return this._kycCase !== null;
   }
-  /** `null` tant que le titulaire n'a pas répondu au questionnaire. */
-  get adequacy(): AdequacyAssessment | null {
-    return this._adequacy;
+
+  /** Identifiant du dossier de vérification, `null` s'il n'y en a pas. */
+  get dossierKycId(): string | null {
+    return this._kycCase?.id ?? null;
+  }
+
+  /** `null` tant qu'aucun dossier n'existe — distinct de `NON_DEMARRE`. */
+  get statutKyc(): KycStatus | null {
+    return this._kycCase?.statut ?? null;
+  }
+
+  /** Ce qui explique un refus ou une mise en revue, `null` sinon. */
+  get motifRefusKyc(): string | null {
+    return this._kycCase?.motifRefus ?? null;
+  }
+
+  /** Session ouverte chez le fournisseur, `null` s'il n'y en a aucune. */
+  get sessionDeVerification(): string | null {
+    return this._kycCase?.fournisseurRef ?? null;
+  }
+
+  /** Le dossier est-il suspendu à une décision humaine ? */
+  estEnRevueManuelle(): boolean {
+    return this._kycCase?.estEnRevueManuelle() ?? false;
+  }
+
+  /** `false` tant que le titulaire n'a pas répondu au questionnaire. */
+  aReponduAuQuestionnaire(): boolean {
+    return this._adequacy !== null;
+  }
+
+  /**
+   * Le dossier de vérification tel qu'il se publie — des primitives, pas
+   * l'entité. Même raison que {@link questionnairePublie}.
+   */
+  get dossierKycPublie(): KycCaseSnapshot | null {
+    return this._kycCase?.toJSON() ?? null;
+  }
+
+  /**
+   * Le questionnaire tel qu'il se publie — des primitives, pas l'entité.
+   *
+   * C'est la réponse de `POST /profiles/questionnaire` et de
+   * `GET /profiles/questionnaire/me`. Rendre l'entité donnerait au contrôleur
+   * de quoi appeler `repondre()` sans passer par cette racine.
+   */
+  get questionnairePublie(): AdequacyAssessmentSnapshot | null {
+    return this._adequacy?.toJSON() ?? null;
+  }
+
+  /**
+   * @internal Réservé au repository de la racine, qui répartit les deux pièces
+   * entre leurs deux tables.
+   *
+   * Public faute de mieux — TypeScript n'a pas de classe amie. C'est **une**
+   * porte, nommée et documentée, là où deux getters ordinaires (`kycCase`,
+   * `adequacy`) se lisaient comme une API et étaient consommés comme telle,
+   * jusque depuis le contexte `iam`. Y passer, c'est se déclarer repository.
+   */
+  get pieces(): {
+    kycCase: KycCase | null;
+    adequacy: AdequacyAssessment | null;
+  } {
+    return { kycCase: this._kycCase, adequacy: this._adequacy };
   }
 }

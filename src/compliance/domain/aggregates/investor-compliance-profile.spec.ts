@@ -1,4 +1,7 @@
-import { KycNiveau, KycStatus } from 'src/compliance/domain/enums/kyc-status.enum';
+import {
+  KycNiveau,
+  KycStatus,
+} from 'src/compliance/domain/enums/kyc-status.enum';
 import { CategoriePsfp } from 'src/compliance/domain/enums/categorie-psfp.enum';
 import { KycMapper } from 'src/compliance/domain/mappers/kyc.mapper';
 import { QuestionnaireAdequationFactory } from 'src/compliance/domain/factories/questionnaire-adequation.factory';
@@ -70,14 +73,13 @@ describe('InvestorComplianceProfile', () => {
 
     it('reprend la catégorie et le plafond calculés par le questionnaire', () => {
       const p = profil();
-      p.repondreAuQuestionnaire(
-        QuestionnaireAdequationFactory.repondre({
-          utilisateurId: 42,
-          patrimoineNet: 400_000,
-          understandsTotalLossRisk: true,
-          acceptsSimulatedLoss: true,
-        }),
-      );
+      // La racine reçoit les réponses, pas un questionnaire déjà fabriqué :
+      // c'est elle qui décide s'il faut en ouvrir un ou remplacer le sien.
+      p.repondreAuQuestionnaire({
+        patrimoineNet: 400_000,
+        understandsTotalLossRisk: true,
+        acceptsSimulatedLoss: true,
+      });
 
       expect(p.classement).toEqual({
         categoriePsfp: CategoriePsfp.NON_AVERTI,

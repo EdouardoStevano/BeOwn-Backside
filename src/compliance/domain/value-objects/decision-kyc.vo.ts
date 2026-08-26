@@ -40,12 +40,11 @@ export interface DecisionKycSnapshotBrut extends Omit<
  *   lit pour rouvrir l'accès aux actions financières, donc une échéance
  *   orpheline est un problème de sécurité, pas d'affichage.
  *
- * **Immuable.** Le bloc n'a pas encore de transition : les changements de
- * statut passent aujourd'hui par des `UPDATE` directs du repository
- * (`updateStatus`, `updateSession`, `updateReportData`), hors du domaine. C'est
- * ici qu'ils viendront quand ce chemin sera repris, et c'est précisément pour
- * qu'ils aient un domicile que le bloc existe : {@link initiale} pose l'état de
- * départ, la suite s'y ajoutera sans rouvrir l'agrégat.
+ * **Immuable, mais transitionnable** : {@link tranchee} rend un nouveau bloc
+ * plutôt que de muter celui-ci. Les changements de statut passaient par des
+ * `UPDATE` directs du repository (`updateStatus`, `updateSession`), c'est-à-dire
+ * une décision réglementaire prise dans la couche de persistance ; ils ont
+ * désormais leur domicile ici.
  */
 export class DecisionKyc {
   private constructor(private readonly etat: DecisionKycSnapshot) {}
@@ -66,6 +65,27 @@ export class DecisionKyc {
       statut: KycStatus.NON_DEMARRE,
       motifRefus: null,
       valideJusquAu: null,
+    });
+  }
+
+  /**
+   * Le dossier passe à un nouveau statut.
+   *
+   * Le motif n'accompagne qu'un statut qui en appelle un — un refus, une mise
+   * en revue. Le passer à `VALIDE` l'efface : garder « pièce illisible » sur un
+   * dossier validé donnerait à lire deux choses contradictoires au RCCI comme
+   * au titulaire.
+   *
+   * `valideJusquAu` est **reconduit tel quel**, jamais calculé ici : l'échéance
+   * de validité relève de la politique de re-vérification périodique, qui n'est
+   * pas branchée (voir `KycStatus.RENOUVELLEMENT`). L'inventer maintenant
+   * ferait expirer des dossiers selon une règle que personne n'a arrêtée.
+   */
+  tranchee(statut: KycStatus, motif?: string | null): DecisionKyc {
+    return new DecisionKyc({
+      statut,
+      motifRefus: statut === KycStatus.VALIDE ? null : (motif ?? null),
+      valideJusquAu: this.etat.valideJusquAu,
     });
   }
 

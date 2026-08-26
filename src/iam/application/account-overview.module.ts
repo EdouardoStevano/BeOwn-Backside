@@ -42,7 +42,8 @@ import { TreasuryInfrastructureModule } from 'src/treasury/infrastructure/treasu
     UsersInfrastructureModule,
     // `GetOnboardingStatusUseCase` — l'avancement du dossier réglementaire.
     ProfilesModule,
-    // `KYC_REPOSITORY` — le dossier de vérification, publié à côté du compte.
+    // `DOSSIER_KYC_QUERY` — le dossier de vérification, publié à côté du
+    // compte. Un port de lecture du contexte voisin, jamais son repository.
     KycInfrastructureModule,
     // `GetPreferencesUseCase` — les réglages publiés à côté du compte.
     PreferencesModule,

@@ -1,8 +1,11 @@
 import { Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
 import { INVESTOR_COMPLIANCE_PROFILE_REPOSITORY } from '../domain/repositories/investor-compliance-profile.repository';
 import { InvestorComplianceProfileTypeOrmRepository } from './repositories/investor-compliance-profile.repository';
 import { KycInfrastructureModule } from './kyc-infrastructure.module';
 import { ProfilesInfrastructureModule } from './profiles-infrastructure.module';
+import { KycEntity } from './persistence/entities/kyc.entity';
+import { QuestionnaireAdequationEntity } from './persistence/entities/questionnaire-adequation.entity';
 
 /**
  * Adapter de sortie de la **racine** du contexte.
@@ -13,13 +16,18 @@ import { ProfilesInfrastructureModule } from './profiles-infrastructure.module';
  * point où ils se rejoignent : il importe les deux, et publie le seul port par
  * lequel l'éligibilité se charge et s'enregistre d'un bloc (§17).
  *
- * Il réexporte les deux ports de pièce, que les **lectures partielles**
- * continuent d'utiliser à bon droit : la liste d'administration des dossiers et
- * l'avancement du parcours d'entrée en relation n'ont pas besoin de la racine
- * (§11 — une Query n'a pas à reconstruire un agrégat).
+ * Il déclare lui-même les deux tables : les pièces de la racine — `KycCase` et
+ * `AdequacyAssessment` — n'ont plus de repository à elles, et leur persistance
+ * ne se délègue donc plus à un port intermédiaire (§6, §10). Ce qu'il réexporte,
+ * ce sont les modules voisins pour leurs **lectures** — `DOSSIER_KYC_QUERY` et
+ * les ports des profils PP/PM, qui sont, eux, des agrégats de plein droit.
  */
 @Module({
-  imports: [KycInfrastructureModule, ProfilesInfrastructureModule],
+  imports: [
+    TypeOrmModule.forFeature([KycEntity, QuestionnaireAdequationEntity]),
+    KycInfrastructureModule,
+    ProfilesInfrastructureModule,
+  ],
   providers: [
     {
       provide: INVESTOR_COMPLIANCE_PROFILE_REPOSITORY,

@@ -1,8 +1,12 @@
 import { ForbiddenException } from '@nestjs/common';
 import { KycController } from './kyc.controller';
 import type { DecideKycManualReviewUseCase } from 'src/compliance/application/usecases/kyc/decide-kyc-manual-review.usecase';
-import { KycNiveau, KycStatus } from 'src/compliance/domain/enums/kyc-status.enum';
+import {
+  KycNiveau,
+  KycStatus,
+} from 'src/compliance/domain/enums/kyc-status.enum';
 import { KycMapper } from 'src/compliance/domain/mappers/kyc.mapper';
+import { InvestorComplianceProfile } from 'src/compliance/domain/aggregates/investor-compliance-profile';
 import { UserRole } from 'src/iam/domain/enums/user.enum';
 
 /**
@@ -24,15 +28,20 @@ describe('KycController.patchKycStatus', () => {
 
   const admin = { userId: 99, role: UserRole.COMPLIANCE } as never;
 
+  // Le use case rend la racine, pas le dossier : c'est elle que la route sert.
   const dossierValide = () =>
-    KycMapper.restore({
-      id: 'kyc-1',
-      utilisateurId: 42,
-      statut: KycStatus.VALIDE,
-      niveau: KycNiveau.STANDARD,
-      fournisseur: 'stripeIdentity',
-      createdAt: new Date(),
-      updatedAt: new Date(),
+    new InvestorComplianceProfile({
+      investorId: 42,
+      kycCase: KycMapper.restore({
+        id: 'kyc-1',
+        utilisateurId: 42,
+        statut: KycStatus.VALIDE,
+        niveau: KycNiveau.STANDARD,
+        fournisseur: 'stripeIdentity',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }),
+      adequacy: null,
     });
 
   beforeEach(() => {
@@ -73,7 +82,7 @@ describe('KycController.patchKycStatus', () => {
       // qui sera tracé comme auteur de la décision.
       decidePar: 99,
     });
-    expect(kyc.statut).toBe(KycStatus.VALIDE);
+    expect(kyc.statutKyc).toBe(KycStatus.VALIDE);
   });
 
   it('rejette (403) un appelant non-reviewer avant toute décision', async () => {

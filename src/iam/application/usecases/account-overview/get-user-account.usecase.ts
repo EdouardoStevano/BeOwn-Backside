@@ -9,9 +9,9 @@ import {
   type UserRepository,
 } from 'src/iam/domain/repositories/user.repository';
 import {
-  KYC_REPOSITORY,
-  type KycRepository,
-} from 'src/compliance/domain/repositories/kyc.repository';
+  DOSSIER_KYC_QUERY,
+  type DossierKycQuery,
+} from 'src/compliance/application/ports/dossier-kyc.query';
 import { WalletType } from 'src/treasury/domain/enums/wallet.enum';
 import {
   WALLET_REPOSITORY,
@@ -41,8 +41,12 @@ export class GetUserAccountUseCase {
   constructor(
     @Inject(USER_REPOSITORY)
     private readonly userRepository: UserRepository,
-    @Inject(KYC_REPOSITORY)
-    private readonly kycRepository: KycRepository,
+    // Un port de **lecture** du contexte voisin, qui rend des primitives.
+    // C'était son repository d'entité : ce contexte tenait un `KycCase` vivant,
+    // c'est-à-dire une pièce interne du dossier de conformité d'un autre
+    // Bounded Context, avec ses transitions (§13).
+    @Inject(DOSSIER_KYC_QUERY)
+    private readonly dossiersKyc: DossierKycQuery,
     @Inject(WALLET_REPOSITORY)
     private readonly walletRepository: WalletRepository,
   ) {}
@@ -56,7 +60,7 @@ export class GetUserAccountUseCase {
     if (!compte) throw new UtilisateurIntrouvableError();
 
     const [kyc, wallet] = await Promise.all([
-      this.kycRepository.findByUserId(cible).catch(() => null),
+      this.dossiersKyc.parTitulaire(cible).catch(() => null),
       this.walletRepository
         .findByUser(cible, WalletType.INVESTISSEUR)
         .catch(() => null),

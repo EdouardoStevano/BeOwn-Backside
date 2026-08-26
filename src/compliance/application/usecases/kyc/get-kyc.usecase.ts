@@ -6,9 +6,9 @@ import {
 } from 'src/iam/domain/repositories/user.repository';
 import type { User } from 'src/iam/domain/aggregates/user';
 import {
-  KYC_REPOSITORY,
-  type KycRepository,
-} from 'src/compliance/domain/repositories/kyc.repository';
+  DOSSIER_KYC_QUERY,
+  type DossierKycQuery,
+} from 'src/compliance/application/ports/dossier-kyc.query';
 import type { KycCaseSnapshot } from 'src/compliance/domain/entities/kyc-case';
 
 /**
@@ -36,12 +36,12 @@ export type LigneKycAdmin = KycCaseSnapshot & { utilisateur?: TitulaireKyc };
 @Injectable()
 export class GetKycUseCase {
   constructor(
-    @Inject(KYC_REPOSITORY) private readonly kycRepository: KycRepository,
+    @Inject(DOSSIER_KYC_QUERY) private readonly dossiers: DossierKycQuery,
     @Inject(USER_REPOSITORY) private readonly userRepository: UserRepository,
   ) {}
 
   async execute(userId: number) {
-    const kyc = await this.kycRepository.findByUserId(userId);
+    const kyc = await this.dossiers.parTitulaire(userId);
     if (!kyc) {
       throw new NotFoundException('KYC non trouvé');
     }
@@ -66,7 +66,7 @@ export class GetKycUseCase {
     page?: number;
     limit?: number;
   }): Promise<{ items: LigneKycAdmin[]; total: number }> {
-    const { items, total } = await this.kycRepository.findAll(params);
+    const { items, total } = await this.dossiers.lister(params);
 
     const titulaires = await this.userRepository.findManyByIds(
       items.map((kyc) => kyc.utilisateurId),
@@ -77,7 +77,7 @@ export class GetKycUseCase {
       items: items.map((kyc) => {
         const titulaire = parId.get(kyc.utilisateurId);
         return {
-          ...kyc.toJSON(),
+          ...kyc,
           ...(titulaire ? { utilisateur: enTitulaire(titulaire) } : {}),
         };
       }),

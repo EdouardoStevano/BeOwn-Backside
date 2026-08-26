@@ -1,12 +1,24 @@
 import type { EventBus } from '@nestjs/cqrs';
 import { DecideKycManualReviewUseCase } from './decide-kyc-manual-review.usecase';
-import type { GetKycUseCase } from './get-kyc.usecase';
+import type { InvestorComplianceProfileRepository } from 'src/compliance/domain/repositories/investor-compliance-profile.repository';
+import { InvestorComplianceProfile } from 'src/compliance/domain/aggregates/investor-compliance-profile';
 import type { UpdateKycStatusUseCase } from './update-kyc-status.usecase';
-import { KycNiveau, KycStatus } from 'src/compliance/domain/enums/kyc-status.enum';
+import {
+  KycNiveau,
+  KycStatus,
+} from 'src/compliance/domain/enums/kyc-status.enum';
 import { KycPasEnRevueManuelleError } from 'src/compliance/domain/errors';
 import { KycRefuseDomainEvent } from 'src/compliance/domain/events/kyc-refuse.domain-event';
 import { KycValideDomainEvent } from 'src/compliance/domain/events/kyc-valide.domain-event';
 import { KycMapper } from 'src/compliance/domain/mappers/kyc.mapper';
+
+/** La racine, avec le dossier au statut voulu — c'est elle que le port rend. */
+const profil = (statut: KycStatus) =>
+  new InvestorComplianceProfile({
+    investorId: 42,
+    kycCase: dossier(statut),
+    adequacy: null,
+  });
 
 const dossier = (statut: KycStatus) =>
   KycMapper.restore({
@@ -21,17 +33,18 @@ const dossier = (statut: KycStatus) =>
 
 function monter(statutCourant: KycStatus = KycStatus.EN_REVUE) {
   const mocks = {
-    getKyc: jest.fn().mockResolvedValue(dossier(statutCourant)),
+    findByInvestorId: jest.fn().mockResolvedValue(profil(statutCourant)),
+    save: jest.fn(),
     updateStatut: jest
       .fn()
       .mockImplementation((_userId: number, statut: KycStatus) =>
-        Promise.resolve(dossier(statut)),
+        Promise.resolve(profil(statut)),
       ),
     publish: jest.fn(),
   };
 
   const useCase = new DecideKycManualReviewUseCase(
-    { execute: mocks.getKyc } as unknown as GetKycUseCase,
+    mocks as unknown as InvestorComplianceProfileRepository,
     { execute: mocks.updateStatut } as unknown as UpdateKycStatusUseCase,
     { publish: mocks.publish } as unknown as EventBus,
   );
@@ -78,7 +91,7 @@ describe('DecideKycManualReviewUseCase', () => {
       KycStatus.VALIDE,
       undefined,
     );
-    expect(kyc.statut).toBe(KycStatus.VALIDE);
+    expect(kyc.statutKyc).toBe(KycStatus.VALIDE);
 
     const [event] = mocks.publish.mock.calls[0] as [KycValideDomainEvent];
     expect(event).toBeInstanceOf(KycValideDomainEvent);

@@ -1,14 +1,36 @@
 import { NotFoundException } from '@nestjs/common';
 import { UpdateKycStatusUseCase } from './update-kyc-status.usecase';
-import { KycStatus } from 'src/compliance/domain/enums/kyc-status.enum';
+import {
+  KycNiveau,
+  KycStatus,
+} from 'src/compliance/domain/enums/kyc-status.enum';
+import { InvestorComplianceProfile } from 'src/compliance/domain/aggregates/investor-compliance-profile';
+import { KycMapper } from 'src/compliance/domain/mappers/kyc.mapper';
 import { buildUser } from 'src/iam/domain/aggregates/user.fixture';
 import { UserRole } from 'src/iam/domain/enums/user.enum';
 import type { User } from 'src/iam/domain/aggregates/user';
 
+const dossierOuvert = () =>
+  new InvestorComplianceProfile({
+    investorId: 7,
+    kycCase: KycMapper.restore({
+      id: 'kyc-1',
+      utilisateurId: 7,
+      statut: KycStatus.EN_COURS,
+      niveau: KycNiveau.STANDARD,
+      fournisseur: 'stripeIdentity',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }),
+    adequacy: null,
+  });
+
 const monter = (titulaire: User | null) => {
+  // Le port est celui de la racine : le statut se change sur elle, pas sur le
+  // dossier, qui est une entité interne (§6, §10).
   const kycRepository = {
-    findByUserId: jest.fn().mockResolvedValue({ id: 'kyc-1' }),
-    updateStatus: jest.fn().mockResolvedValue({ id: 'kyc-1' }),
+    findByInvestorId: jest.fn().mockResolvedValue(dossierOuvert()),
+    save: jest.fn((p: unknown) => Promise.resolve(p)),
   };
   const userRepository = {
     findById: jest.fn().mockResolvedValue(titulaire),
@@ -82,7 +104,7 @@ describe('UpdateKycStatusUseCase — le rôle suit le dossier', () => {
       const { usecase } = monter(null);
 
       await expect(usecase.execute(7, KycStatus.VALIDE)).resolves.toMatchObject(
-        { id: 'kyc-1' },
+        { dossierKycId: 'kyc-1' },
       );
     });
 
@@ -91,14 +113,21 @@ describe('UpdateKycStatusUseCase — le rôle suit le dossier', () => {
       userRepository.save.mockRejectedValue(new Error('base indisponible'));
 
       await expect(usecase.execute(7, KycStatus.VALIDE)).resolves.toMatchObject(
-        { id: 'kyc-1' },
+        { dossierKycId: 'kyc-1' },
       );
     });
   });
 
   it('refuse un titulaire sans dossier', async () => {
     const { usecase, kycRepository } = monter(visiteur());
-    kycRepository.findByUserId.mockResolvedValue(null);
+    // Une racine sans dossier : le titulaire existe, il n'a rien ouvert.
+    kycRepository.findByInvestorId.mockResolvedValue(
+      new InvestorComplianceProfile({
+        investorId: 7,
+        kycCase: null,
+        adequacy: null,
+      }),
+    );
 
     await expect(usecase.execute(7, KycStatus.VALIDE)).rejects.toBeInstanceOf(
       NotFoundException,

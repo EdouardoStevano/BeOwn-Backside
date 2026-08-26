@@ -6,11 +6,9 @@ import { QuestionnaireAdequationEntity } from './persistence/entities/questionna
 import { DossierInvestisseurEntity } from './persistence/entities/dossier-investisseur.entity';
 import { ProfilPPTypeOrmRepository } from './repositories/profil-pp.repository';
 import { ProfilPMTypeOrmRepository } from './repositories/profil-pm.repository';
-import { QuestionnaireAdequationTypeOrmRepository } from './repositories/questionnaire-adequation.repository';
 import { NatureDuDossierTypeOrmRepository } from './repositories/nature-du-dossier.repository';
 import { PROFIL_PP_REPOSITORY } from '../domain/repositories/profil-pp.repository';
 import { PROFIL_PM_REPOSITORY } from '../domain/repositories/profil-pm.repository';
-import { QUESTIONNAIRE_ADEQUATION_REPOSITORY } from '../domain/repositories/questionnaire-adequation.repository';
 import { NATURE_DU_DOSSIER_REPOSITORY } from '../domain/repositories/nature-du-dossier.repository';
 
 /**
@@ -33,10 +31,6 @@ import { NATURE_DU_DOSSIER_REPOSITORY } from '../domain/repositories/nature-du-d
     { provide: PROFIL_PP_REPOSITORY, useClass: ProfilPPTypeOrmRepository },
     { provide: PROFIL_PM_REPOSITORY, useClass: ProfilPMTypeOrmRepository },
     {
-      provide: QUESTIONNAIRE_ADEQUATION_REPOSITORY,
-      useClass: QuestionnaireAdequationTypeOrmRepository,
-    },
-    {
       provide: NATURE_DU_DOSSIER_REPOSITORY,
       useClass: NatureDuDossierTypeOrmRepository,
     },
@@ -44,7 +38,6 @@ import { NATURE_DU_DOSSIER_REPOSITORY } from '../domain/repositories/nature-du-d
   exports: [
     PROFIL_PP_REPOSITORY,
     PROFIL_PM_REPOSITORY,
-    QUESTIONNAIRE_ADEQUATION_REPOSITORY,
     NATURE_DU_DOSSIER_REPOSITORY,
   ],
 })

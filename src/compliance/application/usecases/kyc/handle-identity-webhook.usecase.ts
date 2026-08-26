@@ -1,10 +1,11 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { KycCase } from 'src/compliance/domain/entities/kyc-case';
+import { InvestorComplianceProfile } from 'src/compliance/domain/aggregates/investor-compliance-profile';
 import {
-  KYC_REPOSITORY,
-  type KycRepository,
-} from 'src/compliance/domain/repositories/kyc.repository';
+  INVESTOR_COMPLIANCE_PROFILE_REPOSITORY,
+  type InvestorComplianceProfileRepository,
+} from 'src/compliance/domain/repositories/investor-compliance-profile.repository';
 import {
+  statutPourVerdict,
   SuiteDuVerdict,
   VerdictIdentite,
 } from 'src/compliance/domain/value-objects/verdict-identite';
@@ -28,8 +29,9 @@ import { UpdateKycStatusUseCase } from './update-kyc-status.usecase';
  *
  * Ce qui est parti, et où :
  *
- * - **quel verdict s'applique à quel statut** → {@link KycCase.accueille}, dans
- *   le domaine, où la règle est testable sans mock ;
+ * - **quel verdict s'applique à quel statut** → le domaine, par
+ *   `InvestorComplianceProfile.accueillirVerdict` et l'entité qu'elle
+ *   médiatise, où la règle est testable sans mock ;
  * - **la forme JSON du fournisseur** → {@link EvenementIdentiteTranslator}, une
  *   ACL (§20) ;
  * - **notifications et journal d'audit** → {@link AnnoncesKycService} ;
@@ -48,8 +50,8 @@ export class HandleIdentityWebhookUseCase {
 
   constructor(
     private readonly updateKycStatus: UpdateKycStatusUseCase,
-    @Inject(KYC_REPOSITORY)
-    private readonly kycRepository: KycRepository,
+    @Inject(INVESTOR_COMPLIANCE_PROFILE_REPOSITORY)
+    private readonly profils: InvestorComplianceProfileRepository,
     private readonly annonces: AnnoncesKycService,
     private readonly archivage: ArchivageRapportKycService,
   ) {}
@@ -71,8 +73,8 @@ export class HandleIdentityWebhookUseCase {
     const fait = EvenementIdentiteTranslator.traduire(event);
     if (!fait) return;
 
-    const kyc = await this.kycRepository.findByUserId(fait.utilisateurId);
-    if (!kyc) {
+    const profil = await this.profils.findByInvestorId(fait.utilisateurId);
+    if (!profil.aUnDossierKyc()) {
       this.logger.warn(
         `Vérification d'identité : dossier introuvable pour userId=${fait.utilisateurId} ` +
           `(session=${fait.sessionId}) — no-op`,
@@ -80,7 +82,7 @@ export class HandleIdentityWebhookUseCase {
       return;
     }
 
-    switch (kyc.accueille(fait.verdict, fait.sessionId)) {
+    switch (profil.accueillirVerdict(fait.verdict, fait.sessionId)) {
       case SuiteDuVerdict.DEJA_APPLIQUE:
         this.logger.debug(
           `Verdict ${fait.verdict} déjà appliqué (redélivrance) : userId=${fait.utilisateurId}`,
@@ -91,14 +93,14 @@ export class HandleIdentityWebhookUseCase {
         // Le cas qui mérite d'être vu : le dossier a évolué autrement depuis,
         // typiquement par une décision du RCCI que ce verdict aurait écrasée.
         this.logger.warn(
-          `Verdict ${fait.verdict} écarté — statut actuel « ${kyc.statut} » ` +
+          `Verdict ${fait.verdict} écarté — statut actuel « ${profil.statutKyc} » ` +
             `(event=${fait.evenementId} userId=${fait.utilisateurId}). ` +
             'Probable événement redélivré après une décision manuelle — no-op.',
         );
         return;
 
       case SuiteDuVerdict.A_APPLIQUER:
-        return this.appliquer(fait, kyc);
+        return this.appliquer(fait, profil);
     }
   }
 
@@ -112,9 +114,9 @@ export class HandleIdentityWebhookUseCase {
    */
   private async appliquer(
     fait: EvenementDeVerification,
-    kyc: KycCase,
+    profil: InvestorComplianceProfile,
   ): Promise<void> {
-    const statut = KycCase.statutApres(fait.verdict);
+    const statut = statutPourVerdict(fait.verdict);
     const motif =
       fait.verdict === VerdictIdentite.REVUE_REQUISE ? fait.motif : undefined;
 
@@ -126,7 +128,7 @@ export class HandleIdentityWebhookUseCase {
 
     const contexte = {
       utilisateurId: fait.utilisateurId,
-      kycId: kyc.id,
+      kycId: profil.dossierKycId as string,
       sessionId: fait.sessionId,
       evenementId: fait.evenementId,
     };
@@ -135,7 +137,7 @@ export class HandleIdentityWebhookUseCase {
       this.annonces.annoncerVerificationAutomatique(contexte);
       // Après l'annonce : le titulaire n'a pas à attendre le téléchargement de
       // ses pièces pour apprendre que son identité est établie.
-      await this.archivage.archiver(fait.sessionId, kyc.id, fait.utilisateurId);
+      await this.archivage.archiver(fait.sessionId, fait.utilisateurId);
       return;
     }
 

@@ -1,10 +1,10 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { KycStatus } from 'src/compliance/domain/enums/kyc-status.enum';
-import { KycCase } from 'src/compliance/domain/entities/kyc-case';
+import { KycCaseSnapshot } from 'src/compliance/domain/entities/kyc-case';
 import {
-  KYC_REPOSITORY,
-  type KycRepository,
-} from 'src/compliance/domain/repositories/kyc.repository';
+  INVESTOR_COMPLIANCE_PROFILE_REPOSITORY,
+  type InvestorComplianceProfileRepository,
+} from 'src/compliance/domain/repositories/investor-compliance-profile.repository';
 import {
   PROFIL_PM_REPOSITORY,
   type ProfilPMRepository,
@@ -13,10 +13,6 @@ import {
   PROFIL_PP_REPOSITORY,
   type ProfilPPRepository,
 } from 'src/compliance/domain/repositories/profil-pp.repository';
-import {
-  QUESTIONNAIRE_ADEQUATION_REPOSITORY,
-  type QuestionnaireAdequationRepository,
-} from 'src/compliance/domain/repositories/questionnaire-adequation.repository';
 import { ProfilPM } from 'src/compliance/domain/aggregates/profil-pm';
 import { ProfilPP } from 'src/compliance/domain/aggregates/profil-pp';
 
@@ -39,7 +35,7 @@ export interface OnboardingStatus {
   profilPP: ProfilPP | null;
   /** Les sociétés déclarées, vide si le compte n'en a aucune. */
   profilsPM: ProfilPM[];
-  kyc: KycCase | null;
+  kyc: KycCaseSnapshot | null;
   completionStep: number;
   completionSteps: EtapeOnboarding[];
   completionProgress: number;
@@ -79,10 +75,8 @@ export class GetOnboardingStatusUseCase {
     private readonly profilPPRepository: ProfilPPRepository,
     @Inject(PROFIL_PM_REPOSITORY)
     private readonly profilPMRepository: ProfilPMRepository,
-    @Inject(KYC_REPOSITORY)
-    private readonly kycRepository: KycRepository,
-    @Inject(QUESTIONNAIRE_ADEQUATION_REPOSITORY)
-    private readonly questionnaireRepository: QuestionnaireAdequationRepository,
+    @Inject(INVESTOR_COMPLIANCE_PROFILE_REPOSITORY)
+    private readonly profils: InvestorComplianceProfileRepository,
   ) {}
 
   async execute(input: OnboardingStatusInput): Promise<OnboardingStatus> {
@@ -90,17 +84,18 @@ export class GetOnboardingStatusUseCase {
 
     // Un dossier absent n'est pas une erreur : c'est l'état de départ. Les
     // quatre lectures sont indépendantes, donc menées de front.
-    const [profilPP, profilsPM, kyc, questionnaire] = await Promise.all([
+    // Le dossier de conformité arrive d'un bloc : dossier de vérification et
+    // questionnaire sont deux pièces d'une même racine, et se lisaient
+    // auparavant par deux ports séparés — donc deux requêtes pour un seul
+    // objet métier.
+    const [profilPP, profilsPM, conformite] = await Promise.all([
       this.profilPPRepository.findByUserId(utilisateurId).catch(() => null),
       this.profilPMRepository
         .listerParUtilisateur(utilisateurId)
         // Le type de repli est explicite : un `[]` nu s'infère `never[]`, et
         // l'union avec `ProfilPM[]` prive `some` du type de son paramètre.
         .catch((): ProfilPM[] => []),
-      this.kycRepository.findByUserId(utilisateurId).catch(() => null),
-      this.questionnaireRepository
-        .findByUserId(utilisateurId)
-        .catch(() => null),
+      this.profils.findByInvestorId(utilisateurId),
     ]);
 
     // Une seule société suffit à établir la nature du compte, et il ne peut
@@ -133,12 +128,14 @@ export class GetOnboardingStatusUseCase {
     // Le raccourci « une personne morale n'a pas à répondre » est conservé tel
     // quel : le corriger changerait l'affichage de tous les comptes PM, ce qui
     // est une décision métier, pas un correctif.
-    const questionnaireRepondu = questionnaire !== null || profilsPM.length > 0;
+    const questionnaireRepondu =
+      conformite.aReponduAuQuestionnaire() || profilsPM.length > 0;
 
-    const kycValide = kyc?.statut === KycStatus.VALIDE;
-    const kycRefuse = kyc?.statut === KycStatus.REFUSE;
+    const kycValide = conformite.statutKyc === KycStatus.VALIDE;
+    const kycRefuse = conformite.statutKyc === KycStatus.REFUSE;
     const kycEnCours =
-      kyc?.statut === KycStatus.EN_COURS || kyc?.statut === KycStatus.EN_REVUE;
+      conformite.statutKyc === KycStatus.EN_COURS ||
+      conformite.statutKyc === KycStatus.EN_REVUE;
 
     const completionSteps: EtapeOnboarding[] = [
       {
@@ -178,7 +175,8 @@ export class GetOnboardingStatusUseCase {
               ? 'pending'
               : 'not_started',
         detail: kycRefuse
-          ? (kyc?.motifRefus ?? 'KYC refusé — resoumettez vos documents')
+          ? (conformite.motifRefusKyc ??
+            'KYC refusé — resoumettez vos documents')
           : kycEnCours
             ? 'Vérification en cours par notre équipe'
             : kycValide
@@ -208,7 +206,7 @@ export class GetOnboardingStatusUseCase {
       userType: typeEffectif,
       profilPP,
       profilsPM,
-      kyc,
+      kyc: conformite.dossierKycPublie,
       completionStep: etapeCourante({
         typeChoisi: !!typeChoisi,
         aCommenceSonProfil,

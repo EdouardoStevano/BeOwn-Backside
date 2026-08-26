@@ -1,31 +1,31 @@
 import { Inject, Injectable } from '@nestjs/common';
+import { AdequacyAssessmentSnapshot } from 'src/compliance/domain/entities/adequacy-assessment';
 import {
-  QUESTIONNAIRE_ADEQUATION_REPOSITORY,
-  type QuestionnaireAdequationRepository,
-} from 'src/compliance/domain/repositories/questionnaire-adequation.repository';
-import { AdequacyAssessment } from 'src/compliance/domain/entities/adequacy-assessment';
+  INVESTOR_COMPLIANCE_PROFILE_REPOSITORY,
+  type InvestorComplianceProfileRepository,
+} from 'src/compliance/domain/repositories/investor-compliance-profile.repository';
 
 /**
- * Lecture du questionnaire d'adéquation du titulaire.
+ * Le questionnaire d'adéquation d'un titulaire, `null` s'il n'a pas répondu.
  *
- * Le contrôleur appelait `questionnaireRepo.findOne()` sur le repository
- * TypeORM qu'il s'était fait injecter : la présentation parlait directement à
- * l'infrastructure (§12.9), et l'entité ORM sortait telle quelle dans la
- * réponse HTTP.
+ * Il lisait un `QuestionnaireAdequationRepository` propre à l'entité
+ * `AdequacyAssessment` — une pièce interne de la racine, qui n'a pas à avoir
+ * son propre port (§6, §10). Il passe par la racine, et publie l'**instantané**
+ * plutôt que l'entité : le contrôleur ne doit pas tenir de quoi appeler
+ * `repondre()` hors du dossier qui en est propriétaire.
  *
- * **Rend `null` plutôt que de lever** quand le titulaire n'a jamais répondu :
- * c'est le comportement d'origine, et il a du sens ici — le front interroge
- * cette route pour savoir s'il doit proposer le formulaire, et une absence de
- * réponse n'est pas une erreur.
+ * La forme du JSON est inchangée — c'est déjà `toJSON()` que la sérialisation
+ * appelait.
  */
 @Injectable()
 export class GetQuestionnaireUseCase {
   constructor(
-    @Inject(QUESTIONNAIRE_ADEQUATION_REPOSITORY)
-    private readonly questionnaireRepository: QuestionnaireAdequationRepository,
+    @Inject(INVESTOR_COMPLIANCE_PROFILE_REPOSITORY)
+    private readonly profils: InvestorComplianceProfileRepository,
   ) {}
 
-  execute(userId: number): Promise<AdequacyAssessment | null> {
-    return this.questionnaireRepository.findByUserId(userId);
+  async execute(userId: number): Promise<AdequacyAssessmentSnapshot | null> {
+    const profil = await this.profils.findByInvestorId(userId);
+    return profil.questionnairePublie;
   }
 }

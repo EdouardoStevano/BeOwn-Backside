@@ -1,9 +1,8 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { KycStatus } from 'src/compliance/domain/enums/kyc-status.enum';
 import {
-  KYC_REPOSITORY,
-  type KycRepository,
-} from 'src/compliance/domain/repositories/kyc.repository';
+  INVESTOR_COMPLIANCE_PROFILE_REPOSITORY,
+  type InvestorComplianceProfileRepository,
+} from 'src/compliance/domain/repositories/investor-compliance-profile.repository';
 import {
   IDENTITY_VERIFICATION_PORT,
   type IdentityVerificationPort,
@@ -20,11 +19,14 @@ import { CreateKycUseCase } from './create-kyc.usecase';
  * qui appelait un use case de Profiles puis écrivait elle-même en base par le
  * port du repository (§12.5, §12.9).
  *
- * Le statut reste `NON_DEMARRE` après l'ouverture : ce n'est pas un oubli.
- * Ouvrir une session ne prouve rien — le dossier ne passe `EN_COURS` que quand
- * Stripe confirme la capture des photos (`identity.verification_session.processing`,
- * cf. {@link HandleIdentityWebhookUseCase}). Poser `EN_COURS` ici afficherait
- * une vérification en cours à quiconque a simplement cliqué sur le bouton.
+ * **Le statut n'est pas touché**, et c'est ce qui compte ici. Ouvrir une
+ * session ne prouve rien : le dossier ne passe `EN_COURS` que quand le
+ * fournisseur confirme la capture des pièces, et `VALIDE` que sur son verdict
+ * (cf. {@link HandleIdentityWebhookUseCase}). L'ancienne écriture posait
+ * `NON_DEMARRE` en même temps que la référence de session — ce qui remettait à
+ * zéro un dossier déjà validé ou déjà en revue dès qu'une session était
+ * rouverte. Rattacher la session est désormais un geste qui ne dit rien de
+ * l'avancement.
  */
 @Injectable()
 export class StartKycSessionUseCase {
@@ -32,8 +34,8 @@ export class StartKycSessionUseCase {
 
   constructor(
     private readonly createKyc: CreateKycUseCase,
-    @Inject(KYC_REPOSITORY)
-    private readonly kycRepository: KycRepository,
+    @Inject(INVESTOR_COMPLIANCE_PROFILE_REPOSITORY)
+    private readonly profils: InvestorComplianceProfileRepository,
     @Inject(IDENTITY_VERIFICATION_PORT)
     private readonly identity: IdentityVerificationPort,
   ) {}
@@ -43,18 +45,15 @@ export class StartKycSessionUseCase {
     email: string,
   ): Promise<VerificationSessionResult> {
     // `CreateKycUseCase` est idempotent, d'où l'absence de test d'existence.
-    const kyc = await this.createKyc.execute(utilisateurId);
+    const profil = await this.createKyc.execute(utilisateurId);
 
     const session = await this.identity.createVerificationSession(
       utilisateurId,
       email,
     );
 
-    await this.kycRepository.updateSession(
-      kyc.id,
-      session.sessionId,
-      KycStatus.NON_DEMARRE,
-    );
+    profil.rattacherSessionDeVerification(session.sessionId, 'stripeIdentity');
+    await this.profils.save(profil);
 
     this.logger.log(
       `KYC session créée: userId=${utilisateurId} sessionId=${session.sessionId}`,

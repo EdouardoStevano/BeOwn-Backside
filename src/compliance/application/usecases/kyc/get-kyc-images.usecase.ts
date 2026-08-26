@@ -1,8 +1,8 @@
 import { Inject, Injectable } from '@nestjs/common';
 import {
-  KYC_REPOSITORY,
-  type KycRepository,
-} from 'src/compliance/domain/repositories/kyc.repository';
+  DOSSIER_KYC_QUERY,
+  type DossierKycQuery,
+} from 'src/compliance/application/ports/dossier-kyc.query';
 import type { KycIdentiteExtrait } from 'src/compliance/domain/entities/kyc-case';
 import {
   IDENTITY_VERIFICATION_PORT,
@@ -40,14 +40,14 @@ export type KycImagesResult =
 @Injectable()
 export class GetKycImagesUseCase {
   constructor(
-    @Inject(KYC_REPOSITORY)
-    private readonly kycRepository: KycRepository,
+    @Inject(DOSSIER_KYC_QUERY)
+    private readonly dossiers: DossierKycQuery,
     @Inject(IDENTITY_VERIFICATION_PORT)
     private readonly identity: IdentityVerificationPort,
   ) {}
 
   async execute(utilisateurId: number): Promise<KycImagesResult> {
-    const kyc = await this.kycRepository.findByUserId(utilisateurId);
+    const kyc = await this.dossiers.parTitulaire(utilisateurId);
     if (!kyc?.identiteExtrait) return { available: false };
 
     const { documentFrontFileId, documentBackFileId, selfieFileId } =

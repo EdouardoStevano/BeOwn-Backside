@@ -1,8 +1,8 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
-  KYC_REPOSITORY,
-  type KycRepository,
-} from 'src/compliance/domain/repositories/kyc.repository';
+  INVESTOR_COMPLIANCE_PROFILE_REPOSITORY,
+  type InvestorComplianceProfileRepository,
+} from 'src/compliance/domain/repositories/investor-compliance-profile.repository';
 import {
   IDENTITY_VERIFICATION_PORT,
   type IdentityVerificationPort,
@@ -26,17 +26,13 @@ export class ArchivageRapportKycService {
   private readonly logger = new Logger(ArchivageRapportKycService.name);
 
   constructor(
-    @Inject(KYC_REPOSITORY)
-    private readonly kycRepository: KycRepository,
+    @Inject(INVESTOR_COMPLIANCE_PROFILE_REPOSITORY)
+    private readonly profils: InvestorComplianceProfileRepository,
     @Inject(IDENTITY_VERIFICATION_PORT)
     private readonly identity: IdentityVerificationPort,
   ) {}
 
-  async archiver(
-    sessionId: string,
-    kycId: string,
-    utilisateurId: number,
-  ): Promise<void> {
+  async archiver(sessionId: string, utilisateurId: number): Promise<void> {
     const rapport = await this.identity.extractReportData(sessionId);
     if (!rapport) return;
 
@@ -62,7 +58,8 @@ export class ArchivageRapportKycService {
       ),
     ]);
 
-    await this.kycRepository.updateReportData(kycId, rapport.reportId, {
+    const profil = await this.profils.findByInvestorId(utilisateurId);
+    profil.enregistrerRapportKyc(rapport.reportId, {
       nom: rapport.nom,
       prenom: rapport.prenom,
       dateNaissance: rapport.dateNaissance,
@@ -76,6 +73,7 @@ export class ArchivageRapportKycService {
       documentBackFileId: verso ?? rapport.documentBackFileId,
       selfieFileId: selfie ?? rapport.selfieFileId,
     });
+    await this.profils.save(profil);
 
     this.logger.log(
       `Rapport KYC archivé : userId=${utilisateurId} reportId=${rapport.reportId} ` +

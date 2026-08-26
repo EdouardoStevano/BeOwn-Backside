@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { EventBus } from '@nestjs/cqrs';
 import { KycStatus } from 'src/compliance/domain/enums/kyc-status.enum';
 import { KycRevueManuelleDemandeeDomainEvent } from 'src/compliance/domain/events/kyc-revue-manuelle-demandee.domain-event';
-import { KycCase } from 'src/compliance/domain/entities/kyc-case';
+import { InvestorComplianceProfile } from 'src/compliance/domain/aggregates/investor-compliance-profile';
 import { UpdateKycStatusUseCase } from './update-kyc-status.usecase';
 
 /**
@@ -47,7 +47,7 @@ export class RequestKycManualReviewUseCase {
     private readonly eventBus: EventBus,
   ) {}
 
-  async execute(userId: number): Promise<KycCase> {
+  async execute(userId: number): Promise<InvestorComplianceProfile> {
     const kyc = await this.updateKycStatus.execute(
       userId,
       KycStatus.EN_REVUE,
@@ -60,7 +60,7 @@ export class RequestKycManualReviewUseCase {
     // revue qui n'a pas eu lieu.
     this.eventBus.publish(
       new KycRevueManuelleDemandeeDomainEvent(
-        kyc.id,
+        kyc.dossierKycId as string,
         userId,
         MOTIF_REVUE_MANUELLE,
       ),

@@ -8,10 +8,10 @@ import { ProfilPMFactory } from 'src/compliance/domain/factories/profil-pm.facto
 import { ProfilPPFactory } from 'src/compliance/domain/factories/profil-pp.factory';
 import { QuestionnaireAdequationFactory } from 'src/compliance/domain/factories/questionnaire-adequation.factory';
 import { KycMapper } from 'src/compliance/domain/mappers/kyc.mapper';
-import type { KycRepository } from 'src/compliance/domain/repositories/kyc.repository';
+import type { InvestorComplianceProfileRepository } from 'src/compliance/domain/repositories/investor-compliance-profile.repository';
+import { InvestorComplianceProfile } from 'src/compliance/domain/aggregates/investor-compliance-profile';
 import type { ProfilPMRepository } from 'src/compliance/domain/repositories/profil-pm.repository';
 import type { ProfilPPRepository } from 'src/compliance/domain/repositories/profil-pp.repository';
-import type { QuestionnaireAdequationRepository } from 'src/compliance/domain/repositories/questionnaire-adequation.repository';
 
 const UTILISATEUR = 42;
 
@@ -57,11 +57,16 @@ function monter(
         .mockResolvedValue(etat.profilPM ? [etat.profilPM] : []),
     } as unknown as ProfilPMRepository,
     {
-      findByUserId: jest.fn().mockResolvedValue(etat.kyc ?? null),
-    } as unknown as KycRepository,
-    {
-      findByUserId: jest.fn().mockResolvedValue(etat.questionnaire ?? null),
-    } as unknown as QuestionnaireAdequationRepository,
+      // Dossier de vérification et questionnaire sont deux pièces d'une même
+      // racine : une seule lecture les rend toutes les deux.
+      findByInvestorId: jest.fn().mockResolvedValue(
+        new InvestorComplianceProfile({
+          investorId: UTILISATEUR,
+          kycCase: etat.kyc ?? null,
+          adequacy: etat.questionnaire ?? null,
+        }),
+      ),
+    } as unknown as InvestorComplianceProfileRepository,
   );
 
   return useCase;
@@ -204,13 +209,14 @@ describe('GetOnboardingStatusUseCase', () => {
         listerParUtilisateur: jest.fn().mockResolvedValue([]),
       } as unknown as ProfilPMRepository,
       {
-        findByUserId: jest
-          .fn()
-          .mockResolvedValue(kycAuStatut(KycStatus.VALIDE)),
-      } as unknown as KycRepository,
-      {
-        findByUserId: jest.fn().mockResolvedValue(null),
-      } as unknown as QuestionnaireAdequationRepository,
+        findByInvestorId: jest.fn().mockResolvedValue(
+          new InvestorComplianceProfile({
+            investorId: UTILISATEUR,
+            kycCase: kycAuStatut(KycStatus.VALIDE),
+            adequacy: null,
+          }),
+        ),
+      } as unknown as InvestorComplianceProfileRepository,
     );
 
     await expect(

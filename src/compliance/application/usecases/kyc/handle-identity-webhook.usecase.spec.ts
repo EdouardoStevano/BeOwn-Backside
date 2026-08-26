@@ -6,6 +6,7 @@ import {
   KycStatus,
 } from 'src/compliance/domain/enums/kyc-status.enum';
 import { KycMapper } from 'src/compliance/domain/mappers/kyc.mapper';
+import { InvestorComplianceProfile } from 'src/compliance/domain/aggregates/investor-compliance-profile';
 import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
 import { UserRole } from 'src/iam/domain/enums/user.enum';
 
@@ -39,6 +40,19 @@ import { UserRole } from 'src/iam/domain/enums/user.enum';
  * la regle qu'il pretend verifier.
  */
 const dossier = (etat: {
+  id?: string;
+  statut: KycStatus;
+  fournisseurRef?: string | null;
+}) =>
+  // La racine, et non le dossier seul : `KycCase` est une entité interne, le
+  // use case ne la charge plus directement (§6, §10).
+  new InvestorComplianceProfile({
+    investorId: 42,
+    kycCase: kycCase(etat),
+    adequacy: null,
+  });
+
+const kycCase = (etat: {
   id?: string;
   statut: KycStatus;
   fournisseurRef?: string | null;
@@ -80,8 +94,8 @@ describe('HandleIdentityWebhookUseCase — webhook Stripe Identity (KYC auto + f
     };
     auditLog = { create: jest.fn().mockResolvedValue(undefined) };
     kycRepository = {
-      findByUserId: jest.fn(),
-      updateReportData: jest.fn().mockResolvedValue(undefined),
+      findByInvestorId: jest.fn(),
+      save: jest.fn((p: unknown) => Promise.resolve(p)),
     };
 
     // Les deux services sont montes pour de vrai plutot que mockes : ce sont
@@ -102,7 +116,7 @@ describe('HandleIdentityWebhookUseCase — webhook Stripe Identity (KYC auto + f
         'identity.verification_session.verified',
         session,
       );
-      kycRepository.findByUserId.mockResolvedValue(
+      kycRepository.findByInvestorId.mockResolvedValue(
         dossier({
           id: 'kyc-1',
           statut: KycStatus.EN_COURS,
@@ -145,7 +159,7 @@ describe('HandleIdentityWebhookUseCase — webhook Stripe Identity (KYC auto + f
         'identity.verification_session.verified',
         session,
       );
-      kycRepository.findByUserId.mockResolvedValue(
+      kycRepository.findByInvestorId.mockResolvedValue(
         dossier({
           id: 'kyc-1',
           statut: KycStatus.VALIDE,
@@ -166,7 +180,13 @@ describe('HandleIdentityWebhookUseCase — webhook Stripe Identity (KYC auto + f
         'identity.verification_session.verified',
         session,
       );
-      kycRepository.findByUserId.mockResolvedValue(null);
+      kycRepository.findByInvestorId.mockResolvedValue(
+        new InvestorComplianceProfile({
+          investorId: 999,
+          kycCase: null,
+          adequacy: null,
+        }),
+      );
 
       await usecase.handle(event);
 
@@ -182,7 +202,7 @@ describe('HandleIdentityWebhookUseCase — webhook Stripe Identity (KYC auto + f
 
       await usecase.handle(event);
 
-      expect(kycRepository.findByUserId).not.toHaveBeenCalled();
+      expect(kycRepository.findByInvestorId).not.toHaveBeenCalled();
       expect(updateKycStatus.execute).not.toHaveBeenCalled();
     });
 
@@ -193,7 +213,7 @@ describe('HandleIdentityWebhookUseCase — webhook Stripe Identity (KYC auto + f
         session,
         'evt_late_verified',
       );
-      kycRepository.findByUserId.mockResolvedValue(
+      kycRepository.findByInvestorId.mockResolvedValue(
         dossier({
           id: 'kyc-1',
           statut: KycStatus.REFUSE,
@@ -220,7 +240,7 @@ describe('HandleIdentityWebhookUseCase — webhook Stripe Identity (KYC auto + f
         'identity.verification_session.verified',
         session,
       );
-      kycRepository.findByUserId.mockResolvedValue(
+      kycRepository.findByInvestorId.mockResolvedValue(
         dossier({
           id: 'kyc-1',
           statut: KycStatus.VALIDE,
@@ -240,7 +260,7 @@ describe('HandleIdentityWebhookUseCase — webhook Stripe Identity (KYC auto + f
         'identity.verification_session.verified',
         session,
       );
-      kycRepository.findByUserId.mockResolvedValue(
+      kycRepository.findByInvestorId.mockResolvedValue(
         dossier({
           id: 'kyc-55',
           statut: KycStatus.EN_REVUE,
@@ -271,7 +291,7 @@ describe('HandleIdentityWebhookUseCase — webhook Stripe Identity (KYC auto + f
           'identity.verification_session.verified',
           session,
         );
-        kycRepository.findByUserId.mockResolvedValue(
+        kycRepository.findByInvestorId.mockResolvedValue(
           dossier({
             id: 'kyc-9',
             statut,
@@ -301,7 +321,7 @@ describe('HandleIdentityWebhookUseCase — webhook Stripe Identity (KYC auto + f
         'identity.verification_session.requires_input',
         session,
       );
-      kycRepository.findByUserId.mockResolvedValue(
+      kycRepository.findByInvestorId.mockResolvedValue(
         dossier({
           id: 'kyc-7',
           statut: KycStatus.EN_COURS,
@@ -352,7 +372,7 @@ describe('HandleIdentityWebhookUseCase — webhook Stripe Identity (KYC auto + f
         'identity.verification_session.requires_input',
         session,
       );
-      kycRepository.findByUserId.mockResolvedValue(
+      kycRepository.findByInvestorId.mockResolvedValue(
         dossier({
           id: 'kyc-7',
           statut: KycStatus.EN_REVUE,
@@ -378,7 +398,7 @@ describe('HandleIdentityWebhookUseCase — webhook Stripe Identity (KYC auto + f
         session,
         'evt_late_ri_valide',
       );
-      kycRepository.findByUserId.mockResolvedValue(
+      kycRepository.findByInvestorId.mockResolvedValue(
         dossier({
           id: 'kyc-7',
           statut: KycStatus.VALIDE,
@@ -410,7 +430,7 @@ describe('HandleIdentityWebhookUseCase — webhook Stripe Identity (KYC auto + f
         'identity.verification_session.requires_input',
         session,
       );
-      kycRepository.findByUserId.mockResolvedValue(
+      kycRepository.findByInvestorId.mockResolvedValue(
         dossier({
           id: 'kyc-7',
           statut: KycStatus.REFUSE,
@@ -437,7 +457,7 @@ describe('HandleIdentityWebhookUseCase — webhook Stripe Identity (KYC auto + f
           'identity.verification_session.requires_input',
           session,
         );
-        kycRepository.findByUserId.mockResolvedValue(
+        kycRepository.findByInvestorId.mockResolvedValue(
           dossier({
             id: 'kyc-9',
             statut,
@@ -463,7 +483,7 @@ describe('HandleIdentityWebhookUseCase — webhook Stripe Identity (KYC auto + f
         'identity.verification_session.processing',
         session,
       );
-      kycRepository.findByUserId.mockResolvedValue(
+      kycRepository.findByInvestorId.mockResolvedValue(
         dossier({
           id: 'kyc-3',
           statut: KycStatus.NON_DEMARRE,
@@ -486,7 +506,7 @@ describe('HandleIdentityWebhookUseCase — webhook Stripe Identity (KYC auto + f
         'identity.verification_session.processing',
         session,
       );
-      kycRepository.findByUserId.mockResolvedValue(
+      kycRepository.findByInvestorId.mockResolvedValue(
         dossier({
           id: 'kyc-3',
           statut: KycStatus.EN_COURS,
@@ -506,7 +526,7 @@ describe('HandleIdentityWebhookUseCase — webhook Stripe Identity (KYC auto + f
         session,
         'evt_late_processing',
       );
-      kycRepository.findByUserId.mockResolvedValue(
+      kycRepository.findByInvestorId.mockResolvedValue(
         dossier({
           id: 'kyc-3',
           statut: KycStatus.VALIDE,
@@ -533,7 +553,7 @@ describe('HandleIdentityWebhookUseCase — webhook Stripe Identity (KYC auto + f
           'identity.verification_session.processing',
           session,
         );
-        kycRepository.findByUserId.mockResolvedValue(
+        kycRepository.findByInvestorId.mockResolvedValue(
           dossier({
             id: 'kyc-3',
             statut,
@@ -555,7 +575,7 @@ describe('HandleIdentityWebhookUseCase — webhook Stripe Identity (KYC auto + f
           'identity.verification_session.processing',
           session,
         );
-        kycRepository.findByUserId.mockResolvedValue(
+        kycRepository.findByInvestorId.mockResolvedValue(
           dossier({
             id: 'kyc-9',
             statut,
