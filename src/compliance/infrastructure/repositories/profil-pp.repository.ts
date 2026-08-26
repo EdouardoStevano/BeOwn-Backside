@@ -1,12 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { IsNull, LessThan, Repository } from 'typeorm';
-import { NiveauRisque } from 'src/compliance/domain/enums/niveau-risque.enum';
-import {
-  ClassementPsfp,
-  ProfilPPRepository,
-  SuiviRisque,
-} from 'src/compliance/domain/repositories/profil-pp.repository';
+import { Repository } from 'typeorm';
+import { ProfilPPRepository } from 'src/compliance/domain/repositories/profil-pp.repository';
 import { ProfilPP } from 'src/compliance/domain/aggregates/profil-pp';
 import { ProfilPPEntity } from '../persistence/entities/profil-pp.entity';
 import { ProfilMapper } from '../persistence/mappers/profil.mapper';
@@ -38,49 +33,5 @@ export class ProfilPPTypeOrmRepository implements ProfilPPRepository {
    */
   update(profil: ProfilPP): Promise<ProfilPP> {
     return this.save(profil);
-  }
-
-  /**
-   * `update` et non `save` : une mise à jour ciblée ne touche que ces colonnes,
-   * là où `save` réécrirait toute la ligne — y compris ce qu'un autre chemin
-   * aurait modifié entre-temps. Sans effet si la ligne n'existe pas, ce que le
-   * port annonce.
-   */
-  async enregistrerClassementPsfp(
-    userId: number,
-    classement: ClassementPsfp,
-  ): Promise<void> {
-    await this.ppRepo.update(
-      { userId },
-      {
-        categoriePsfp: classement.categoriePsfp,
-        patrimoineDeclare: classement.patrimoineDeclare,
-        montantMaxConseille: classement.montantMaxConseille,
-      },
-    );
-  }
-
-  async enregistrerSuiviRisque(
-    userId: number,
-    suivi: SuiviRisque,
-  ): Promise<void> {
-    await this.ppRepo.update(
-      { userId },
-      {
-        niveauRisque: suivi.niveauRisque,
-        prochainContactDu: suivi.prochainContactDu,
-      },
-    );
-  }
-
-  async listerContactsDus(limite: number): Promise<ProfilPP[]> {
-    const entities = await this.ppRepo.find({
-      where: [
-        { prochainContactDu: LessThan(new Date()) },
-        { prochainContactDu: IsNull(), niveauRisque: NiveauRisque.VULNERABLE },
-      ],
-      take: limite,
-    });
-    return entities.map((entity) => ProfilMapper.ppToDomain(entity));
   }
 }
