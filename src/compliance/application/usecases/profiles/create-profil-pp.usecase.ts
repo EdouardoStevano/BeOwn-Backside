@@ -1,4 +1,8 @@
 import { Inject, Injectable } from '@nestjs/common';
+import {
+  INVESTOR_COMPLIANCE_PROFILE_REPOSITORY,
+  type InvestorComplianceProfileRepository,
+} from 'src/compliance/domain/repositories/investor-compliance-profile.repository';
 import { EventBus } from '@nestjs/cqrs';
 import {
   USER_REPOSITORY,
@@ -54,6 +58,8 @@ export class CreateProfilPPUseCase {
     private readonly userRepository: UserRepository,
     @Inject(NATURE_DU_DOSSIER_REPOSITORY)
     private readonly natureDuDossier: NatureDuDossierRepository,
+    @Inject(INVESTOR_COMPLIANCE_PROFILE_REPOSITORY)
+    private readonly profilsConformite: InvestorComplianceProfileRepository,
     private readonly eventBus: EventBus,
   ) {}
 
@@ -85,8 +91,14 @@ export class CreateProfilPPUseCase {
     // profil qui n'existe pas.
     this.eventBus.publish(new ProfilPPCreeDomainEvent(userId));
 
-    const compte = await this.userRepository.findById(userId);
+    const [compte, conformite] = await Promise.all([
+      this.userRepository.findById(userId),
+      // Le classement se lit sur la racine, et non sur le profil qui vient de
+      // naître : rien n'oblige le titulaire à remplir son dossier avant de
+      // répondre au questionnaire, et l'ordre inverse se produit.
+      this.profilsConformite.findByInvestorId(userId),
+    ]);
 
-    return vueProfilPP(profil, compte);
+    return vueProfilPP(profil, compte, conformite.classement);
   }
 }

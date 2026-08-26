@@ -74,17 +74,19 @@ describe('ProfilPPFactory — ce que la fabrique décide seule', () => {
     expect(champFautif(() => creer({ userId: -1 }))).toBe('userId');
   });
 
-  it('naît toujours non averti, quelle que soit la demande', () => {
+  it('ne retient aucun classement, quelle que soit la demande', () => {
+    // Le DTO ne propose pas la catégorie, mais un import ou un script pourrait
+    // la glisser. Elle n'est pas un paramètre — et le profil n'a plus où la
+    // mettre : c'est `InvestorComplianceProfile` qui classe, sur la foi du
+    // questionnaire d'adéquation.
     const profil = creer({
-      // Le DTO ne propose pas la catégorie, mais un import ou un script
-      // pourrait la glisser : elle n'est tout simplement pas un paramètre.
       categoriePsfp: CategoriePsfp.PROFESSIONNEL,
       patrimoineDeclare: 10_000_000,
     } as unknown as Partial<CreerProfilPPProps>);
 
-    expect(profil.categoriePsfp).toBe(CategoriePsfp.NON_AVERTI);
-    expect(profil.estNonAverti()).toBe(true);
-    expect(profil.patrimoineDeclare).toBeNull();
+    const publie = profil.toJSON() as unknown as Record<string, unknown>;
+    expect(publie.categoriePsfp).toBeUndefined();
+    expect(publie.patrimoineDeclare).toBeUndefined();
   });
 
   it('ne déclare personne politiquement exposé par défaut', () => {

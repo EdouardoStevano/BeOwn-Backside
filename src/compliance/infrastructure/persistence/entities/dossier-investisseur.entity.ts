@@ -1,5 +1,12 @@
-import { Column, CreateDateColumn, Entity, PrimaryColumn } from 'typeorm';
+import {
+  Column,
+  CreateDateColumn,
+  Entity,
+  Index,
+  PrimaryColumn,
+} from 'typeorm';
 import { NatureDeDossier } from 'src/compliance/domain/enums/nature-de-dossier.enum';
+import { NiveauRisque } from 'src/compliance/domain/enums/niveau-risque.enum';
 
 /**
  * Une ligne par compte ayant ouvert un dossier : sa nature, et rien d'autre.
@@ -22,6 +29,13 @@ import { NatureDeDossier } from 'src/compliance/domain/enums/nature-de-dossier.e
  * Le fait reste modélisé côté domaine : c'est `NatureDuDossierRepository` qui
  * le pose, et les use cases de création qui refusent, avec une erreur métier
  * qui s'explique. Cette table est le filet, pas la règle.
+ *
+ * **Elle porte désormais aussi la surveillance périodique** (PSFP art. 21), et
+ * devient de ce fait la table de `InvestorComplianceProfile` : le premier état
+ * que la racine possède en propre, tout le reste de ce qu'elle publie étant
+ * dérivé de ses deux pièces. Ces trois colonnes vivaient sur
+ * `profil_personne_physique`, ce qui rendait toute surveillance impossible
+ * pour une personne morale — elle n'a pas de ligne dans cette table-là.
  */
 @Entity('dossier_investisseur')
 export class DossierInvestisseurEntity {
@@ -30,6 +44,18 @@ export class DossierInvestisseurEntity {
 
   @Column({ type: 'varchar', length: 2 })
   nature: NatureDeDossier;
+
+  /** Cadence de contact appelée par les réponses au questionnaire. */
+  @Column({ type: 'varchar', nullable: true })
+  niveauRisque: NiveauRisque | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  dernierContactAdmin: Date | null;
+
+  /** Indexée : le CRON quotidien balaie la table entière par cette colonne. */
+  @Column({ type: 'timestamptz', nullable: true })
+  @Index()
+  prochainContactDu: Date | null;
 
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;

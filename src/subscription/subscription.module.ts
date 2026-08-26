@@ -7,7 +7,7 @@ import { CatalogInfrastructureModule } from 'src/catalog/infrastructure/catalog-
 import { TreasuryInfrastructureModule } from 'src/treasury/infrastructure/treasury-infrastructure.module';
 import { DocumentsInfrastructureModule } from 'src/documents/infrastructure/documents-infrastructure.module';
 import { UsersInfrastructureModule } from 'src/iam/infrastructure/users-infrastructure.module';
-import { ProfilesInfrastructureModule } from 'src/compliance/infrastructure/profiles-infrastructure.module';
+import { ComplianceInfrastructureModule } from 'src/compliance/infrastructure/compliance-infrastructure.module';
 import { CloudStorageModule } from 'src/shared/cloud-storage/cloud-storage.module';
 import { YouSignModule } from 'src/documents/infrastructure/external-services/yousign.module';
 import { CreateInvestmentUseCase } from './application/usecases/create-investment.usecase';
@@ -86,7 +86,9 @@ import { TransactionEntity } from 'src/treasury/infrastructure/persistence/entit
     TreasuryInfrastructureModule,
     DocumentsInfrastructureModule,
     UsersInfrastructureModule,
-    ProfilesInfrastructureModule,
+    // `PROFIL_CONFORMITE_QUERY` : le verdict d'éligibilité PSFP du contexte
+    // amont, et non son agrégat `ProfilPP` (§13).
+    ComplianceInfrastructureModule,
     CloudStorageModule,
     YouSignModule,
     NotificationsModule,
@@ -106,8 +108,6 @@ import { TransactionEntity } from 'src/treasury/infrastructure/persistence/entit
     { provide: APP_FILTER, useClass: SubscriptionErrorFilter },
   ],
   controllers: [InvestmentController],
-  exports: [
-    RefundCollecteService,
-  ],
+  exports: [RefundCollecteService],
 })
 export class SubscriptionModule {}

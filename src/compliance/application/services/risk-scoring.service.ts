@@ -2,14 +2,14 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { NiveauRisque } from 'src/compliance/domain/enums/niveau-risque.enum';
 import {
-  PROFIL_PP_REPOSITORY,
-  type ProfilPPRepository,
-} from 'src/compliance/domain/repositories/profil-pp.repository';
+  PROFIL_CONFORMITE_QUERY,
+  type ContactDu,
+  type ProfilConformiteQuery,
+} from 'src/compliance/application/ports/profil-conformite.query';
 import {
   INVESTOR_COMPLIANCE_PROFILE_REPOSITORY,
   type InvestorComplianceProfileRepository,
 } from 'src/compliance/domain/repositories/investor-compliance-profile.repository';
-import { ProfilPP } from 'src/compliance/domain/aggregates/profil-pp';
 import { prochainContactApres } from 'src/compliance/domain/domain-services/suivi-investisseur.domain-service';
 
 /** Au-delà, la liste n'est plus exploitable à la main : elle est paginée côté admin. */
@@ -34,8 +34,8 @@ export class RiskScoringService {
   private readonly logger = new Logger(RiskScoringService.name);
 
   constructor(
-    @Inject(PROFIL_PP_REPOSITORY)
-    private readonly profilPPRepository: ProfilPPRepository,
+    @Inject(PROFIL_CONFORMITE_QUERY)
+    private readonly profilsConformite: ProfilConformiteQuery,
     @Inject(INVESTOR_COMPLIANCE_PROFILE_REPOSITORY)
     private readonly profils: InvestorComplianceProfileRepository,
   ) {}
@@ -53,17 +53,18 @@ export class RiskScoringService {
     // demande à la pièce qui le calcule, sans la rendre.
     const niveauRisque = profil.niveauSuivi() ?? NiveauRisque.VULNERABLE;
 
-    await this.profilPPRepository.enregistrerSuiviRisque(userId, {
-      niveauRisque,
-      prochainContactDu: prochainContactApres(niveauRisque),
-    });
+    // Le niveau est **figé** sur la racine, avec la date qu'il appelle : la
+    // cadence ne doit pas changer sous les pieds de l'équipe conformité parce
+    // qu'un questionnaire a bougé entre deux passages du CRON.
+    profil.reevaluerLeSuivi(niveauRisque, prochainContactApres(niveauRisque));
+    await this.profils.save(profil);
 
     return niveauRisque;
   }
 
   /** Liste les investisseurs dont le prochain contact est dû (export Excel/CSV). */
-  listDueContacts(): Promise<ProfilPP[]> {
-    return this.profilPPRepository.listerContactsDus(MAX_CONTACTS_DUS);
+  listDueContacts(): Promise<ContactDu[]> {
+    return this.profilsConformite.contactsDus(MAX_CONTACTS_DUS);
   }
 
   /** CRON quotidien : recalcule les contacts dus. */

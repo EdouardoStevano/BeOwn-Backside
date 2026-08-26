@@ -2,6 +2,9 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { INVESTOR_COMPLIANCE_PROFILE_REPOSITORY } from '../domain/repositories/investor-compliance-profile.repository';
 import { InvestorComplianceProfileTypeOrmRepository } from './repositories/investor-compliance-profile.repository';
+import { ProfilConformiteTypeOrmQuery } from './repositories/profil-conformite.query';
+import { PROFIL_CONFORMITE_QUERY } from '../application/ports/profil-conformite.query';
+import { DossierInvestisseurEntity } from './persistence/entities/dossier-investisseur.entity';
 import { KycInfrastructureModule } from './kyc-infrastructure.module';
 import { ProfilesInfrastructureModule } from './profiles-infrastructure.module';
 import { KycEntity } from './persistence/entities/kyc.entity';
@@ -24,18 +27,30 @@ import { QuestionnaireAdequationEntity } from './persistence/entities/questionna
  */
 @Module({
   imports: [
-    TypeOrmModule.forFeature([KycEntity, QuestionnaireAdequationEntity]),
+    TypeOrmModule.forFeature([
+      KycEntity,
+      QuestionnaireAdequationEntity,
+      DossierInvestisseurEntity,
+    ]),
     KycInfrastructureModule,
     ProfilesInfrastructureModule,
   ],
   providers: [
+    InvestorComplianceProfileTypeOrmRepository,
     {
       provide: INVESTOR_COMPLIANCE_PROFILE_REPOSITORY,
       useClass: InvestorComplianceProfileTypeOrmRepository,
     },
+    // Les lectures que les contextes en aval font du dossier : le verdict PSFP
+    // pour `subscription`, la surveillance périodique pour l'administration.
+    {
+      provide: PROFIL_CONFORMITE_QUERY,
+      useClass: ProfilConformiteTypeOrmQuery,
+    },
   ],
   exports: [
     INVESTOR_COMPLIANCE_PROFILE_REPOSITORY,
+    PROFIL_CONFORMITE_QUERY,
     KycInfrastructureModule,
     ProfilesInfrastructureModule,
   ],

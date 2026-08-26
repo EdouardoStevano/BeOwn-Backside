@@ -2,6 +2,8 @@ import {
   ProfilPP,
   ProfilPPSnapshot,
 } from 'src/compliance/domain/aggregates/profil-pp';
+import type { ClassementPsfp } from 'src/compliance/domain/aggregates/investor-compliance-profile';
+import { CategoriePsfp } from 'src/compliance/domain/enums/categorie-psfp.enum';
 
 /**
  * Ce que le contexte Profiles lit du compte, dans le vocabulaire d'IAM.
@@ -23,6 +25,20 @@ export interface EtatCivilPublie {
 }
 
 /**
+ * Le classement PSFP, publié à côté du dossier sans lui appartenir.
+ *
+ * Ces trois clés étaient des colonnes de `profil_pp`. Elles n'y étaient qu'une
+ * **copie** de ce que le questionnaire d'adéquation calcule, et une personne
+ * morale — qui n'a pas de profil PP — n'était donc classée nulle part. La
+ * source est `InvestorComplianceProfile` ; la réponse, elle, ne change pas.
+ */
+export interface ClassementPublie {
+  categoriePsfp: CategoriePsfp;
+  patrimoineDeclare: number | null;
+  montantMaxConseille: number | null;
+}
+
+/**
  * Ce que publient les routes du profil personne physique : le dossier, plus
  * l'état civil que porte le compte. Le téléphone, lui, est dans le dossier —
  * il arrive donc par `profil.toJSON()`, sans composition.
@@ -36,7 +52,7 @@ export interface EtatCivilPublie {
  * dépendent. Deux noms pour un identifiant, c'est un front qui finit par
  * croire à deux identifiants.
  */
-export type VueProfilPP = ProfilPPSnapshot & EtatCivilPublie;
+export type VueProfilPP = ProfilPPSnapshot & EtatCivilPublie & ClassementPublie;
 
 /**
  * Recompose la vue attendue par le front à partir des deux propriétaires.
@@ -54,10 +70,16 @@ export type VueProfilPP = ProfilPPSnapshot & EtatCivilPublie;
 export function vueProfilPP(
   profil: ProfilPP,
   compte: CompteDuTitulaire | null,
+  classement: ClassementPsfp | null,
 ): VueProfilPP {
   return {
     ...profil.toJSON(),
     prenom: compte?.firstname ?? null,
     nom: compte?.lastname ?? null,
+    // Sans questionnaire, le titulaire **est** non averti : le classement se
+    // gagne, il ne se présume pas. C'est le même repli que la racine applique.
+    categoriePsfp: classement?.categoriePsfp ?? CategoriePsfp.NON_AVERTI,
+    patrimoineDeclare: classement?.patrimoineDeclare ?? null,
+    montantMaxConseille: classement?.montantMaxConseille ?? null,
   };
 }

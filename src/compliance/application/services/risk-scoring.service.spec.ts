@@ -1,7 +1,7 @@
 import { RiskScoringService } from './risk-scoring.service';
 import { NiveauRisque } from 'src/compliance/domain/enums/niveau-risque.enum';
 import { QuestionnaireAdequationFactory } from 'src/compliance/domain/factories/questionnaire-adequation.factory';
-import type { ProfilPPRepository } from 'src/compliance/domain/repositories/profil-pp.repository';
+import type { ProfilConformiteQuery } from 'src/compliance/application/ports/profil-conformite.query';
 import type { InvestorComplianceProfileRepository } from 'src/compliance/domain/repositories/investor-compliance-profile.repository';
 import { InvestorComplianceProfile } from 'src/compliance/domain/aggregates/investor-compliance-profile';
 import {
@@ -23,17 +23,20 @@ function monter(questionnaire: AdequacyAssessment | null) {
         adequacy: questionnaire,
       }),
     ),
-    enregistrerSuiviRisque: jest.fn().mockResolvedValue(undefined),
-    listerContactsDus: jest.fn().mockResolvedValue([]),
+    // Le suivi est écrit **sur la racine**, puis persisté : c'est donc le
+    // profil passé à `save` qu'on inspecte, et non l'argument d'un appel
+    // d'écriture ciblée qui n'existe plus.
+    save: jest.fn((p: unknown) => Promise.resolve(p)),
+    contactsDus: jest.fn().mockResolvedValue([]),
   };
 
   const service = new RiskScoringService(
     {
-      enregistrerSuiviRisque: mocks.enregistrerSuiviRisque,
-      listerContactsDus: mocks.listerContactsDus,
-    } as unknown as ProfilPPRepository,
+      contactsDus: mocks.contactsDus,
+    } as unknown as ProfilConformiteQuery,
     {
       findByInvestorId: mocks.findByInvestorId,
+      save: mocks.save,
     } as unknown as InvestorComplianceProfileRepository,
   );
 
@@ -67,10 +70,10 @@ describe('RiskScoringService.computeAndStore', () => {
     const { service, mocks } = monter(repondre(reponses));
 
     await expect(service.computeAndStore(42)).resolves.toBe(attendu);
-    expect(mocks.enregistrerSuiviRisque).toHaveBeenCalledWith(
-      42,
-      expect.objectContaining({ niveauRisque: attendu }),
-    );
+    const [enregistre] = mocks.save.mock.calls[0] as [
+      InvestorComplianceProfile,
+    ];
+    expect(enregistre.suivi.niveauRisque).toBe(attendu);
   });
 
   it('traite comme vulnérable le titulaire sans questionnaire', async () => {
@@ -88,10 +91,10 @@ describe('RiskScoringService.computeAndStore', () => {
 
     await service.computeAndStore(42);
 
-    const [, suivi] = mocks.enregistrerSuiviRisque.mock.calls[0] as [
-      number,
-      { prochainContactDu: Date },
+    const [enregistre] = mocks.save.mock.calls[0] as [
+      InvestorComplianceProfile,
     ];
+    const suivi = enregistre.suivi as { prochainContactDu: Date };
     const attendu = new Date();
     attendu.setMonth(attendu.getMonth() + CADENCE[NiveauRisque.VULNERABLE]);
 

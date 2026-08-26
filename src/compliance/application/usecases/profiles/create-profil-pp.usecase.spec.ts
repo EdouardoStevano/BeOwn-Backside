@@ -14,6 +14,8 @@ import {
 import { CategoriePsfp } from 'src/compliance/domain/enums/categorie-psfp.enum';
 import { ProfilPPCreeDomainEvent } from 'src/compliance/domain/events/profil-pp-cree.domain-event';
 import { NatureDeDossier } from 'src/compliance/domain/enums/nature-de-dossier.enum';
+import { InvestorComplianceProfile } from 'src/compliance/domain/aggregates/investor-compliance-profile';
+import type { InvestorComplianceProfileRepository } from 'src/compliance/domain/repositories/investor-compliance-profile.repository';
 import { CreateProfilPPDto } from 'src/compliance/presentation/http/dto/profil.dto';
 
 /**
@@ -54,10 +56,24 @@ function monter(
       .mockResolvedValue(options.natureEtablie ?? NatureDeDossier.PP),
   };
 
+  // La racine sert le classement publié à côté du dossier : un profil qui
+  // vient de naître n'a pas de questionnaire, elle rend donc le repli.
+  const profilsConformite = {
+    findByInvestorId: jest.fn().mockResolvedValue(
+      new InvestorComplianceProfile({
+        investorId: 42,
+        kycCase: null,
+        adequacy: null,
+      }),
+    ),
+    save: jest.fn(),
+  };
+
   const useCase = new CreateProfilPPUseCase(
     profilPPRepository as ProfilPPRepository,
     userRepository as unknown as UserRepository,
     natureDuDossier,
+    profilsConformite as unknown as InvestorComplianceProfileRepository,
     eventBus as unknown as EventBus,
   );
 
@@ -140,6 +156,8 @@ describe('CreateProfilPPUseCase', () => {
   });
 
   it("ignore les montants que seul le questionnaire d'adéquation peut fixer", async () => {
+    // Le dossier n'a plus où les mettre : la réponse les publie depuis la
+    // racine, qui les tient du questionnaire — vide ici.
     const { useCase } = monter();
 
     const vue = await useCase.execute(42, {

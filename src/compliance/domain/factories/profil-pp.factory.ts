@@ -3,7 +3,6 @@ import {
   ProfilPP,
 } from 'src/compliance/domain/aggregates/profil-pp';
 import { Coordonnees } from 'src/compliance/domain/value-objects/coordonnees.vo';
-import { EvaluationInvestisseur } from 'src/compliance/domain/value-objects/evaluation-investisseur.vo';
 import { eprouverUtilisateurId } from 'src/compliance/domain/value-objects/identifiant-utilisateur';
 import { Identite } from 'src/compliance/domain/value-objects/identite.vo';
 import { SituationFiscale } from 'src/compliance/domain/value-objects/situation-fiscale.vo';
@@ -44,10 +43,10 @@ export class ProfilPPFactory {
    *
    * - le **rattachement au compte**, éprouvé ici parce qu'il n'appartient à
    *   aucun bloc et conditionne l'existence de la ligne ;
-   * - le fait que l'**évaluation réglementaire n'est pas déclarable**. Elle part
-   *   de son état initial quoi qu'on lui passe, ce qui ferme la seule porte par
-   *   laquelle on aurait pu naître « professionnel » sans questionnaire
-   *   d'adéquation — donc sans délai de rétractation ni plafond.
+   * - le fait que l'**évaluation réglementaire ne le concerne pas**. Le
+   *   classement PSFP est calculé par le questionnaire d'adéquation et porté
+   *   par `InvestorComplianceProfile` : aucune porte, ici, par laquelle on
+   *   pourrait naître « professionnel » sans y avoir répondu.
    */
   static creer(props: CreerProfilPPProps): ProfilPP {
     return new ProfilPP({
@@ -68,7 +67,6 @@ export class ProfilPPFactory {
       coordonnees: Coordonnees.declarer(props),
       situationProfessionnelle: SituationProfessionnelle.declarer(props),
       situationFiscale: SituationFiscale.declarer(props),
-      evaluation: EvaluationInvestisseur.initiale(),
     });
   }
 }

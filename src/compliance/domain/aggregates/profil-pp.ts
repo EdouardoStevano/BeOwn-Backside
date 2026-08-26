@@ -6,11 +6,6 @@ import {
   CoordonneesSnapshot,
 } from '../value-objects/coordonnees.vo';
 import {
-  EvaluationInvestisseur,
-  EvaluationInvestisseurSnapshot,
-  EvaluationInvestisseurSnapshotBrut,
-} from '../value-objects/evaluation-investisseur.vo';
-import {
   ChampsIdentite,
   Identite,
   IdentiteSnapshot,
@@ -79,8 +74,7 @@ export interface ProfilPPSnapshot
     IdentiteSnapshot,
     CoordonneesSnapshot,
     SituationProfessionnelleSnapshot,
-    SituationFiscaleSnapshot,
-    EvaluationInvestisseurSnapshot {}
+    SituationFiscaleSnapshot {}
 
 /**
  * Ce que `restore` accepte : le snapshot, mais tolérant sur les formes que rend
@@ -93,8 +87,7 @@ export interface ProfilPPSnapshotBrut
     IdentiteSnapshotBrut,
     CoordonneesSnapshot,
     SituationProfessionnelleSnapshot,
-    SituationFiscaleSnapshot,
-    EvaluationInvestisseurSnapshotBrut {}
+    SituationFiscaleSnapshot {}
 
 /**
  * Profil investisseur — personne physique.
@@ -108,7 +101,15 @@ export interface ProfilPPSnapshotBrut
  * | `Coordonnees`              | adresse postale et téléphone             |
  * | `SituationProfessionnelle` | profession et secteur                    |
  * | `SituationFiscale`         | résidence fiscale et NIF                 |
- * | `EvaluationInvestisseur`   | classement PSFP, risque (lecture seule)  |
+ *
+ * Il en portait un sixième, `EvaluationInvestisseur` — classement PSFP,
+ * plafond conseillé, niveau de risque. Il n'y était pas à sa place : ces
+ * valeurs ne sont pas déclarées par le titulaire mais **calculées par le
+ * questionnaire d'adéquation** (RG-KYC-13), et le profil n'en tenait qu'une
+ * copie, écrite par des `UPDATE` ciblés venus d'ailleurs. Pire, une personne
+ * morale n'ayant pas de profil PP, elle n'était classée nulle part.
+ * `InvestorComplianceProfile` en est désormais le propriétaire, pour les deux
+ * natures de titulaire.
  *
  * Ce qui reste ici est ce qui n'appartient à aucun d'eux : la clé du profil, le
  * drapeau PEP, et les **règles qui traversent plusieurs blocs** — au premier
@@ -140,7 +141,6 @@ export class ProfilPP {
   private _coordonnees: Coordonnees;
   private _situationProfessionnelle: SituationProfessionnelle;
   private _situationFiscale: SituationFiscale;
-  private readonly _evaluation: EvaluationInvestisseur;
   private _pep: boolean;
   private readonly _createdAt: Date;
   private readonly _updatedAt: Date;
@@ -162,7 +162,6 @@ export class ProfilPP {
     coordonnees: Coordonnees;
     situationProfessionnelle: SituationProfessionnelle;
     situationFiscale: SituationFiscale;
-    evaluation: EvaluationInvestisseur;
   }) {
     this._id = etat.entete.id;
     this._userId = etat.entete.userId;
@@ -173,7 +172,6 @@ export class ProfilPP {
     this._coordonnees = etat.coordonnees;
     this._situationProfessionnelle = etat.situationProfessionnelle;
     this._situationFiscale = etat.situationFiscale;
-    this._evaluation = etat.evaluation;
   }
 
   // ── Transitions ───────────────────────────────────────────────────────────
@@ -262,9 +260,6 @@ export class ProfilPP {
   get situationFiscale(): SituationFiscale {
     return this._situationFiscale;
   }
-  get evaluation(): EvaluationInvestisseur {
-    return this._evaluation;
-  }
   get pep(): boolean {
     return this._pep;
   }
@@ -273,29 +268,6 @@ export class ProfilPP {
   }
   get updatedAt(): Date {
     return this._updatedAt;
-  }
-
-  // ── Délégations ───────────────────────────────────────────────────────────
-  //
-  // Les seuls raccourcis conservés : ce que les autres contextes lisent
-  // réellement sur un profil. Tout le reste passe par le bloc concerné, ce qui
-  // évite de recréer à plat la classe qu'on vient de découper.
-
-  /** @see EvaluationInvestisseur.estNonAverti */
-  estNonAverti(): boolean {
-    return this._evaluation.estNonAverti();
-  }
-
-  /** @see EvaluationInvestisseur.plafondConseille */
-  plafondConseille(): number | null {
-    return this._evaluation.plafondConseille();
-  }
-
-  get categoriePsfp(): CategoriePsfp {
-    return this._evaluation.categoriePsfp;
-  }
-  get patrimoineDeclare(): number | null {
-    return this._evaluation.patrimoineDeclare;
   }
 
   // ── Sérialisation ─────────────────────────────────────────────────────────

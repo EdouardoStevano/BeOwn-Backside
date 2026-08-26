@@ -1,30 +1,30 @@
-import type { ProfilPP } from 'src/compliance/domain/aggregates/profil-pp';
 import { PLANCHER_PLAFOND_NON_AVERTI } from 'src/compliance/domain/domain-services/plafond-psfp.domain-service';
+import type { EligibiliteDuTitulaire } from 'src/compliance/application/ports/profil-conformite.query';
 import type { EligibilitePsfp } from '../../domain/value-objects/eligibilite-psfp';
 
 /**
  * **Anti-Corruption Layer vers `compliance`** (§13, §20) — le seul endroit du
- * contexte qui lise le profil investisseur du contexte amont.
+ * contexte qui lise le verdict d'éligibilité du contexte amont.
  *
  * `compliance` est en amont (§3.4) : il décide de la catégorisation PSFP et de
- * la formule du plafond conseillé (`plafondConseille()` sur le profil, adossée
- * à `PLANCHER_PLAFOND_NON_AVERTI`). `subscription` n'en retient que le verdict
- * — {@link EligibilitePsfp} — et ne recalcule jamais la règle : c'est
- * précisément ce que §3.3 reproche aux contextes qui dupliquent un calcul déjà
- * fait ailleurs.
+ * la formule du plafond conseillé. `subscription` n'en retient que le verdict —
+ * {@link EligibilitePsfp} — et ne recalcule jamais la règle : c'est précisément
+ * ce que §3.3 reproche aux contextes qui dupliquent un calcul déjà fait
+ * ailleurs.
  *
- * Un profil absent n'est pas une erreur ici : l'investisseur n'est alors pas
- * catégorisé non-averti, aucun plafond ne lui est recommandé, et le
- * `KycValidatedGuard` monté devant la route a déjà tranché son droit
- * d'investir. C'est le comportement `?? false` / `?? null` du code d'origine,
- * rendu explicite.
+ * **Il lisait l'agrégat `ProfilPP`**, pour y prendre une catégorie et un
+ * plafond que ce profil ne calculait pas — il n'en tenait qu'une copie, écrite
+ * par le questionnaire. Et comme une personne morale n'a pas de profil PP, elle
+ * traversait ce traducteur en `null` : ni catégorie, ni plafond, donc **aucune
+ * limite opposée**. Le port de conformité est clé sur le titulaire et sert les
+ * deux natures.
  */
 export class EligibilitePsfpTranslator {
-  static traduire(profil: ProfilPP | null | undefined): EligibilitePsfp {
+  static traduire(verdict: EligibiliteDuTitulaire): EligibilitePsfp {
     return {
-      estNonAverti: profil?.estNonAverti() ?? false,
-      plafondConseille: profil?.plafondConseille() ?? null,
-      patrimoineDeclare: Number(profil?.patrimoineDeclare ?? 0),
+      estNonAverti: verdict.estNonAverti,
+      plafondConseille: verdict.plafondConseille,
+      patrimoineDeclare: Number(verdict.patrimoineDeclare ?? 0),
       plancherPlafond: PLANCHER_PLAFOND_NON_AVERTI,
     };
   }

@@ -4,7 +4,6 @@ import {
   ProfilPPSnapshotBrut,
 } from 'src/compliance/domain/aggregates/profil-pp';
 import { Coordonnees } from 'src/compliance/domain/value-objects/coordonnees.vo';
-import { EvaluationInvestisseur } from 'src/compliance/domain/value-objects/evaluation-investisseur.vo';
 import { Identite } from 'src/compliance/domain/value-objects/identite.vo';
 import { SituationFiscale } from 'src/compliance/domain/value-objects/situation-fiscale.vo';
 import { SituationProfessionnelle } from 'src/compliance/domain/value-objects/situation-professionnelle.vo';
@@ -52,7 +51,6 @@ export class ProfilPPMapper {
       coordonnees: Coordonnees.restore(snapshot),
       situationProfessionnelle: SituationProfessionnelle.restore(snapshot),
       situationFiscale: SituationFiscale.restore(snapshot),
-      evaluation: EvaluationInvestisseur.restore(snapshot),
     });
   }
 
@@ -76,7 +74,6 @@ export class ProfilPPMapper {
       ...profil.coordonnees.toSnapshot(),
       ...profil.situationProfessionnelle.toSnapshot(),
       ...profil.situationFiscale.toSnapshot(),
-      ...profil.evaluation.toSnapshot(),
     };
   }
 }

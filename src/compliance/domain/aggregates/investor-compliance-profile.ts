@@ -16,6 +16,11 @@ import {
   VerdictIdentite,
 } from 'src/compliance/domain/value-objects/verdict-identite';
 import { NiveauRisque } from 'src/compliance/domain/enums/niveau-risque.enum';
+import { plafondConseillePour } from 'src/compliance/domain/domain-services/plafond-psfp.domain-service';
+import {
+  SuiviInvestisseur,
+  SuiviInvestisseurSnapshot,
+} from 'src/compliance/domain/value-objects/suivi-investisseur.vo';
 
 /**
  * Ce que le classement du questionnaire impose au reste de l'application.
@@ -70,6 +75,7 @@ export class InvestorComplianceProfile {
   private readonly _investorId: number;
   private _kycCase: KycCase | null;
   private _adequacy: AdequacyAssessment | null;
+  private _suivi: SuiviInvestisseur;
 
   /**
    * @internal Réservé au repository, qui compose la racine depuis les deux
@@ -80,10 +86,12 @@ export class InvestorComplianceProfile {
     investorId: number;
     kycCase: KycCase | null;
     adequacy: AdequacyAssessment | null;
+    suivi?: SuiviInvestisseur;
   }) {
     this._investorId = etat.investorId;
     this._kycCase = etat.kycCase;
     this._adequacy = etat.adequacy;
+    this._suivi = etat.suivi ?? SuiviInvestisseur.jamaisEvalue();
   }
 
   /** Titulaire qui n'a encore rien déposé — ni dossier, ni questionnaire. */
@@ -93,6 +101,72 @@ export class InvestorComplianceProfile {
       kycCase: null,
       adequacy: null,
     });
+  }
+
+  // ── Le classement réglementaire ───────────────────────────────────────────
+  //
+  // Ces trois règles vivaient sur `ProfilPP`, dans un bloc
+  // `EvaluationInvestisseur` alimenté par recopie du questionnaire. Deux
+  // défauts : le profil paraissait propriétaire d'un classement qu'il ne
+  // calculait pas, et **une personne morale n'a pas de profil PP** — elle
+  // n'était donc catégorisée nulle part, et `subscription` ne lui opposait
+  // aucun plafond. Ici, la racine est clé sur le titulaire, quelle que soit sa
+  // nature.
+
+  /**
+   * Investisseur non averti au sens PSFP : plafond conseillé et délai de
+   * rétractation de quatre jours s'appliquent.
+   *
+   * Un titulaire qui n'a pas répondu au questionnaire **est** non averti : le
+   * classement se gagne, il ne se présume pas. C'est aussi le repli que
+   * `classement` applique aux lignes anciennes.
+   */
+  estNonAverti(): boolean {
+    return (
+      (this._adequacy?.categoriePsfp ?? CategoriePsfp.NON_AVERTI) ===
+      CategoriePsfp.NON_AVERTI
+    );
+  }
+
+  estProfessionnel(): boolean {
+    return this._adequacy?.categoriePsfp === CategoriePsfp.PROFESSIONNEL;
+  }
+
+  /**
+   * Montant conseillé par investissement : le plus élevé du plancher
+   * réglementaire et de 5 % du patrimoine déclaré. `null` pour qui n'est pas
+   * non averti — la recommandation ne le concerne pas.
+   *
+   * Le calcul est délégué à `plafondConseillePour`, que le questionnaire
+   * applique déjà pour fixer le montant qu'il retient : une seule formule, deux
+   * lecteurs.
+   */
+  plafondConseille(): number | null {
+    if (!this.estNonAverti()) return null;
+    return plafondConseillePour(this._adequacy?.patrimoineNet ?? null);
+  }
+
+  // ── La surveillance périodique ────────────────────────────────────────────
+
+  /**
+   * Enregistre le niveau de risque et la date du prochain contact.
+   *
+   * Le niveau vient des réponses ({@link niveauSuivi}), mais il est **figé**
+   * ici : la cadence de contact ne doit pas changer sous les pieds de l'équipe
+   * conformité entre deux passages du CRON parce qu'un questionnaire a été
+   * modifié entre-temps.
+   */
+  reevaluerLeSuivi(niveauRisque: NiveauRisque, prochainContactDu: Date): void {
+    this._suivi = this._suivi.reevalue(niveauRisque, prochainContactDu);
+  }
+
+  /** Le contact périodique de ce titulaire est-il dû ? */
+  contactEstDu(maintenant: Date = new Date()): boolean {
+    return this._suivi.contactEstDu(maintenant);
+  }
+
+  get suivi(): SuiviInvestisseurSnapshot {
+    return this._suivi.toSnapshot();
   }
 
   // ── Le verdict ────────────────────────────────────────────────────────────
@@ -302,7 +376,12 @@ export class InvestorComplianceProfile {
   get pieces(): {
     kycCase: KycCase | null;
     adequacy: AdequacyAssessment | null;
+    suivi: SuiviInvestisseurSnapshot;
   } {
-    return { kycCase: this._kycCase, adequacy: this._adequacy };
+    return {
+      kycCase: this._kycCase,
+      adequacy: this._adequacy,
+      suivi: this._suivi.toSnapshot(),
+    };
   }
 }

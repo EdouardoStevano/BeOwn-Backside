@@ -5,6 +5,8 @@ import { InvestorComplianceProfile } from 'src/compliance/domain/aggregates/inve
 import { InvestorComplianceProfileRepository } from 'src/compliance/domain/repositories/investor-compliance-profile.repository';
 import { KycEntity } from '../persistence/entities/kyc.entity';
 import { QuestionnaireAdequationEntity } from '../persistence/entities/questionnaire-adequation.entity';
+import { DossierInvestisseurEntity } from '../persistence/entities/dossier-investisseur.entity';
+import { SuiviInvestisseur } from 'src/compliance/domain/value-objects/suivi-investisseur.vo';
 import { KycOrmMapper } from '../persistence/mappers/kyc.mapper';
 import { ProfilMapper } from '../persistence/mappers/profil.mapper';
 
@@ -36,14 +38,17 @@ export class InvestorComplianceProfileTypeOrmRepository implements InvestorCompl
     private readonly dossiers: Repository<KycEntity>,
     @InjectRepository(QuestionnaireAdequationEntity)
     private readonly questionnaires: Repository<QuestionnaireAdequationEntity>,
+    @InjectRepository(DossierInvestisseurEntity)
+    private readonly registre: Repository<DossierInvestisseurEntity>,
   ) {}
 
   async findByInvestorId(
     investorId: number,
   ): Promise<InvestorComplianceProfile> {
-    const [dossier, questionnaire] = await Promise.all([
+    const [dossier, questionnaire, suivi] = await Promise.all([
       this.dossiers.findOne({ where: { utilisateurId: investorId } }),
       this.questionnaires.findOne({ where: { utilisateurId: investorId } }),
+      this.registre.findOne({ where: { userId: investorId } }),
     ]);
 
     return new InvestorComplianceProfile({
@@ -52,6 +57,9 @@ export class InvestorComplianceProfileTypeOrmRepository implements InvestorCompl
       adequacy: questionnaire
         ? ProfilMapper.questionnaireToDomain(questionnaire)
         : null,
+      suivi: suivi
+        ? SuiviInvestisseur.restore(suivi)
+        : SuiviInvestisseur.jamaisEvalue(),
     });
   }
 
@@ -59,7 +67,13 @@ export class InvestorComplianceProfileTypeOrmRepository implements InvestorCompl
     profile: InvestorComplianceProfile,
   ): Promise<InvestorComplianceProfile> {
     // La porte réservée au repository — voir `InvestorComplianceProfile.pieces`.
-    const { kycCase, adequacy } = profile.pieces;
+    const { kycCase, adequacy, suivi } = profile.pieces;
+
+    // Écriture ciblée, et sans création : le registre est posé par
+    // `NatureDuDossierRepository.declarer`, à l'ouverture d'un profil PP ou PM.
+    // Un titulaire qui n'en a aucun n'est surveillé nulle part — c'est la même
+    // limite qu'avant, où le suivi vivait sur `profil_pp`.
+    await this.registre.update({ userId: profile.investorId }, suivi);
 
     const [dossier, questionnaire] = await Promise.all([
       kycCase

@@ -13,13 +13,13 @@ import { QuestionnaireAdequationEntity } from '../entities/questionnaire-adequat
 
 export class ProfilMapper {
   /**
-   * `paysNaissance`, `patrimoineDeclare`, `montantMaxConseille`,
-   * `niveauRisque` et les dates de contact étaient absents de cette
-   * traduction : la colonne existait, l'agrégat aussi, mais la valeur se
-   * perdait entre les deux. La conséquence la plus visible touchait le plafond
-   * PSFP — `create-investment.usecase` lisait `profilPP.patrimoineDeclare`,
-   * toujours `undefined`, et retombait donc systématiquement sur le plancher
-   * de 1 000 € au lieu des 5 % du patrimoine déclaré.
+   * Le profil ne traduit plus que ce que le titulaire **déclare** de lui.
+   *
+   * Le classement PSFP et le suivi de risque passaient par ici, et une partie
+   * s'y perdait — `patrimoineDeclare` n'était pas repris, si bien que le
+   * plafond retombait sur le plancher de 1 000 € au lieu des 5 % du patrimoine.
+   * Ils appartiennent à `InvestorComplianceProfile`, qui les tient du
+   * questionnaire d'adéquation : il n'y a plus de copie à tenir à jour.
    */
   static ppToDomain(entity: ProfilPPEntity): ProfilPP {
     return ProfilPPDomainMapper.restore({
@@ -42,12 +42,6 @@ export class ProfilMapper {
       pep: entity.pep,
       residenceFiscale: entity.residenceFiscale,
       nif: entity.nif,
-      categoriePsfp: entity.categoriePsfp,
-      patrimoineDeclare: entity.patrimoineDeclare,
-      montantMaxConseille: entity.montantMaxConseille,
-      niveauRisque: entity.niveauRisque,
-      dernierContactAdmin: entity.dernierContactAdmin,
-      prochainContactDu: entity.prochainContactDu,
       createdAt: entity.createdAt,
       updatedAt: entity.updatedAt,
     });
@@ -91,7 +85,6 @@ export class ProfilMapper {
     entity.pep = snapshot.pep;
     entity.residenceFiscale = snapshot.residenceFiscale;
     entity.nif = snapshot.nif;
-    entity.categoriePsfp = snapshot.categoriePsfp;
     return entity;
   }
 

@@ -36,38 +36,16 @@ export interface SuiviRisque {
  *
  * Les méthodes perdent du même coup leur suffixe : `saveProfilPP` dans une
  * interface qui ne parle que de profils PP répétait deux fois la même chose.
+ *
+ * Trois méthodes, et **aucune écriture ciblée**. Il en portait trois de plus —
+ * `enregistrerClassementPsfp`, `enregistrerSuiviRisque`, `listerContactsDus` —
+ * qui écrivaient et lisaient un classement PSFP et un suivi de risque que le
+ * profil ne calculait pas : il n'en tenait qu'une copie du questionnaire.
+ * `InvestorComplianceProfile` en est le propriétaire, et le port de lecture
+ * `PROFIL_CONFORMITE_QUERY` les sert aux contextes en aval.
  */
 export interface ProfilPPRepository {
   save(profil: ProfilPP): Promise<ProfilPP>;
   findByUserId(userId: number): Promise<ProfilPP | null>;
   update(profil: ProfilPP): Promise<ProfilPP>;
-
-  /**
-   * Reporte sur le profil le classement issu du questionnaire d'adéquation.
-   *
-   * Écriture ciblée, et non `save(profil)`, pour la raison exposée par
-   * `EvaluationInvestisseur` : ces trois colonnes ne sont pas déclarables
-   * depuis l'agrégat, qui les expose en lecture seule. Charger le profil pour
-   * les y écrire rouvrirait justement la porte qu'on a fermée — et écraserait
-   * au passage tout ce qui aurait changé sur le profil entre le chargement et
-   * la sauvegarde.
-   *
-   * Sans effet si le compte n'a pas de profil PP : répondre au questionnaire
-   * avant d'avoir complété son profil reste permis.
-   */
-  enregistrerClassementPsfp(
-    userId: number,
-    classement: ClassementPsfp,
-  ): Promise<void>;
-
-  /** Reporte le niveau de risque et la date du prochain contact. Mêmes raisons. */
-  enregistrerSuiviRisque(userId: number, suivi: SuiviRisque): Promise<void>;
-
-  /**
-   * Profils dont la prise de contact périodique est due — surveillance PSFP.
-   *
-   * Y figurent aussi les profils vulnérables jamais contactés, dont la date de
-   * prochain contact est encore vide.
-   */
-  listerContactsDus(limite: number): Promise<ProfilPP[]>;
 }

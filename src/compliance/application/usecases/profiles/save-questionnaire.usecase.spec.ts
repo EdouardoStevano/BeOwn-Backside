@@ -2,7 +2,6 @@ import { SaveQuestionnaireUseCase } from './save-questionnaire.usecase';
 import { CategoriePsfp } from 'src/compliance/domain/enums/categorie-psfp.enum';
 import { ChampProfilInvalideError } from 'src/compliance/domain/errors';
 import { QuestionnaireAdequationFactory } from 'src/compliance/domain/factories/questionnaire-adequation.factory';
-import type { ProfilPPRepository } from 'src/compliance/domain/repositories/profil-pp.repository';
 import type { InvestorComplianceProfileRepository } from 'src/compliance/domain/repositories/investor-compliance-profile.repository';
 import { InvestorComplianceProfile } from 'src/compliance/domain/aggregates/investor-compliance-profile';
 import { AdequacyAssessment } from 'src/compliance/domain/entities/adequacy-assessment';
@@ -39,7 +38,6 @@ function monter(existant: AdequacyAssessment | null = null) {
     ),
     // Le repository rend ce qu'il a reçu : la persistance n'est pas le sujet.
     save: jest.fn((p: InvestorComplianceProfile) => Promise.resolve(p)),
-    enregistrerClassementPsfp: jest.fn().mockResolvedValue(undefined),
     computeAndStore: jest.fn().mockResolvedValue(undefined),
   };
 
@@ -48,9 +46,6 @@ function monter(existant: AdequacyAssessment | null = null) {
       findByInvestorId: mocks.findByInvestorId,
       save: mocks.save,
     } as InvestorComplianceProfileRepository,
-    {
-      enregistrerClassementPsfp: mocks.enregistrerClassementPsfp,
-    } as unknown as ProfilPPRepository,
     { computeAndStore: mocks.computeAndStore } as unknown as RiskScoringService,
   );
 
@@ -89,14 +84,18 @@ describe('SaveQuestionnaireUseCase', () => {
     expect(mocks.save.mock.calls[0][0].pieces.adequacy).toBe(existant);
   });
 
-  it('reporte le classement sur le profil', async () => {
-    // `create-investment.usecase` lit ces trois colonnes sur le profil pour
-    // opposer le plafond PSFP : le report doit suivre la sauvegarde, sans délai.
+  it('rend le classement opposable dès la sauvegarde', async () => {
+    // Il n'est plus reporté nulle part : la racine le porte, et
+    // `PROFIL_CONFORMITE_QUERY` le sert à `subscription`. Ce qui se vérifie
+    // ici, c'est donc ce que la racine enregistrée impose.
     const { useCase, mocks } = monter();
 
     await useCase.execute(42, DTO_NON_AVERTI);
 
-    expect(mocks.enregistrerClassementPsfp).toHaveBeenCalledWith(42, {
+    const [enregistre] = mocks.save.mock.calls[0] as [
+      InvestorComplianceProfile,
+    ];
+    expect(enregistre.classement).toEqual({
       categoriePsfp: CategoriePsfp.NON_AVERTI,
       patrimoineDeclare: 400_000,
       montantMaxConseille: 20_000,
@@ -108,13 +107,14 @@ describe('SaveQuestionnaireUseCase', () => {
 
     await useCase.execute(42, DTO_PROFESSIONNEL);
 
-    expect(mocks.enregistrerClassementPsfp).toHaveBeenCalledWith(
-      42,
-      expect.objectContaining({
-        categoriePsfp: CategoriePsfp.PROFESSIONNEL,
-        montantMaxConseille: null,
-      }),
-    );
+    const [enregistre] = mocks.save.mock.calls[0] as [
+      InvestorComplianceProfile,
+    ];
+    expect(enregistre.classement).toMatchObject({
+      categoriePsfp: CategoriePsfp.PROFESSIONNEL,
+      montantMaxConseille: null,
+    });
+    expect(enregistre.plafondConseille()).toBeNull();
   });
 
   it('recalcule le niveau de risque du titulaire', async () => {
@@ -133,7 +133,6 @@ describe('SaveQuestionnaireUseCase', () => {
     ).rejects.toBeInstanceOf(ChampProfilInvalideError);
 
     expect(mocks.save).not.toHaveBeenCalled();
-    expect(mocks.enregistrerClassementPsfp).not.toHaveBeenCalled();
     expect(mocks.computeAndStore).not.toHaveBeenCalled();
   });
 

@@ -1,4 +1,8 @@
 import { Inject, Injectable } from '@nestjs/common';
+import {
+  INVESTOR_COMPLIANCE_PROFILE_REPOSITORY,
+  type InvestorComplianceProfileRepository,
+} from 'src/compliance/domain/repositories/investor-compliance-profile.repository';
 import { EventBus } from '@nestjs/cqrs';
 import {
   USER_REPOSITORY,
@@ -34,6 +38,8 @@ export class UpdateProfilPPUseCase {
     private readonly profilPPRepository: ProfilPPRepository,
     @Inject(USER_REPOSITORY)
     private readonly userRepository: UserRepository,
+    @Inject(INVESTOR_COMPLIANCE_PROFILE_REPOSITORY)
+    private readonly profilsConformite: InvestorComplianceProfileRepository,
     private readonly eventBus: EventBus,
   ) {}
 
@@ -53,8 +59,11 @@ export class UpdateProfilPPUseCase {
     // mise à jour qui n'a pas eu lieu.
     this.eventBus.publish(new ProfilPPMisAJourDomainEvent(userId));
 
-    const compte = await this.userRepository.findById(userId);
+    const [compte, conformite] = await Promise.all([
+      this.userRepository.findById(userId),
+      this.profilsConformite.findByInvestorId(userId),
+    ]);
 
-    return vueProfilPP(misAJour, compte);
+    return vueProfilPP(misAJour, compte, conformite.classement);
   }
 }

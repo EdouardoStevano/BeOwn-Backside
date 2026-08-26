@@ -15,9 +15,9 @@ import { DOCUMENT_REPOSITORY } from 'src/documents/domain/repositories/document.
 import type { UserRepository } from 'src/iam/domain/repositories/user.repository';
 import { USER_REPOSITORY } from 'src/iam/domain/repositories/user.repository';
 import {
-  PROFIL_PP_REPOSITORY,
-  type ProfilPPRepository,
-} from 'src/compliance/domain/repositories/profil-pp.repository';
+  PROFIL_CONFORMITE_QUERY,
+  type ProfilConformiteQuery,
+} from 'src/compliance/application/ports/profil-conformite.query';
 import { CollecteCapacity } from 'src/subscription/domain/aggregates/collecte-capacity';
 import { Investment } from 'src/subscription/domain/aggregates/investment';
 import { EcheancierGenerator } from 'src/servicing/domain/domain-services/echeancier.domain-service';
@@ -112,8 +112,10 @@ export class CreateInvestmentUseCase {
     private readonly documentRepository: DocumentRepository,
     @Inject(USER_REPOSITORY)
     private readonly userRepository: UserRepository,
-    @Inject(PROFIL_PP_REPOSITORY)
-    private readonly profilPPRepository: ProfilPPRepository,
+    // Un port de **lecture** du contexte amont : le verdict d'éligibilité, pas
+    // le dossier qui l'a produit (§13).
+    @Inject(PROFIL_CONFORMITE_QUERY)
+    private readonly profilsConformite: ProfilConformiteQuery,
     private readonly contractGenerator: ContractGeneratorService,
     private readonly cloudStorage: CloudStorageService,
     private readonly notificationEvents: NotificationEventService,
@@ -133,7 +135,7 @@ export class CreateInvestmentUseCase {
     const projet = ProjetSouscriptibleTranslator.traduire(projetCatalogue);
 
     const eligibilite = EligibilitePsfpTranslator.traduire(
-      await this.profilPPRepository.findByUserId(userId),
+      await this.profilsConformite.eligibilite(userId),
     );
 
     // Le wallet est relu sous verrou dans la transaction ; cette lecture ne

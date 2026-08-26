@@ -63,7 +63,10 @@ describe('ProfilPP.mettreAJour', () => {
     expect(profil.identite.nationalite).toBeNull();
   });
 
-  it('ne laisse aucune prise pour changer la catégorie PSFP', () => {
+  it('ne laisse aucune prise pour glisser un classement PSFP', () => {
+    // Le classement appartient à `InvestorComplianceProfile`, qui le tient du
+    // questionnaire : le profil ne le porte plus, donc une clé glissée dans un
+    // formulaire ne peut plus rien atteindre.
     const profil = creer();
 
     profil.mettreAJour({
@@ -71,8 +74,9 @@ describe('ProfilPP.mettreAJour', () => {
       patrimoineDeclare: 10_000_000,
     } as unknown as ChampsDeclaresProfilPP);
 
-    expect(profil.categoriePsfp).toBe(CategoriePsfp.NON_AVERTI);
-    expect(profil.patrimoineDeclare).toBeNull();
+    const publie = profil.toJSON() as unknown as Record<string, unknown>;
+    expect(publie.categoriePsfp).toBeUndefined();
+    expect(publie.patrimoineDeclare).toBeUndefined();
   });
 });
 
@@ -100,22 +104,16 @@ describe('ProfilPP.toJSON', () => {
       [
         'adresseLigne1',
         'adresseLigne2',
-        'categoriePsfp',
         'civilite',
         'codePostal',
         'dateNaissance',
-        'dernierContactAdmin',
         'lieuNaissance',
-        'montantMaxConseille',
         'nationalite',
         'nif',
-        'niveauRisque',
         'nomNaissance',
-        'patrimoineDeclare',
         'pays',
         'paysNaissance',
         'pep',
-        'prochainContactDu',
         'profession',
         'residenceFiscale',
         'secteurActivite',

@@ -29,12 +29,6 @@ const LIGNE: ProfilPPSnapshotBrut = {
   pep: false,
   residenceFiscale: null,
   nif: 'X',
-  categoriePsfp: CategoriePsfp.AVERTI,
-  patrimoineDeclare: '500000.00',
-  montantMaxConseille: null,
-  niveauRisque: 'modere',
-  dernierContactAdmin: null,
-  prochainContactDu: null,
   createdAt: new Date('2024-01-01T00:00:00.000Z'),
   updatedAt: new Date('2024-01-02T00:00:00.000Z'),
 };
@@ -48,19 +42,16 @@ describe('ProfilPPMapper.restore', () => {
     expect(profil.identite.nationalite).toBe('ZZ');
     expect(profil.identite.dateNaissance).toBe('2015-01-01');
     expect(profil.situationFiscale.nif).toBe('X');
-    expect(profil.categoriePsfp).toBe(CategoriePsfp.AVERTI);
   });
 
   it('absorbe les formes que rend le driver Postgres', () => {
     const profil = ProfilPPMapper.restore({
       ...LIGNE,
-      // Colonne `date` rendue en `Date`, colonne `decimal` rendue en chaîne.
+      // Colonne `date` rendue en `Date` par le driver.
       dateNaissance: new Date('1985-06-15T00:00:00.000Z'),
-      patrimoineDeclare: '500000.00',
     });
 
     expect(profil.identite.dateNaissance).toBe('1985-06-15');
-    expect(profil.patrimoineDeclare).toBe(500_000);
   });
 });
 
@@ -70,11 +61,7 @@ describe('ProfilPPMapper.toSnapshot', () => {
     // que fait le repository à chaque sauvegarde.
     const snapshot = ProfilPPMapper.toSnapshot(ProfilPPMapper.restore(LIGNE));
 
-    expect(snapshot).toEqual({
-      ...LIGNE,
-      // Seule forme normalisée : le décimal rendu en chaîne par le driver.
-      patrimoineDeclare: 500_000,
-    });
+    expect(snapshot).toEqual(LIGNE);
   });
 
   it('assemble à plat ce que le découpage en blocs a séparé', () => {
@@ -96,6 +83,5 @@ describe('ProfilPPMapper.toSnapshot', () => {
     expect(snapshot.ville).toBe('Paris');
     expect(snapshot.profession).toBe('Ingénieur');
     expect(snapshot.nif).toBe('1234567890');
-    expect(snapshot.categoriePsfp).toBe(CategoriePsfp.NON_AVERTI);
   });
 });

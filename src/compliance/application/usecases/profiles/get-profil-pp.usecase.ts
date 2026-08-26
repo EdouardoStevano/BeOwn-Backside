@@ -1,5 +1,9 @@
 import { Inject, Injectable } from '@nestjs/common';
 import {
+  INVESTOR_COMPLIANCE_PROFILE_REPOSITORY,
+  type InvestorComplianceProfileRepository,
+} from 'src/compliance/domain/repositories/investor-compliance-profile.repository';
+import {
   USER_REPOSITORY,
   type UserRepository,
 } from 'src/iam/domain/repositories/user.repository';
@@ -25,16 +29,19 @@ export class GetProfilPPUseCase {
     private readonly profilPPRepository: ProfilPPRepository,
     @Inject(USER_REPOSITORY)
     private readonly userRepository: UserRepository,
+    @Inject(INVESTOR_COMPLIANCE_PROFILE_REPOSITORY)
+    private readonly profilsConformite: InvestorComplianceProfileRepository,
   ) {}
 
   async execute(userId: number): Promise<VueProfilPP> {
-    const [profil, compte] = await Promise.all([
+    const [profil, compte, conformite] = await Promise.all([
       this.profilPPRepository.findByUserId(userId),
       this.userRepository.findById(userId),
+      this.profilsConformite.findByInvestorId(userId),
     ]);
     if (!profil) {
       throw new ProfilPPIntrouvableError();
     }
-    return vueProfilPP(profil, compte);
+    return vueProfilPP(profil, compte, conformite.classement);
   }
 }
