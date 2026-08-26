@@ -12,7 +12,6 @@ const JOUR = 86_400_000;
 const dossier = (statut: KycStatus, valideJusquAu: string | null = null) =>
   KycMapper.restore({
     id: 'kyc-1',
-    utilisateurId: 42,
     statut,
     motifRefus: null,
     valideJusquAu,
@@ -67,8 +66,15 @@ describe('InvestorComplianceProfile', () => {
   });
 
   describe('classement', () => {
-    it("ne classe personne tant que le questionnaire n'a pas été rempli", () => {
-      expect(profil().classement).toBeNull();
+    it('classe non averti tant que le questionnaire n’a pas été rempli', () => {
+      // Jamais `null` : le classement se gagne, il ne se présume pas, et un
+      // repli absent obligerait chaque appelant à le retrouver.
+      expect(profil().classement).toEqual({
+        categoriePsfp: CategoriePsfp.NON_AVERTI,
+        patrimoineDeclare: null,
+        montantMaxConseille: null,
+      });
+      expect(profil().estNonAverti()).toBe(true);
     });
 
     it('reprend la catégorie et le plafond calculés par le questionnaire', () => {

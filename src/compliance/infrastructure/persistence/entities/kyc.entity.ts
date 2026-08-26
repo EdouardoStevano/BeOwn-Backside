@@ -6,7 +6,10 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { KycNiveau, KycStatus } from 'src/compliance/domain/enums/kyc-status.enum';
+import {
+  KycNiveau,
+  KycStatus,
+} from 'src/compliance/domain/enums/kyc-status.enum';
 
 @Entity('kyc')
 export class KycEntity {
@@ -14,19 +17,16 @@ export class KycEntity {
   id: string;
 
   /**
-   * Le titulaire du dossier, **par identité seule**.
+   * Le dossier de conformité auquel cette pièce appartient — relation 1:1.
    *
-   * C'était la dernière relation de ce contexte vers `UserEntity`, et la seule
-   * qui était réellement chargée : `findAll` la joignait pour que la liste
-   * d'administration affiche un nom. Profiles dépendait donc de
-   * l'infrastructure d'IAM pour un besoin d'affichage (§12.7).
-   *
-   * Le nom est désormais composé au-dessus, par le port `USER_REPOSITORY`
-   * (`GetKycUseCase.executeAll`). La clé étrangère en base est inchangée.
+   * C'était `utilisateurId`, une colonne vers `users` : la pièce se rattachait
+   * au compte par-dessus sa racine. Elle ne connaît plus que celle-ci, qui est
+   * la seule à savoir de quel titulaire il s'agit (§6). `unique` porte le 1:1 :
+   * un dossier de conformité n'a qu'un dossier de vérification.
    */
-  @Column()
-  @Index()
-  utilisateurId: number;
+  @Column({ type: 'uuid' })
+  @Index({ unique: true })
+  profileId: string;
 
   @Column({ type: 'varchar', default: KycStatus.NON_DEMARRE })
   statut: KycStatus;

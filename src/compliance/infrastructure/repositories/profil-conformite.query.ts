@@ -9,7 +9,7 @@ import {
   ProfilConformiteQuery,
 } from 'src/compliance/application/ports/profil-conformite.query';
 import { InvestorComplianceProfileTypeOrmRepository } from './investor-compliance-profile.repository';
-import { DossierInvestisseurEntity } from '../persistence/entities/dossier-investisseur.entity';
+import { InvestorComplianceProfileEntity } from '../persistence/entities/investor-compliance-profile.entity';
 
 /**
  * Lectures du dossier de conformité pour les contextes en aval.
@@ -29,8 +29,8 @@ import { DossierInvestisseurEntity } from '../persistence/entities/dossier-inves
 export class ProfilConformiteTypeOrmQuery implements ProfilConformiteQuery {
   constructor(
     private readonly profils: InvestorComplianceProfileTypeOrmRepository,
-    @InjectRepository(DossierInvestisseurEntity)
-    private readonly registre: Repository<DossierInvestisseurEntity>,
+    @InjectRepository(InvestorComplianceProfileEntity)
+    private readonly registre: Repository<InvestorComplianceProfileEntity>,
   ) {}
 
   async eligibilite(investorId: number): Promise<EligibiliteDuTitulaire> {

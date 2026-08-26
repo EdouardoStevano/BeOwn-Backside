@@ -25,14 +25,29 @@ import {
 /**
  * Ce que le classement du questionnaire impose au reste de l'application.
  *
- * Reporté sur le profil personne physique, où le contrôle de plafond à la
- * souscription va le lire — voir {@link InvestorComplianceProfile.classement}.
+ * **Porté par la racine, et non plus par le profil personne physique.** Il y a
+ * vécu sous forme de trois colonnes que le profil ne calculait pas — le
+ * questionnaire les lui recopiait — et qui n'existaient donc pas du tout pour
+ * une personne morale, faute de ligne dans cette table-là.
  */
 export interface ClassementPsfp {
   categoriePsfp: CategoriePsfp;
   patrimoineDeclare: number | null;
   montantMaxConseille: number | null;
 }
+
+/**
+ * Le classement d'un titulaire qui n'a jamais répondu au questionnaire.
+ *
+ * `NON_AVERTI` et non « inconnu » : c'est le régime le plus protecteur du
+ * règlement PSFP, et le seul défaut acceptable — se tromper dans l'autre sens
+ * lèverait un plafond et un délai de rétractation.
+ */
+const CLASSEMENT_INITIAL: ClassementPsfp = {
+  categoriePsfp: CategoriePsfp.NON_AVERTI,
+  patrimoineDeclare: null,
+  montantMaxConseille: null,
+};
 
 /**
  * Éligibilité réglementaire d'un investisseur : peut-il opérer, et jusqu'où.
@@ -72,9 +87,11 @@ export interface ClassementPsfp {
  * (§6.1). La racine les référence par l'identifiant du titulaire (§6.2).
  */
 export class InvestorComplianceProfile {
+  private readonly _id: string;
   private readonly _investorId: number;
   private _kycCase: KycCase | null;
   private _adequacy: AdequacyAssessment | null;
+  private _classement: ClassementPsfp;
   private _suivi: SuiviInvestisseur;
 
   /**
@@ -83,18 +100,29 @@ export class InvestorComplianceProfile {
    * sa propre fabrique.
    */
   constructor(etat: {
+    /** Attribuée par la persistance : absente d'un dossier jamais écrit. */
+    id?: string;
     investorId: number;
     kycCase: KycCase | null;
     adequacy: AdequacyAssessment | null;
+    classement?: ClassementPsfp;
     suivi?: SuiviInvestisseur;
   }) {
+    this._id = etat.id as string;
     this._investorId = etat.investorId;
     this._kycCase = etat.kycCase;
     this._adequacy = etat.adequacy;
+    this._classement = etat.classement ?? CLASSEMENT_INITIAL;
     this._suivi = etat.suivi ?? SuiviInvestisseur.jamaisEvalue();
   }
 
-  /** Titulaire qui n'a encore rien déposé — ni dossier, ni questionnaire. */
+  /**
+   * Titulaire qui n'a encore rien déposé — ni dossier, ni questionnaire.
+   *
+   * `id` reste vide : il est attribué par la persistance, comme pour les
+   * autres agrégats du contexte. Un dossier qui n'a jamais été écrit n'a pas
+   * encore d'identité.
+   */
   static vierge(investorId: number): InvestorComplianceProfile {
     return new InvestorComplianceProfile({
       investorId,
@@ -122,14 +150,11 @@ export class InvestorComplianceProfile {
    * `classement` applique aux lignes anciennes.
    */
   estNonAverti(): boolean {
-    return (
-      (this._adequacy?.categoriePsfp ?? CategoriePsfp.NON_AVERTI) ===
-      CategoriePsfp.NON_AVERTI
-    );
+    return this._classement.categoriePsfp === CategoriePsfp.NON_AVERTI;
   }
 
   estProfessionnel(): boolean {
-    return this._adequacy?.categoriePsfp === CategoriePsfp.PROFESSIONNEL;
+    return this._classement.categoriePsfp === CategoriePsfp.PROFESSIONNEL;
   }
 
   /**
@@ -143,7 +168,7 @@ export class InvestorComplianceProfile {
    */
   plafondConseille(): number | null {
     if (!this.estNonAverti()) return null;
-    return plafondConseillePour(this._adequacy?.patrimoineNet ?? null);
+    return plafondConseillePour(this._classement.patrimoineDeclare);
   }
 
   // ── La surveillance périodique ────────────────────────────────────────────
@@ -211,13 +236,20 @@ export class InvestorComplianceProfile {
   repondreAuQuestionnaire(reponses: ReponsesQuestionnaire): void {
     if (this._adequacy !== null) {
       this._adequacy.repondre(reponses);
-      return;
+    } else {
+      this._adequacy = QuestionnaireAdequationFactory.repondre(reponses);
     }
 
-    this._adequacy = QuestionnaireAdequationFactory.repondre({
-      utilisateurId: this._investorId,
-      ...reponses,
-    });
+    // Le classement est **repris ici, dans le même geste**. C'était un report
+    // fait après coup par le use case, vers une autre table, avec le décalage
+    // que cela suppose : un questionnaire enregistré sans que le classement
+    // suive laissait le plafond de la veille opposable à la souscription du
+    // jour. Les deux ne se séparent plus.
+    this._classement = {
+      categoriePsfp: this._adequacy.categoriePsfp ?? CategoriePsfp.NON_AVERTI,
+      patrimoineDeclare: this._adequacy.patrimoineNet,
+      montantMaxConseille: this._adequacy.montantMaxConseille,
+    };
   }
 
   /** Ouvre ou remplace le dossier de vérification d'identité. */
@@ -269,26 +301,21 @@ export class InvestorComplianceProfile {
   // ── Ce que le classement impose ───────────────────────────────────────────
 
   /**
-   * Classement à reporter sur le profil personne physique.
+   * Le classement opposable — jamais `null`.
    *
-   * `null` tant que le titulaire n'a pas répondu. Le repli sur `NON_AVERTI`
-   * protège les lignes anciennes relues sans `resultCategorie` : un classement
-   * absent ne doit jamais valoir « averti », qui lèverait les protections.
+   * Un titulaire qui n'a pas répondu **est** non averti : le classement se
+   * gagne, il ne se présume pas, et rendre `null` obligerait chaque appelant à
+   * retrouver ce repli, en l'oubliant parfois. C'est aussi ce qui protège les
+   * lignes anciennes relues sans `resultCategorie`.
    *
-   * Ce report est **synchrone**, et doit le rester. Il serait tentant d'en
-   * faire un abonné à un Domain Event, comme pour les décisions KYC ; ce serait
-   * une erreur : `create-investment.usecase` lit la catégorie et le plafond sur
-   * le profil pour opposer la limite PSFP. Un report différé, même de peu,
-   * laisserait passer une souscription contrôlée avec l'ancien classement.
+   * Il est lu ici et non recalculé depuis le questionnaire : la racine le
+   * **possède**, et le pose elle-même en répondant. Le questionnaire garde le
+   * sien de son côté, comme pièce justificative du passage — c'est ce que la
+   * conservation de dix ans (RG-Q-07) exige de conserver, et ce n'est pas le
+   * même objet que l'état opposable d'aujourd'hui.
    */
-  get classement(): ClassementPsfp | null {
-    if (this._adequacy === null) return null;
-
-    return {
-      categoriePsfp: this._adequacy.categoriePsfp ?? CategoriePsfp.NON_AVERTI,
-      patrimoineDeclare: this._adequacy.patrimoineNet,
-      montantMaxConseille: this._adequacy.montantMaxConseille,
-    };
+  get classement(): ClassementPsfp {
+    return { ...this._classement };
   }
 
   /** Niveau de suivi appelé par les réponses ; `null` sans questionnaire. */
@@ -297,6 +324,11 @@ export class InvestorComplianceProfile {
   }
 
   // ── Lectures ──────────────────────────────────────────────────────────────
+
+  /** Identité propre du dossier, attribuée par la persistance. */
+  get id(): string {
+    return this._id;
+  }
 
   get investorId(): number {
     return this._investorId;
@@ -376,11 +408,13 @@ export class InvestorComplianceProfile {
   get pieces(): {
     kycCase: KycCase | null;
     adequacy: AdequacyAssessment | null;
+    classement: ClassementPsfp;
     suivi: SuiviInvestisseurSnapshot;
   } {
     return {
       kycCase: this._kycCase,
       adequacy: this._adequacy,
+      classement: { ...this._classement },
       suivi: this._suivi.toSnapshot(),
     };
   }

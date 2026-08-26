@@ -53,7 +53,6 @@ describe('CreateKycUseCase', () => {
     // Un 409 obligerait chacun à rattraper l'erreur pour relire le dossier.
     const existant = KycMapper.restore({
       id: 'kyc-1',
-      utilisateurId: 42,
       statut: KycStatus.EN_COURS,
       niveau: KycNiveau.STANDARD,
       fournisseur: 'stripeIdentity',
@@ -70,12 +69,8 @@ describe('CreateKycUseCase', () => {
     expect(mocks.save).not.toHaveBeenCalled();
   });
 
-  it('ne persiste rien quand le compte visé est invalide', async () => {
-    const { useCase, mocks } = monter();
-
-    await expect(useCase.execute(0)).rejects.toBeInstanceOf(
-      ChampKycInvalideError,
-    );
-    expect(mocks.save).not.toHaveBeenCalled();
-  });
+  // Le test « ne persiste rien quand le compte visé est invalide » a disparu
+  // avec la clé qu'il éprouvait : le dossier ne porte plus le titulaire. C'est
+  // la clé étrangère de `investor_compliance_profile` vers `users` qui refuse
+  // désormais un compte inexistant, et la racine qui la porte.
 });

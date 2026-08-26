@@ -3,13 +3,13 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { NatureDeDossier } from 'src/compliance/domain/enums/nature-de-dossier.enum';
 import { NatureDuDossierRepository } from 'src/compliance/domain/repositories/nature-du-dossier.repository';
-import { DossierInvestisseurEntity } from '../persistence/entities/dossier-investisseur.entity';
+import { InvestorComplianceProfileEntity } from '../persistence/entities/investor-compliance-profile.entity';
 
 @Injectable()
 export class NatureDuDossierTypeOrmRepository implements NatureDuDossierRepository {
   constructor(
-    @InjectRepository(DossierInvestisseurEntity)
-    private readonly registre: Repository<DossierInvestisseurEntity>,
+    @InjectRepository(InvestorComplianceProfileEntity)
+    private readonly registre: Repository<InvestorComplianceProfileEntity>,
   ) {}
 
   /**
@@ -28,6 +28,11 @@ export class NatureDuDossierTypeOrmRepository implements NatureDuDossierReposito
     userId: number,
     nature: NatureDeDossier,
   ): Promise<NatureDeDossier> {
+    // Le dossier peut déjà exister sans nature : un titulaire commence sa
+    // vérification d'identité avant de choisir s'il investit en son nom propre
+    // ou par une société. On l'insère s'il manque, puis on y pose la nature —
+    // mais seulement si elle est encore vide, sinon la première déclaration ne
+    // serait plus définitive.
     await this.registre
       .createQueryBuilder()
       .insert()
@@ -35,11 +40,17 @@ export class NatureDuDossierTypeOrmRepository implements NatureDuDossierReposito
       .orIgnore()
       .execute();
 
+    await this.registre
+      .createQueryBuilder()
+      .update()
+      .set({ nature })
+      .where('"userId" = :userId AND "nature" IS NULL', { userId })
+      .execute();
+
     const ligne = await this.registre.findOne({ where: { userId } });
 
-    // La ligne vient d'être écrite ou existait : elle ne peut pas manquer.
-    // Un `??` défensif masquerait une panne de la table derrière un
-    // comportement plausible — mieux vaut que l'appel échoue franchement.
-    return ligne!.nature;
+    // La ligne vient d'être écrite ou existait : elle ne peut pas manquer, et
+    // sa nature non plus — on vient de la poser si elle était vide.
+    return ligne!.nature!;
   }
 }

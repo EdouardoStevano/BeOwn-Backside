@@ -10,7 +10,7 @@ import {
 } from 'src/compliance/domain/entities/adequacy-assessment';
 
 const repondre = (reponses: ReponsesQuestionnaire) =>
-  QuestionnaireAdequationFactory.repondre({ utilisateurId: 42, ...reponses });
+  QuestionnaireAdequationFactory.repondre(reponses);
 
 function monter(questionnaire: AdequacyAssessment | null) {
   const mocks = {

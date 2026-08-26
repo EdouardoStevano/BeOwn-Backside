@@ -4,7 +4,7 @@ import { INVESTOR_COMPLIANCE_PROFILE_REPOSITORY } from '../domain/repositories/i
 import { InvestorComplianceProfileTypeOrmRepository } from './repositories/investor-compliance-profile.repository';
 import { ProfilConformiteTypeOrmQuery } from './repositories/profil-conformite.query';
 import { PROFIL_CONFORMITE_QUERY } from '../application/ports/profil-conformite.query';
-import { DossierInvestisseurEntity } from './persistence/entities/dossier-investisseur.entity';
+import { InvestorComplianceProfileEntity } from './persistence/entities/investor-compliance-profile.entity';
 import { KycInfrastructureModule } from './kyc-infrastructure.module';
 import { ProfilesInfrastructureModule } from './profiles-infrastructure.module';
 import { KycEntity } from './persistence/entities/kyc.entity';
@@ -30,7 +30,7 @@ import { QuestionnaireAdequationEntity } from './persistence/entities/questionna
     TypeOrmModule.forFeature([
       KycEntity,
       QuestionnaireAdequationEntity,
-      DossierInvestisseurEntity,
+      InvestorComplianceProfileEntity,
     ]),
     KycInfrastructureModule,
     ProfilesInfrastructureModule,

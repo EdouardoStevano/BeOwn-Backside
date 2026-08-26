@@ -127,7 +127,6 @@ export class ProfilMapper {
   ): AdequacyAssessment {
     return QuestionnaireAdequationDomainMapper.restore({
       id: entity.id,
-      utilisateurId: entity.utilisateurId,
       workInFinancialSector: entity.workInFinancialSector,
       moreThan10TransactionsPerQuarter: entity.moreThan10TransactionsPerQuarter,
       portfolioOver500k: entity.portfolioOver500k,
@@ -156,14 +155,16 @@ export class ProfilMapper {
    * `ResultatAdequation.calculer`. C'est le questionnaire qui les reporte
    * ensuite sur le profil, via `enregistrerClassementPsfp`.
    */
+  /** @see KycOrmMapper.toEntity — `profileId` vient du repository. */
   static questionnaireToEntity(
     domain: AdequacyAssessment,
+    profileId: string,
   ): QuestionnaireAdequationEntity {
     const snapshot = QuestionnaireAdequationDomainMapper.toSnapshot(domain);
     const entity = new QuestionnaireAdequationEntity();
     // Absent d'un premier passage : l'uuid est généré en base.
     if (snapshot.id) entity.id = snapshot.id;
-    entity.utilisateurId = snapshot.utilisateurId;
+    entity.profileId = profileId;
     entity.workInFinancialSector = snapshot.workInFinancialSector;
     entity.moreThan10TransactionsPerQuarter =
       snapshot.moreThan10TransactionsPerQuarter;

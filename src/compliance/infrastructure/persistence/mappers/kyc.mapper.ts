@@ -17,7 +17,6 @@ export class KycOrmMapper {
   static toDomain(entity: KycEntity): KycCase {
     return KycDomainMapper.restore({
       id: entity.id,
-      utilisateurId: entity.utilisateurId,
       statut: entity.statut,
       niveau: entity.niveau,
       scoreRisque: entity.scoreRisque,
@@ -42,12 +41,17 @@ export class KycOrmMapper {
    * celui-ci vient d'écrire. Les laisser `undefined` dit à TypeORM de ne pas
    * toucher à la colonne.
    */
-  static toEntity(domain: KycCase): KycEntity {
+  /**
+   * `profileId` est un paramètre, et non un champ du snapshot : la pièce ne le
+   * connaît pas. C'est le repository de la racine qui sait à quel dossier elle
+   * se rattache, parce que c'est lui qui tient la racine (§6).
+   */
+  static toEntity(domain: KycCase, profileId: string): KycEntity {
     const snapshot = KycDomainMapper.toSnapshot(domain);
     const entity = new KycEntity();
     // Absent d'un dossier qui vient de naître : l'uuid est généré en base.
     if (snapshot.id) entity.id = snapshot.id;
-    entity.utilisateurId = snapshot.utilisateurId;
+    entity.profileId = profileId;
     entity.statut = snapshot.statut;
     entity.niveau = snapshot.niveau;
     entity.scoreRisque = snapshot.scoreRisque;

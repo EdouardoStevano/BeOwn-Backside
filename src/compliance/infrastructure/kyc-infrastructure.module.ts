@@ -5,6 +5,7 @@ import { CloudStorageModule } from 'src/shared/cloud-storage/cloud-storage.modul
 import { DOSSIER_KYC_QUERY } from '../application/ports/dossier-kyc.query';
 import { IDENTITY_VERIFICATION_PORT } from '../application/ports/identity-verification.port';
 import { KycEntity } from './persistence/entities/kyc.entity';
+import { InvestorComplianceProfileEntity } from './persistence/entities/investor-compliance-profile.entity';
 import { DossierKycTypeOrmQuery } from './repositories/dossier-kyc.query';
 import { StripeIdentityAdapter } from './external-services/stripe-identity.adapter';
 
@@ -28,7 +29,9 @@ import { StripeIdentityAdapter } from './external-services/stripe-identity.adapt
   imports: [
     ConfigModule,
     CloudStorageModule,
-    TypeOrmModule.forFeature([KycEntity]),
+    // La racine accompagne le dossier : c'est elle qui sait de quel
+    // titulaire il s'agit, la pièce ne le porte plus (§6).
+    TypeOrmModule.forFeature([KycEntity, InvestorComplianceProfileEntity]),
   ],
   providers: [
     { provide: DOSSIER_KYC_QUERY, useClass: DossierKycTypeOrmQuery },

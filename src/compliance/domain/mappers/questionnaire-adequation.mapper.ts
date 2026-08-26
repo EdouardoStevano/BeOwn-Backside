@@ -26,13 +26,10 @@ export class QuestionnaireAdequationMapper {
    * **entre** : `QuestionnaireAdequationFactory.repondre` et
    * `AdequacyAssessment.repondre`.
    */
-  static restore(
-    snapshot: AdequacyAssessmentSnapshotBrut,
-  ): AdequacyAssessment {
+  static restore(snapshot: AdequacyAssessmentSnapshotBrut): AdequacyAssessment {
     return new AdequacyAssessment({
       entete: {
         id: snapshot.id,
-        utilisateurId: snapshot.utilisateurId,
         createdAt: snapshot.createdAt,
         updatedAt: snapshot.updatedAt,
       },
@@ -57,7 +54,6 @@ export class QuestionnaireAdequationMapper {
   ): AdequacyAssessmentSnapshot {
     return {
       id: questionnaire.id,
-      utilisateurId: questionnaire.utilisateurId,
       createdAt: questionnaire.createdAt,
       updatedAt: questionnaire.updatedAt,
       ...questionnaire.preQualification.toSnapshot(),

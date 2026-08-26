@@ -26,7 +26,6 @@ describe('KycRefuseEventHandler', () => {
 
     expect(push).toHaveBeenCalledWith(
       expect.objectContaining({
-        utilisateurId: 42,
         type: NotificationType.KYC_REJETE,
         message: 'Votre KYC a été refusé : Document illisible',
         metadata: { motifRefus: 'Document illisible' },

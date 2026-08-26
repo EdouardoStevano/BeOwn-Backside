@@ -1,4 +1,8 @@
-import { KycCase, KycCaseSnapshot, KycCaseSnapshotBrut } from 'src/compliance/domain/entities/kyc-case';
+import {
+  KycCase,
+  KycCaseSnapshot,
+  KycCaseSnapshotBrut,
+} from 'src/compliance/domain/entities/kyc-case';
 import { DecisionKyc } from 'src/compliance/domain/value-objects/decision-kyc.vo';
 
 /**
@@ -26,7 +30,6 @@ export class KycMapper {
     return new KycCase({
       entete: {
         id: snapshot.id,
-        utilisateurId: snapshot.utilisateurId,
         createdAt: snapshot.createdAt,
         updatedAt: snapshot.updatedAt,
       },
@@ -55,7 +58,6 @@ export class KycMapper {
   static toSnapshot(kyc: KycCase): KycCaseSnapshot {
     return {
       id: kyc.id,
-      utilisateurId: kyc.utilisateurId,
       niveau: kyc.niveau,
       scoreRisque: kyc.scoreRisque,
       fournisseur: kyc.fournisseur,

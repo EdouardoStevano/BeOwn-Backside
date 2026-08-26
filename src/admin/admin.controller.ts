@@ -35,6 +35,7 @@ import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.ent
 import { UserRole, UserStatus } from 'src/iam/domain/enums/user.enum';
 import { ProjectEntity } from 'src/catalog/infrastructure/persistence/entities/project.entity';
 import { InvestmentEntity } from 'src/subscription/infrastructure/persistence/entities/investment.entity';
+import { InvestorComplianceProfileEntity } from 'src/compliance/infrastructure/persistence/entities/investor-compliance-profile.entity';
 import { KycEntity } from 'src/compliance/infrastructure/persistence/entities/kyc.entity';
 import { OrdreMarcheEntity } from 'src/secondary-market/infrastructure/persistence/entities/ordre-marche.entity';
 import { OrdreMarcheStatus } from 'src/secondary-market/domain/enums/ordre-marche.enum';
@@ -165,9 +166,7 @@ export class AdminController {
     // Fetch KYC + aggregated investment totals for all returned users in parallel
     const userIds = users.map((u) => u.userId);
     const [kycRecords, investmentTotals] = await Promise.all([
-      userIds.length > 0
-        ? this.kycRepo.find({ where: { utilisateurId: In(userIds) } })
-        : Promise.resolve([] as KycEntity[]),
+      this.kycAvecTitulaire({ userIds }),
       userIds.length > 0
         ? this.investRepo
             .createQueryBuilder('i')
@@ -588,18 +587,22 @@ export class AdminController {
       // des deux et compose ce que ni l'un ni l'autre ne publie — d'où les deux
       // lectures ici, et non une jointure d'ORM à travers la frontière.
       tasks.push(
-        this.kycRepo
-          .find({ order: { updatedAt: 'DESC' }, take: limit })
-          .then(async (rows) => {
-            const titulaires = await this.usersByIds(
-              rows.map((k) => k.utilisateurId),
-            );
-            return rows
+        this.kycAvecTitulaire({ limite: limit }).then(async (rows) => {
+          const titulaires = await this.usersByIds(
+            rows.map((k) => k.utilisateurId),
+          );
+          return (
+            rows
               .map((k) => ({ k, u: titulaires.get(k.utilisateurId) }))
               // Comme l'INNER JOIN d'avant : un dossier sans compte rattaché
               // ne figure pas dans le flux d'activité.
-              .filter((ligne): ligne is { k: KycEntity; u: UserEntity } =>
-                Boolean(ligne.u),
+              .filter(
+                (
+                  ligne,
+                ): ligne is {
+                  k: KycEntity & { utilisateurId: number };
+                  u: UserEntity;
+                } => Boolean(ligne.u),
               )
               .map(({ k, u }) => ({
                 type: 'kyc',
@@ -611,8 +614,9 @@ export class AdminController {
                 status: this.kycActivityStatus(k.statut),
                 date: k.updatedAt,
                 time: this.relativeTime(k.updatedAt),
-              }));
-          }),
+              }))
+          );
+        }),
       );
     }
 
@@ -737,5 +741,40 @@ export class AdminController {
     const hours = Math.floor(mins / 60);
     if (hours < 24) return `Il y a ${hours}h`;
     return `Il y a ${Math.floor(hours / 24)}j`;
+  }
+  /**
+   * Les dossiers de vérification, chacun avec le compte qu'il concerne.
+   *
+   * `kyc` ne porte plus de `utilisateurId` : une entité interne au dossier de
+   * conformité n'a pas à connaître le titulaire, c'est sa racine qui le sait
+   * (§6). Le back-office passe donc par elle. La jointure s'arrête là — le nom
+   * du titulaire est composé au-dessus, par `usersByIds`.
+   */
+  private async kycAvecTitulaire(
+    ou: { userIds?: number[]; limite?: number } = {},
+  ): Promise<Array<KycEntity & { utilisateurId: number }>> {
+    const qb = this.kycRepo
+      .createQueryBuilder('kyc')
+      .innerJoin(
+        InvestorComplianceProfileEntity,
+        'racine',
+        'racine.id = kyc."profileId"',
+      )
+      .addSelect('racine."userId"', 'utilisateurId');
+
+    if (ou.userIds) {
+      if (ou.userIds.length === 0) return [];
+      qb.where('racine."userId" IN (:...ids)', { ids: ou.userIds });
+    }
+    if (ou.limite) qb.orderBy('kyc.updatedAt', 'DESC').take(ou.limite);
+
+    const { entities, raw } = await qb.getRawAndEntities();
+    return entities.map((k, i) =>
+      Object.assign(k, {
+        utilisateurId: Number(
+          (raw[i] as { utilisateurId: number }).utilisateurId,
+        ),
+      }),
+    );
   }
 }

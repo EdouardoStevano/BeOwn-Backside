@@ -58,7 +58,6 @@ describe('SaveQuestionnaireUseCase', () => {
 
     const questionnaire = await useCase.execute(42, DTO_NON_AVERTI);
 
-    expect(questionnaire.utilisateurId).toBe(42);
     expect(questionnaire.resultCategorie).toBe(CategoriePsfp.NON_AVERTI);
     expect(questionnaire.resultMontantMaxConseille).toBe(20_000);
     expect(mocks.save).toHaveBeenCalledTimes(1);
@@ -66,7 +65,6 @@ describe('SaveQuestionnaireUseCase', () => {
 
   it("remplace le questionnaire existant plutôt que d'en créer un second", async () => {
     const existant = QuestionnaireAdequationFactory.repondre({
-      utilisateurId: 42,
       workInFinancialSector: true,
       portfolioOver500k: true,
     });

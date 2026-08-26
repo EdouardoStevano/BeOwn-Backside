@@ -34,7 +34,6 @@ describe('KycController.patchKycStatus', () => {
       investorId: 42,
       kycCase: KycMapper.restore({
         id: 'kyc-1',
-        utilisateurId: 42,
         statut: KycStatus.VALIDE,
         niveau: KycNiveau.STANDARD,
         fournisseur: 'stripeIdentity',
@@ -75,12 +74,12 @@ describe('KycController.patchKycStatus', () => {
     );
 
     expect(decideKycManualReview.execute).toHaveBeenCalledWith({
-      utilisateurId: 42,
       decision: KycStatus.REFUSE,
       motifRefus: 'Document illisible',
       // Repris du porteur du token, jamais du corps de la requête : c'est ce
       // qui sera tracé comme auteur de la décision.
       decidePar: 99,
+      utilisateurId: 42,
     });
     expect(kyc.statutKyc).toBe(KycStatus.VALIDE);
   });

@@ -122,7 +122,6 @@ describe('ProfilPM.mettreAJour', () => {
 
     profil.mettreAJour({
       representantId: 999,
-      utilisateurId: 1,
     } as unknown as ChampsDeclaresProfilPM);
 
     expect(profil.aUnRepresentant()).toBe(true);

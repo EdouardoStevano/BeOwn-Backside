@@ -59,7 +59,6 @@ const kycCase = (etat: {
 }) =>
   KycMapper.restore({
     id: etat.id ?? 'kyc-1',
-    utilisateurId: 42,
     statut: etat.statut,
     niveau: KycNiveau.STANDARD,
     fournisseur: 'stripeIdentity',
@@ -133,7 +132,6 @@ describe('HandleIdentityWebhookUseCase — webhook Stripe Identity (KYC auto + f
       );
       expect(notificationService.push).toHaveBeenCalledWith(
         expect.objectContaining({
-          utilisateurId: 42,
           type: NotificationType.KYC_VALIDE,
           titre: 'Identité vérifiée', // pas de dingbat/emoji (règle repo)
         }),
@@ -277,7 +275,6 @@ describe('HandleIdentityWebhookUseCase — webhook Stripe Identity (KYC auto + f
       );
       expect(notificationService.push).toHaveBeenCalledWith(
         expect.objectContaining({
-          utilisateurId: 55,
           type: NotificationType.KYC_VALIDE,
         }),
       );
@@ -338,7 +335,6 @@ describe('HandleIdentityWebhookUseCase — webhook Stripe Identity (KYC auto + f
       );
       expect(notificationService.push).toHaveBeenCalledWith(
         expect.objectContaining({
-          utilisateurId: 7,
           type: NotificationType.KYC_REJETE,
         }),
       );

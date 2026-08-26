@@ -27,7 +27,6 @@ describe('KycValideEventHandler', () => {
 
     expect(push).toHaveBeenCalledWith(
       expect.objectContaining({
-        utilisateurId: 42,
         type: NotificationType.KYC_VALIDE,
         titre: 'KYC validé',
       }),

@@ -1,7 +1,6 @@
 import { KycNiveau } from 'src/compliance/domain/enums/kyc-status.enum';
 import { KycCase } from 'src/compliance/domain/entities/kyc-case';
 import { DecisionKyc } from 'src/compliance/domain/value-objects/decision-kyc.vo';
-import { eprouverUtilisateurIdDuDossierKyc } from 'src/compliance/domain/value-objects/identifiant-utilisateur';
 import { NomFournisseur } from 'src/compliance/domain/value-objects/nom-fournisseur.vo';
 
 /**
@@ -24,7 +23,6 @@ export const NIVEAU_PAR_DEFAUT = KycNiveau.STANDARD;
 
 /** Ce qu'il faut pour ouvrir un dossier. Tout le reste est décidé ici. */
 export interface CreerKycProps {
-  utilisateurId: number;
   /** Prestataire choisi ; à défaut {@link FOURNISSEUR_PAR_DEFAUT}. */
   fournisseur?: string;
   /** Diligence exigée ; à défaut {@link NIVEAU_PAR_DEFAUT}. */
@@ -56,11 +54,12 @@ export interface CreerKycProps {
  * framework que rien ne justifie (§12.1).
  */
 export class KycFactory {
-  static creer(props: CreerKycProps): KycCase {
+  static creer(props: CreerKycProps = {}): KycCase {
     return new KycCase({
       entete: {
-        utilisateurId: eprouverUtilisateurIdDuDossierKyc(props.utilisateurId),
         // Attribués par la persistance — l'`id` est un uuid généré en base.
+        // Le rattachement au titulaire n'en fait plus partie : il passe par la
+        // racine, qui est la seule à connaître le compte (§6).
         id: undefined as unknown as string,
         createdAt: undefined as unknown as Date,
         updatedAt: undefined as unknown as Date,

@@ -69,13 +69,13 @@ export class GetKycUseCase {
     const { items, total } = await this.dossiers.lister(params);
 
     const titulaires = await this.userRepository.findManyByIds(
-      items.map((kyc) => kyc.utilisateurId),
+      items.map((kyc) => kyc.investorId),
     );
     const parId = new Map(titulaires.map((user) => [user.userId, user]));
 
     return {
       items: items.map((kyc) => {
-        const titulaire = parId.get(kyc.utilisateurId);
+        const titulaire = parId.get(kyc.investorId);
         return {
           ...kyc,
           ...(titulaire ? { utilisateur: enTitulaire(titulaire) } : {}),

@@ -20,7 +20,6 @@ const dossierEnRevue = () =>
     investorId: 42,
     kycCase: KycMapper.restore({
       id: 'kyc-1',
-      utilisateurId: 42,
       statut: KycStatus.EN_REVUE,
       niveau: KycNiveau.STANDARD,
       fournisseur: 'stripeIdentity',

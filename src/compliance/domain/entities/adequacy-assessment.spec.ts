@@ -6,7 +6,7 @@ import { QuestionnaireAdequationMapper } from '../mappers/questionnaire-adequati
 import { ReponsesQuestionnaire } from './adequacy-assessment';
 
 const repondre = (reponses: ReponsesQuestionnaire = {}) =>
-  QuestionnaireAdequationFactory.repondre({ utilisateurId: 42, ...reponses });
+  QuestionnaireAdequationFactory.repondre(reponses);
 
 const REPONSES_PROFESSIONNEL: ReponsesQuestionnaire = {
   workInFinancialSector: true,
@@ -27,7 +27,6 @@ describe('QuestionnaireAdequationFactory.repondre', () => {
       patrimoineNet: 800_000,
     });
 
-    expect(questionnaire.utilisateurId).toBe(42);
     expect(questionnaire.categoriePsfp).toBe(CategoriePsfp.PROFESSIONNEL);
     expect(questionnaire.montantMaxConseille).toBeNull();
   });
@@ -42,15 +41,6 @@ describe('QuestionnaireAdequationFactory.repondre', () => {
 
     expect(questionnaire.categoriePsfp).toBe(CategoriePsfp.NON_AVERTI);
   });
-
-  it.each([[0], [-1], [1.5]])(
-    'refuse un identifiant utilisateur invalide (%p)',
-    (utilisateurId) => {
-      expect(() =>
-        QuestionnaireAdequationFactory.repondre({ utilisateurId }),
-      ).toThrow(ChampProfilInvalideError);
-    },
-  );
 
   it("laisse la persistance attribuer l'identité de la ligne", () => {
     const questionnaire = repondre();
@@ -113,7 +103,6 @@ describe('AdequacyAssessment.niveauRisque', () => {
 describe('AdequacyAssessment — sérialisation', () => {
   const LIGNE = {
     id: 'q-1',
-    utilisateurId: 42,
     workInFinancialSector: true,
     moreThan10TransactionsPerQuarter: false,
     portfolioOver500k: true,

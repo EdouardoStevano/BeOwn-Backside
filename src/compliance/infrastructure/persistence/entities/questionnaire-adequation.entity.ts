@@ -13,9 +13,17 @@ export class QuestionnaireAdequationEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ type: 'integer' })
+  /**
+   * Le dossier de conformité auquel cette pièce appartient — relation 1:1.
+   *
+   * C'était `utilisateurId`, une colonne vers `users` : la pièce se rattachait
+   * au compte par-dessus sa racine. Elle ne connaît plus que celle-ci, qui est
+   * la seule à savoir de quel titulaire il s'agit (§6). `unique` porte le 1:1 :
+   * un dossier de conformité n'a qu'un questionnaire.
+   */
+  @Column({ type: 'uuid' })
   @Index({ unique: true })
-  utilisateurId: number;
+  profileId: string;
 
   // ── Étape 1 : Pré-qualification (professionnel ?) ──────────────────────
   @Column({ type: 'boolean', default: false })

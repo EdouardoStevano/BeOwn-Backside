@@ -3,7 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { ProfilPPEntity } from './persistence/entities/profil-pp.entity';
 import { ProfilPMEntity } from './persistence/entities/profil-pm.entity';
 import { QuestionnaireAdequationEntity } from './persistence/entities/questionnaire-adequation.entity';
-import { DossierInvestisseurEntity } from './persistence/entities/dossier-investisseur.entity';
+import { InvestorComplianceProfileEntity } from './persistence/entities/investor-compliance-profile.entity';
 import { ProfilPPTypeOrmRepository } from './repositories/profil-pp.repository';
 import { ProfilPMTypeOrmRepository } from './repositories/profil-pm.repository';
 import { NatureDuDossierTypeOrmRepository } from './repositories/nature-du-dossier.repository';
@@ -24,7 +24,7 @@ import { NATURE_DU_DOSSIER_REPOSITORY } from '../domain/repositories/nature-du-d
       ProfilPPEntity,
       ProfilPMEntity,
       QuestionnaireAdequationEntity,
-      DossierInvestisseurEntity,
+      InvestorComplianceProfileEntity,
     ]),
   ],
   providers: [

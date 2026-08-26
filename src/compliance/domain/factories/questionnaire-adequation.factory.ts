@@ -3,22 +3,18 @@ import {
   ReponsesQuestionnaire,
 } from 'src/compliance/domain/entities/adequacy-assessment';
 import { CapaciteDePerte } from 'src/compliance/domain/value-objects/capacite-de-perte.vo';
-import { eprouverUtilisateurId } from 'src/compliance/domain/value-objects/identifiant-utilisateur';
 import { PreQualificationPsfp } from 'src/compliance/domain/value-objects/pre-qualification-psfp.vo';
 import { QualificationPsfp } from 'src/compliance/domain/value-objects/qualification-psfp.vo';
 import { ResultatAdequation } from 'src/compliance/domain/value-objects/resultat-adequation.vo';
 
-/** Ce qu'il faut pour un premier passage : le compte, et les réponses. */
-export interface RepondreQuestionnaireProps extends ReponsesQuestionnaire {
-  utilisateurId: number;
-}
+/** Ce qu'il faut pour un premier passage : les réponses, et rien d'autre. */
+export type RepondreQuestionnaireProps = ReponsesQuestionnaire;
 
 /**
  * Premier passage du questionnaire d'adéquation.
  *
  * Même rôle que `ProfilPPFactory` : répartir un formulaire plat entre ses
- * étapes, éprouver la clé — que nul bloc ne peut éprouver seul — et laisser le
- * classement se déduire des réponses. Rien ici n'est décidé par l'appelant :
+ * étapes, et laisser le classement se déduire des réponses. Rien ici n'est décidé par l'appelant :
  * il n'y a pas de props « catégorie » ni « montant conseillé », et c'est le
  * point (§4 — Open/Closed sur la règle réglementaire).
  *
@@ -40,8 +36,8 @@ export class QuestionnaireAdequationFactory {
 
     return new AdequacyAssessment({
       entete: {
-        utilisateurId: eprouverUtilisateurId(props.utilisateurId),
         // Attribués par la persistance — l'`id` est un uuid généré en base.
+        // Le titulaire n'y figure pas : c'est la racine qui le connaît (§6).
         id: undefined as unknown as string,
         createdAt: undefined as unknown as Date,
         updatedAt: undefined as unknown as Date,

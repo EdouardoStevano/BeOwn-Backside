@@ -41,10 +41,14 @@ export type ReponsesQuestionnaire = ChampsPreQualification &
   ChampsQualification &
   ChampsCapaciteDePerte;
 
-/** Ce que le questionnaire ajoute à ses étapes : sa clé, le compte, ses dates. */
+/**
+ * Ce que le questionnaire ajoute à ses étapes : sa clé et ses dates.
+ *
+ * Il portait aussi `utilisateurId` — voir `EnteteKycCase` : une pièce interne
+ * n'a pas à connaître le titulaire, c'est sa racine qui le connaît (§6).
+ */
 export interface EnteteQuestionnaire {
   id: string;
-  utilisateurId: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -105,7 +109,6 @@ export interface AdequacyAssessmentSnapshotBrut
  */
 export class AdequacyAssessment {
   private readonly _id: string;
-  private readonly _utilisateurId: number;
   private _preQualification: PreQualificationPsfp;
   private _qualification: QualificationPsfp;
   private _capacite: CapaciteDePerte;
@@ -129,7 +132,6 @@ export class AdequacyAssessment {
     resultat: ResultatAdequation;
   }) {
     this._id = etat.entete.id;
-    this._utilisateurId = etat.entete.utilisateurId;
     this._createdAt = etat.entete.createdAt;
     this._updatedAt = etat.entete.updatedAt;
     this._preQualification = etat.preQualification;
@@ -191,9 +193,6 @@ export class AdequacyAssessment {
 
   get id(): string {
     return this._id;
-  }
-  get utilisateurId(): number {
-    return this._utilisateurId;
   }
   get preQualification(): PreQualificationPsfp {
     return this._preQualification;

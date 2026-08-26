@@ -34,10 +34,16 @@ export interface KycIdentiteExtrait {
 // et à partir du seul `utilisateurId` : voir `GetKycUseCase.executeAll`. Le
 // JSON rendu par `GET /kyc/all` est inchangé.
 
-/** Ce que le dossier ajoute à son bloc : sa clé, le compte rattaché, ses dates. */
+/**
+ * Ce que le dossier ajoute à son bloc : sa clé et ses dates.
+ *
+ * Il portait aussi `utilisateurId`. Une entité interne se rattachait donc au
+ * compte par-dessus sa racine, alors que c'est elle — et elle seule — qui
+ * connaît le titulaire (§6). Le rattachement passe désormais par `profileId`,
+ * que seule la persistance manipule.
+ */
 export interface EnteteKycCase {
   id: string;
-  utilisateurId: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -110,7 +116,6 @@ export interface KycCaseSnapshotBrut
  */
 export class KycCase {
   private readonly _id: string;
-  private readonly _utilisateurId: number;
   private _decision: DecisionKyc;
   private readonly _niveau: KycNiveau;
   private readonly _scoreRisque: number | null;
@@ -141,7 +146,6 @@ export class KycCase {
     identiteExtrait: KycIdentiteExtrait | null;
   }) {
     this._id = etat.entete.id;
-    this._utilisateurId = etat.entete.utilisateurId;
     this._createdAt = etat.entete.createdAt;
     this._updatedAt = etat.entete.updatedAt;
     this._decision = etat.decision;
@@ -291,9 +295,6 @@ export class KycCase {
 
   get id(): string {
     return this._id;
-  }
-  get utilisateurId(): number {
-    return this._utilisateurId;
   }
   get decision(): DecisionKyc {
     return this._decision;

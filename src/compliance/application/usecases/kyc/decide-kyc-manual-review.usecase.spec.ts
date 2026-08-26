@@ -23,7 +23,6 @@ const profil = (statut: KycStatus) =>
 const dossier = (statut: KycStatus) =>
   KycMapper.restore({
     id: 'kyc-1',
-    utilisateurId: 42,
     statut,
     niveau: KycNiveau.STANDARD,
     fournisseur: 'stripeIdentity',

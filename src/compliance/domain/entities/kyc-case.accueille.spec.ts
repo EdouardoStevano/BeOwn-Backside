@@ -11,7 +11,6 @@ const SESSION = 'vs_courante';
 const dossier = (statut: KycStatus, fournisseurRef: string | null = SESSION) =>
   KycMapper.restore({
     id: 'kyc-1',
-    utilisateurId: 42,
     statut,
     niveau: KycNiveau.STANDARD,
     fournisseur: 'stripeIdentity',

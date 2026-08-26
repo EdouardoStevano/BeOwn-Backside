@@ -15,7 +15,6 @@ const dossierOuvert = () =>
     investorId: 7,
     kycCase: KycMapper.restore({
       id: 'kyc-1',
-      utilisateurId: 7,
       statut: KycStatus.EN_COURS,
       niveau: KycNiveau.STANDARD,
       fournisseur: 'stripeIdentity',

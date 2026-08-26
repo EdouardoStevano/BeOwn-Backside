@@ -1,10 +1,12 @@
-import { KycNiveau, KycStatus } from 'src/compliance/domain/enums/kyc-status.enum';
+import {
+  KycNiveau,
+  KycStatus,
+} from 'src/compliance/domain/enums/kyc-status.enum';
 import { KycFactory } from 'src/compliance/domain/factories/kyc.factory';
 import { KycMapper } from 'src/compliance/domain/mappers/kyc.mapper';
 
 const LIGNE = {
   id: 'kyc-1',
-  utilisateurId: 42,
   statut: KycStatus.VALIDE,
   niveau: KycNiveau.STANDARD,
   scoreRisque: 12,
@@ -53,7 +55,6 @@ describe('KycMapper', () => {
     // n'écrit pas (rapport de vérification, identité extraite) en sont absentes.
     const kyc = KycMapper.restore({
       id: 'kyc-1',
-      utilisateurId: 42,
       statut: KycStatus.NON_DEMARRE,
       niveau: KycNiveau.STANDARD,
       fournisseur: 'stripeIdentity',
@@ -92,12 +93,9 @@ describe('KycMapper', () => {
   });
 
   it("traduit un dossier qui vient de naître, avant que la base ne l'identifie", () => {
-    const snapshot = KycMapper.toSnapshot(
-      KycFactory.creer({ utilisateurId: 42 }),
-    );
+    const snapshot = KycMapper.toSnapshot(KycFactory.creer());
 
     expect(snapshot.id).toBeUndefined();
     expect(snapshot.statut).toBe(KycStatus.NON_DEMARRE);
-    expect(snapshot.utilisateurId).toBe(42);
   });
 });

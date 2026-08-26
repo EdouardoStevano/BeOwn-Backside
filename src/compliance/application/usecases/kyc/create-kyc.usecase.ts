@@ -29,7 +29,7 @@ export class CreateKycUseCase {
     const profil = await this.profils.findByInvestorId(userId);
     if (profil.aUnDossierKyc()) return profil;
 
-    profil.deposerDossierKyc(KycFactory.creer({ utilisateurId: userId }));
+    profil.deposerDossierKyc(KycFactory.creer());
     return this.profils.save(profil);
   }
 }

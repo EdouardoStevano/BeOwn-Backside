@@ -27,7 +27,6 @@ const profilPPVide = () => ProfilPPFactory.creer({ userId: UTILISATEUR });
 const kycAuStatut = (statut: KycStatus) =>
   KycMapper.restore({
     id: 'kyc-1',
-    utilisateurId: UTILISATEUR,
     statut,
     niveau: KycNiveau.STANDARD,
     fournisseur: 'stripeIdentity',
@@ -130,7 +129,6 @@ describe('GetOnboardingStatusUseCase', () => {
     const statut = await monter({
       profilPP: profilPPRenseigne(),
       questionnaire: QuestionnaireAdequationFactory.repondre({
-        utilisateurId: UTILISATEUR,
         patrimoineNet: 50_000,
       }),
       kyc: kycAuStatut(KycStatus.VALIDE),
@@ -175,7 +173,6 @@ describe('GetOnboardingStatusUseCase', () => {
   it('reprend le motif de refus opposé au titulaire', async () => {
     const kyc = KycMapper.restore({
       id: 'kyc-1',
-      utilisateurId: UTILISATEUR,
       statut: KycStatus.REFUSE,
       niveau: KycNiveau.STANDARD,
       fournisseur: 'stripeIdentity',
@@ -226,9 +223,7 @@ describe('GetOnboardingStatusUseCase', () => {
 
   it("n'invente pas de dossier KYC quand il n'y en a pas", async () => {
     const statut = await monter({
-      kyc: KycFactory.creer({
-        utilisateurId: UTILISATEUR,
-      }),
+      kyc: KycFactory.creer(),
     }).execute({ utilisateurId: UTILISATEUR });
 
     expect(etape(statut, 'kyc').status).toBe('not_started');

@@ -1,5 +1,14 @@
 import { KycCaseSnapshot } from 'src/compliance/domain/entities/kyc-case';
 
+/**
+ * Un dossier de vérification, accompagné du titulaire qu'il concerne.
+ *
+ * `investorId` ne vient pas du dossier — il ne connaît plus le compte — mais
+ * de la racine qui le porte. C'est la jointure que ce port fait pour ses
+ * lecteurs, afin qu'aucun d'eux n'ait à la refaire.
+ */
+export type DossierKycPublie = KycCaseSnapshot & { investorId: number };
+
 export const DOSSIER_KYC_QUERY = Symbol('DOSSIER_KYC_QUERY');
 
 /**
@@ -20,11 +29,11 @@ export const DOSSIER_KYC_QUERY = Symbol('DOSSIER_KYC_QUERY');
  */
 export interface DossierKycQuery {
   /** Le dossier d'un titulaire, `null` s'il n'en a pas encore ouvert. */
-  parTitulaire(utilisateurId: number): Promise<KycCaseSnapshot | null>;
+  parTitulaire(utilisateurId: number): Promise<DossierKycPublie | null>;
 
   /** Page de la liste d'administration, du plus récent au plus ancien. */
   lister(params?: {
     page?: number;
     limit?: number;
-  }): Promise<{ items: KycCaseSnapshot[]; total: number }>;
+  }): Promise<{ items: DossierKycPublie[]; total: number }>;
 }
