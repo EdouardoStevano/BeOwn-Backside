@@ -34,6 +34,15 @@ export enum NotificationType {
   INVESTISSEUR_INACTIF = 'investisseur_inactif',
   PROJET_CONSULTE_2X = 'projet_consulte_2x',
   KYC_REVUE_MANUELLE = 'kyc_revue_manuelle',
+  /**
+   * Une pièce du dossier personne morale a été refusée à l'instruction.
+   *
+   * Distincte de `KYC_REJETE` : celle-ci vise **une pièce** que le titulaire
+   * peut remplacer seul, pas le dossier d'identité entier. Les confondre ferait
+   * lire « votre KYC a été refusé » à qui doit simplement redéposer un KBIS
+   * périmé.
+   */
+  PIECE_JUSTIFICATIVE_REFUSEE = 'piece_justificative_refusee',
 }
 
 @Entity('notification')

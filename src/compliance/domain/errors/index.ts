@@ -5,5 +5,6 @@ export * from './revue-manuelle.errors';
 // Dossier investisseur et questionnaire d'adéquation (M3).
 export * from './champ-profil.errors';
 export * from './etape-questionnaire.errors';
+export * from './piece-justificative.errors';
 export * from './profil-pp.errors';
 export * from './profil-pm.errors';

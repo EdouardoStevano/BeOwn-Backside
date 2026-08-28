@@ -15,6 +15,13 @@ import { SaveQuestionnaireUseCase } from './usecases/profiles/save-questionnaire
 import { RepondreEtapeQuestionnaireUseCase } from './usecases/profiles/repondre-etape-questionnaire.usecase';
 import { GetQuestionnaireUseCase } from './usecases/profiles/get-questionnaire.usecase';
 import { GetOnboardingStatusUseCase } from './usecases/profiles/get-onboarding-status.usecase';
+import { DeposerPieceUseCase } from './usecases/pieces/deposer-piece.usecase';
+import { ConsulterDossierDePiecesUseCase } from './usecases/pieces/consulter-dossier-de-pieces.usecase';
+import { DeciderPieceUseCase } from './usecases/pieces/decider-piece.usecase';
+import { PieceJustificativeRefuseeEventHandler } from './handlers/piece-justificative-refusee.event-handler';
+import { PieceJustificativeController } from '../presentation/http/piece-justificative.controller';
+import { AdminPieceJustificativeController } from '../presentation/http/admin-piece-justificative.controller';
+import { NotificationsModule } from 'src/notifications/notifications.module';
 import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructure.module';
 import { UsersInfrastructureModule } from 'src/iam/infrastructure/users-infrastructure.module';
 import { KycInfrastructureModule } from 'src/compliance/infrastructure/kyc-infrastructure.module';
@@ -75,6 +82,11 @@ import { BeneficiaireEffectifController } from '../presentation/http/beneficiair
     // rattachent. Le questionnaire, le profil PP et le compte en sont sortis —
     // ils passent par leurs ports (§12.3, §12.9).
     TypeOrmModule.forFeature([BeneficiaireEffectifEntity, ProfilPMEntity]),
+    // `NotificationService` : le refus d'une pièce est annoncé au titulaire —
+    // c'est la moitié de « l'utilisateur sera notifié par mail et pourra
+    // modifier lui-même les documents refusés ». Le contexte s'abonne à son
+    // propre événement, il n'appelle pas le service depuis le use case (§8).
+    NotificationsModule,
   ],
   providers: [
     CreateProfilPPUseCase,
@@ -88,13 +100,24 @@ import { BeneficiaireEffectifController } from '../presentation/http/beneficiair
     RepondreEtapeQuestionnaireUseCase,
     GetQuestionnaireUseCase,
     GetOnboardingStatusUseCase,
+    // Les pièces justificatives du dossier moral — dépôt par le titulaire,
+    // instruction par l'équipe conformité, annonce du refus.
+    DeposerPieceUseCase,
+    ConsulterDossierDePiecesUseCase,
+    DeciderPieceUseCase,
+    PieceJustificativeRefuseeEventHandler,
     RiskScoringService,
     // Plus de filtre propre : les erreurs du dossier investisseur sont des
     // `IamError` depuis qu'elles ont rejoint le contexte, et `IamErrorFilter`
     // — enregistré globalement par `IamModule` — les traduit avec les mêmes
     // statuts et le même corps que `ProfilesErrorFilter` produisait.
   ],
-  controllers: [ProfileController, BeneficiaireEffectifController],
+  controllers: [
+    ProfileController,
+    BeneficiaireEffectifController,
+    PieceJustificativeController,
+    AdminPieceJustificativeController,
+  ],
   exports: [
     // Consommé par `UserController` (IAM) : `GET /users/me` compose le compte
     // avec l'avancement du dossier, que seul ce contexte sait calculer.
