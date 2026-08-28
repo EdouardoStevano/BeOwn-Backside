@@ -23,7 +23,7 @@ import { AuthenticationController } from 'src/iam/presentation/http/authenticati
 import { RegisterUseCase } from './usecases/sign/register.usecase';
 import { SignInUsecase } from './usecases/sign/sign-in.usecase';
 import { RefreshTokenUseCase } from './usecases/token/refresh-token.usecase';
-import { SocialAuthUseCase } from './usecases/sign/social-auth.usecase';
+import { SocialAuthUseCase } from './usecases/oauth/social-auth.usecase';
 import { IssueOAuthCodeUseCase } from './usecases/oauth/issue-oauth-code.usecase';
 import { ExchangeOAuthCodeUseCase } from './usecases/oauth/exchange-oauth-code.usecase';
 import { ForgotPasswordUseCase } from './usecases/password/forgot-password.usecase';
