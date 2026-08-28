@@ -10,7 +10,16 @@ import {
 } from 'src/compliance/domain/repositories/profil-pm.repository';
 import { ProfilPMIntrouvableError } from 'src/compliance/domain/errors';
 import { PieceJustificativeRefuseeDomainEvent } from 'src/compliance/domain/events/piece-justificative-refusee.domain-event';
-import { PieceJustificativeSnapshot } from 'src/compliance/domain/entities/piece-justificative';
+import {
+  vuePiece,
+  type VuePieceJustificative,
+} from '../../mappers/dossier-de-pieces-vue.mapper';
+import { DossierDePieces } from 'src/compliance/domain/aggregates/dossier-de-pieces';
+import {
+  BENEFICIAIRES_DE_LA_SOCIETE_QUERY,
+  type BeneficiairesDeLaSocieteQuery,
+} from '../../ports/beneficiaires-de-la-societe.query';
+import { annoncerLaCompletude } from './annoncer-la-completude';
 
 /**
  * Instruction d'une pièce justificative par l'équipe conformité.
@@ -39,26 +48,38 @@ export class DeciderPieceUseCase {
     private readonly dossiers: DossierDePiecesRepository,
     @Inject(PROFIL_PM_REPOSITORY)
     private readonly societes: ProfilPMRepository,
+    @Inject(BENEFICIAIRES_DE_LA_SOCIETE_QUERY)
+    private readonly beneficiaires: BeneficiairesDeLaSocieteQuery,
     private readonly eventBus: EventBus,
   ) {}
 
   async accepter(
     societeId: string,
     pieceId: string,
-  ): Promise<PieceJustificativeSnapshot> {
+  ): Promise<VuePieceJustificative> {
+    // La société est relue avant la décision, comme pour un refus : son
+    // titulaire est la clé du dossier de conformité qu'on annoncera ensuite,
+    // et accepter la dernière pièce sans pouvoir dire de qui elle relève
+    // laisserait un dossier complet que personne n'instruirait jamais.
+    const societe = await this.societes.findById(societeId);
+    if (!societe) throw new ProfilPMIntrouvableError();
+
     const dossier = await this.dossiers.parSociete(societeId);
     // Passe par la racine : elle seule sait que cette pièce est bien d'ici.
     dossier.accepterLaPiece(pieceId);
 
     const enregistre = await this.dossiers.save(dossier);
-    return enregistre.piece(pieceId).toSnapshot();
+
+    await this.annoncerOuEnEstLeDossier(enregistre, societe);
+
+    return vuePiece(enregistre.piece(pieceId).toSnapshot());
   }
 
   async refuser(
     societeId: string,
     pieceId: string,
     motif: string,
-  ): Promise<PieceJustificativeSnapshot> {
+  ): Promise<VuePieceJustificative> {
     // La société est relue **avant** la décision : le titulaire à prévenir en
     // dépend, et refuser une pièce sans pouvoir dire à qui laisserait un
     // dossier bloqué sans que personne ne le sache.
@@ -82,6 +103,33 @@ export class DeciderPieceUseCase {
       ),
     );
 
-    return enregistre.piece(piece.id).toSnapshot();
+    // Deux faits distincts, deux événements : le titulaire apprend *quelle*
+    // pièce reprendre, le dossier de conformité apprend que la société n'est
+    // plus en état d'opérer. Les fondre obligerait l'abonné qui notifie à
+    // connaître la règle de complétude, et celui qui révoque à connaître les
+    // pièces (§8).
+    await this.annoncerOuEnEstLeDossier(enregistre, societe);
+
+    return vuePiece(enregistre.piece(piece.id).toSnapshot());
+  }
+
+  /**
+   * Le dossier réunit-il encore tout ? La question est posée après **chaque**
+   * instruction, acceptation comprise : c'est l'acceptation de la dernière
+   * pièce qui envoie le dossier en instruction, et le refus de n'importe
+   * laquelle qui l'en fait revenir.
+   */
+  private async annoncerOuEnEstLeDossier(
+    dossier: DossierDePieces,
+    societe: { id: string; userId: number },
+  ): Promise<void> {
+    const beneficiaires = await this.beneficiaires.parSociete(societe.id);
+
+    annoncerLaCompletude(
+      this.eventBus,
+      dossier,
+      { id: societe.id, utilisateurId: societe.userId },
+      beneficiaires.map((b) => b.id),
+    );
   }
 }

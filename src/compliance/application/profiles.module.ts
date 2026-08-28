@@ -24,6 +24,10 @@ import { ListerProfilsInvestisseurUseCase } from './usecases/investisseur/lister
 import { BasculerProfilInvestisseurUseCase } from './usecases/investisseur/basculer-profil-investisseur.usecase';
 import { ProfilInvestisseurController } from '../presentation/http/profil-investisseur.controller';
 import { PieceJustificativeRefuseeEventHandler } from './handlers/piece-justificative-refusee.event-handler';
+import { CompletudeDuDossierEventHandler } from './handlers/completude-du-dossier.event-handler';
+import { KybTrancheEventHandler } from './handlers/kyb-tranche.event-handler';
+import { DeciderKybUseCase } from './usecases/kyb/decider-kyb.usecase';
+import { AdminKybController } from '../presentation/http/admin-kyb.controller';
 import { PieceJustificativeController } from '../presentation/http/piece-justificative.controller';
 import { AdminPieceJustificativeController } from '../presentation/http/admin-piece-justificative.controller';
 import { NotificationsModule } from 'src/notifications/notifications.module';
@@ -110,6 +114,16 @@ import { BeneficiaireEffectifController } from '../presentation/http/beneficiair
     ConsulterDossierDePiecesUseCase,
     DeciderPieceUseCase,
     PieceJustificativeRefuseeEventHandler,
+    // Le verdict KYB de la société — l'instruction du dossier une fois ses
+    // pièces réunies, et ce qui le défait quand l'une d'elles bouge.
+    //
+    // `CompletudeDuDossierEventHandler` est le pont entre deux agrégats qui ne
+    // se connaissent pas : `DossierDePieces` constate ce qui manque, la racine
+    // de conformité décide ce que la société a le droit de faire. Deux
+    // frontières transactionnelles, donc un événement et non un appel (§17).
+    DeciderKybUseCase,
+    CompletudeDuDossierEventHandler,
+    KybTrancheEventHandler,
     // Le registre des bénéficiaires effectifs — le seuil de 25 %, la
     // distinction directe/indirecte et le plafond du capital.
     DeclarerBeneficiaireUseCase,
@@ -129,6 +143,7 @@ import { BeneficiaireEffectifController } from '../presentation/http/beneficiair
     BeneficiaireEffectifController,
     PieceJustificativeController,
     AdminPieceJustificativeController,
+    AdminKybController,
     ProfilInvestisseurController,
   ],
   exports: [

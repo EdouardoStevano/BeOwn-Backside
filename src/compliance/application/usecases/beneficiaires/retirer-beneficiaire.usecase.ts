@@ -3,8 +3,14 @@ import {
   REGISTRE_DES_BENEFICIAIRES_REPOSITORY,
   type RegistreDesBeneficiairesRepository,
 } from 'src/compliance/domain/repositories/registre-des-beneficiaires.repository';
+import { EventBus } from '@nestjs/cqrs';
 import { BeneficiaireEffectifSnapshot } from 'src/compliance/domain/entities/beneficiaire-effectif';
+import {
+  DOSSIER_DE_PIECES_REPOSITORY,
+  type DossierDePiecesRepository,
+} from 'src/compliance/domain/repositories/dossier-de-pieces.repository';
 import { GetProfilPMUseCase } from '../profiles/get-profil-pm.usecase';
+import { annoncerLaCompletude } from '../pieces/annoncer-la-completude';
 
 /**
  * Retrait d'un bénéficiaire effectif du registre d'une société.
@@ -28,6 +34,9 @@ export class RetirerBeneficiaireUseCase {
     @Inject(REGISTRE_DES_BENEFICIAIRES_REPOSITORY)
     private readonly registres: RegistreDesBeneficiairesRepository,
     private readonly getProfilPM: GetProfilPMUseCase,
+    @Inject(DOSSIER_DE_PIECES_REPOSITORY)
+    private readonly dossiers: DossierDePiecesRepository,
+    private readonly eventBus: EventBus,
   ) {}
 
   async execute(
@@ -44,6 +53,18 @@ export class RetirerBeneficiaireUseCase {
     registre.retirer(beneficiaireId);
 
     await this.registres.retirer(societeId, beneficiaireId);
+
+    // Un retrait joue dans l'autre sens qu'une déclaration : la pièce
+    // d'identité de cette personne n'est plus réclamée, et un dossier qui
+    // n'attendait qu'elle devient complet. Le même geste couvre les deux
+    // parce que c'est la même règle qui tranche.
+    const dossier = await this.dossiers.parSociete(societeId);
+    annoncerLaCompletude(
+      this.eventBus,
+      dossier,
+      { id: societeId, utilisateurId: userId },
+      registre.beneficiairesPublies.map((b) => b.id),
+    );
 
     return registre.beneficiairesPublies;
   }

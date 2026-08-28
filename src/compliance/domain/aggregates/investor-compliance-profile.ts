@@ -15,7 +15,15 @@ import {
 } from 'src/compliance/domain/value-objects/classement-psfp.vo';
 import { EtapeQuestionnaire } from 'src/compliance/domain/enums/etape-questionnaire.enum';
 import { ProfilInvestisseur } from 'src/compliance/domain/value-objects/profil-investisseur.vo';
-import { EtapeQuestionnaireFermeeError } from 'src/compliance/domain/errors';
+import {
+  EtapeQuestionnaireFermeeError,
+  KybNeConcernePasUnePersonnePhysiqueError,
+} from 'src/compliance/domain/errors';
+import {
+  DecisionKyb,
+  DecisionKybSnapshot,
+} from 'src/compliance/domain/value-objects/decision-kyb.vo';
+import { StatutKyb } from 'src/compliance/domain/enums/statut-kyb.enum';
 import { KycStatus } from 'src/compliance/domain/enums/kyc-status.enum';
 import { ChampsPreQualification } from 'src/compliance/domain/value-objects/pre-qualification-psfp.vo';
 import { ChampsQualification } from 'src/compliance/domain/value-objects/qualification-psfp.vo';
@@ -61,6 +69,15 @@ import {
  * compte n'a ni dossier ni questionnaire, et c'est un état normal du parcours
  * d'entrée en relation, pas une anomalie à corriger par un objet vide.
  *
+ * S'y ajoute {@link DecisionKyb}, qui répond à la même question — le droit
+ * d'opérer — mais pour l'autre nature de souscripteur : une société n'a pas
+ * d'identité à vérifier, elle a un dossier de justificatifs instruit par
+ * l'équipe conformité. Un Value Object et non une entité (cinq attributs, pas
+ * d'identité propre), rangé en colonnes à plat comme {@link ClassementPsfp} et
+ * {@link SuiviInvestisseur}. Les deux signaux ne coexistent jamais sur une même
+ * ligne : `souscripteur` décide lequel fait foi, et {@link peutOperer} ne lit
+ * que celui-là.
+ *
  * Ce que la racine ne porte **pas** : les profils personne physique et morale.
  * Ils vivent dans le même contexte, mais ils ont leur propre cycle de vie — on
  * complète son adresse sans rouvrir son dossier de vérification — et les
@@ -75,6 +92,7 @@ export class InvestorComplianceProfile {
   private _adequacy: AdequacyAssessment | null;
   private _classement: ClassementPsfp;
   private _suivi: SuiviInvestisseur;
+  private _kyb: DecisionKyb;
 
   /**
    * @internal Réservé au repository, qui compose la racine depuis les deux
@@ -95,6 +113,12 @@ export class InvestorComplianceProfile {
     adequacy: AdequacyAssessment | null;
     classement?: ClassementPsfp;
     suivi?: SuiviInvestisseur;
+    /**
+     * Le dossier KYB de la société. Absent du dossier d'un titulaire, et de
+     * toute ligne écrite avant que ces colonnes n'existent : dans les deux cas
+     * le repli est `EN_CONSTITUTION`, jamais une validité présumée.
+     */
+    kyb?: DecisionKyb;
   }) {
     this._id = etat.id as string;
     this._investorId = etat.investorId;
@@ -104,6 +128,7 @@ export class InvestorComplianceProfile {
     this._adequacy = etat.adequacy;
     this._classement = etat.classement ?? ClassementPsfp.initial();
     this._suivi = etat.suivi ?? SuiviInvestisseur.jamaisEvalue();
+    this._kyb = etat.kyb ?? DecisionKyb.initiale();
   }
 
   /**
@@ -204,19 +229,50 @@ export class InvestorComplianceProfile {
   // ── Le verdict ────────────────────────────────────────────────────────────
 
   /**
-   * Ce titulaire peut-il réaliser des opérations financières — dépôt,
+   * Ce souscripteur peut-il réaliser des opérations financières — dépôt,
    * souscription, marché secondaire, retrait ?
    *
-   * La vérification d'identité est le signal unique et faisant foi. Trois
-   * conditions, et elles sont cumulatives : un dossier existe, il est validé,
-   * et sa validité n'est pas périmée. Cette dernière compte autant que les deux
-   * autres — un dossier validé il y a trois ans ne prouve plus rien, et le
-   * régulateur attend qu'il soit rejoué.
+   * **La réponse dépend de sa nature, parce que les deux ne prouvent pas la
+   * même chose.** Un titulaire prouve son identité ; une société n'en a pas à
+   * prouver — elle prouve son existence légale et qui la contrôle, par un
+   * dossier de justificatifs instruit par l'équipe conformité :
+   *
+   * | Souscripteur      | Signal faisant foi                       |
+   * | ----------------- | ---------------------------------------- |
+   * | personne physique | {@link KycCase} — vérification d'identité |
+   * | société           | {@link DecisionKyb} — dossier KYB         |
+   *
+   * La méthode ne rendait auparavant que le premier verdict, ce qui la rendait
+   * **structurellement fausse sur une ligne de société** : le repository n'y
+   * charge délibérément aucun `KycCase` — une société n'a pas d'identité à
+   * vérifier — donc elle y répondait toujours `false`. Aucun appelant ne la
+   * posait à une société, et c'est précisément le trou que la décision KYB
+   * comble : le verdict existait, mais recomposé à chaque lecture par
+   * `aptitudeDeLaSociete`, sans date ni auteur.
+   *
+   * Ce que cette méthode **ne dit pas**, et ne peut pas dire : qu'une société
+   * ne signe pas elle-même. Le KYC de son représentant légal est une condition
+   * supplémentaire, portée par une *autre* racine — celle du titulaire — donc
+   * hors de cette frontière transactionnelle (§17). C'est
+   * `aptitudeDeLaSociete` qui compose les deux verdicts, et c'est tout ce qui
+   * doit lui rester à faire.
    *
    * @param maintenant injecté pour que la règle s'éprouve sans dépendre de
    *   l'horloge (§26).
    */
   peutOperer(maintenant: Date = new Date()): boolean {
+    return this._souscripteur.estSociete()
+      ? this._kyb.estValide(maintenant)
+      : this.identiteEstVerifiee(maintenant);
+  }
+
+  /**
+   * Trois conditions cumulatives : un dossier existe, il est validé, et sa
+   * validité n'est pas périmée. La dernière compte autant que les deux autres —
+   * un dossier validé il y a trois ans ne prouve plus rien, et le régulateur
+   * attend qu'il soit rejoué.
+   */
+  private identiteEstVerifiee(maintenant: Date): boolean {
     if (this._kycCase === null) return false;
 
     if (this._kycCase.statut !== KycStatus.VALIDE) return false;
@@ -427,6 +483,115 @@ export class InvestorComplianceProfile {
     );
   }
 
+  // ── Le parcours KYB de la société ─────────────────────────────────────────
+  //
+  // Les quatre gestes de l'instruction d'un dossier moral. Ils sont ici, et non
+  // sur `DossierDePieces`, parce qu'ils ne portent pas sur les pièces mais sur
+  // le **verdict** qu'on en tire : le dossier de justificatifs constate ce qui
+  // manque, la racine décide ce que la société a le droit de faire. Les deux
+  // sont deux agrégats, donc deux frontières transactionnelles (§17) — c'est
+  // pourquoi ces gestes répondent à des événements et n'appellent jamais
+  // `DossierDePieces` eux-mêmes.
+  //
+  // Tous refusent une personne physique. L'invariant paraît évident et n'était
+  // pourtant porté nulle part : la racine est bien clé sur le souscripteur,
+  // mais rien n'empêchait d'écrire un état de société sur la ligne d'un
+  // titulaire, ni de valider par ce chemin un compte dont l'identité n'a jamais
+  // été vérifiée.
+
+  /**
+   * Le dossier de la société réunit toutes ses pièces : il part en instruction.
+   *
+   * Sans effet si le dossier est déjà instruit ou tranché — voir
+   * {@link DecisionKyb.soumise} : ce geste répond à un événement, et un
+   * événement se redélivre.
+   *
+   * @throws KybNeConcernePasUnePersonnePhysiqueError
+   */
+  soumettreLeKybALinstruction(le: Date = new Date()): void {
+    this.exigerUneSociete();
+    this._kyb = this._kyb.soumise(le);
+  }
+
+  /**
+   * L'équipe conformité valide le dossier KYB.
+   *
+   * @param valideJusquAu échéance de la validité, ou `null` pour une validité
+   *   sans terme. Elle est **fournie** et non calculée : la cadence de
+   *   re-vérification d'une personne morale n'est pas arrêtée (cf.
+   *   `DecisionKyb.validee`).
+   * @param par le compte de l'agent conformité qui tranche.
+   * @throws KybNeConcernePasUnePersonnePhysiqueError
+   * @throws KybPasEnInstructionError si le dossier n'est pas en instruction.
+   */
+  validerLeKyb(
+    valideJusquAu: string | null,
+    par: number,
+    le: Date = new Date(),
+  ): void {
+    this.exigerUneSociete();
+    this._kyb = this._kyb.validee(valideJusquAu, par, le);
+  }
+
+  /**
+   * L'équipe conformité rejette le dossier KYB, motif à l'appui.
+   *
+   * @throws KybNeConcernePasUnePersonnePhysiqueError
+   * @throws KybPasEnInstructionError si le dossier n'est pas en instruction.
+   */
+  refuserLeKyb(motif: string, par: number, le: Date = new Date()): void {
+    this.exigerUneSociete();
+    this._kyb = this._kyb.refusee(motif, par, le);
+  }
+
+  /**
+   * Le dossier retombe en constitution : une pièce a été refusée, remplacée, ou
+   * s'est périmée.
+   *
+   * **C'est le seul chemin par lequel un KYB validé se révoque** avant son
+   * échéance, et il est légal depuis n'importe quel état : une pièce peut être
+   * refusée longtemps après la validation.
+   *
+   * @throws KybNeConcernePasUnePersonnePhysiqueError
+   */
+  rouvrirLeKyb(motif: string): void {
+    this.exigerUneSociete();
+    this._kyb = this._kyb.rouverte(motif);
+  }
+
+  /** @throws KybNeConcernePasUnePersonnePhysiqueError */
+  private exigerUneSociete(): void {
+    if (!this._souscripteur.estSociete()) {
+      throw new KybNeConcernePasUnePersonnePhysiqueError();
+    }
+  }
+
+  /** Le dossier KYB attend-il une décision de l'équipe conformité ? */
+  kybEstEnInstruction(): boolean {
+    return this._souscripteur.estSociete() && this._kyb.estEnInstruction();
+  }
+
+  /**
+   * Statut du dossier KYB — `null` pour une personne physique, qui n'en a pas.
+   *
+   * `null` plutôt que `EN_CONSTITUTION` : un titulaire n'a pas un KYB « à
+   * commencer », il n'en a pas du tout, et les confondre ferait afficher au
+   * représentant légal un dossier de société qui n'existe pas.
+   */
+  get statutKyb(): StatutKyb | null {
+    return this._souscripteur.estSociete() ? this._kyb.statut : null;
+  }
+
+  /** Ce qui explique un refus ou une remise en constitution, `null` sinon. */
+  get motifRefusKyb(): string | null {
+    return this._souscripteur.estSociete() ? this._kyb.motifRefus : null;
+  }
+
+  /** Jusqu'à quand le KYB vaut ; `null` sans échéance ou sans société. */
+  get kybValideJusquAu(): string | null {
+    return this._souscripteur.estSociete() ? this._kyb.valideJusquAu : null;
+  }
+
   // ── Ce que le classement impose ───────────────────────────────────────────
 
   /**
@@ -543,12 +708,22 @@ export class InvestorComplianceProfile {
     /** Déjà à plat : le repository n'a que trois colonnes à remplir. */
     classement: ClassementPsfpSnapshot;
     suivi: SuiviInvestisseurSnapshot;
+    /**
+     * À plat également, et rendu pour **toutes** les natures de souscripteur —
+     * à la différence des getters `statutKyb` et consorts, qui rendent `null`
+     * sur un titulaire. Le repository écrit une ligne de table, pas une vue :
+     * lui rendre `null` ici l'obligerait à retrouver seul le repli
+     * `EN_CONSTITUTION`, et la colonne d'un titulaire s'écrirait à `NULL` là où
+     * `restore` attend un statut.
+     */
+    kyb: DecisionKybSnapshot;
   } {
     return {
       kycCase: this._kycCase,
       adequacy: this._adequacy,
       classement: this._classement.toSnapshot(),
       suivi: this._suivi.toSnapshot(),
+      kyb: this._kyb.toSnapshot(),
     };
   }
 }

@@ -42,6 +42,11 @@ export interface InvestorComplianceProfileRepository {
    * représentant, sur le dossier du titulaire, et elle vaut pour toutes ses
    * sociétés — c'est précisément l'économie que le cahier des charges vise.
    *
+   * Il porte en revanche le **KYB** : la décision de l'équipe conformité sur le
+   * dossier de justificatifs de cette société, avec sa date, son auteur et son
+   * échéance. C'est ce que `peutOperer()` lit sur une ligne de société, là où
+   * il lit le KYC sur celle du titulaire.
+   *
    * @param investorId le compte qui déclare la société : il porte la clé
    *   étrangère, et le suivi périodique reste rattaché à une personne joignable.
    */

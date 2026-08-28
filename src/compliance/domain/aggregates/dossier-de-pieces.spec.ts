@@ -2,8 +2,12 @@ import { ChampProfilInvalideError } from '../errors';
 import {
   BeneficiaireDeLaPieceIncoherentError,
   PieceJustificativeIntrouvableError,
+  VersoDeLaPieceIncoherentError,
 } from '../errors/piece-justificative.errors';
-import { TypePieceJustificative } from '../enums/type-piece-justificative.enum';
+import {
+  exigeUnVerso,
+  TypePieceJustificative,
+} from '../enums/type-piece-justificative.enum';
 import { PieceJustificative } from '../entities/piece-justificative';
 import { DecisionPiece } from '../value-objects/decision-piece.vo';
 import { FichierDepose } from '../value-objects/fichier-depose.vo';
@@ -50,19 +54,22 @@ function dossierAvec(
             deposeeLe: AUJOURD_HUI,
           },
           fichier: fichier(),
+          // Le dos suit le type, comme au dépôt : une pièce d'identité
+          // reconstituée sans son verso ne serait pas un état que l'agrégat
+          // sait produire.
+          verso: exigeUnVerso(depot.type) ? fichier() : null,
           decision: DecisionPiece.enAttente(),
         }),
     ),
   });
 }
 
-/** Les quatre pièces de la société, toutes acceptées et fraîches. */
+/** Les trois pièces de la société, toutes acceptées et fraîches. */
 function dossierComplet(): DossierDePieces {
   const dossier = dossierAvec([
     { type: TypePieceJustificative.KBIS, dateEmission: new Date('2026-08-01') },
     { type: TypePieceJustificative.STATUTS },
     { type: TypePieceJustificative.LISTE_ACTIONNAIRES },
-    { type: TypePieceJustificative.DBE_S1 },
   ]);
   for (const piece of dossier.pieces) {
     dossier.accepterLaPiece(piece.id, AUJOURD_HUI);
@@ -95,6 +102,25 @@ describe('DossierDePieces — le dépôt', () => {
     for (const beneficiaireId of ['b-1', 'b-2']) {
       dossier.deposer({
         type: TypePieceJustificative.PIECE_IDENTITE_BENEFICIAIRE,
+        beneficiaireId,
+        dateEmission: null,
+        fichier: fichier(),
+        verso: fichier(),
+        maintenant: AUJOURD_HUI,
+      });
+    }
+
+    expect(dossier.pieces).toHaveLength(2);
+  });
+
+  it('laisse coexister les DBE-S1 de deux bénéficiaires distincts', () => {
+    // Le formulaire est **nominatif** : il s'en dépose un par personne
+    // déclarée. Compté une fois par société, un dossier de trois actionnaires
+    // passait pour complet avec le formulaire d'un seul.
+    const dossier = DossierDePieces.vierge(SOCIETE);
+    for (const beneficiaireId of ['b-1', 'b-2']) {
+      dossier.deposer({
+        type: TypePieceJustificative.DBE_S1,
         beneficiaireId,
         dateEmission: null,
         fichier: fichier(),
@@ -143,7 +169,9 @@ describe('DossierDePieces — le dépôt', () => {
     expect(piece.decision.motifRefus).toBeNull();
   });
 
-  it('exige un bénéficiaire pour sa pièce d’identité, et l’interdit ailleurs', () => {
+  it('exige un bénéficiaire pour les pièces nominatives, et l’interdit ailleurs', () => {
+    // Ce que la pièce documente décide : le DBE-S1 et la pièce d'identité
+    // désignent une personne, le KBIS et les statuts décrivent l'entreprise.
     const dossier = DossierDePieces.vierge(SOCIETE);
     const depot =
       (type: TypePieceJustificative, beneficiaireId: string | null) => () =>
@@ -152,25 +180,108 @@ describe('DossierDePieces — le dépôt', () => {
           beneficiaireId,
           dateEmission: null,
           fichier: fichier(),
+          verso: exigeUnVerso(type) ? fichier() : null,
           maintenant: AUJOURD_HUI,
         });
 
+    // Nominatives, déposées sans dire qui elles documentent.
     expect(
       depot(TypePieceJustificative.PIECE_IDENTITE_BENEFICIAIRE, null),
     ).toThrow(BeneficiaireDeLaPieceIncoherentError);
-    expect(depot(TypePieceJustificative.KBIS, BENEFICIAIRE)).toThrow(
+    expect(depot(TypePieceJustificative.DBE_S1, null)).toThrow(
       BeneficiaireDeLaPieceIncoherentError,
     );
+
+    // De la société, rattachées à une personne.
+    for (const type of [
+      TypePieceJustificative.KBIS,
+      TypePieceJustificative.STATUTS,
+      TypePieceJustificative.LISTE_ACTIONNAIRES,
+    ]) {
+      expect(depot(type, BENEFICIAIRE)).toThrow(
+        BeneficiaireDeLaPieceIncoherentError,
+      );
+    }
+  });
+
+  it('exige le verso d’une pièce d’identité, et l’interdit ailleurs', () => {
+    // La date d'expiration est au dos : instruire sur le seul recto revient à
+    // accepter un document sans pouvoir vérifier qu'il est encore valide.
+    const dossier = DossierDePieces.vierge(SOCIETE);
+
+    expect(() =>
+      dossier.deposer({
+        type: TypePieceJustificative.PIECE_IDENTITE_BENEFICIAIRE,
+        beneficiaireId: BENEFICIAIRE,
+        dateEmission: null,
+        fichier: fichier(),
+        maintenant: AUJOURD_HUI,
+      }),
+    ).toThrow(VersoDeLaPieceIncoherentError);
+
+    // Un KBIS n'a pas de dos : lui en attacher un désignerait des octets que
+    // rien ne réclamerait jamais.
+    expect(() =>
+      dossier.deposer({
+        type: TypePieceJustificative.KBIS,
+        beneficiaireId: null,
+        dateEmission: null,
+        fichier: fichier(),
+        verso: fichier(),
+        maintenant: AUJOURD_HUI,
+      }),
+    ).toThrow(VersoDeLaPieceIncoherentError);
+  });
+
+  it('remplace le verso avec le recto, jamais séparément', () => {
+    // Garder l'ancien dos accolerait le verso de la pièce périmée au recto de
+    // la nouvelle : l'instruction porterait sur un document qui n'existe pas.
+    const dossier = DossierDePieces.vierge(SOCIETE);
+    const premier = fichier();
+    dossier.deposer({
+      type: TypePieceJustificative.PIECE_IDENTITE_BENEFICIAIRE,
+      beneficiaireId: BENEFICIAIRE,
+      dateEmission: null,
+      fichier: fichier(),
+      verso: premier,
+      maintenant: AUJOURD_HUI,
+    });
+
+    const second = FichierDepose.depose({
+      nomOrigine: 'cni-verso-2.jpg',
+      cleStockage: 'conformite/societes/societe-1/cni-verso-2',
+      url: 'https://exemple/cni-verso-2.jpg',
+      mimeType: 'image/jpeg',
+      tailleOctets: 8_000,
+    });
+    const piece = dossier.deposer({
+      type: TypePieceJustificative.PIECE_IDENTITE_BENEFICIAIRE,
+      beneficiaireId: BENEFICIAIRE,
+      dateEmission: null,
+      fichier: fichier(),
+      verso: second,
+      maintenant: AUJOURD_HUI,
+    });
+
+    expect(dossier.pieces).toHaveLength(1);
+    expect(piece.verso?.cleStockage).toBe(second.cleStockage);
   });
 });
 
 describe('DossierDePieces — la complétude', () => {
-  it('réclame les quatre pièces de la société tant que rien n’est déposé', () => {
+  it('réclame les trois pièces de la société tant que rien n’est déposé', () => {
+    // Trois, et non quatre : le DBE-S1 en est sorti, il se compte par
+    // bénéficiaire. Une société sans bénéficiaire déclaré ne doit donc rien
+    // devoir de nominatif.
     const dossier = DossierDePieces.vierge(SOCIETE);
 
     const manquantes = dossier.piecesManquantes([], AUJOURD_HUI);
 
-    expect(manquantes).toHaveLength(4);
+    expect(manquantes.map((m) => m.type)).toEqual([
+      TypePieceJustificative.KBIS,
+      TypePieceJustificative.STATUTS,
+      TypePieceJustificative.LISTE_ACTIONNAIRES,
+    ]);
     expect(manquantes.every((m) => m.raison === 'absente')).toBe(true);
     expect(dossier.estComplet([], AUJOURD_HUI)).toBe(false);
   });
@@ -185,28 +296,69 @@ describe('DossierDePieces — la complétude', () => {
       },
       { type: TypePieceJustificative.STATUTS },
       { type: TypePieceJustificative.LISTE_ACTIONNAIRES },
-      { type: TypePieceJustificative.DBE_S1 },
     ]);
 
     const manquantes = dossier.piecesManquantes([], AUJOURD_HUI);
 
-    expect(manquantes).toHaveLength(4);
+    expect(manquantes).toHaveLength(3);
     expect(manquantes.every((m) => m.raison === 'en_attente')).toBe(true);
   });
 
-  it('tient le dossier pour complet quand les quatre sont acceptées', () => {
+  it('tient le dossier pour complet quand les trois sont acceptées', () => {
     expect(dossierComplet().estComplet([], AUJOURD_HUI)).toBe(true);
   });
 
-  it('exige une pièce d’identité par bénéficiaire déclaré', () => {
-    // « Une pièce d'identité pour chacun de ces bénéficiaires » : leur nombre
-    // fait partie de la règle, et il vient de l'appelant.
+  it('exige un DBE-S1 et une pièce d’identité par bénéficiaire déclaré', () => {
+    // Deux documents par personne, et non plus un seul formulaire pour toute
+    // la société : leur nombre fait partie de la règle, et il vient du registre
+    // par l'appelant.
     const dossier = dossierComplet();
 
     const manquantes = dossier.piecesManquantes(['b-1', 'b-2'], AUJOURD_HUI);
 
-    expect(manquantes).toHaveLength(2);
-    expect(manquantes.map((m) => m.beneficiaireId)).toEqual(['b-1', 'b-2']);
+    expect(manquantes).toEqual([
+      {
+        type: TypePieceJustificative.DBE_S1,
+        beneficiaireId: 'b-1',
+        raison: 'absente',
+      },
+      {
+        type: TypePieceJustificative.PIECE_IDENTITE_BENEFICIAIRE,
+        beneficiaireId: 'b-1',
+        raison: 'absente',
+      },
+      {
+        type: TypePieceJustificative.DBE_S1,
+        beneficiaireId: 'b-2',
+        raison: 'absente',
+      },
+      {
+        type: TypePieceJustificative.PIECE_IDENTITE_BENEFICIAIRE,
+        beneficiaireId: 'b-2',
+        raison: 'absente',
+      },
+    ]);
+  });
+
+  it('tient pour complet un dossier dont chaque bénéficiaire a ses deux pièces', () => {
+    const dossier = dossierAvec([
+      {
+        type: TypePieceJustificative.KBIS,
+        dateEmission: new Date('2026-08-01'),
+      },
+      { type: TypePieceJustificative.STATUTS },
+      { type: TypePieceJustificative.LISTE_ACTIONNAIRES },
+      { type: TypePieceJustificative.DBE_S1, beneficiaireId: BENEFICIAIRE },
+      {
+        type: TypePieceJustificative.PIECE_IDENTITE_BENEFICIAIRE,
+        beneficiaireId: BENEFICIAIRE,
+      },
+    ]);
+    for (const piece of dossier.pieces) {
+      dossier.accepterLaPiece(piece.id, AUJOURD_HUI);
+    }
+
+    expect(dossier.estComplet([BENEFICIAIRE], AUJOURD_HUI)).toBe(true);
   });
 
   it('dit pourquoi chaque pièce manque, pas seulement qu’elle manque', () => {

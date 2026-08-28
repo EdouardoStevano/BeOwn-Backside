@@ -1,4 +1,5 @@
 import { KycStatus } from 'src/compliance/domain/enums/kyc-status.enum';
+import { dateCivileOuNull } from './date-civile';
 
 export interface DecisionKycSnapshot {
   statut: KycStatus;
@@ -123,18 +124,4 @@ export class DecisionKyc {
   toSnapshot(): DecisionKycSnapshot {
     return { ...this.etat };
   }
-}
-
-/**
- * TypeORM rend une colonne `date` sous forme de chaîne `AAAA-MM-JJ` malgré le
- * type `Date` déclaré sur l'entité ; les deux formes sont donc acceptées, et
- * ramenées à la date civile — celle que le front reçoit déjà aujourd'hui.
- */
-function dateCivileOuNull(
-  raw: Date | string | null | undefined,
-): string | null {
-  if (raw === null || raw === undefined) return null;
-  return raw instanceof Date
-    ? raw.toISOString().slice(0, 10)
-    : String(raw).slice(0, 10);
 }

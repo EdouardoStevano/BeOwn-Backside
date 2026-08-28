@@ -2,6 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, LessThanOrEqual, Repository } from 'typeorm';
 import { NiveauRisque } from 'src/compliance/domain/enums/niveau-risque.enum';
+import { StatutKyb } from 'src/compliance/domain/enums/statut-kyb.enum';
 import {
   aptitudeDeLaPersonnePhysique,
   aptitudeDeLaSociete,
@@ -130,6 +131,13 @@ export class ProfilConformiteTypeOrmQuery implements ProfilConformiteQuery {
 
     const aptitude = aptitudeDeLaSociete({
       kycDuRepresentantValide: conformiteDuRepresentant.peutOperer(),
+      // Le verdict opposable de la société : sa propre racine le porte, daté et
+      // signé, plutôt qu'un calcul refait à chaque lecture.
+      kybValide: dossierDeLaSociete.peutOperer(),
+      // `parSociete` rend toujours une racine de société, donc un statut non
+      // nul ; le repli reste explicite plutôt qu'affirmé par une assertion —
+      // et c'est le plus prudent des quatre états.
+      statutKyb: dossierDeLaSociete.statutKyb ?? StatutKyb.EN_CONSTITUTION,
       societeImmatriculee: societe.estImmatriculee(),
       dossier: pieces,
       beneficiaires: beneficiaires.map((b) => b.id),

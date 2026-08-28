@@ -28,6 +28,7 @@ import {
   aptitudeDeLaPersonnePhysique,
   aptitudeDeLaSociete,
 } from 'src/compliance/domain/domain-services/aptitude-du-profil.domain-service';
+import { StatutKyb } from 'src/compliance/domain/enums/statut-kyb.enum';
 import {
   BENEFICIAIRES_DE_LA_SOCIETE_QUERY,
   type BeneficiairesDeLaSocieteQuery,
@@ -95,17 +96,24 @@ export class ListerProfilsInvestisseurUseCase {
     const nomPropre: ProfilDisponible = {
       nature: NatureProfilInvestisseur.PP,
       societeId: null,
-      libelle: profilPP ? 'En mon nom propre' : 'En mon nom propre (à compléter)',
+      libelle: profilPP
+        ? 'En mon nom propre'
+        : 'En mon nom propre (à compléter)',
       actif: actif.estPersonnePhysique(),
       aptitude: aptitudeDeLaPersonnePhysique(kycDuRepresentantValide),
     };
 
     const parSociete = await Promise.all(
       societes.map(async (societe) => {
-        const [dossier, beneficiaires] = await Promise.all([
-          this.dossiers.parSociete(societe.id),
-          this.beneficiaires.parSociete(societe.id),
-        ]);
+        // Le dossier de conformité **de la société** s'ajoute aux deux autres
+        // lectures : c'est lui qui porte le verdict KYB, et il est propre à
+        // chacune — deux sociétés d'un même compte s'instruisent séparément.
+        const [dossier, beneficiaires, conformiteDeLaSociete] =
+          await Promise.all([
+            this.dossiers.parSociete(societe.id),
+            this.beneficiaires.parSociete(societe.id),
+            this.conformite.parSociete(userId, societe.id),
+          ]);
 
         return {
           nature: NatureProfilInvestisseur.PM,
@@ -114,6 +122,9 @@ export class ListerProfilsInvestisseurUseCase {
           actif: actif.societeId === societe.id,
           aptitude: aptitudeDeLaSociete({
             kycDuRepresentantValide,
+            kybValide: conformiteDeLaSociete.peutOperer(),
+            statutKyb:
+              conformiteDeLaSociete.statutKyb ?? StatutKyb.EN_CONSTITUTION,
             societeImmatriculee: societe.estImmatriculee(),
             dossier,
             beneficiaires: beneficiaires.map((b) => b.id),

@@ -79,6 +79,32 @@ export class PieceJustificativeEntity {
   @Column({ type: 'int' })
   tailleOctets: number;
 
+  // ── Le verso ────────────────────────────────────────────────────────────
+  //
+  // Cinq colonnes de plus sur la **même ligne**, et non une seconde ligne :
+  // recto et verso sont deux faces d'un document unique, avec une seule
+  // décision d'instruction. Deux lignes auraient permis d'accepter un recto et
+  // de refuser son verso — et fait mentir la contrainte d'unicité, qui compte
+  // une pièce par (société, type, bénéficiaire).
+  //
+  // Nulles partout sauf pour une pièce d'identité : une table est
+  // rectangulaire, le modèle ne l'est pas (cf. `ClassementPsfp`).
+
+  @Column({ type: 'varchar', nullable: true })
+  versoNomOrigine: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  versoCleStockage: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  versoUrl: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  versoMimeType: string | null;
+
+  @Column({ type: 'int', nullable: true })
+  versoTailleOctets: number | null;
+
   /** Date d'émission du document, `null` quand elle n'est pas exigée. */
   @Column({ type: 'date', nullable: true })
   dateEmission: Date | null;

@@ -6,6 +6,7 @@ import { InvestorComplianceProfile } from 'src/compliance/domain/aggregates/inve
 import { InvestorComplianceProfileRepository } from 'src/compliance/domain/repositories/investor-compliance-profile.repository';
 import { ClassementPsfp } from 'src/compliance/domain/value-objects/classement-psfp.vo';
 import { SuiviInvestisseur } from 'src/compliance/domain/value-objects/suivi-investisseur.vo';
+import { DecisionKyb } from 'src/compliance/domain/value-objects/decision-kyb.vo';
 import { KycEntity } from '../persistence/entities/kyc.entity';
 import { QuestionnaireAdequationEntity } from '../persistence/entities/questionnaire-adequation.entity';
 import { InvestorComplianceProfileEntity } from '../persistence/entities/investor-compliance-profile.entity';
@@ -114,6 +115,10 @@ export class InvestorComplianceProfileTypeOrmRepository implements InvestorCompl
         montantMaxConseille: nombreOuNull(racine.montantMaxConseille),
       }),
       suivi: SuiviInvestisseur.restore(racine),
+      // Les lignes écrites avant que ces colonnes n'existent rendent
+      // `undefined` : `restore` les replie sur `EN_CONSTITUTION`, jamais sur
+      // une validité présumée.
+      kyb: DecisionKyb.restore(racine),
     });
   }
 
@@ -121,7 +126,7 @@ export class InvestorComplianceProfileTypeOrmRepository implements InvestorCompl
     profile: InvestorComplianceProfile,
   ): Promise<InvestorComplianceProfile> {
     // La porte réservée au repository — voir `InvestorComplianceProfile.pieces`.
-    const { kycCase, adequacy, classement, suivi } = profile.pieces;
+    const { kycCase, adequacy, classement, suivi, kyb } = profile.pieces;
 
     // La racine d'abord : ses pièces ont besoin de son identité.
     const racine = await this.racines.save({
@@ -131,6 +136,7 @@ export class InvestorComplianceProfileTypeOrmRepository implements InvestorCompl
       souscripteurSocieteId: profile.souscripteur.societeId,
       ...classement,
       ...suivi,
+      ...kyb,
     });
 
     await Promise.all([

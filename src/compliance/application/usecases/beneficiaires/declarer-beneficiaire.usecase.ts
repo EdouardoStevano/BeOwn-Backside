@@ -3,9 +3,16 @@ import {
   REGISTRE_DES_BENEFICIAIRES_REPOSITORY,
   type RegistreDesBeneficiairesRepository,
 } from 'src/compliance/domain/repositories/registre-des-beneficiaires.repository';
+import { EventBus } from '@nestjs/cqrs';
 import { ChampsBeneficiaire } from 'src/compliance/domain/entities/beneficiaire-effectif';
 import { BeneficiaireEffectifSnapshot } from 'src/compliance/domain/entities/beneficiaire-effectif';
+import { RegistreDesBeneficiaires } from 'src/compliance/domain/aggregates/registre-des-beneficiaires';
+import {
+  DOSSIER_DE_PIECES_REPOSITORY,
+  type DossierDePiecesRepository,
+} from 'src/compliance/domain/repositories/dossier-de-pieces.repository';
 import { GetProfilPMUseCase } from '../profiles/get-profil-pm.usecase';
+import { annoncerLaCompletude } from '../pieces/annoncer-la-completude';
 
 /**
  * Déclaration d'un bénéficiaire effectif au registre d'une société.
@@ -30,6 +37,9 @@ export class DeclarerBeneficiaireUseCase {
     // Le contrôle d'appartenance vit là, pour tous ses appelants — le recopier
     // ici en ferait une seconde version à tenir à jour.
     private readonly getProfilPM: GetProfilPMUseCase,
+    @Inject(DOSSIER_DE_PIECES_REPOSITORY)
+    private readonly dossiers: DossierDePiecesRepository,
+    private readonly eventBus: EventBus,
   ) {}
 
   async execute(
@@ -48,8 +58,35 @@ export class DeclarerBeneficiaireUseCase {
 
     const enregistre = await this.registres.save(registre);
 
+    // **Déclarer un bénéficiaire réclame une pièce d'identité de plus.** Le
+    // dossier qui était complet ne l'est donc plus, et un KYB validé doit être
+    // révoqué — sans quoi une société pourrait ajouter un actionnaire après sa
+    // validation et continuer d'opérer sans que personne l'ait identifié.
+    await this.annoncerLeDossier(societeId, userId, enregistre);
+
     // Le registre entier, et non la seule déclaration : le total des parts a
     // changé, et c'est l'écran que le titulaire relit.
     return enregistre.beneficiairesPublies;
+  }
+
+  /**
+   * Le registre a changé, donc ce que le dossier de pièces doit réunir aussi.
+   *
+   * La liste vient du registre **tel qu'il vient d'être enregistré**, jamais de
+   * celui d'avant : c'est le nouveau bénéficiaire dont la pièce manque.
+   */
+  private async annoncerLeDossier(
+    societeId: string,
+    userId: number,
+    registre: RegistreDesBeneficiaires,
+  ): Promise<void> {
+    const dossier = await this.dossiers.parSociete(societeId);
+
+    annoncerLaCompletude(
+      this.eventBus,
+      dossier,
+      { id: societeId, utilisateurId: userId },
+      registre.beneficiairesPublies.map((b) => b.id),
+    );
   }
 }

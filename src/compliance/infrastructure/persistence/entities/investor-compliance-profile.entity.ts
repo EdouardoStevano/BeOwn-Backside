@@ -8,6 +8,7 @@ import {
 } from 'typeorm';
 import { CategoriePsfp } from 'src/compliance/domain/enums/categorie-psfp.enum';
 import { NiveauRisque } from 'src/compliance/domain/enums/niveau-risque.enum';
+import { StatutKyb } from 'src/compliance/domain/enums/statut-kyb.enum';
 
 /**
  * Le dossier de conformité d'un titulaire — la table de la racine.
@@ -97,6 +98,41 @@ export class InvestorComplianceProfileEntity {
 
   @Column({ type: 'decimal', precision: 15, scale: 2, nullable: true })
   montantMaxConseille: number | null;
+
+  // ── Le dossier KYB de la société ───────────────────────────────────────
+  //
+  // Cinq colonnes qui n'ont de sens que sur une ligne de société
+  // (`souscripteurSocieteId` non nul) : une personne physique prouve son
+  // identité par `kyc`, une société son existence légale par ses
+  // justificatifs. La ligne d'un titulaire les porte donc à leur valeur
+  // initiale, comme elle porte un classement qu'elle n'a pas gagné — une table
+  // est rectangulaire, le modèle ne l'est pas (cf. `ClassementPsfp`).
+  //
+  // Elles remplacent un verdict qui n'était stocké nulle part :
+  // `aptitudeDeLaSociete` le recomposait à chaque lecture depuis trois
+  // agrégats, donc sans date, sans auteur, et basculant en silence dès qu'un
+  // KBIS se périmait.
+
+  @Column({ type: 'varchar', default: StatutKyb.EN_CONSTITUTION })
+  kybStatut: StatutKyb;
+
+  @Column({ type: 'text', nullable: true })
+  kybMotifRefus: string | null;
+
+  /**
+   * `date` et non `timestamptz` : une échéance de validité n'a ni heure ni
+   * fuseau — même choix que `kyc.valideJusquAu`, et les deux se comparent par
+   * la même règle.
+   */
+  @Column({ type: 'date', nullable: true })
+  kybValideJusquAu: string | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  kybDecideeLe: Date | null;
+
+  /** Le compte de l'agent conformité qui a tranché — jamais le titulaire. */
+  @Column({ type: 'int', nullable: true })
+  kybDecideePar: number | null;
 
   // ── La surveillance périodique (PSFP art. 21) ──────────────────────────
 

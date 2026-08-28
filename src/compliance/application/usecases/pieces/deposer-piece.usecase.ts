@@ -1,4 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
+import { EventBus } from '@nestjs/cqrs';
 import {
   DOSSIER_DE_PIECES_REPOSITORY,
   type DossierDePiecesRepository,
@@ -19,18 +20,30 @@ import {
   vueDossierDePieces,
 } from '../../mappers/dossier-de-pieces-vue.mapper';
 import { GetProfilPMUseCase } from '../profiles/get-profil-pm.usecase';
+import { annoncerLaCompletude } from './annoncer-la-completude';
+
+/** Les octets d'une face, tels que le contrôleur les a reçus. */
+export interface FaceDeposee {
+  contenu: Buffer;
+  nomOrigine: string;
+  mimeType: string;
+  tailleOctets: number;
+}
 
 export interface DepotDePiece {
   societeId: string;
   type: TypePieceJustificative;
   beneficiaireId: string | null;
   dateEmission: Date | null;
-  fichier: {
-    contenu: Buffer;
-    nomOrigine: string;
-    mimeType: string;
-    tailleOctets: number;
-  };
+  /** Le recto — ou l'unique face, pour les pièces qui n'ont pas de dos. */
+  fichier: FaceDeposee;
+  /**
+   * Le dos du document.
+   *
+   * Exigé pour une pièce d'identité, interdit ailleurs — c'est
+   * `DossierDePieces.deposer` qui le tranche, pas ce use case (§14).
+   */
+  verso?: FaceDeposee | null;
 }
 
 /**
@@ -67,6 +80,7 @@ export class DeposerPieceUseCase {
     // Le contrôle d'appartenance vit là, pour tous ses appelants — le recopier
     // ici en ferait une seconde version à tenir à jour.
     private readonly getProfilPM: GetProfilPMUseCase,
+    private readonly eventBus: EventBus,
   ) {}
 
   async execute(
@@ -89,12 +103,12 @@ export class DeposerPieceUseCase {
       throw new BeneficiaireDeLaPieceIncoherentError(depot.type, true);
     }
 
-    const range = await this.magasin.stocker({
-      contenu: depot.fichier.contenu,
-      nomOrigine: depot.fichier.nomOrigine,
-      mimeType: depot.fichier.mimeType,
-      societeId: depot.societeId,
-    });
+    // Les deux faces sont rangées de front : elles ne valent que déposées
+    // ensemble, et les enchaîner doublerait l'attente sans rien protéger.
+    const [recto, verso] = await Promise.all([
+      this.ranger(depot.societeId, depot.fichier),
+      depot.verso ? this.ranger(depot.societeId, depot.verso) : null,
+    ]);
 
     const dossier = await this.dossiers.parSociete(depot.societeId);
 
@@ -102,17 +116,52 @@ export class DeposerPieceUseCase {
       type: depot.type,
       beneficiaireId: depot.beneficiaireId,
       dateEmission: depot.dateEmission,
-      fichier: FichierDepose.depose({
-        nomOrigine: depot.fichier.nomOrigine,
-        cleStockage: range.cleStockage,
-        url: range.url,
-        mimeType: depot.fichier.mimeType,
-        tailleOctets: depot.fichier.tailleOctets,
-      }),
+      fichier: recto,
+      verso,
     });
 
     const enregistre = await this.dossiers.save(dossier);
 
+    // Un dépôt fait toujours bouger la complétude, dans un sens ou dans
+    // l'autre : la dernière pièce attendue rend le dossier complet, et
+    // remplacer une pièce déjà acceptée remet son instruction en attente —
+    // donc révoque un KYB validé, qui ne doit pas survivre au document sur
+    // lequel il reposait.
+    annoncerLaCompletude(
+      this.eventBus,
+      enregistre,
+      { id: depot.societeId, utilisateurId: userId },
+      beneficiaires.map((b) => b.id),
+    );
+
     return vueDossierDePieces(enregistre, beneficiaires);
+  }
+
+  /**
+   * Range une face et en fait le Value Object que le domaine sait éprouver.
+   *
+   * Les bornes — type MIME, taille, clé non vide — sont posées par
+   * `FichierDepose`, donc **après** l'écriture des octets. C'est la trace
+   * assumée décrite plus haut : un fichier rangé puis refusé laisse des octets
+   * orphelins, ce qui vaut mieux qu'une ligne pointant vers rien.
+   */
+  private async ranger(
+    societeId: string,
+    face: FaceDeposee,
+  ): Promise<FichierDepose> {
+    const range = await this.magasin.stocker({
+      contenu: face.contenu,
+      nomOrigine: face.nomOrigine,
+      mimeType: face.mimeType,
+      societeId,
+    });
+
+    return FichierDepose.depose({
+      nomOrigine: face.nomOrigine,
+      cleStockage: range.cleStockage,
+      url: range.url,
+      mimeType: face.mimeType,
+      tailleOctets: face.tailleOctets,
+    });
   }
 }

@@ -3,12 +3,16 @@ import {
   PieceJustificativeSnapshot,
 } from '../entities/piece-justificative';
 import {
+  exigeUnBeneficiaire,
+  exigeUnVerso,
   PIECES_EXIGEES_DE_LA_SOCIETE,
+  PIECES_EXIGEES_DU_BENEFICIAIRE,
   TypePieceJustificative,
 } from '../enums/type-piece-justificative.enum';
 import {
   BeneficiaireDeLaPieceIncoherentError,
   PieceJustificativeIntrouvableError,
+  VersoDeLaPieceIncoherentError,
 } from '../errors/piece-justificative.errors';
 import { DecisionPiece } from '../value-objects/decision-piece.vo';
 import { FichierDepose } from '../value-objects/fichier-depose.vo';
@@ -83,19 +87,31 @@ export class DossierDePieces {
     type: TypePieceJustificative;
     beneficiaireId: string | null;
     fichier: FichierDepose;
+    /** Le dos du document — exigé pour une pièce d'identité, interdit ailleurs. */
+    verso?: FichierDepose | null;
     dateEmission: Date | null;
     maintenant?: Date;
   }): PieceJustificative {
     const maintenant = depot.maintenant ?? new Date();
+    const verso = depot.verso ?? null;
 
-    // Le bénéficiaire est exigé pour sa pièce d'identité, et interdit ailleurs.
-    // C'est ici et non dans le DTO : la règle vaut pour tout point d'entrée, et
-    // c'est elle qui garantit que `documenteLaMemeChoseQue` sépare bien deux
-    // bénéficiaires sans jamais séparer deux KBIS.
-    const attendu =
-      depot.type === TypePieceJustificative.PIECE_IDENTITE_BENEFICIAIRE;
+    // Le bénéficiaire est exigé par les pièces qui documentent une personne —
+    // DBE-S1 et pièce d'identité —, interdit par celles qui documentent la
+    // société. C'est ici et non dans le DTO : la règle vaut pour tout point
+    // d'entrée, et c'est elle qui garantit que `documenteLaMemeChoseQue` sépare
+    // bien deux bénéficiaires sans jamais séparer deux KBIS.
+    const attendu = exigeUnBeneficiaire(depot.type);
     if (attendu !== (depot.beneficiaireId !== null)) {
       throw new BeneficiaireDeLaPieceIncoherentError(depot.type, attendu);
+    }
+
+    // Même forme, pour le dos du document. Un recto seul de carte d'identité ne
+    // permet pas d'en vérifier la validité — la date d'expiration est au verso —
+    // et un verso attaché à un KBIS désignerait une seconde page qui n'existe
+    // pas.
+    const versoAttendu = exigeUnVerso(depot.type);
+    if (versoAttendu !== (verso !== null)) {
+      throw new VersoDeLaPieceIncoherentError(depot.type, versoAttendu);
     }
 
     const existante = this._pieces.find((piece) =>
@@ -103,7 +119,12 @@ export class DossierDePieces {
     );
 
     if (existante) {
-      existante.remplacerPar(depot.fichier, depot.dateEmission, maintenant);
+      existante.remplacerPar(
+        depot.fichier,
+        verso,
+        depot.dateEmission,
+        maintenant,
+      );
       return existante;
     }
 
@@ -117,6 +138,7 @@ export class DossierDePieces {
         deposeeLe: maintenant,
       },
       fichier: depot.fichier,
+      verso,
       decision: DecisionPiece.enAttente(),
     });
 
@@ -159,15 +181,18 @@ export class DossierDePieces {
    *
    * @param beneficiaires les bénéficiaires effectifs déclarés par la société.
    *   Ils viennent de l'appelant plutôt que du dossier : ils appartiennent à
-   *   `ProfilPM`, et les charger ici ferait de ce petit agrégat le propriétaire
-   *   d'une liste qui ne lui appartient pas (§6.2). Le cahier des charges exige
-   *   « une pièce d'identité pour chacun de ces bénéficiaires » — leur nombre
-   *   fait donc partie de la règle, mais pas de cet agrégat.
+   *   `RegistreDesBeneficiaires`, et les charger ici ferait de ce petit agrégat
+   *   le propriétaire d'une liste qui ne lui appartient pas (§6.2). Le cahier
+   *   des charges exige un DBE-S1 et une pièce d'identité **pour chacun** —
+   *   leur nombre fait donc partie de la règle, mais pas de cet agrégat.
    */
   piecesManquantes(
     beneficiaires: readonly string[] = [],
     maintenant: Date = new Date(),
   ): PieceManquante[] {
+    // Le produit des deux familles : trois documents pour l'entreprise, deux
+    // par personne qui la contrôle. C'est ici que se voit ce que la constante
+    // ne peut pas dire — le second facteur dépend du registre.
     const attendues: {
       type: TypePieceJustificative;
       beneficiaireId: string | null;
@@ -176,10 +201,12 @@ export class DossierDePieces {
         type,
         beneficiaireId: null,
       })),
-      ...beneficiaires.map((beneficiaireId) => ({
-        type: TypePieceJustificative.PIECE_IDENTITE_BENEFICIAIRE,
-        beneficiaireId,
-      })),
+      ...beneficiaires.flatMap((beneficiaireId) =>
+        PIECES_EXIGEES_DU_BENEFICIAIRE.map((type) => ({
+          type,
+          beneficiaireId,
+        })),
+      ),
     ];
 
     const manquantes: PieceManquante[] = [];

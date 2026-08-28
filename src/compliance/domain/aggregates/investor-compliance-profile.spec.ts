@@ -4,14 +4,19 @@ import {
 } from 'src/compliance/domain/enums/kyc-status.enum';
 import { CategoriePsfp } from 'src/compliance/domain/enums/categorie-psfp.enum';
 import { EtapeQuestionnaire } from 'src/compliance/domain/enums/etape-questionnaire.enum';
-import { EtapeQuestionnaireFermeeError } from 'src/compliance/domain/errors';
+import {
+  EtapeQuestionnaireFermeeError,
+  KybNeConcernePasUnePersonnePhysiqueError,
+  KybPasEnInstructionError,
+} from 'src/compliance/domain/errors';
+import { StatutKyb } from 'src/compliance/domain/enums/statut-kyb.enum';
+import { ProfilInvestisseur } from 'src/compliance/domain/value-objects/profil-investisseur.vo';
 import { PLANCHER_PLAFOND_NON_AVERTI } from 'src/compliance/domain/domain-services/plafond-psfp.domain-service';
 import {
   NonAvertiPsfp,
   ProfessionnelPsfp,
 } from 'src/compliance/domain/value-objects/classement-psfp.vo';
 import { KycMapper } from 'src/compliance/domain/mappers/kyc.mapper';
-import { QuestionnaireAdequationFactory } from 'src/compliance/domain/factories/questionnaire-adequation.factory';
 import { InvestorComplianceProfile } from './investor-compliance-profile';
 
 const JOUR = 86_400_000;
@@ -30,6 +35,22 @@ const dossier = (statut: KycStatus, valideJusquAu: string | null = null) =>
 
 const profil = (kycCase = null as ReturnType<typeof dossier> | null) =>
   new InvestorComplianceProfile({ investorId: 42, kycCase, adequacy: null });
+
+/**
+ * Le dossier du **même compte**, mais au nom de l'une de ses sociétés.
+ *
+ * `kycCase` reste paramétrable pour éprouver qu'il n'est jamais lu ici : le
+ * repository n'en charge délibérément aucun sur une ligne de société, et
+ * `peutOperer` ne doit pas rendre celui du représentant comme s'il était le
+ * sien.
+ */
+const societe = (kycCase = null as ReturnType<typeof dossier> | null) =>
+  new InvestorComplianceProfile({
+    investorId: 42,
+    souscripteur: ProfilInvestisseur.societe('societe-1'),
+    kycCase,
+    adequacy: null,
+  });
 
 describe('InvestorComplianceProfile', () => {
   describe('peutOperer', () => {
@@ -210,6 +231,120 @@ describe('InvestorComplianceProfile', () => {
       expect(() =>
         p.repondreALaPreQualification({ portfolioOver500k: true }),
       ).not.toThrow();
+    });
+  });
+
+  describe('le parcours KYB', () => {
+    const RCCI = 7;
+
+    describe("l'invariant de nature", () => {
+      // Une personne physique prouve son identité, une société son existence
+      // légale. Rien n'empêchait jusqu'ici d'écrire un état de société sur la
+      // ligne d'un titulaire — ni de lui ouvrir par ce chemin les opérations
+      // financières sans qu'aucune identité ait été vérifiée.
+      it.each([
+        [
+          'soumettre à instruction',
+          (p: InvestorComplianceProfile) => p.soumettreLeKybALinstruction(),
+        ],
+        [
+          'valider',
+          (p: InvestorComplianceProfile) => p.validerLeKyb(null, RCCI),
+        ],
+        [
+          'refuser',
+          (p: InvestorComplianceProfile) => p.refuserLeKyb('non', RCCI),
+        ],
+        [
+          'rouvrir',
+          (p: InvestorComplianceProfile) => p.rouvrirLeKyb('pièce refusée'),
+        ],
+      ])('refuse de %s le KYB d’une personne physique', (_, geste) => {
+        expect(() => geste(profil())).toThrow(
+          KybNeConcernePasUnePersonnePhysiqueError,
+        );
+      });
+
+      it('ne publie aucun statut KYB pour une personne physique', () => {
+        // `null` et non `EN_CONSTITUTION` : un titulaire n'a pas un KYB « à
+        // commencer », il n'en a pas du tout.
+        expect(profil().statutKyb).toBeNull();
+        expect(profil().kybEstEnInstruction()).toBe(false);
+      });
+    });
+
+    describe('peutOperer', () => {
+      it("refuse une société dont le dossier n'a pas été instruit", () => {
+        expect(societe().peutOperer()).toBe(false);
+        expect(societe().statutKyb).toBe(StatutKyb.EN_CONSTITUTION);
+      });
+
+      it('refuse une société dont le dossier attend encore la conformité', () => {
+        const s = societe();
+        s.soumettreLeKybALinstruction();
+
+        expect(s.kybEstEnInstruction()).toBe(true);
+        expect(s.peutOperer()).toBe(false);
+      });
+
+      it('laisse opérer une société dont le KYB est validé', () => {
+        const s = societe();
+        s.soumettreLeKybALinstruction();
+        s.validerLeKyb(null, RCCI);
+
+        expect(s.peutOperer()).toBe(true);
+      });
+
+      it("s'éprouve à une date donnée, comme la vérification d'identité", () => {
+        // Les deux natures de souscripteur doivent expirer selon la même règle,
+        // au même instant : le KYB et le KYC ouvrent le même accès.
+        const s = societe();
+        s.soumettreLeKybALinstruction();
+        s.validerLeKyb('2026-06-30', RCCI);
+
+        expect(s.peutOperer(new Date('2026-06-29'))).toBe(true);
+        expect(s.peutOperer(new Date('2026-07-01'))).toBe(false);
+      });
+
+      it('ne lit pas le KYC du représentant sur la ligne d’une société', () => {
+        // Une société n'a pas d'identité à vérifier : son verdict est son KYB,
+        // et celui du représentant est composé ailleurs — par
+        // `aptitudeDeLaSociete`, qui croise deux racines (§17).
+        const s = societe(dossier(KycStatus.VALIDE));
+
+        expect(s.peutOperer()).toBe(false);
+      });
+    });
+
+    describe('la révocation', () => {
+      it('fait retomber en constitution un KYB validé dont une pièce est refusée', () => {
+        const s = societe();
+        s.soumettreLeKybALinstruction();
+        s.validerLeKyb('2099-01-01', RCCI);
+        expect(s.peutOperer()).toBe(true);
+
+        s.rouvrirLeKyb('KBIS remplacé');
+
+        expect(s.peutOperer()).toBe(false);
+        expect(s.statutKyb).toBe(StatutKyb.EN_CONSTITUTION);
+        expect(s.motifRefusKyb).toBe('KBIS remplacé');
+      });
+
+      it('refuse de valider un dossier qui vient de retomber en constitution', () => {
+        const s = societe();
+        s.soumettreLeKybALinstruction();
+        s.rouvrirLeKyb('Statuts illisibles');
+
+        expect(() => s.validerLeKyb(null, RCCI)).toThrow(
+          KybPasEnInstructionError,
+        );
+      });
+    });
+
+    it('rend la décision au repository même pour une personne physique', () => {
+      // La porte `pieces` écrit une ligne de table, pas une vue : rendre `null`
+      // ici écrirait la colonne à `NULL` là où `restore` attend un statut.
+      expect(profil().pieces.kyb.kybStatut).toBe(StatutKyb.EN_CONSTITUTION);
     });
   });
 });

@@ -25,14 +25,18 @@ export class PieceJustificativeIntrouvableError extends ComplianceError {
 }
 
 /**
- * Une pièce d'identité de bénéficiaire a été déposée sans dire lequel — ou une
+ * Une pièce nominative a été déposée sans dire qui elle documente — ou une
  * pièce de la société avec un bénéficiaire.
  *
- * Le cahier des charges exige « une pièce d'identité pour chacun de ces
- * bénéficiaires » : sans le désigner, la pièce ne documente personne et ne peut
- * compter pour aucun. À l'inverse, rattacher un KBIS à un bénéficiaire ferait
- * exister deux extraits pour une même société, sans qu'on sache lequel fait
- * foi.
+ * Deux pièces désignent une personne : le **DBE-S1** et la **pièce
+ * d'identité**. Sans nommer le bénéficiaire, elles ne documentent personne et
+ * ne peuvent compter pour aucun — un dossier de trois actionnaires passerait
+ * pour complet avec le formulaire d'un seul.
+ *
+ * À l'inverse, le KBIS, les statuts et la liste des actionnaires décrivent
+ * l'entreprise prise comme un tout. Rattacher l'un d'eux à un bénéficiaire
+ * ferait exister autant d'extraits que de personnes déclarées, sans qu'on sache
+ * lequel fait foi.
  */
 export class BeneficiaireDeLaPieceIncoherentError extends ComplianceError {
   readonly kind = ComplianceErrorKind.INVALID_INPUT;
@@ -48,6 +52,39 @@ export class BeneficiaireDeLaPieceIncoherentError extends ComplianceError {
       {
         code: 'BENEFICIAIRE_DE_LA_PIECE_INCOHERENT',
         details: { type, beneficiaireAttendu: attendu },
+      },
+    );
+  }
+}
+
+/**
+ * Une pièce d'identité a été déposée sans son verso — ou un document sans dos
+ * s'est vu accoler une seconde face.
+ *
+ * **Le verso n'est pas un supplément, c'est la moitié du document.** Sur une
+ * carte d'identité, la date d'expiration, l'adresse et la bande MRZ sont au
+ * dos : instruire sur le seul recto revient à accepter une pièce sans pouvoir
+ * vérifier qu'elle est encore valide. Le régime protecteur veut qu'on ne le
+ * présume pas — même raison que `PieceJustificative.estPerimee`, qui tient pour
+ * périmée une pièce datée dont la date d'émission manque.
+ *
+ * Dans l'autre sens, un KBIS n'a pas de dos : lui en attacher un désignerait
+ * des octets que personne n'instruirait et que rien ne réclamerait jamais.
+ */
+export class VersoDeLaPieceIncoherentError extends ComplianceError {
+  readonly kind = ComplianceErrorKind.INVALID_INPUT;
+
+  constructor(
+    readonly type: TypePieceJustificative,
+    readonly attendu: boolean,
+  ) {
+    super(
+      attendu
+        ? `Une ${LIBELLE_PIECE[type]} se dépose recto **et** verso : la date d'expiration est au dos.`
+        : `Une ${LIBELLE_PIECE[type]} n'a qu'une face — aucun verso n'est attendu.`,
+      {
+        code: 'VERSO_DE_LA_PIECE_INCOHERENT',
+        details: { type, versoAttendu: attendu },
       },
     );
   }

@@ -43,6 +43,21 @@ export enum NotificationType {
    * périmé.
    */
   PIECE_JUSTIFICATIVE_REFUSEE = 'piece_justificative_refusee',
+  /**
+   * Le dossier KYB d'une société a été tranché par l'équipe conformité.
+   *
+   * Distinctes de `KYC_VALIDE` / `KYC_REJETE`, qui visent l'identité d'une
+   * **personne** : une société n'a pas d'identité à vérifier, elle a un dossier
+   * de justificatifs. Les confondre ferait lire « votre vérification d'identité
+   * a été refusée » au dirigeant dont le KYC personnel est validé depuis des
+   * mois.
+   *
+   * Distinctes aussi de `PIECE_JUSTIFICATIVE_REFUSEE`, qui ne dit qu'une pièce :
+   * un dossier dont tous les documents sont acceptés peut être rejeté pour
+   * incohérence entre eux, et aucun refus de pièce ne l'aurait annoncé.
+   */
+  KYB_VALIDE = 'kyb_valide',
+  KYB_REFUSE = 'kyb_refuse',
 }
 
 @Entity('notification')
