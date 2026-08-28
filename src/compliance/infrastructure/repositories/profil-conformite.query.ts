@@ -35,16 +35,16 @@ export class ProfilConformiteTypeOrmQuery implements ProfilConformiteQuery {
 
   async eligibilite(investorId: number): Promise<EligibiliteDuTitulaire> {
     const profil = await this.profils.findByInvestorId(investorId);
-    const classement = profil.classement;
+    // Jamais `null` : sans questionnaire, la racine tient un classement non
+    // averti — le classement se gagne, il ne se présume pas.
+    const classement = profil.classement.toSnapshot();
 
     return {
       investorId,
-      // `classement` est `null` sans questionnaire ; son repli est le même que
-      // celui d'`estNonAverti()` — non averti tant que rien n'est prouvé.
-      categoriePsfp: classement?.categoriePsfp ?? CategoriePsfp.NON_AVERTI,
+      categoriePsfp: classement.categoriePsfp,
       estNonAverti: profil.estNonAverti(),
       plafondConseille: profil.plafondConseille(),
-      patrimoineDeclare: classement?.patrimoineDeclare ?? null,
+      patrimoineDeclare: classement.patrimoineDeclare,
     };
   }
 

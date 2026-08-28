@@ -7,17 +7,17 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { CategoriePsfp } from 'src/compliance/domain/enums/categorie-psfp.enum';
-import { NatureDeDossier } from 'src/compliance/domain/enums/nature-de-dossier.enum';
 import { NiveauRisque } from 'src/compliance/domain/enums/niveau-risque.enum';
 
 /**
  * Le dossier de conformité d'un titulaire — la table de la racine.
  *
  * Elle s'appelait `dossier_investisseur` et ne portait que la nature du
- * dossier, pour garantir l'exclusivité PP ⊻ PM. Elle est devenue la table de
- * `InvestorComplianceProfile` en trois temps : la surveillance périodique s'y
- * est installée, puis le classement PSFP, et enfin les deux pièces s'y
- * rattachent.
+ * dossier, pour garantir une exclusivité PP ⊻ PM que le cahier des charges ne
+ * demandait pas. Elle est devenue la table de `InvestorComplianceProfile` en
+ * quatre temps : la surveillance périodique s'y est installée, puis le
+ * classement PSFP, puis les deux pièces s'y sont rattachées, et enfin la nature
+ * — sa raison d'être initiale — en est partie.
  *
  * **C'est le seul point de ce contexte qui connaisse le compte.** `kyc` et
  * `questionnaire_adequation` portaient chacune un `utilisateurId` vers `users`,
@@ -50,17 +50,14 @@ export class InvestorComplianceProfileEntity {
   @Index({ unique: true })
   userId: number;
 
-  /**
-   * Personne physique ou morale — exclusif et définitif.
-   *
-   * `null` tant que le titulaire n'a ouvert aucun profil : un compte peut
-   * commencer sa vérification d'identité avant de choisir sa nature. C'est
-   * `NatureDuDossierRepository.declarer` qui la fixe, et la clé étrangère
-   * composée `(userId, nature)` que portent `profil_personne_physique` et
-   * `profil_personne_morale` qui la rend opposable.
-   */
-  @Column({ type: 'varchar', length: 2, nullable: true })
-  nature: NatureDeDossier | null;
+  // La colonne `nature` a disparu, avec la clé étrangère composée
+  // `(userId, nature)` par laquelle les deux tables de profils s'interdisaient
+  // mutuellement. Un compte relève des deux régimes à la fois : il a un dossier
+  // personne physique — son identité, celle du représentant légal — et autant
+  // de sociétés qu'il en représente. Une nature unique n'était donc plus
+  // décidable, et ce qu'elle prétendait dire se lit sans elle : un dossier
+  // physique existe ou non, des sociétés sont déclarées ou non. Voir
+  // `ProfilsPPEtPMCoexistent1784100000000`.
 
   // ── Le classement PSFP ─────────────────────────────────────────────────
   //

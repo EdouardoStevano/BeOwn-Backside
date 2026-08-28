@@ -2,7 +2,7 @@ import {
   ProfilPP,
   ProfilPPSnapshot,
 } from 'src/compliance/domain/aggregates/profil-pp';
-import type { ClassementPsfp } from 'src/compliance/domain/aggregates/investor-compliance-profile';
+import { ClassementPsfp } from 'src/compliance/domain/value-objects/classement-psfp.vo';
 import { CategoriePsfp } from 'src/compliance/domain/enums/categorie-psfp.enum';
 
 /**
@@ -77,9 +77,9 @@ export function vueProfilPP(
     prenom: compte?.firstname ?? null,
     nom: compte?.lastname ?? null,
     // Sans questionnaire, le titulaire **est** non averti : le classement se
-    // gagne, il ne se présume pas. C'est le même repli que la racine applique.
-    categoriePsfp: classement?.categoriePsfp ?? CategoriePsfp.NON_AVERTI,
-    patrimoineDeclare: classement?.patrimoineDeclare ?? null,
-    montantMaxConseille: classement?.montantMaxConseille ?? null,
+    // gagne, il ne se présume pas. Le repli est celui de la racine — le même
+    // objet, et non trois valeurs par défaut réécrites clé par clé, qui
+    // pouvaient diverger du domaine sans que rien ne le signale.
+    ...(classement ?? ClassementPsfp.initial()).toSnapshot(),
   };
 }

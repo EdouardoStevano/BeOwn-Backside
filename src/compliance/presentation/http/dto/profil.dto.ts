@@ -91,23 +91,22 @@ export class CreateProfilPPDto {
   @IsString()
   nif?: string;
 
-  @ApiPropertyOptional({
-    example: 500000,
-    description:
-      'Patrimoine net déclaré (€) — pour calcul limite 5% non-averti',
-  })
-  @IsOptional()
-  @IsNumber()
-  patrimoineDeclare?: number;
-
-  @ApiPropertyOptional({
-    example: 25000,
-    description:
-      'Montant max conseillé par investissement (€) — déduit du questionnaire',
-  })
-  @IsOptional()
-  @IsNumber()
-  montantMaxConseille?: number;
+  // `patrimoineDeclare` et `montantMaxConseille` ne sont pas ici, et ne
+  // reviendront pas.
+  //
+  // Ils n'ont jamais rien fait : `champsDeclaresDepuisDto` les écartait déjà,
+  // et le domaine n'a pas où les mettre — le patrimoine appartient à l'étape 3
+  // du questionnaire d'adéquation (`CapaciteDePerte`), et le montant conseillé
+  // en est **déduit**, jamais déclaré (`ResultatAdequation`, dont le
+  // constructeur est privé pour cette raison précise). Les accepter ici les
+  // annonçait pourtant comme réglables dans Swagger, exemples à l'appui : une
+  // invitation à croire qu'on peut se fixer son propre plafond PSFP — c'est-à-
+  // dire à contourner la limite des 5 % du patrimoine sans répondre au
+  // questionnaire.
+  //
+  // Ils restent **publiés** dans la réponse des routes du profil, où ils sont à
+  // leur place : le front les lit, il ne les écrit pas (voir
+  // `ClassementPublie`).
 }
 
 export class CreateProfilPMDto {

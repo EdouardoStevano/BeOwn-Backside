@@ -14,16 +14,8 @@ import {
 } from 'src/compliance/domain/repositories/profil-pp.repository';
 import { CreateProfilPPDto } from 'src/compliance/presentation/http/dto/profil.dto';
 import { ProfilPPCreeDomainEvent } from 'src/compliance/domain/events/profil-pp-cree.domain-event';
-import {
-  NATURE_DU_DOSSIER_REPOSITORY,
-  type NatureDuDossierRepository,
-} from 'src/compliance/domain/repositories/nature-du-dossier.repository';
-import { NatureDeDossier } from 'src/compliance/domain/enums/nature-de-dossier.enum';
 import { ProfilPPFactory } from 'src/compliance/domain/factories/profil-pp.factory';
-import {
-  NatureDeDossierIncompatibleError,
-  ProfilPPDejaExistantError,
-} from 'src/compliance/domain/errors';
+import { ProfilPPDejaExistantError } from 'src/compliance/domain/errors';
 import { champsDeclaresDepuisDto } from '../../mappers/profil-pp-champs.mapper';
 import { VueProfilPP, vueProfilPP } from '../../mappers/profil-pp-vue.mapper';
 
@@ -45,6 +37,14 @@ import { VueProfilPP, vueProfilPP } from '../../mappers/profil-pp-vue.mapper';
  * Le compte reste lu — jamais écrit — parce que la **réponse** publie son état
  * civil : `prenom` et `nom` ont quitté `profil_pp`, et les retirer du JSON
  * casserait l'écran de profil (voir `vueProfilPP`).
+ *
+ * **Remplir son dossier personnel n'engage plus la nature du compte.** Ce use
+ * case déclarait le compte « personne physique », ce qui lui interdisait
+ * ensuite de déclarer une société. Le cahier des charges dit l'inverse : un
+ * compte a un dossier physique **et** autant de sociétés qu'il en représente,
+ * et c'est ce qui lui évite « de compléter les informations redondantes » —
+ * l'identité saisie ici est celle du représentant légal de chacune d'elles.
+ * Voir `ProfilsPPEtPMCoexistent1784100000000`.
  */
 @Injectable()
 export class CreateProfilPPUseCase {
@@ -56,8 +56,6 @@ export class CreateProfilPPUseCase {
     // (§12.3).
     @Inject(USER_REPOSITORY)
     private readonly userRepository: UserRepository,
-    @Inject(NATURE_DU_DOSSIER_REPOSITORY)
-    private readonly natureDuDossier: NatureDuDossierRepository,
     @Inject(INVESTOR_COMPLIANCE_PROFILE_REPOSITORY)
     private readonly profilsConformite: InvestorComplianceProfileRepository,
     private readonly eventBus: EventBus,
@@ -71,18 +69,6 @@ export class CreateProfilPPUseCase {
       userId,
       ...champsDeclaresDepuisDto(dto),
     });
-
-    // Après la fabrique, avant l'écriture : un formulaire refusé ne doit pas
-    // fixer la nature du compte, et rien ne doit être écrit si elle est déjà
-    // fixée à l'autre. L'appel pose la nature ou rend celle qui fait foi — il
-    // n'y a pas de fenêtre entre lire et écrire (§13).
-    const nature = await this.natureDuDossier.declarer(
-      userId,
-      NatureDeDossier.PP,
-    );
-    if (nature !== NatureDeDossier.PP) {
-      throw new NatureDeDossierIncompatibleError(NatureDeDossier.PP, nature);
-    }
 
     const profil = await this.profilPPRepository.save(naissant);
 

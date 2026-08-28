@@ -6,10 +6,8 @@ import { QuestionnaireAdequationEntity } from './persistence/entities/questionna
 import { InvestorComplianceProfileEntity } from './persistence/entities/investor-compliance-profile.entity';
 import { ProfilPPTypeOrmRepository } from './repositories/profil-pp.repository';
 import { ProfilPMTypeOrmRepository } from './repositories/profil-pm.repository';
-import { NatureDuDossierTypeOrmRepository } from './repositories/nature-du-dossier.repository';
 import { PROFIL_PP_REPOSITORY } from '../domain/repositories/profil-pp.repository';
 import { PROFIL_PM_REPOSITORY } from '../domain/repositories/profil-pm.repository';
-import { NATURE_DU_DOSSIER_REPOSITORY } from '../domain/repositories/nature-du-dossier.repository';
 
 /**
  * Câblage des adapters de sortie du contexte Profiles (§4 — DIP) : un port par
@@ -30,15 +28,7 @@ import { NATURE_DU_DOSSIER_REPOSITORY } from '../domain/repositories/nature-du-d
   providers: [
     { provide: PROFIL_PP_REPOSITORY, useClass: ProfilPPTypeOrmRepository },
     { provide: PROFIL_PM_REPOSITORY, useClass: ProfilPMTypeOrmRepository },
-    {
-      provide: NATURE_DU_DOSSIER_REPOSITORY,
-      useClass: NatureDuDossierTypeOrmRepository,
-    },
   ],
-  exports: [
-    PROFIL_PP_REPOSITORY,
-    PROFIL_PM_REPOSITORY,
-    NATURE_DU_DOSSIER_REPOSITORY,
-  ],
+  exports: [PROFIL_PP_REPOSITORY, PROFIL_PM_REPOSITORY],
 })
 export class ProfilesInfrastructureModule {}

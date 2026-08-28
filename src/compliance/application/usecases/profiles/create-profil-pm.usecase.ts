@@ -6,12 +6,6 @@ import {
 } from 'src/compliance/domain/repositories/profil-pm.repository';
 import { ProfilPM } from 'src/compliance/domain/aggregates/profil-pm';
 import { ProfilPMFactory } from 'src/compliance/domain/factories/profil-pm.factory';
-import {
-  NATURE_DU_DOSSIER_REPOSITORY,
-  type NatureDuDossierRepository,
-} from 'src/compliance/domain/repositories/nature-du-dossier.repository';
-import { NatureDeDossier } from 'src/compliance/domain/enums/nature-de-dossier.enum';
-import { NatureDeDossierIncompatibleError } from 'src/compliance/domain/errors';
 import { CreateProfilPMDto } from '../../../presentation/http/dto/profil.dto';
 
 /**
@@ -32,14 +26,22 @@ import { CreateProfilPMDto } from '../../../presentation/http/dto/profil.dto';
  * recevait un 201 et aucun changement. Le repli n'a plus lieu d'être : un
  * compte peut déclarer plusieurs sociétés, et corriger l'une d'elles a sa
  * propre route.
+ *
+ * **Déclarer une société n'exige pas d'avoir d'abord rempli son dossier
+ * personnel, et ne l'interdit pas non plus.** Ce use case refusait la société
+ * à un compte déjà « personne physique » ; le cahier des charges veut
+ * exactement la situation inverse — un compte porte son identité *et* les
+ * entreprises qu'il représente. Reste une contrainte réelle, mais elle ne
+ * porte pas ici : on ne peut pas **investir** au nom d'une société dont le
+ * représentant légal n'est pas identifié. Nommer une raison sociale n'engage
+ * aucun fonds ; cette règle appartient donc à la porte des opérations
+ * financières (`InvestorComplianceProfile.peutOperer`), pas à ce formulaire.
  */
 @Injectable()
 export class CreateProfilPMUseCase {
   constructor(
     @Inject(PROFIL_PM_REPOSITORY)
     private readonly profilPMRepository: ProfilPMRepository,
-    @Inject(NATURE_DU_DOSSIER_REPOSITORY)
-    private readonly natureDuDossier: NatureDuDossierRepository,
   ) {}
 
   async execute(userId: number, dto: CreateProfilPMDto): Promise<ProfilPM> {
@@ -55,18 +57,6 @@ export class CreateProfilPMUseCase {
       // `representantId` n'est pas exposé au formulaire : on ne se désigne pas
       // représentant légal d'une société en le déclarant dans un POST.
     });
-
-    // Après la fabrique, avant l'écriture : un formulaire refusé ne doit pas
-    // fixer la nature du compte, et rien ne doit être écrit si elle est déjà
-    // fixée à l'autre. L'appel pose la nature ou rend celle qui fait foi — il
-    // n'y a pas de fenêtre entre lire et écrire (§13).
-    const nature = await this.natureDuDossier.declarer(
-      userId,
-      NatureDeDossier.PM,
-    );
-    if (nature !== NatureDeDossier.PM) {
-      throw new NatureDeDossierIncompatibleError(NatureDeDossier.PM, nature);
-    }
 
     return this.profilPMRepository.save(profil);
   }

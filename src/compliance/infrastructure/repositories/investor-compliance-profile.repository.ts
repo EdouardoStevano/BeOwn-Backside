@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { InvestorComplianceProfile } from 'src/compliance/domain/aggregates/investor-compliance-profile';
 import { InvestorComplianceProfileRepository } from 'src/compliance/domain/repositories/investor-compliance-profile.repository';
+import { ClassementPsfp } from 'src/compliance/domain/value-objects/classement-psfp.vo';
 import { SuiviInvestisseur } from 'src/compliance/domain/value-objects/suivi-investisseur.vo';
 import { KycEntity } from '../persistence/entities/kyc.entity';
 import { QuestionnaireAdequationEntity } from '../persistence/entities/questionnaire-adequation.entity';
@@ -68,11 +69,11 @@ export class InvestorComplianceProfileTypeOrmRepository implements InvestorCompl
       adequacy: questionnaire
         ? ProfilMapper.questionnaireToDomain(questionnaire)
         : null,
-      classement: {
+      classement: ClassementPsfp.restore({
         categoriePsfp: racine.categoriePsfp,
         patrimoineDeclare: nombreOuNull(racine.patrimoineDeclare),
         montantMaxConseille: nombreOuNull(racine.montantMaxConseille),
-      },
+      }),
       suivi: SuiviInvestisseur.restore(racine),
     });
   }
@@ -83,8 +84,7 @@ export class InvestorComplianceProfileTypeOrmRepository implements InvestorCompl
     // La porte réservée au repository — voir `InvestorComplianceProfile.pieces`.
     const { kycCase, adequacy, classement, suivi } = profile.pieces;
 
-    // La racine d'abord : ses pièces ont besoin de son identité, et `nature`
-    // n'est pas touchée — elle appartient à `NatureDuDossierRepository`.
+    // La racine d'abord : ses pièces ont besoin de son identité.
     const racine = await this.racines.save({
       // `id` absent d'un dossier jamais écrit : TypeORM insère et l'attribue.
       ...(profile.id ? { id: profile.id } : {}),

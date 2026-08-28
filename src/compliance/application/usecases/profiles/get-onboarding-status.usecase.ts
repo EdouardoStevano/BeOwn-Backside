@@ -98,14 +98,17 @@ export class GetOnboardingStatusUseCase {
       this.profils.findByInvestorId(utilisateurId),
     ]);
 
-    // Une seule société suffit à établir la nature du compte, et il ne peut
-    // pas en exister en même temps qu'un dossier physique — voir
-    // `NatureDeDossier`.
-    const typeEffectif: TypeInvestisseur | null = profilPP
-      ? 'PP'
-      : profilsPM.length > 0
-        ? 'PM'
-        : null;
+    // Les deux coexistent désormais : un compte a son dossier physique **et**
+    // ses sociétés. `userType` n'est donc plus une nature — c'est un raccourci
+    // d'affichage, et la société l'emporte parce qu'elle est ce qui distingue
+    // ce compte des autres : tout titulaire finit par avoir un dossier
+    // physique, seul celui qui investit par une société en déclare une.
+    //
+    // L'ordre était l'inverse. Le laisser tel quel aurait fait afficher « PP »
+    // à tout compte moral dès qu'il aurait renseigné son identité — c'est-à-dire
+    // à tous, l'identité du représentant étant requise.
+    const typeEffectif: TypeInvestisseur | null =
+      profilsPM.length > 0 ? 'PM' : profilPP ? 'PP' : null;
 
     // Le type est acquis dès qu'il est annoncé : l'étape 1 du parcours consiste
     // précisément à le choisir, avant qu'aucun profil n'existe. Elle ne pouvait
@@ -114,10 +117,15 @@ export class GetOnboardingStatusUseCase {
 
     // Le parcours est commencé dès qu'une société est nommée : celui qui en
     // déclare plusieurs n'a pas à toutes les remplir pour avancer.
-    const aCommenceSonProfil = !!(
-      profilPP?.aRenseigneSonProfil() ??
-      profilsPM.some((pm) => pm.identiteLegale.raisonSociale)
-    );
+    //
+    // `||`, et non `??` : ce dernier ne regardait les sociétés que si le
+    // dossier physique était **absent**. Les deux coexistant maintenant, un
+    // compte qui déclare sa société avant de saisir son adresse a un dossier
+    // physique vide, `aRenseigneSonProfil()` rend `false`, et l'étape se serait
+    // affichée non commencée alors qu'une société est nommée.
+    const aCommenceSonProfil =
+      (profilPP?.aRenseigneSonProfil() ?? false) ||
+      profilsPM.some((pm) => pm.identiteLegale.raisonSociale);
 
     // Le questionnaire est répondu quand il **existe**. La condition lisait
     // `profilPP?.categoriePsfp`, toujours vraie dès qu'un profil PP existe —

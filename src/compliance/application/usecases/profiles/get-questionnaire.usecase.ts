@@ -4,6 +4,10 @@ import {
   INVESTOR_COMPLIANCE_PROFILE_REPOSITORY,
   type InvestorComplianceProfileRepository,
 } from 'src/compliance/domain/repositories/investor-compliance-profile.repository';
+import {
+  VueQuestionnaire,
+  vueQuestionnaire,
+} from '../../mappers/questionnaire-vue.mapper';
 
 /**
  * Le questionnaire d'adéquation d'un titulaire, `null` s'il n'a pas répondu.
@@ -27,5 +31,19 @@ export class GetQuestionnaireUseCase {
   async execute(userId: number): Promise<AdequacyAssessmentSnapshot | null> {
     const profil = await this.profils.findByInvestorId(userId);
     return profil.questionnairePublie;
+  }
+
+  /**
+   * Le questionnaire **et l'étape à poser** — ce que le parcours en trois temps
+   * demande de savoir avant d'afficher quoi que ce soit.
+   *
+   * Route à part plutôt qu'enrichissement de {@link execute} : celle-ci rend le
+   * questionnaire nu depuis toujours, et le front en dépend. L'ajout est donc
+   * additif, et `GET /profiles/questionnaire/me` reste mot pour mot ce qu'il
+   * était.
+   */
+  async executeEtapes(userId: number): Promise<VueQuestionnaire> {
+    const profil = await this.profils.findByInvestorId(userId);
+    return vueQuestionnaire(profil);
   }
 }

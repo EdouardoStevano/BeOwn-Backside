@@ -4,18 +4,17 @@ import { ChampsDeclaresProfilPP } from 'src/compliance/domain/aggregates/profil-
 /**
  * Traduit le DTO HTTP en champs déclarés du domaine.
  *
- * L'intérêt est dans ce qui **n'est pas** repris : `patrimoineDeclare` et
- * `montantMaxConseille` figurent dans le DTO mais sont le résultat du
- * questionnaire d'adéquation (`SaveQuestionnaireUseCase`), pas une déclaration
- * libre. Les laisser passer permettrait de s'attribuer un plafond
- * d'investissement — et donc de contourner la limite PSFP de 5 % du patrimoine
- * — sans jamais répondre au questionnaire. Le use case de création les
- * ignorait déjà ; celui de mise à jour, lui, les recopiait via
- * `Object.assign`.
- *
  * La liste est écrite en toutes lettres plutôt que déduite par un `rest` :
  * ajouter un champ au DTO ne doit pas suffire à le faire entrer dans le
  * domaine, la décision doit se prendre ici.
+ *
+ * Cette fonction a longtemps eu un second rôle : **écarter** `patrimoineDeclare`
+ * et `montantMaxConseille`, que le DTO acceptait sans que rien ne les
+ * enregistre. Ils ont quitté le DTO — un champ qu'aucun chemin n'utilise n'a
+ * pas à être documenté comme réglable, et le laisser là invitait à croire qu'on
+ * peut se fixer son propre plafond PSFP. La garde ne tient donc plus qu'à la
+ * liste ci-dessous, ce qui suffit : elle n'a jamais été franchissable
+ * autrement.
  */
 export function champsDeclaresDepuisDto(
   dto: Partial<CreateProfilPPDto>,

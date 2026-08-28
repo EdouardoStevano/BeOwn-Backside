@@ -64,6 +64,23 @@ export class QuestionnaireAdequationEntity {
   @Column({ type: 'boolean', default: false })
   acceptsSimulatedLoss: boolean;
 
+  // ── Avancement : quelle étape a été répondue, et quand ─────────────────
+  //
+  // `null` tant que l'étape ne l'a pas été. Ces trois dates sont ce qui rend
+  // une étape répondue **discernable** d'une étape jamais ouverte : toutes les
+  // réponses des étapes 1 et 2 sont des booléens qui valent `false` par défaut,
+  // si bien que répondre « non » partout produit exactement la ligne de qui n'a
+  // rien rempli. Voir `AvancementQuestionnaire`.
+
+  @Column({ type: 'timestamptz', nullable: true })
+  preQualificationRepondueLe: Date | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  qualificationRepondueLe: Date | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  capaciteRepondueLe: Date | null;
+
   // ── Résultat calculé ───────────────────────────────────────────────────
   @Column({ type: 'varchar', nullable: true })
   resultCategorie: CategoriePsfp | null;

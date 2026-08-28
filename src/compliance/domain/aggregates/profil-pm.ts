@@ -40,8 +40,12 @@ export interface EnteteProfilPM {
    * compte ne pouvait alors porter qu'une société, et la seconde écrasait
    * silencieusement la première.
    *
-   * Ce que le compte ne peut pas faire, en revanche, c'est porter en plus un
-   * dossier personne physique — voir `NatureDeDossier`.
+   * Le compte porte **en plus** son dossier personne physique : c'est
+   * l'identité du représentant légal, saisie une fois et valable pour toutes
+   * ses sociétés — c'est même la raison d'être de la pluralité, le cahier des
+   * charges parlant d'éviter « de compléter les informations redondantes ». Une
+   * exclusivité l'a interdit un temps, à tort ; voir
+   * `ProfilsPPEtPMCoexistent1784100000000`.
    */
   userId: number;
   createdAt: Date;

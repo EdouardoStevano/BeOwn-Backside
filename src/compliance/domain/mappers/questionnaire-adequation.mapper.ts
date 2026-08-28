@@ -3,6 +3,7 @@ import {
   AdequacyAssessmentSnapshot,
   AdequacyAssessmentSnapshotBrut,
 } from 'src/compliance/domain/entities/adequacy-assessment';
+import { AvancementQuestionnaire } from 'src/compliance/domain/value-objects/avancement-questionnaire.vo';
 import { CapaciteDePerte } from 'src/compliance/domain/value-objects/capacite-de-perte.vo';
 import { PreQualificationPsfp } from 'src/compliance/domain/value-objects/pre-qualification-psfp.vo';
 import { QualificationPsfp } from 'src/compliance/domain/value-objects/qualification-psfp.vo';
@@ -36,6 +37,7 @@ export class QuestionnaireAdequationMapper {
       preQualification: PreQualificationPsfp.restore(snapshot),
       qualification: QualificationPsfp.restore(snapshot),
       capacite: CapaciteDePerte.restore(snapshot),
+      avancement: AvancementQuestionnaire.restore(snapshot),
       resultat: ResultatAdequation.restore(snapshot),
     });
   }
@@ -59,6 +61,7 @@ export class QuestionnaireAdequationMapper {
       ...questionnaire.preQualification.toSnapshot(),
       ...questionnaire.qualification.toSnapshot(),
       ...questionnaire.capacite.toSnapshot(),
+      ...questionnaire.avancement.toSnapshot(),
       ...questionnaire.resultat.toSnapshot(),
     };
   }

@@ -5,6 +5,7 @@ import { QuestionnaireAdequationFactory } from 'src/compliance/domain/factories/
 import type { InvestorComplianceProfileRepository } from 'src/compliance/domain/repositories/investor-compliance-profile.repository';
 import { InvestorComplianceProfile } from 'src/compliance/domain/aggregates/investor-compliance-profile';
 import { AdequacyAssessment } from 'src/compliance/domain/entities/adequacy-assessment';
+import { ProfessionnelPsfp } from 'src/compliance/domain/value-objects/classement-psfp.vo';
 import { SaveQuestionnaireDto } from 'src/compliance/presentation/http/dto/questionnaire.dto';
 import type { RiskScoringService } from '../../services/risk-scoring.service';
 
@@ -93,7 +94,7 @@ describe('SaveQuestionnaireUseCase', () => {
     const [enregistre] = mocks.save.mock.calls[0] as [
       InvestorComplianceProfile,
     ];
-    expect(enregistre.classement).toEqual({
+    expect(enregistre.classement.toSnapshot()).toEqual({
       categoriePsfp: CategoriePsfp.NON_AVERTI,
       patrimoineDeclare: 400_000,
       montantMaxConseille: 20_000,
@@ -108,7 +109,10 @@ describe('SaveQuestionnaireUseCase', () => {
     const [enregistre] = mocks.save.mock.calls[0] as [
       InvestorComplianceProfile,
     ];
-    expect(enregistre.classement).toMatchObject({
+    // Le montant n'est pas « à null » : la classe du professionnel ne le porte
+    // pas du tout, et `toSnapshot` ne le replie en `null` que pour la table.
+    expect(enregistre.classement).toBeInstanceOf(ProfessionnelPsfp);
+    expect(enregistre.classement.toSnapshot()).toMatchObject({
       categoriePsfp: CategoriePsfp.PROFESSIONNEL,
       montantMaxConseille: null,
     });

@@ -22,13 +22,19 @@ import { GetProfilPMUseCase } from 'src/compliance/application/usecases/profiles
 import { ListProfilsPMUseCase } from 'src/compliance/application/usecases/profiles/list-profils-pm.usecase';
 import { UpdateProfilPMUseCase } from 'src/compliance/application/usecases/profiles/update-profil-pm.usecase';
 import { SaveQuestionnaireUseCase } from 'src/compliance/application/usecases/profiles/save-questionnaire.usecase';
+import { RepondreEtapeQuestionnaireUseCase } from 'src/compliance/application/usecases/profiles/repondre-etape-questionnaire.usecase';
 import { GetQuestionnaireUseCase } from 'src/compliance/application/usecases/profiles/get-questionnaire.usecase';
 import {
   CreateProfilPPDto,
   CreateProfilPMDto,
   UpdateProfilPMDto,
 } from './dto/profil.dto';
-import { SaveQuestionnaireDto } from './dto/questionnaire.dto';
+import {
+  CapaciteDePerteDto,
+  PreQualificationDto,
+  QualificationDto,
+  SaveQuestionnaireDto,
+} from './dto/questionnaire.dto';
 import { CurrentUser } from 'src/iam/presentation/decorators/current-user.decorator';
 import type { ActiveUser } from 'src/iam/presentation/decorators/current-user.decorator';
 import { JwtAuthGuard } from 'src/iam/presentation/guards/jwt-auth.guard';
@@ -55,6 +61,7 @@ export class ProfileController {
     private readonly listProfilsPM: ListProfilsPMUseCase,
     private readonly updateProfilPM: UpdateProfilPMUseCase,
     private readonly saveQuestionnaireUseCase: SaveQuestionnaireUseCase,
+    private readonly repondreEtape: RepondreEtapeQuestionnaireUseCase,
     private readonly getQuestionnaire: GetQuestionnaireUseCase,
   ) {}
 
@@ -142,7 +149,86 @@ export class ProfileController {
     return this.updateProfilPM.execute(user.userId, id, dto);
   }
 
-  @ApiOperation({ summary: "Sauvegarder le questionnaire d'adéquation PSFP" })
+  // ── Le questionnaire d'adéquation, étape par étape ────────────────────────
+  //
+  // Les trois routes suivent le parcours du cahier des charges, et chacune rend
+  // la même chose : le questionnaire, l'étape suivante, et celles déjà
+  // franchies. Le front n'a donc jamais à déduire où il en est — c'est le
+  // domaine qui le lui dit, seuils réglementaires compris.
+  //
+  //   POST pre-qualification  → averti/professionnel ? clôt si professionnel
+  //   POST qualification      → averti ? clôt si averti
+  //   POST capacite-de-perte  → montant conseillé, dernière étape
+  //
+  // Une étape non ouverte est refusée en 409 (`ETAPE_QUESTIONNAIRE_FERMEE`),
+  // avec l'étape attendue dans le corps. Repasser une étape déjà répondue est
+  // toujours permis — le cahier des charges l'autorise explicitement.
+
+  @ApiOperation({
+    summary: "Étape 1 — pré-qualification du questionnaire d'adéquation",
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Étape enregistrée ; étape suivante indiquée',
+  })
+  @ApiResponse({ status: 409, description: "L'étape n'est pas ouverte" })
+  @Post('questionnaire/pre-qualification')
+  repondrePreQualification(
+    @CurrentUser() user: ActiveUser,
+    @Body() dto: PreQualificationDto,
+  ) {
+    return this.repondreEtape.preQualification(user.userId, dto);
+  }
+
+  @ApiOperation({
+    summary: "Étape 2 — qualification du questionnaire d'adéquation",
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Étape enregistrée ; étape suivante indiquée',
+  })
+  @ApiResponse({ status: 409, description: "L'étape n'est pas ouverte" })
+  @Post('questionnaire/qualification')
+  repondreQualification(
+    @CurrentUser() user: ActiveUser,
+    @Body() dto: QualificationDto,
+  ) {
+    return this.repondreEtape.qualification(user.userId, dto);
+  }
+
+  @ApiOperation({
+    summary: 'Étape 3 — simulation de la capacité à subir des pertes',
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Étape enregistrée ; montant conseillé calculé',
+  })
+  @ApiResponse({ status: 409, description: "L'étape n'est pas ouverte" })
+  @Post('questionnaire/capacite-de-perte')
+  repondreCapaciteDePerte(
+    @CurrentUser() user: ActiveUser,
+    @Body() dto: CapaciteDePerteDto,
+  ) {
+    return this.repondreEtape.capaciteDePerte(user.userId, dto);
+  }
+
+  @ApiOperation({
+    summary: "Où en est mon questionnaire : étape suivante et étapes franchies",
+  })
+  @ApiResponse({ status: 200, description: 'Avancement retourné' })
+  @Get('questionnaire/etapes')
+  getMesEtapes(@CurrentUser() user: ActiveUser) {
+    return this.getQuestionnaire.executeEtapes(user.userId);
+  }
+
+  @ApiOperation({
+    summary: "Sauvegarder le questionnaire d'adéquation PSFP (formulaire entier)",
+    deprecated: true,
+    description:
+      "Reçoit les trois étapes d'un seul bloc, et ne dit pas laquelle vient " +
+      'ensuite. Conservée pour le front actuel ; préférer les trois routes par ' +
+      'étape.',
+  })
   @ApiResponse({
     status: 201,
     description: 'Questionnaire enregistré, catégorie et plafond calculés',

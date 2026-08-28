@@ -8,12 +8,10 @@ import { ProfilPP } from 'src/compliance/domain/aggregates/profil-pp';
 import { ProfilPPFactory } from 'src/compliance/domain/factories/profil-pp.factory';
 import {
   ChampProfilInvalideError,
-  NatureDeDossierIncompatibleError,
   ProfilPPDejaExistantError,
 } from 'src/compliance/domain/errors';
 import { CategoriePsfp } from 'src/compliance/domain/enums/categorie-psfp.enum';
 import { ProfilPPCreeDomainEvent } from 'src/compliance/domain/events/profil-pp-cree.domain-event';
-import { NatureDeDossier } from 'src/compliance/domain/enums/nature-de-dossier.enum';
 import { InvestorComplianceProfile } from 'src/compliance/domain/aggregates/investor-compliance-profile';
 import type { InvestorComplianceProfileRepository } from 'src/compliance/domain/repositories/investor-compliance-profile.repository';
 import { CreateProfilPPDto } from 'src/compliance/presentation/http/dto/profil.dto';
@@ -28,12 +26,6 @@ function monter(
   options: {
     existant?: ProfilPP | null;
     compte?: User | null;
-    /**
-     * Ce que le registre des natures oppose au compte. `PP` par défaut : le
-     * compte n'a rien déclaré d'autre, et le registre rend donc la nature
-     * qu'on vient d'y poser.
-     */
-    natureEtablie?: NatureDeDossier;
   } = {},
 ) {
   const compte =
@@ -50,11 +42,6 @@ function monter(
   };
 
   const eventBus = { publish: jest.fn() };
-  const natureDuDossier = {
-    declarer: jest
-      .fn()
-      .mockResolvedValue(options.natureEtablie ?? NatureDeDossier.PP),
-  };
 
   // La racine sert le classement publié à côté du dossier : un profil qui
   // vient de naître n'a pas de questionnaire, elle rend donc le repli.
@@ -72,19 +59,11 @@ function monter(
   const useCase = new CreateProfilPPUseCase(
     profilPPRepository as ProfilPPRepository,
     userRepository as unknown as UserRepository,
-    natureDuDossier,
     profilsConformite as unknown as InvestorComplianceProfileRepository,
     eventBus as unknown as EventBus,
   );
 
-  return {
-    useCase,
-    profilPPRepository,
-    userRepository,
-    natureDuDossier,
-    eventBus,
-    compte,
-  };
+  return { useCase, profilPPRepository, userRepository, eventBus, compte };
 }
 
 const DTO_VIDE = {} as CreateProfilPPDto;
@@ -114,28 +93,18 @@ describe('CreateProfilPPUseCase', () => {
     expect(vue.nom).toBe('Koné');
   });
 
-  it('refuse un dossier physique sur un compte déjà personne morale', async () => {
-    // Un titulaire est soit l'un, soit l'autre : ce qu'il faut vérifier de lui
-    // en dépend entièrement (KYC ou KYB).
-    const { useCase, profilPPRepository } = monter({
-      natureEtablie: NatureDeDossier.PM,
-    });
+  it('accepte le dossier physique du représentant légal de sociétés', async () => {
+    // Ce use case le refusait à un compte ayant déclaré une société, au nom
+    // d'une exclusivité PP ⊻ PM. C'est l'inverse que veut le cahier des
+    // charges : le dossier physique **est** l'identité du représentant légal,
+    // et c'est en la saisissant une fois qu'on évite « de compléter les
+    // informations redondantes » pour chaque société.
+    const { useCase, profilPPRepository } = monter();
 
-    await expect(useCase.execute(42, DTO_VIDE)).rejects.toBeInstanceOf(
-      NatureDeDossierIncompatibleError,
-    );
-    expect(profilPPRepository.save).not.toHaveBeenCalled();
-  });
+    const vue = await useCase.execute(42, DTO_VIDE);
 
-  it('ne fixe pas la nature du compte quand le formulaire est refusé', async () => {
-    // Un premier essai fautif ne doit pas engager le titulaire : il pourrait
-    // encore vouloir déclarer une société.
-    const { useCase, natureDuDossier } = monter();
-
-    await expect(
-      useCase.execute(42, { nationalite: 'ZZ' } as CreateProfilPPDto),
-    ).rejects.toBeInstanceOf(ChampProfilInvalideError);
-    expect(natureDuDossier.declarer).not.toHaveBeenCalled();
+    expect(vue.userId).toBe(42);
+    expect(profilPPRepository.save).toHaveBeenCalledTimes(1);
   });
 
   it('crée le profil même si le compte est introuvable', async () => {
@@ -156,14 +125,19 @@ describe('CreateProfilPPUseCase', () => {
   });
 
   it("ignore les montants que seul le questionnaire d'adéquation peut fixer", async () => {
-    // Le dossier n'a plus où les mettre : la réponse les publie depuis la
-    // racine, qui les tient du questionnaire — vide ici.
+    // Ces deux clés ont quitté le DTO — d'où le passage par `unknown`, qui
+    // simule un corps de requête les portant quand même. Le use case reste
+    // éprouvé de bout en bout : le dossier n'a pas où les mettre, et la réponse
+    // les publie depuis la racine, qui les tient du questionnaire — vide ici.
+    //
+    // La route, elle, les refuse désormais en amont : `forbidNonWhitelisted`
+    // rejette toute clé absente du DTO.
     const { useCase } = monter();
 
     const vue = await useCase.execute(42, {
       patrimoineDeclare: 10_000_000,
       montantMaxConseille: 500_000,
-    } as CreateProfilPPDto);
+    } as unknown as CreateProfilPPDto);
 
     expect(vue.patrimoineDeclare).toBeNull();
     expect(vue.montantMaxConseille).toBeNull();

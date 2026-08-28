@@ -12,6 +12,7 @@ import { GetProfilPMUseCase } from './usecases/profiles/get-profil-pm.usecase';
 import { ListProfilsPMUseCase } from './usecases/profiles/list-profils-pm.usecase';
 import { UpdateProfilPMUseCase } from './usecases/profiles/update-profil-pm.usecase';
 import { SaveQuestionnaireUseCase } from './usecases/profiles/save-questionnaire.usecase';
+import { RepondreEtapeQuestionnaireUseCase } from './usecases/profiles/repondre-etape-questionnaire.usecase';
 import { GetQuestionnaireUseCase } from './usecases/profiles/get-questionnaire.usecase';
 import { GetOnboardingStatusUseCase } from './usecases/profiles/get-onboarding-status.usecase';
 import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructure.module';
@@ -84,6 +85,7 @@ import { BeneficiaireEffectifController } from '../presentation/http/beneficiair
     ListProfilsPMUseCase,
     UpdateProfilPMUseCase,
     SaveQuestionnaireUseCase,
+    RepondreEtapeQuestionnaireUseCase,
     GetQuestionnaireUseCase,
     GetOnboardingStatusUseCase,
     RiskScoringService,

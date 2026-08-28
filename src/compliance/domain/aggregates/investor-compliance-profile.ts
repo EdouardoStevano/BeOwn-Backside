@@ -9,45 +9,25 @@ import {
   KycCaseSnapshot,
   KycIdentiteExtrait,
 } from 'src/compliance/domain/entities/kyc-case';
-import { CategoriePsfp } from 'src/compliance/domain/enums/categorie-psfp.enum';
+import {
+  ClassementPsfp,
+  ClassementPsfpSnapshot,
+} from 'src/compliance/domain/value-objects/classement-psfp.vo';
+import { EtapeQuestionnaire } from 'src/compliance/domain/enums/etape-questionnaire.enum';
+import { EtapeQuestionnaireFermeeError } from 'src/compliance/domain/errors';
 import { KycStatus } from 'src/compliance/domain/enums/kyc-status.enum';
+import { ChampsPreQualification } from 'src/compliance/domain/value-objects/pre-qualification-psfp.vo';
+import { ChampsQualification } from 'src/compliance/domain/value-objects/qualification-psfp.vo';
+import { ChampsCapaciteDePerte } from 'src/compliance/domain/value-objects/capacite-de-perte.vo';
 import {
   SuiteDuVerdict,
   VerdictIdentite,
 } from 'src/compliance/domain/value-objects/verdict-identite';
 import { NiveauRisque } from 'src/compliance/domain/enums/niveau-risque.enum';
-import { plafondConseillePour } from 'src/compliance/domain/domain-services/plafond-psfp.domain-service';
 import {
   SuiviInvestisseur,
   SuiviInvestisseurSnapshot,
 } from 'src/compliance/domain/value-objects/suivi-investisseur.vo';
-
-/**
- * Ce que le classement du questionnaire impose au reste de l'application.
- *
- * **Porté par la racine, et non plus par le profil personne physique.** Il y a
- * vécu sous forme de trois colonnes que le profil ne calculait pas — le
- * questionnaire les lui recopiait — et qui n'existaient donc pas du tout pour
- * une personne morale, faute de ligne dans cette table-là.
- */
-export interface ClassementPsfp {
-  categoriePsfp: CategoriePsfp;
-  patrimoineDeclare: number | null;
-  montantMaxConseille: number | null;
-}
-
-/**
- * Le classement d'un titulaire qui n'a jamais répondu au questionnaire.
- *
- * `NON_AVERTI` et non « inconnu » : c'est le régime le plus protecteur du
- * règlement PSFP, et le seul défaut acceptable — se tromper dans l'autre sens
- * lèverait un plafond et un délai de rétractation.
- */
-const CLASSEMENT_INITIAL: ClassementPsfp = {
-  categoriePsfp: CategoriePsfp.NON_AVERTI,
-  patrimoineDeclare: null,
-  montantMaxConseille: null,
-};
 
 /**
  * Éligibilité réglementaire d'un investisseur : peut-il opérer, et jusqu'où.
@@ -112,7 +92,7 @@ export class InvestorComplianceProfile {
     this._investorId = etat.investorId;
     this._kycCase = etat.kycCase;
     this._adequacy = etat.adequacy;
-    this._classement = etat.classement ?? CLASSEMENT_INITIAL;
+    this._classement = etat.classement ?? ClassementPsfp.initial();
     this._suivi = etat.suivi ?? SuiviInvestisseur.jamaisEvalue();
   }
 
@@ -150,11 +130,11 @@ export class InvestorComplianceProfile {
    * `classement` applique aux lignes anciennes.
    */
   estNonAverti(): boolean {
-    return this._classement.categoriePsfp === CategoriePsfp.NON_AVERTI;
+    return this._classement.estNonAverti();
   }
 
   estProfessionnel(): boolean {
-    return this._classement.categoriePsfp === CategoriePsfp.PROFESSIONNEL;
+    return this._classement.estProfessionnel();
   }
 
   /**
@@ -162,13 +142,13 @@ export class InvestorComplianceProfile {
    * réglementaire et de 5 % du patrimoine déclaré. `null` pour qui n'est pas
    * non averti — la recommandation ne le concerne pas.
    *
-   * Le calcul est délégué à `plafondConseillePour`, que le questionnaire
-   * applique déjà pour fixer le montant qu'il retient : une seule formule, deux
-   * lecteurs.
+   * C'était ici un `if` sur la catégorie, suivi d'un accès à un patrimoine que
+   * deux catégories sur trois n'ont jamais. Le classement répond désormais
+   * lui-même : `NonAvertiPsfp` applique la formule, les deux autres rendent
+   * `null` parce qu'elles n'ont rien à conseiller.
    */
   plafondConseille(): number | null {
-    if (!this.estNonAverti()) return null;
-    return plafondConseillePour(this._classement.patrimoineDeclare);
+    return this._classement.plafondConseille();
   }
 
   // ── La surveillance périodique ────────────────────────────────────────────
@@ -245,11 +225,133 @@ export class InvestorComplianceProfile {
     // que cela suppose : un questionnaire enregistré sans que le classement
     // suive laissait le plafond de la veille opposable à la souscription du
     // jour. Les deux ne se séparent plus.
-    this._classement = {
-      categoriePsfp: this._adequacy.categoriePsfp ?? CategoriePsfp.NON_AVERTI,
-      patrimoineDeclare: this._adequacy.patrimoineNet,
-      montantMaxConseille: this._adequacy.montantMaxConseille,
-    };
+    this.reprendreLeClassement();
+  }
+
+  // ── Le questionnaire, étape par étape ─────────────────────────────────────
+  //
+  // Le formulaire arrivait entier, par une seule route : le front recevait les
+  // trois étapes d'un coup et devait deviner seul laquelle poser, en
+  // réappliquant des seuils réglementaires que seul le domaine connaît. Ces
+  // trois transitions les exposent une par une, et `etapeSuivante` dit laquelle
+  // vient — ce n'est plus au client de l'inférer.
+  //
+  // Chacune est un **relais** vers la pièce qui porte la règle, comme les trois
+  // gestes du parcours de vérification plus haut : la racine n'ajoute que ce
+  // que la pièce ne peut pas savoir — qu'un questionnaire existe, et que
+  // l'étape demandée est bien ouverte.
+
+  /** Étape 1 — pré-qualification : professionnel, ou non. */
+  repondreALaPreQualification(
+    champs: ChampsPreQualification,
+    maintenant: Date = new Date(),
+  ): void {
+    this.repondreAlEtape(
+      EtapeQuestionnaire.PRE_QUALIFICATION,
+      (questionnaire) =>
+        questionnaire.repondreALaPreQualification(champs, maintenant),
+    );
+  }
+
+  /** Étape 2 — qualification : averti, ou non. */
+  repondreALaQualification(
+    champs: ChampsQualification,
+    maintenant: Date = new Date(),
+  ): void {
+    this.repondreAlEtape(EtapeQuestionnaire.QUALIFICATION, (questionnaire) =>
+      questionnaire.repondreALaQualification(champs, maintenant),
+    );
+  }
+
+  /** Étape 3 — capacité à subir des pertes, d'où sort le montant conseillé. */
+  repondreALaCapaciteDePerte(
+    champs: ChampsCapaciteDePerte,
+    maintenant: Date = new Date(),
+  ): void {
+    this.repondreAlEtape(
+      EtapeQuestionnaire.CAPACITE_DE_PERTE,
+      (questionnaire) =>
+        questionnaire.repondreALaCapaciteDePerte(champs, maintenant),
+    );
+  }
+
+  /**
+   * L'ossature commune aux trois : ouvrir le questionnaire, vérifier que
+   * l'étape est atteignable, appliquer, reprendre le classement.
+   *
+   * L'ordre compte. Le questionnaire n'est rattaché à la racine **qu'après**
+   * que la transition a réussi : une étape refusée — un montant négatif à
+   * l'étape 3 — ne doit pas laisser derrière elle un questionnaire vide qui
+   * n'existait pas avant l'appel.
+   *
+   * @throws EtapeQuestionnaireFermeeError si l'étape n'est ni celle attendue ni
+   *   une étape déjà répondue.
+   */
+  private repondreAlEtape(
+    etape: EtapeQuestionnaire,
+    appliquer: (questionnaire: AdequacyAssessment) => void,
+  ): void {
+    // Répondre à la première étape fait naître le questionnaire : rien
+    // n'oblige le titulaire à l'ouvrir par un geste séparé.
+    const questionnaire =
+      this._adequacy ?? QuestionnaireAdequationFactory.commencer();
+
+    if (!questionnaire.etapeEstOuverte(etape)) {
+      throw new EtapeQuestionnaireFermeeError(
+        etape,
+        questionnaire.etapeSuivante(),
+      );
+    }
+
+    appliquer(questionnaire);
+
+    this._adequacy = questionnaire;
+    this.reprendreLeClassement();
+  }
+
+  /**
+   * L'étape que le titulaire doit encore passer — `null` si son questionnaire
+   * est clos, `PRE_QUALIFICATION` s'il n'en a pas encore.
+   *
+   * Un titulaire sans questionnaire n'a pas « aucune étape à faire », il les a
+   * toutes : rendre `null` ici aurait laissé croire au front qu'il n'y a rien à
+   * demander.
+   *
+   * Le `if` explicite, et non un `??` sur l'appel optionnel : les deux
+   * situations rendent `null` — le questionnaire absent, et le questionnaire
+   * **clos** — et un repli les confondrait. Un professionnel, qui n'a plus
+   * d'étape à passer, se serait vu redemander la pré-qualification à l'infini.
+   */
+  etapeSuivanteDuQuestionnaire(): EtapeQuestionnaire | null {
+    if (this._adequacy === null) return EtapeQuestionnaire.PRE_QUALIFICATION;
+    return this._adequacy.etapeSuivante();
+  }
+
+  /** Les étapes franchies, dans l'ordre du parcours ; vide sans questionnaire. */
+  etapesReponduesDuQuestionnaire(): EtapeQuestionnaire[] {
+    return this._adequacy?.etapesRepondues() ?? [];
+  }
+
+  /**
+   * Le classement de la racine, repris depuis le questionnaire.
+   *
+   * Le questionnaire le recalcule lui-même à chaque réponse ; ce que fait cette
+   * méthode, c'est le **reporter sur la racine**, dans le même geste que la
+   * réponse. C'était auparavant un report fait après coup par le use case, vers
+   * une autre table, avec le décalage que cela suppose : un questionnaire
+   * enregistré sans que le classement suive laissait le plafond de la veille
+   * opposable à la souscription du jour.
+   */
+  private reprendreLeClassement(): void {
+    if (this._adequacy === null) return;
+
+    // La catégorie choisit la classe : un professionnel n'emporte ni patrimoine
+    // ni montant conseillé, quoi que le questionnaire en dise.
+    this._classement = ClassementPsfp.etabli(
+      this._adequacy.categoriePsfp,
+      this._adequacy.patrimoineNet,
+      this._adequacy.montantMaxConseille,
+    );
   }
 
   /** Ouvre ou remplace le dossier de vérification d'identité. */
@@ -313,9 +415,12 @@ export class InvestorComplianceProfile {
    * sien de son côté, comme pièce justificative du passage — c'est ce que la
    * conservation de dix ans (RG-Q-07) exige de conserver, et ce n'est pas le
    * même objet que l'état opposable d'aujourd'hui.
+   *
+   * Rendu sans copie, à la différence de l'enregistrement plat qu'il remplace :
+   * `ClassementPsfp` est immuable, il n'y a rien à protéger d'un appelant.
    */
   get classement(): ClassementPsfp {
-    return { ...this._classement };
+    return this._classement;
   }
 
   /** Niveau de suivi appelé par les réponses ; `null` sans questionnaire. */
@@ -408,13 +513,14 @@ export class InvestorComplianceProfile {
   get pieces(): {
     kycCase: KycCase | null;
     adequacy: AdequacyAssessment | null;
-    classement: ClassementPsfp;
+    /** Déjà à plat : le repository n'a que trois colonnes à remplir. */
+    classement: ClassementPsfpSnapshot;
     suivi: SuiviInvestisseurSnapshot;
   } {
     return {
       kycCase: this._kycCase,
       adequacy: this._adequacy,
-      classement: { ...this._classement },
+      classement: this._classement.toSnapshot(),
       suivi: this._suivi.toSnapshot(),
     };
   }

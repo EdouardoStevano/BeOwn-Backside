@@ -113,6 +113,38 @@ describe('GetOnboardingStatusUseCase', () => {
     expect(statut.userType).toBe('PM');
   });
 
+  it('affiche « PM » au représentant légal, qui a aussi son dossier physique', async () => {
+    // Les deux coexistent : le dossier physique est l'identité du représentant,
+    // la société ce par quoi il investit. `userType` lisait le dossier physique
+    // d'abord — un compte moral se serait donc affiché « PP » dès qu'il aurait
+    // renseigné son identité, c'est-à-dire toujours, puisqu'elle est requise.
+    const statut = await monter({
+      profilPP: profilPPRenseigne(),
+      profilPM: ProfilPMFactory.creer({
+        userId: UTILISATEUR,
+        raisonSociale: 'BeOwn',
+      }),
+    }).execute({ utilisateurId: UTILISATEUR });
+
+    expect(statut.userType).toBe('PM');
+  });
+
+  it('tient le profil pour commencé dès la société, dossier physique vide', async () => {
+    // L'ordre de remplissage est libre. La condition enchaînait les deux
+    // sources par `??`, qui ne regarde la seconde que si la première est
+    // absente : un dossier physique vide — donc présent — masquait la société.
+    const statut = await monter({
+      profilPP: profilPPVide(),
+      profilPM: ProfilPMFactory.creer({
+        userId: UTILISATEUR,
+        raisonSociale: 'BeOwn',
+      }),
+    }).execute({ utilisateurId: UTILISATEUR });
+
+    expect(etape(statut, 'profil_investisseur').status).toBe('completed');
+    expect(statut.completionStep).toBe(2);
+  });
+
   it("n'affiche pas le questionnaire comme répondu tant qu'il ne l'est pas", async () => {
     // Le défaut historique : la condition lisait `categoriePsfp`, qui vaut
     // `non_averti` par défaut — donc toujours vraie dès qu'un profil existe.

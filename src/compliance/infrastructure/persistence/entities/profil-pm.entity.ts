@@ -17,9 +17,10 @@ export class ProfilPMEntity {
    * @see ProfilPPEntity.userId — référence par identité, sans relation.
    *
    * Indexée mais **non unique**, à la différence du dossier physique : un
-   * compte peut déclarer plusieurs sociétés. Ce qu'il ne peut pas, c'est
-   * porter en plus un dossier physique — la clé étrangère composée
-   * `(userId, nature)` vers `dossier_investisseur` s'en charge.
+   * compte peut déclarer plusieurs sociétés — et il porte en plus son dossier
+   * physique, qui est l'identité du représentant légal de chacune d'elles. Une
+   * clé étrangère composée `(userId, nature)` l'en a empêché un temps ; voir
+   * `ProfilsPPEtPMCoexistent1784100000000`.
    */
   @Column()
   @Index()

@@ -139,6 +139,9 @@ export class ProfilMapper {
       revenuAnnuel: entity.revenuAnnuel,
       budgetAnnuelInvestissement: entity.budgetAnnuelInvestissement,
       acceptsSimulatedLoss: entity.acceptsSimulatedLoss,
+      preQualificationRepondueLe: entity.preQualificationRepondueLe,
+      qualificationRepondueLe: entity.qualificationRepondueLe,
+      capaciteRepondueLe: entity.capaciteRepondueLe,
       resultCategorie: entity.resultCategorie,
       resultMontantMaxConseille: entity.resultMontantMaxConseille,
       createdAt: entity.createdAt,
@@ -179,6 +182,9 @@ export class ProfilMapper {
     entity.revenuAnnuel = snapshot.revenuAnnuel;
     entity.budgetAnnuelInvestissement = snapshot.budgetAnnuelInvestissement;
     entity.acceptsSimulatedLoss = snapshot.acceptsSimulatedLoss;
+    entity.preQualificationRepondueLe = snapshot.preQualificationRepondueLe;
+    entity.qualificationRepondueLe = snapshot.qualificationRepondueLe;
+    entity.capaciteRepondueLe = snapshot.capaciteRepondueLe;
     entity.resultCategorie = snapshot.resultCategorie;
     entity.resultMontantMaxConseille = snapshot.resultMontantMaxConseille;
     return entity;

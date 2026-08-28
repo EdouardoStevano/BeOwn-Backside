@@ -1,6 +1,11 @@
 import { CategoriePsfp } from '../enums/categorie-psfp.enum';
+import { EtapeQuestionnaire } from '../enums/etape-questionnaire.enum';
 import { NiveauRisque } from '../enums/niveau-risque.enum';
 import { QuestionnaireAdequationMapper } from '../mappers/questionnaire-adequation.mapper';
+import {
+  AvancementQuestionnaire,
+  AvancementSnapshot,
+} from '../value-objects/avancement-questionnaire.vo';
 import {
   CapaciteDePerte,
   CapaciteDePerteSnapshot,
@@ -67,6 +72,7 @@ export interface AdequacyAssessmentSnapshot
     PreQualificationSnapshot,
     QualificationSnapshot,
     CapaciteDePerteSnapshot,
+    AvancementSnapshot,
     ResultatAdequationSnapshot {}
 
 /**
@@ -79,20 +85,22 @@ export interface AdequacyAssessmentSnapshotBrut
     PreQualificationSnapshot,
     QualificationSnapshot,
     CapaciteDePerteSnapshotBrut,
+    AvancementSnapshot,
     ResultatAdequationSnapshotBrut {}
 
 /**
  * Questionnaire d'adéquation PSFP — un par compte.
  *
- * **Une façade sur quatre blocs** : les trois étapes du formulaire, et le
- * classement qui en découle.
+ * **Une façade sur cinq blocs** : les trois étapes du formulaire, l'avancement
+ * du parcours, et le classement qui en découle.
  *
- * | Bloc                   | Sujet                                            |
- * | ---------------------- | ------------------------------------------------ |
- * | `PreQualificationPsfp` | étape 1 — professionnel ? (2 critères sur 3)     |
- * | `QualificationPsfp`    | étape 2 — averti ? (4 critères sur 5)            |
- * | `CapaciteDePerte`      | étape 3 — patrimoine, revenus, budget            |
- * | `ResultatAdequation`   | catégorie et plafond, **calculés, jamais déclarés** |
+ * | Bloc                      | Sujet                                            |
+ * | ------------------------- | ------------------------------------------------ |
+ * | `PreQualificationPsfp`    | étape 1 — professionnel ? (2 critères sur 3)     |
+ * | `QualificationPsfp`       | étape 2 — averti ? (4 critères sur 5)            |
+ * | `CapaciteDePerte`         | étape 3 — patrimoine, revenus, budget            |
+ * | `AvancementQuestionnaire` | quelles étapes ont été répondues, et quand       |
+ * | `ResultatAdequation`      | catégorie et plafond, **calculés, jamais déclarés** |
  *
  * Il n'existait aucun modèle de domaine pour ce questionnaire : le classement
  * réglementaire — celui qui décide du délai de rétractation et du plafond
@@ -101,17 +109,31 @@ export interface AdequacyAssessmentSnapshotBrut
  * étaient des littéraux au fil du code, la règle intestable sans base de
  * données, et n'importe quelle clé du DTO entrait telle quelle dans la ligne.
  *
- * Le questionnaire se répond **d'un bloc** : {@link repondre} remplace les
- * trois étapes et recalcule le classement. C'est le contraire de
- * `ProfilPP.mettreAJour`, qui distingue « ne pas toucher » de « effacer », et
- * c'est voulu — un formulaire d'adéquation partiellement resoumis donnerait un
- * classement issu d'un mélange de deux passages.
+ * **Le questionnaire se répond étape par étape**, chacune par sa transition —
+ * {@link repondreALaPreQualification}, {@link repondreALaQualification},
+ * {@link repondreALaCapaciteDePerte}. C'est le parcours en trois temps que
+ * décrit le cahier des charges, et qu'aucune route ne savait exposer tant que
+ * le formulaire arrivait entier.
+ *
+ * Il se répondait auparavant **d'un seul bloc**, et il le peut encore par
+ * {@link repondre}, que sert la route historique. Ce n'était pas un choix
+ * gratuit : `PreQualificationPsfp.declarer` et ses jumelles reconstruisent leur
+ * bloc depuis un objet plat où une clé absente vaut « non », si bien qu'envoyer
+ * l'étape 1 seule à `repondre` **effacerait** les étapes 2 et 3. Les trois
+ * transitions ci-dessous n'ont pas ce défaut : chacune ne reconstruit que son
+ * propre bloc et laisse les autres en place.
+ *
+ * Ce que le découpage ne relâche pas, c'est l'accord entre les réponses et le
+ * classement : chaque transition **reclasse** (voir {@link reclasser}), de sorte
+ * que le classement corresponde toujours aux trois blocs tels qu'ils sont
+ * stockés — jamais à un mélange de deux passages.
  */
 export class AdequacyAssessment {
   private readonly _id: string;
   private _preQualification: PreQualificationPsfp;
   private _qualification: QualificationPsfp;
   private _capacite: CapaciteDePerte;
+  private _avancement: AvancementQuestionnaire;
   private _resultat: ResultatAdequation;
   private readonly _createdAt: Date;
   private readonly _updatedAt: Date;
@@ -129,6 +151,7 @@ export class AdequacyAssessment {
     preQualification: PreQualificationPsfp;
     qualification: QualificationPsfp;
     capacite: CapaciteDePerte;
+    avancement: AvancementQuestionnaire;
     resultat: ResultatAdequation;
   }) {
     this._id = etat.entete.id;
@@ -137,6 +160,7 @@ export class AdequacyAssessment {
     this._preQualification = etat.preQualification;
     this._qualification = etat.qualification;
     this._capacite = etat.capacite;
+    this._avancement = etat.avancement;
     this._resultat = etat.resultat;
   }
 
@@ -154,7 +178,10 @@ export class AdequacyAssessment {
    * peut l'être, et cela garantit qu'il correspond toujours aux réponses
    * enregistrées avec lui.
    */
-  repondre(reponses: ReponsesQuestionnaire): void {
+  repondre(
+    reponses: ReponsesQuestionnaire,
+    maintenant: Date = new Date(),
+  ): void {
     const preQualification = PreQualificationPsfp.declarer(reponses);
     const qualification = QualificationPsfp.declarer(reponses);
     const capacite = CapaciteDePerte.declarer(reponses);
@@ -167,7 +194,137 @@ export class AdequacyAssessment {
     this._preQualification = preQualification;
     this._qualification = qualification;
     this._capacite = capacite;
+    // Les trois étapes sont soumises ensemble, donc datées ensemble.
+    this._avancement = AvancementQuestionnaire.toutRepondu(maintenant);
     this._resultat = resultat;
+  }
+
+  // ── Les trois étapes, une par une ─────────────────────────────────────────
+  //
+  // Chacune ne reconstruit que **son** bloc, date sa réponse, et reclasse. Le
+  // découpage ne change aucune règle : ce sont les mêmes `declarer` et le même
+  // `ResultatAdequation.calculer` que le passage d'un bloc.
+  //
+  // Aucune ne vérifie qu'elle est ouverte — savoir si l'étape est atteignable
+  // demande de connaître le questionnaire *et* son absence éventuelle, ce dont
+  // seule la racine dispose. Voir `InvestorComplianceProfile.repondreAlEtape`.
+
+  /** Étape 1 — les trois critères qui font, ou non, un professionnel. */
+  repondreALaPreQualification(
+    champs: ChampsPreQualification,
+    maintenant: Date = new Date(),
+  ): void {
+    const preQualification = PreQualificationPsfp.declarer(champs);
+
+    this._preQualification = preQualification;
+    this._avancement = this._avancement.repondue(
+      EtapeQuestionnaire.PRE_QUALIFICATION,
+      maintenant,
+    );
+    this.reclasser();
+  }
+
+  /** Étape 2 — expérience et compréhension du risque : averti ou non. */
+  repondreALaQualification(
+    champs: ChampsQualification,
+    maintenant: Date = new Date(),
+  ): void {
+    const qualification = QualificationPsfp.declarer(champs);
+
+    this._qualification = qualification;
+    this._avancement = this._avancement.repondue(
+      EtapeQuestionnaire.QUALIFICATION,
+      maintenant,
+    );
+    this.reclasser();
+  }
+
+  /**
+   * Étape 3 — patrimoine, revenus, budget, et la perte simulée acceptée.
+   *
+   * La seule des trois dont les réponses peuvent être **refusées** : un montant
+   * négatif ou illisible lève depuis `CapaciteDePerte.declarer`. Le bloc est
+   * donc construit avant la moindre affectation — un montant refusé laisse le
+   * questionnaire exactement dans l'état où il était, avancement compris.
+   */
+  repondreALaCapaciteDePerte(
+    champs: ChampsCapaciteDePerte,
+    maintenant: Date = new Date(),
+  ): void {
+    const capacite = CapaciteDePerte.declarer(champs);
+
+    this._capacite = capacite;
+    this._avancement = this._avancement.repondue(
+      EtapeQuestionnaire.CAPACITE_DE_PERTE,
+      maintenant,
+    );
+    this.reclasser();
+  }
+
+  /**
+   * Le classement, refait depuis les trois blocs tels qu'ils sont maintenant.
+   *
+   * Appelé par chaque transition, et par elles seules : c'est ce qui garantit
+   * qu'aucune réponse enregistrée ne coexiste avec un classement qui l'ignore.
+   * Il n'est **jamais** recalculé à la lecture — voir
+   * `ResultatAdequation.restore`.
+   */
+  private reclasser(): void {
+    this._resultat = ResultatAdequation.calculer(
+      this._preQualification,
+      this._qualification,
+      this._capacite,
+    );
+  }
+
+  // ── L'enchaînement des étapes ─────────────────────────────────────────────
+
+  /**
+   * Quelle étape reste à poser au titulaire — `null` si le questionnaire est
+   * clos.
+   *
+   * La règle traverse l'avancement **et** deux blocs de réponses : c'est ce qui
+   * la fait vivre ici plutôt que dans l'un d'eux. Elle se lit dans l'ordre du
+   * parcours, chaque étape pouvant clore la suite selon son propre résultat —
+   * un professionnel n'a pas de qualification à passer, un averti pas de
+   * capacité de perte à simuler.
+   *
+   * Elle n'existait nulle part : le front recevait un formulaire entier et
+   * devait deviner seul lequel de ses trois volets afficher, en réappliquant
+   * des seuils réglementaires que seul le domaine connaît.
+   */
+  etapeSuivante(): EtapeQuestionnaire | null {
+    if (!this._avancement.aRepondu(EtapeQuestionnaire.PRE_QUALIFICATION)) {
+      return EtapeQuestionnaire.PRE_QUALIFICATION;
+    }
+    if (this._preQualification.estProfessionnel()) return null;
+
+    if (!this._avancement.aRepondu(EtapeQuestionnaire.QUALIFICATION)) {
+      return EtapeQuestionnaire.QUALIFICATION;
+    }
+    if (this._qualification.estAverti()) return null;
+
+    if (!this._avancement.aRepondu(EtapeQuestionnaire.CAPACITE_DE_PERTE)) {
+      return EtapeQuestionnaire.CAPACITE_DE_PERTE;
+    }
+    return null;
+  }
+
+  /**
+   * Le titulaire a-t-il le droit de répondre à cette étape ?
+   *
+   * Deux cas, et deux seulement : c'est l'étape attendue, ou c'en est une qu'il
+   * a déjà répondue. Le second couvre la reprise, que le cahier des charges
+   * autorise explicitement — « re-compléter cette étape ainsi que toutes les
+   * autres à n'importe quel moment ».
+   */
+  etapeEstOuverte(etape: EtapeQuestionnaire): boolean {
+    return etape === this.etapeSuivante() || this._avancement.aRepondu(etape);
+  }
+
+  /** Les étapes franchies, dans l'ordre — de quoi afficher un fil d'Ariane. */
+  etapesRepondues(): EtapeQuestionnaire[] {
+    return this._avancement.etapesRepondues();
   }
 
   // ── Règles propres au questionnaire ───────────────────────────────────────
@@ -202,6 +359,9 @@ export class AdequacyAssessment {
   }
   get capacite(): CapaciteDePerte {
     return this._capacite;
+  }
+  get avancement(): AvancementQuestionnaire {
+    return this._avancement;
   }
   get resultat(): ResultatAdequation {
     return this._resultat;
