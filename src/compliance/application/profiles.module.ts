@@ -20,6 +20,9 @@ import { DeciderPieceUseCase } from './usecases/pieces/decider-piece.usecase';
 import { DeclarerBeneficiaireUseCase } from './usecases/beneficiaires/declarer-beneficiaire.usecase';
 import { ConsulterRegistreUseCase } from './usecases/beneficiaires/consulter-registre.usecase';
 import { RetirerBeneficiaireUseCase } from './usecases/beneficiaires/retirer-beneficiaire.usecase';
+import { ListerProfilsInvestisseurUseCase } from './usecases/investisseur/lister-profils-investisseur.usecase';
+import { BasculerProfilInvestisseurUseCase } from './usecases/investisseur/basculer-profil-investisseur.usecase';
+import { ProfilInvestisseurController } from '../presentation/http/profil-investisseur.controller';
 import { PieceJustificativeRefuseeEventHandler } from './handlers/piece-justificative-refusee.event-handler';
 import { PieceJustificativeController } from '../presentation/http/piece-justificative.controller';
 import { AdminPieceJustificativeController } from '../presentation/http/admin-piece-justificative.controller';
@@ -112,6 +115,9 @@ import { BeneficiaireEffectifController } from '../presentation/http/beneficiair
     DeclarerBeneficiaireUseCase,
     ConsulterRegistreUseCase,
     RetirerBeneficiaireUseCase,
+    // Au nom de qui le compte agit — le sélecteur d'identité et son aptitude.
+    ListerProfilsInvestisseurUseCase,
+    BasculerProfilInvestisseurUseCase,
     RiskScoringService,
     // Plus de filtre propre : les erreurs du dossier investisseur sont des
     // `IamError` depuis qu'elles ont rejoint le contexte, et `IamErrorFilter`
@@ -123,6 +129,7 @@ import { BeneficiaireEffectifController } from '../presentation/http/beneficiair
     BeneficiaireEffectifController,
     PieceJustificativeController,
     AdminPieceJustificativeController,
+    ProfilInvestisseurController,
   ],
   exports: [
     // Consommé par `UserController` (IAM) : `GET /users/me` compose le compte

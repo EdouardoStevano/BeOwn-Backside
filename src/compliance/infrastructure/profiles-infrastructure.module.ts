@@ -6,6 +6,9 @@ import { QuestionnaireAdequationEntity } from './persistence/entities/questionna
 import { InvestorComplianceProfileEntity } from './persistence/entities/investor-compliance-profile.entity';
 import { PieceJustificativeEntity } from './persistence/entities/piece-justificative.entity';
 import { BeneficiaireEffectifEntity } from './persistence/entities/beneficiaire-effectif.entity';
+import { ProfilInvestisseurActifEntity } from './persistence/entities/profil-investisseur-actif.entity';
+import { ProfilInvestisseurActifTypeOrmRepository } from './repositories/profil-investisseur-actif.repository';
+import { PROFIL_INVESTISSEUR_ACTIF_REPOSITORY } from '../domain/repositories/profil-investisseur-actif.repository';
 import { ProfilPPTypeOrmRepository } from './repositories/profil-pp.repository';
 import { ProfilPMTypeOrmRepository } from './repositories/profil-pm.repository';
 import { DossierDePiecesTypeOrmRepository } from './repositories/dossier-de-pieces.repository';
@@ -36,6 +39,7 @@ import { PIECE_JUSTIFICATIVE_STORAGE } from '../application/ports/piece-justific
       InvestorComplianceProfileEntity,
       PieceJustificativeEntity,
       BeneficiaireEffectifEntity,
+      ProfilInvestisseurActifEntity,
     ]),
     // Le magasin de fichiers, atteint par le port du contexte : les
     // justificatifs de conformité ont leurs propres règles de conservation et
@@ -61,6 +65,10 @@ import { PIECE_JUSTIFICATIVE_STORAGE } from '../application/ports/piece-justific
       provide: REGISTRE_DES_BENEFICIAIRES_REPOSITORY,
       useClass: RegistreDesBeneficiairesTypeOrmRepository,
     },
+    {
+      provide: PROFIL_INVESTISSEUR_ACTIF_REPOSITORY,
+      useClass: ProfilInvestisseurActifTypeOrmRepository,
+    },
   ],
   exports: [
     PROFIL_PP_REPOSITORY,
@@ -69,6 +77,7 @@ import { PIECE_JUSTIFICATIVE_STORAGE } from '../application/ports/piece-justific
     BENEFICIAIRES_DE_LA_SOCIETE_QUERY,
     PIECE_JUSTIFICATIVE_STORAGE,
     REGISTRE_DES_BENEFICIAIRES_REPOSITORY,
+    PROFIL_INVESTISSEUR_ACTIF_REPOSITORY,
   ],
 })
 export class ProfilesInfrastructureModule {}
