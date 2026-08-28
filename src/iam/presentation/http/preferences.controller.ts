@@ -28,6 +28,10 @@ import {
  * sur le même use case : elles ne se distinguent que par le champ qu'elles
  * touchent. Elles pourront disparaître au profit de la route groupée quand le
  * front n'appellera plus qu'elle.
+ *
+ * **La double authentification n'est pas un réglage** et n'a donc aucune route
+ * ici : elle se pilote par `/auth/mfa/*`. `twoFactorEnabled` reste publié en
+ * lecture, comme reflet des facteurs réellement enrôlés.
  */
 @ApiTags('Préférences')
 @ApiBearerAuth()
@@ -113,26 +117,18 @@ export class PreferencesController {
     });
   }
 
-  @ApiOperation({
-    summary: 'Double authentification — lecture seule depuis les préférences',
-    description:
-      "Répond 409 : armer un facteur exige d'en vérifier un code, le retirer " +
-      "exige de prouver qu'on le possède encore. Aucune des deux garanties ne " +
-      'tient dans un PATCH de préférence. Utilisez POST /auth/mfa/enroll et ' +
-      'POST /auth/mfa/disable.',
-  })
-  @ApiResponse({
-    status: 409,
-    description: 'MFA_NON_MODIFIABLE_PAR_PREFERENCE',
-  })
-  // Deux chemins pour un seul handler : `mfa` est le nom retenu, `tfa` reste
-  // servi parce que le front déployé l'appelle.
-  @Patch(['me/preferences/mfa', 'me/preferences/tfa'])
-  toggleMfa(@CurrentUser() user: ActiveUser, @Body() body: ToggleValueDto) {
-    // Passe par le domaine plutôt que de lever ici : la règle vaut pour tout
-    // appelant, y compris la route groupée (§12.5).
-    return this.updatePreferences.execute(user.userId, {
-      twoFactorEnabled: body.value,
-    });
-  }
+  // `PATCH me/preferences/mfa` et son alias `…/tfa` ont été retirés.
+  //
+  // Ils ne servaient qu'à répondre 409 en renvoyant vers `/auth/mfa/*` — une
+  // route dont le seul rôle était d'expliquer qu'elle n'existait pas. Le
+  // parcours complet vit dans `AuthenticationController` : `mfa/enroll`,
+  // `mfa/enable`, `mfa/disable/challenge`, `mfa/disable`, et ces quatre-là
+  // portent les garanties qu'un PATCH de préférence ne peut pas tenir —
+  // vérifier un code pour armer un facteur, prouver qu'on le possède encore
+  // pour le retirer.
+  //
+  // **La règle, elle, reste** : `Preferences.modifier` refuse toujours
+  // `twoFactorEnabled`, ce qui protège la route groupée ci-dessus. C'est là
+  // qu'elle doit être — dans le domaine, valable pour tout appelant, et non
+  // dans un chemin HTTP qu'il suffisait de ne pas monter (§12.5).
 }

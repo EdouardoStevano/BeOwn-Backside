@@ -37,6 +37,12 @@ export class LangueNonSupporteeError extends IamError {
  * colonne. Le titulaire actionnait donc un interrupteur sans effet, en croyant
  * protéger ou déverrouiller son compte.
  *
+ * Cette route a depuis été retirée — elle n'existait plus que pour répondre le
+ * présent conflit. L'erreur, elle, reste levée par la route **groupée**
+ * `PATCH /users/me/preferences`, où le champ peut encore arriver dans le corps.
+ * C'est bien là qu'est sa raison d'être : dans le domaine, pas dans un chemin
+ * HTTP qu'il suffisait de ne pas monter.
+ *
  * Armer un facteur exige de vérifier un code (`POST /auth/mfa/enroll` puis
  * `/auth/mfa/enable`), le retirer exige de prouver une dernière fois qu'on le
  * possède (`POST /auth/mfa/disable`) — sans quoi une session volée suffirait à
