@@ -1,6 +1,5 @@
 import { Module } from '@nestjs/common';
 import { CqrsModule } from '@nestjs/cqrs';
-import { TypeOrmModule } from '@nestjs/typeorm';
 import { ProfilesInfrastructureModule } from '../infrastructure/profiles-infrastructure.module';
 import { ComplianceInfrastructureModule } from '../infrastructure/compliance-infrastructure.module';
 import { CreateProfilPPUseCase } from './usecases/profiles/create-profil-pp.usecase';
@@ -18,6 +17,9 @@ import { GetOnboardingStatusUseCase } from './usecases/profiles/get-onboarding-s
 import { DeposerPieceUseCase } from './usecases/pieces/deposer-piece.usecase';
 import { ConsulterDossierDePiecesUseCase } from './usecases/pieces/consulter-dossier-de-pieces.usecase';
 import { DeciderPieceUseCase } from './usecases/pieces/decider-piece.usecase';
+import { DeclarerBeneficiaireUseCase } from './usecases/beneficiaires/declarer-beneficiaire.usecase';
+import { ConsulterRegistreUseCase } from './usecases/beneficiaires/consulter-registre.usecase';
+import { RetirerBeneficiaireUseCase } from './usecases/beneficiaires/retirer-beneficiaire.usecase';
 import { PieceJustificativeRefuseeEventHandler } from './handlers/piece-justificative-refusee.event-handler';
 import { PieceJustificativeController } from '../presentation/http/piece-justificative.controller';
 import { AdminPieceJustificativeController } from '../presentation/http/admin-piece-justificative.controller';
@@ -26,8 +28,6 @@ import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructu
 import { UsersInfrastructureModule } from 'src/iam/infrastructure/users-infrastructure.module';
 import { KycInfrastructureModule } from 'src/compliance/infrastructure/kyc-infrastructure.module';
 import { RiskScoringService } from './services/risk-scoring.service';
-import { BeneficiaireEffectifEntity } from '../infrastructure/persistence/entities/beneficiaire-effectif.entity';
-import { ProfilPMEntity } from '../infrastructure/persistence/entities/profil-pm.entity';
 import { BeneficiaireEffectifController } from '../presentation/http/beneficiaire-effectif.controller';
 
 /**
@@ -77,11 +77,12 @@ import { BeneficiaireEffectifController } from '../presentation/http/beneficiair
     // contexte KYC, pas son module applicatif : Profiles lit un dossier, il
     // n'ouvre pas de session Stripe et n'écoute aucun de ses événements (§5).
     KycInfrastructureModule,
-    // Ce qui reste ici est la seule table que la présentation lit encore en
-    // direct : les bénéficiaires effectifs, et le profil moral auquel ils se
-    // rattachent. Le questionnaire, le profil PP et le compte en sont sortis —
-    // ils passent par leurs ports (§12.3, §12.9).
-    TypeOrmModule.forFeature([BeneficiaireEffectifEntity, ProfilPMEntity]),
+    // Plus aucune entité ORM ici. Ce module en déclarait deux — les
+    // bénéficiaires effectifs et le profil moral — parce que
+    // `BeneficiaireEffectifController` injectait leur `Repository` et faisait
+    // `create` / `save` / `delete` lui-même. C'était le dernier endroit de ce
+    // contexte où la présentation touchait la base ; il passe désormais par
+    // trois use cases et le port du registre (§12.3, §12.9).
     // `NotificationService` : le refus d'une pièce est annoncé au titulaire —
     // c'est la moitié de « l'utilisateur sera notifié par mail et pourra
     // modifier lui-même les documents refusés ». Le contexte s'abonne à son
@@ -106,6 +107,11 @@ import { BeneficiaireEffectifController } from '../presentation/http/beneficiair
     ConsulterDossierDePiecesUseCase,
     DeciderPieceUseCase,
     PieceJustificativeRefuseeEventHandler,
+    // Le registre des bénéficiaires effectifs — le seuil de 25 %, la
+    // distinction directe/indirecte et le plafond du capital.
+    DeclarerBeneficiaireUseCase,
+    ConsulterRegistreUseCase,
+    RetirerBeneficiaireUseCase,
     RiskScoringService,
     // Plus de filtre propre : les erreurs du dossier investisseur sont des
     // `IamError` depuis qu'elles ont rejoint le contexte, et `IamErrorFilter`

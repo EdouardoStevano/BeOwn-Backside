@@ -9,6 +9,8 @@ import { BeneficiaireEffectifEntity } from './persistence/entities/beneficiaire-
 import { ProfilPPTypeOrmRepository } from './repositories/profil-pp.repository';
 import { ProfilPMTypeOrmRepository } from './repositories/profil-pm.repository';
 import { DossierDePiecesTypeOrmRepository } from './repositories/dossier-de-pieces.repository';
+import { RegistreDesBeneficiairesTypeOrmRepository } from './repositories/registre-des-beneficiaires.repository';
+import { REGISTRE_DES_BENEFICIAIRES_REPOSITORY } from '../domain/repositories/registre-des-beneficiaires.repository';
 import { BeneficiairesDeLaSocieteTypeOrmQuery } from './repositories/beneficiaires-de-la-societe.query';
 import { CloudPieceJustificativeAdapter } from './external-services/cloud-piece-justificative.adapter';
 import { CloudStorageModule } from 'src/shared/cloud-storage/cloud-storage.module';
@@ -55,6 +57,10 @@ import { PIECE_JUSTIFICATIVE_STORAGE } from '../application/ports/piece-justific
       provide: PIECE_JUSTIFICATIVE_STORAGE,
       useClass: CloudPieceJustificativeAdapter,
     },
+    {
+      provide: REGISTRE_DES_BENEFICIAIRES_REPOSITORY,
+      useClass: RegistreDesBeneficiairesTypeOrmRepository,
+    },
   ],
   exports: [
     PROFIL_PP_REPOSITORY,
@@ -62,6 +68,7 @@ import { PIECE_JUSTIFICATIVE_STORAGE } from '../application/ports/piece-justific
     DOSSIER_DE_PIECES_REPOSITORY,
     BENEFICIAIRES_DE_LA_SOCIETE_QUERY,
     PIECE_JUSTIFICATIVE_STORAGE,
+    REGISTRE_DES_BENEFICIAIRES_REPOSITORY,
   ],
 })
 export class ProfilesInfrastructureModule {}

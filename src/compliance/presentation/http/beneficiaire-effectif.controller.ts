@@ -13,90 +13,102 @@ import {
   ApiOperation,
   ApiParam,
   ApiQuery,
+  ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
 import { JwtAuthGuard } from 'src/iam/presentation/guards/jwt-auth.guard';
 import { CurrentUser } from 'src/iam/presentation/decorators/current-user.decorator';
 import type { ActiveUser } from 'src/iam/presentation/decorators/current-user.decorator';
-import { BeneficiaireEffectifEntity } from '../../infrastructure/persistence/entities/beneficiaire-effectif.entity';
-import { GetProfilPMUseCase } from '../../application/usecases/profiles/get-profil-pm.usecase';
+import { DeclarerBeneficiaireUseCase } from '../../application/usecases/beneficiaires/declarer-beneficiaire.usecase';
+import { ConsulterRegistreUseCase } from '../../application/usecases/beneficiaires/consulter-registre.usecase';
+import { RetirerBeneficiaireUseCase } from '../../application/usecases/beneficiaires/retirer-beneficiaire.usecase';
 import { CreateBeneficiaireEffectifDto } from './dto/beneficiaire-effectif.dto';
 
+/**
+ * Les bénéficiaires effectifs d'une société — les personnes qui la contrôlent
+ * réellement.
+ *
+ * Le cahier des charges les définit comme *« les actionnaires possédant 25 % et
+ * plus des parts de la société de manière directe ou indirecte »*, à déclarer
+ * par un formulaire DBE-S1 accompagné d'une pièce d'identité par personne.
+ *
+ * **Ce contrôleur ne connaît plus la base.** Il injectait
+ * `Repository<BeneficiaireEffectifEntity>` et faisait `create` / `save` /
+ * `delete` lui-même : la couche de présentation portait la persistance, le
+ * contrôle d'appartenance et — par les décorateurs du DTO — les seules règles
+ * métier écrites (§14, §27). Elles vivent désormais dans
+ * `RegistreDesBeneficiaires` et `BeneficiaireEffectif`, où elles s'éprouvent
+ * sans simuler une requête HTTP, et où un import ou un script les rencontre
+ * aussi.
+ *
+ * La **pièce d'identité** de chaque bénéficiaire ne se dépose pas ici : elle
+ * passe par `POST /profiles/pm/:societeId/pieces` avec le type
+ * `piece_identite_beneficiaire`, qui lui donne un statut d'instruction et un
+ * motif de refus — ce que l'ancien champ `pieceIdentiteDocId`, jamais lu, ne
+ * pouvait pas porter.
+ */
 @ApiTags('Profiles — Bénéficiaires Effectifs (DBE-S1)')
 @ApiBearerAuth()
 @Controller('profiles/pm/me/beneficiaires')
 @UseGuards(JwtAuthGuard)
 export class BeneficiaireEffectifController {
   constructor(
-    @InjectRepository(BeneficiaireEffectifEntity)
-    private readonly beneficiaireRepo: Repository<BeneficiaireEffectifEntity>,
-    private readonly getProfilPM: GetProfilPMUseCase,
+    private readonly declarerBeneficiaire: DeclarerBeneficiaireUseCase,
+    private readonly consulterRegistre: ConsulterRegistreUseCase,
+    private readonly retirerBeneficiaire: RetirerBeneficiaireUseCase,
   ) {}
-
-  /**
-   * La société visée est désignée par l'appelant, et vérifiée sienne.
-   *
-   * Elle se déduisait du token — un compte n'ayant qu'un dossier moral, il n'y
-   * avait rien à désigner. Il peut en déclarer plusieurs, donc `pmId` redevient
-   * obligatoire ; ce qui ne revient pas, c'est le contrôle d'appartenance
-   * écrit ici à la main, avec son 403 qui confirmait l'existence de
-   * l'identifiant. `GetProfilPMUseCase` le porte, pour tous ses appelants, et
-   * répond « introuvable » à qui n'est pas le titulaire.
-   *
-   * Passer par le use case plutôt que par le repository ORM referme au passage
-   * l'accès direct que ce contrôleur gardait sur la table du dossier moral
-   * (§14).
-   */
-  private async societeSienne(user: ActiveUser, pmId: string): Promise<string> {
-    const profilPM = await this.getProfilPM.execute(user.userId, pmId);
-    return profilPM.id;
-  }
 
   @ApiOperation({
     summary: "Lister les bénéficiaires effectifs (>25%) d'une de mes sociétés",
+    description:
+      'Rend les déclarations et le total des parts détenues en direct — celui ' +
+      'qui ne peut pas dépasser 100 %.',
   })
   @ApiQuery({ name: 'pmId', description: 'UUID du profil PM' })
+  @ApiResponse({ status: 200, description: 'Registre retourné' })
+  @ApiResponse({ status: 404, description: 'Société introuvable' })
   @Get()
-  async list(@CurrentUser() user: ActiveUser, @Query('pmId') pmId: string) {
-    const profilPMId = await this.societeSienne(user, pmId);
-    return this.beneficiaireRepo.find({ where: { profilPMId } });
+  lister(@CurrentUser() user: ActiveUser, @Query('pmId') pmId: string) {
+    return this.consulterRegistre.execute(user.userId, pmId);
   }
 
   @ApiOperation({
-    summary: 'Ajouter un bénéficiaire effectif à une de mes sociétés',
+    summary: 'Déclarer un bénéficiaire effectif sur une de mes sociétés',
+  })
+  @ApiResponse({ status: 201, description: 'Registre mis à jour' })
+  @ApiResponse({
+    status: 400,
+    description: 'Part inférieure à 25 %, ou donnée déclarée invalide',
+  })
+  @ApiResponse({
+    status: 409,
+    description: 'Les détentions directes dépasseraient 100 % du capital',
   })
   @Post()
-  async create(
+  declarer(
     @CurrentUser() user: ActiveUser,
     @Body() dto: CreateBeneficiaireEffectifDto,
   ) {
-    const { pmId, ...beneficiaire } = dto;
-    const profilPMId = await this.societeSienne(user, pmId);
-    const entity = this.beneficiaireRepo.create({
-      ...beneficiaire,
-      profilPMId,
-      dateNaissance: dto.dateNaissance ? new Date(dto.dateNaissance) : null,
-    });
-    return this.beneficiaireRepo.save(entity);
+    const { pmId, ...champs } = dto;
+    return this.declarerBeneficiaire.execute(user.userId, pmId, champs);
   }
 
   @ApiOperation({
-    summary: "Supprimer un bénéficiaire effectif d'une de mes sociétés",
+    summary: "Retirer un bénéficiaire effectif d'une de mes sociétés",
+    description:
+      "La pièce d'identité déposée pour cette personne n'est pas supprimée : " +
+      'sa conservation de cinq ans survit à la correction d’un registre.',
   })
   @ApiParam({ name: 'id', description: 'UUID du bénéficiaire' })
   @ApiQuery({ name: 'pmId', description: 'UUID du profil PM' })
+  @ApiResponse({ status: 200, description: 'Registre mis à jour' })
+  @ApiResponse({ status: 404, description: 'Bénéficiaire introuvable' })
   @Delete(':id')
-  async remove(
+  retirer(
+    @CurrentUser() user: ActiveUser,
     @Param('id') id: string,
     @Query('pmId') pmId: string,
-    @CurrentUser() user: ActiveUser,
   ) {
-    const profilPMId = await this.societeSienne(user, pmId);
-    // `profilPMId` reste dans le critère de suppression : sans lui, l'UUID d'un
-    // bénéficiaire appartenant à quelqu'un d'autre suffirait à l'effacer.
-    await this.beneficiaireRepo.delete({ id, profilPMId });
-    return { deleted: true };
+    return this.retirerBeneficiaire.execute(user.userId, pmId, id);
   }
 }
