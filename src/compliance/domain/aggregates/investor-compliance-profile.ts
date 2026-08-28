@@ -14,6 +14,7 @@ import {
   ClassementPsfpSnapshot,
 } from 'src/compliance/domain/value-objects/classement-psfp.vo';
 import { EtapeQuestionnaire } from 'src/compliance/domain/enums/etape-questionnaire.enum';
+import { ProfilInvestisseur } from 'src/compliance/domain/value-objects/profil-investisseur.vo';
 import { EtapeQuestionnaireFermeeError } from 'src/compliance/domain/errors';
 import { KycStatus } from 'src/compliance/domain/enums/kyc-status.enum';
 import { ChampsPreQualification } from 'src/compliance/domain/value-objects/pre-qualification-psfp.vo';
@@ -69,6 +70,7 @@ import {
 export class InvestorComplianceProfile {
   private readonly _id: string;
   private readonly _investorId: number;
+  private readonly _souscripteur: ProfilInvestisseur;
   private _kycCase: KycCase | null;
   private _adequacy: AdequacyAssessment | null;
   private _classement: ClassementPsfp;
@@ -83,6 +85,12 @@ export class InvestorComplianceProfile {
     /** Attribuée par la persistance : absente d'un dossier jamais écrit. */
     id?: string;
     investorId: number;
+    /**
+     * Au nom de qui ce dossier vaut. Par défaut le titulaire lui-même, ce qui
+     * est le cas de toutes les lignes écrites avant que les sociétés aient leur
+     * propre classement.
+     */
+    souscripteur?: ProfilInvestisseur;
     kycCase: KycCase | null;
     adequacy: AdequacyAssessment | null;
     classement?: ClassementPsfp;
@@ -90,6 +98,8 @@ export class InvestorComplianceProfile {
   }) {
     this._id = etat.id as string;
     this._investorId = etat.investorId;
+    this._souscripteur =
+      etat.souscripteur ?? ProfilInvestisseur.personnePhysique();
     this._kycCase = etat.kycCase;
     this._adequacy = etat.adequacy;
     this._classement = etat.classement ?? ClassementPsfp.initial();
@@ -103,12 +113,29 @@ export class InvestorComplianceProfile {
    * autres agrégats du contexte. Un dossier qui n'a jamais été écrit n'a pas
    * encore d'identité.
    */
-  static vierge(investorId: number): InvestorComplianceProfile {
+  static vierge(
+    investorId: number,
+    souscripteur: ProfilInvestisseur = ProfilInvestisseur.personnePhysique(),
+  ): InvestorComplianceProfile {
     return new InvestorComplianceProfile({
       investorId,
+      souscripteur,
       kycCase: null,
       adequacy: null,
     });
+  }
+
+  /**
+   * Au nom de qui ce dossier vaut : le titulaire, ou l'une de ses sociétés.
+   *
+   * Le classement PSFP s'apprécie sur l'investisseur, pas sur le compte — une
+   * SAS peut être professionnelle quand son dirigeant est non-averti. Le
+   * **KYC**, lui, ne vit que sur le dossier du titulaire : une société n'a pas
+   * d'identité à vérifier, elle a un KYB (`DossierDePieces`) et un représentant
+   * dont l'identité vaut pour toutes ses sociétés.
+   */
+  get souscripteur(): ProfilInvestisseur {
+    return this._souscripteur;
   }
 
   // ── Le classement réglementaire ───────────────────────────────────────────

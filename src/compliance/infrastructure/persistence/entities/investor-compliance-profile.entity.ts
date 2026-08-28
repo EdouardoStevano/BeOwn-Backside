@@ -47,8 +47,31 @@ export class InvestorComplianceProfileEntity {
    * `users` l'impose.
    */
   @Column()
-  @Index({ unique: true })
+  @Index()
   userId: number;
+
+  /**
+   * La société dont ce dossier porte le classement — `null` pour celui du
+   * titulaire lui-même.
+   *
+   * **Un dossier par profil investisseur, et non plus par compte.** Le
+   * classement PSFP s'apprécie sur l'investisseur : une SAS peut être
+   * professionnelle quand son dirigeant est non-averti, et lui opposer le
+   * plafond de son représentant lui imposerait un délai de rétractation qui ne
+   * la concerne pas.
+   *
+   * Le **KYC reste sur la ligne du titulaire** (`societeId` nul) : c'est une
+   * identité de personne physique, et le cahier des charges veut précisément
+   * qu'elle ne soit pas ressaisie par société. Ce qu'une société a en propre,
+   * c'est son KYB — qui vit dans `piece_justificative` — et son questionnaire.
+   *
+   * L'unicité tient à deux index partiels : `NULL` n'étant jamais égal à `NULL`
+   * dans un index unique Postgres, une contrainte à deux colonnes laisserait
+   * passer autant de lignes de titulaire qu'on veut.
+   */
+  @Column({ type: 'uuid', nullable: true })
+  @Index()
+  souscripteurSocieteId: string | null;
 
   // La colonne `nature` a disparu, avec la clé étrangère composée
   // `(userId, nature)` par laquelle les deux tables de profils s'interdisaient

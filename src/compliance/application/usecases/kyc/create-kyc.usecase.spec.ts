@@ -27,6 +27,9 @@ function monter(existant: KycCase | null = null) {
   // d'interface pour l'inspecter la détache de son objet.
   const mocks = {
     findByInvestorId: jest.fn().mockResolvedValue(profil),
+    // Le dossier d'une société n'a pas de KYC : ce use case ne le lit jamais,
+    // et le mock le rappelle plutôt que de rendre un dossier plausible.
+    parSociete: jest.fn(),
     // Le repository rend ce qu'il a reçu : la persistance n'est pas le sujet.
     save: jest.fn((p: InvestorComplianceProfile) => Promise.resolve(p)),
   };

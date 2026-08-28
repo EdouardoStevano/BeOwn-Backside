@@ -46,7 +46,7 @@ function monter(existant: AdequacyAssessment | null = null) {
     {
       findByInvestorId: mocks.findByInvestorId,
       save: mocks.save,
-    } as InvestorComplianceProfileRepository,
+    } as unknown as InvestorComplianceProfileRepository,
     { computeAndStore: mocks.computeAndStore } as unknown as RiskScoringService,
   );
 
