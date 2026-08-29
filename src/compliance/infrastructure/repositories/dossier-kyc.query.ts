@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { IsNull, Repository } from 'typeorm';
 import {
   DossierKycPublie,
   DossierKycQuery,
@@ -30,9 +30,16 @@ export class DossierKycTypeOrmQuery implements DossierKycQuery {
 
   async parTitulaire(utilisateurId: number): Promise<DossierKycPublie | null> {
     // Deux lectures et non une jointure : le dossier ne porte plus le compte,
-    // c'est la racine qui fait le lien — et elle se lit par un index unique.
+    // c'est la racine qui fait le lien.
+    //
+    // `IsNull()` sur la société, et non plus le seul `userId` : depuis qu'un
+    // compte déclare ses sociétés, il a **plusieurs** racines de conformité —
+    // la sienne, et une par société. Sans ce critère, `findOne` rendait la
+    // première venue, donc parfois celle d'une société, qui ne porte jamais de
+    // KYC — le titulaire vérifié s'affichait alors sans dossier au seul motif
+    // qu'il avait déclaré une entreprise.
     const racine = await this.racines.findOne({
-      where: { userId: utilisateurId },
+      where: { userId: utilisateurId, souscripteurSocieteId: IsNull() },
     });
     if (!racine) return null;
 

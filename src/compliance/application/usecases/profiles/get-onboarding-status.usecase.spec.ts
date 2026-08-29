@@ -12,6 +12,9 @@ import type { InvestorComplianceProfileRepository } from 'src/compliance/domain/
 import { InvestorComplianceProfile } from 'src/compliance/domain/aggregates/investor-compliance-profile';
 import type { ProfilPMRepository } from 'src/compliance/domain/repositories/profil-pm.repository';
 import type { ProfilPPRepository } from 'src/compliance/domain/repositories/profil-pp.repository';
+import { CategoriePsfp } from 'src/compliance/domain/enums/categorie-psfp.enum';
+import { ClassementPsfp } from 'src/compliance/domain/value-objects/classement-psfp.vo';
+import { EtapeQuestionnaire } from 'src/compliance/domain/enums/etape-questionnaire.enum';
 
 const UTILISATEUR = 42;
 
@@ -42,6 +45,13 @@ function monter(
     questionnaire?: ReturnType<
       typeof QuestionnaireAdequationFactory.repondre
     > | null;
+    /**
+     * Le classement que la racine porte, pour qui veut l'éprouver tel que le
+     * repository le restitue. Le constructeur ne le déduit pas du
+     * questionnaire — c'est `repondreAuQuestionnaire` qui le reprend, et la
+     * persistance qui le relit ensuite de ses propres colonnes.
+     */
+    classement?: ClassementPsfp;
   } = {},
 ) {
   const useCase = new GetOnboardingStatusUseCase(
@@ -63,6 +73,7 @@ function monter(
           investorId: UTILISATEUR,
           kycCase: etat.kyc ?? null,
           adequacy: etat.questionnaire ?? null,
+          classement: etat.classement,
         }),
       ),
     } as unknown as InvestorComplianceProfileRepository,
@@ -155,6 +166,70 @@ describe('GetOnboardingStatusUseCase', () => {
 
     expect(etape(statut, 'questionnaire').status).toBe('pending');
     expect(statut.isProfileComplete).toBe(false);
+  });
+
+  it('tient un questionnaire commencé pour en cours, et non pour répondu', async () => {
+    // Le questionnaire se répond en trois temps depuis qu'il est découpé :
+    // le faire naître ne le clôt pas. La condition lisait sa seule existence,
+    // si bien que répondre à la pré-qualification affichait l'étape
+    // réglementaire franchie — et `isProfileComplete` avec elle.
+    const questionnaire = QuestionnaireAdequationFactory.commencer();
+    questionnaire.repondreALaPreQualification({
+      workInFinancialSector: false,
+    });
+
+    const statut = await monter({
+      profilPP: profilPPRenseigne(),
+      questionnaire,
+      kyc: kycAuStatut(KycStatus.VALIDE),
+    }).execute({ utilisateurId: UTILISATEUR });
+
+    expect(etape(statut, 'questionnaire').status).toBe('pending');
+    expect(statut.isProfileComplete).toBe(false);
+    // Le front n'a pas à réappliquer les seuils PSFP pour savoir quoi poser.
+    expect(statut.etapeSuivanteQuestionnaire).toBe(
+      EtapeQuestionnaire.QUALIFICATION,
+    );
+    expect(statut.etapesQuestionnaireRepondues).toEqual([
+      EtapeQuestionnaire.PRE_QUALIFICATION,
+    ]);
+  });
+
+  it('clôt le questionnaire du professionnel dès la première étape', async () => {
+    // Deux critères sur trois : le règlement le dispense de la suite. L'étape
+    // se franchit donc sans que les deux autres soient posées.
+    const questionnaire = QuestionnaireAdequationFactory.commencer();
+    questionnaire.repondreALaPreQualification({
+      workInFinancialSector: true,
+      portfolioOver500k: true,
+    });
+
+    const statut = await monter({
+      profilPP: profilPPRenseigne(),
+      questionnaire,
+      kyc: kycAuStatut(KycStatus.VALIDE),
+    }).execute({ utilisateurId: UTILISATEUR });
+
+    expect(statut.etapeSuivanteQuestionnaire).toBeNull();
+    expect(etape(statut, 'questionnaire').status).toBe('completed');
+    expect(statut.isProfileComplete).toBe(true);
+  });
+
+  it('publie le classement PSFP, que le profil PP ne porte plus', async () => {
+    const statut = await monter({
+      profilPP: profilPPRenseigne(),
+      classement: ClassementPsfp.etabli(
+        CategoriePsfp.NON_AVERTI,
+        50_000,
+        2_000,
+      ),
+    }).execute({ utilisateurId: UTILISATEUR });
+
+    // Catégorie et plafond conseillé transitaient par `profilPP` ; depuis
+    // qu'ils appartiennent à la racine de conformité, plus rien ne les
+    // publiait — alors que c'est le plafond opposé à la souscription.
+    expect(statut.classement.categoriePsfp).toBe(CategoriePsfp.NON_AVERTI);
+    expect(statut.classement.patrimoineDeclare).toBe(50_000);
   });
 
   it('reconnaît un questionnaire réellement rempli', async () => {

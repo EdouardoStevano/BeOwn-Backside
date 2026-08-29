@@ -147,9 +147,14 @@ import { BeneficiaireEffectifController } from '../presentation/http/beneficiair
     ProfilInvestisseurController,
   ],
   exports: [
-    // Consommé par `UserController` (IAM) : `GET /users/me` compose le compte
-    // avec l'avancement du dossier, que seul ce contexte sait calculer.
+    // Consommés par `AccountOverviewModule` : `GET /users/me` compose le compte
+    // avec l'avancement du dossier et le sélecteur d'identité, que seul ce
+    // contexte sait calculer. Ce sont deux lectures **déjà composées ici** —
+    // les exporter est ce qui évite que la vue d'ensemble ne recompose
+    // l'aptitude d'une société à partir de ses pièces, ce qui reviendrait à
+    // réécrire une règle réglementaire hors de son contexte (§14).
     GetOnboardingStatusUseCase,
+    ListerProfilsInvestisseurUseCase,
     ProfilesInfrastructureModule,
     RiskScoringService,
   ],

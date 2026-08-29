@@ -15,6 +15,8 @@ import {
 } from 'src/compliance/domain/repositories/profil-pp.repository';
 import { ProfilPM } from 'src/compliance/domain/aggregates/profil-pm';
 import { ProfilPP } from 'src/compliance/domain/aggregates/profil-pp';
+import { ClassementPsfpSnapshot } from 'src/compliance/domain/value-objects/classement-psfp.vo';
+import { EtapeQuestionnaire } from 'src/compliance/domain/enums/etape-questionnaire.enum';
 
 /** Type d'investisseur, tel que le dossier réellement ouvert le montre. */
 export type TypeInvestisseur = 'PP' | 'PM';
@@ -36,6 +38,28 @@ export interface OnboardingStatus {
   /** Les sociétés déclarées, vide si le compte n'en a aucune. */
   profilsPM: ProfilPM[];
   kyc: KycCaseSnapshot | null;
+  /**
+   * Le classement PSFP opposable — jamais `null` : qui n'a pas répondu **est**
+   * non averti.
+   *
+   * Il est publié ici parce qu'il n'est plus publié ailleurs : catégorie,
+   * patrimoine déclaré et montant conseillé vivaient sur `ProfilPP`, d'où
+   * `GET /users/me` les rendait par ricochet. Ils appartiennent désormais à la
+   * racine de conformité — pour les deux natures de titulaire, une société
+   * n'ayant pas de profil PP où se ranger — et personne ne les avait repris.
+   */
+  classement: ClassementPsfpSnapshot;
+  /**
+   * L'étape du questionnaire qu'il reste à poser — `null` quand il est clos.
+   *
+   * Le questionnaire se répond désormais en trois temps, chacun pouvant clore
+   * le parcours selon son propre résultat (un professionnel n'a pas de
+   * qualification à passer). Seul le domaine connaît ces seuils : le front
+   * n'a pas à les réappliquer pour deviner quel volet afficher.
+   */
+  etapeSuivanteQuestionnaire: EtapeQuestionnaire | null;
+  /** Les étapes déjà franchies, dans l'ordre du parcours. */
+  etapesQuestionnaireRepondues: EtapeQuestionnaire[];
   completionStep: number;
   completionSteps: EtapeOnboarding[];
   completionProgress: number;
@@ -127,17 +151,21 @@ export class GetOnboardingStatusUseCase {
       (profilPP?.aRenseigneSonProfil() ?? false) ||
       profilsPM.some((pm) => pm.identiteLegale.raisonSociale);
 
-    // Le questionnaire est répondu quand il **existe**. La condition lisait
-    // `profilPP?.categoriePsfp`, toujours vraie dès qu'un profil PP existe —
-    // la catégorie vaut `non_averti` par défaut, jamais vide. L'étape
-    // réglementaire s'affichait donc franchie sans qu'une seule question ait
-    // été posée, et `isProfileComplete` avec elle.
+    // Le questionnaire est répondu quand il est **clos**, c'est-à-dire quand il
+    // ne reste aucune étape à poser. La condition lisait son seule existence
+    // (`aReponduAuQuestionnaire`), ce qui était juste tant que le formulaire
+    // arrivait d'un bloc : depuis qu'il se répond en trois temps, répondre à la
+    // pré-qualification suffisait à faire naître le questionnaire — donc à
+    // afficher l'étape réglementaire franchie, et `isProfileComplete` avec
+    // elle, à qui n'avait passé qu'un tiers du parcours.
     //
     // Le raccourci « une personne morale n'a pas à répondre » est conservé tel
     // quel : le corriger changerait l'affichage de tous les comptes PM, ce qui
     // est une décision métier, pas un correctif.
+    const etapeSuivanteQuestionnaire =
+      conformite.etapeSuivanteDuQuestionnaire();
     const questionnaireRepondu =
-      conformite.aReponduAuQuestionnaire() || profilsPM.length > 0;
+      etapeSuivanteQuestionnaire === null || profilsPM.length > 0;
 
     const kycValide = conformite.statutKyc === KycStatus.VALIDE;
     const kycRefuse = conformite.statutKyc === KycStatus.REFUSE;
@@ -185,11 +213,18 @@ export class GetOnboardingStatusUseCase {
         detail: kycRefuse
           ? (conformite.motifRefusKyc ??
             'KYC refusé — resoumettez vos documents')
-          : kycEnCours
-            ? 'Vérification en cours par notre équipe'
-            : kycValide
-              ? undefined
-              : "Soumettez vos documents d'identité",
+          : // La revue manuelle est nommée à part : le titulaire qui vient de
+            // déposer sa pièce à la main attend une **personne**, pas un
+            // prestataire, et le délai n'est pas le même. Confondre les deux
+            // le laissait rafraîchir une page en espérant une réponse
+            // automatique qui ne viendra pas.
+            conformite.estEnRevueManuelle()
+            ? "Vos documents sont en cours d'examen par notre équipe conformité"
+            : kycEnCours
+              ? 'Vérification en cours chez notre prestataire'
+              : kycValide
+                ? undefined
+                : "Soumettez vos documents d'identité",
       },
       {
         id: 'questionnaire',
@@ -199,9 +234,14 @@ export class GetOnboardingStatusUseCase {
           : aCommenceSonProfil
             ? 'pending'
             : 'not_started',
+        // Le parcours étant en trois temps, le détail dit s'il est à commencer
+        // ou à reprendre : « répondez au questionnaire » à qui en a déjà passé
+        // deux tiers lui laisse croire que ses réponses sont perdues.
         detail:
           !questionnaireRepondu && aCommenceSonProfil
-            ? 'Répondez au questionnaire pour finaliser votre profil réglementaire'
+            ? conformite.etapesReponduesDuQuestionnaire().length > 0
+              ? 'Reprenez votre questionnaire là où vous vous êtes arrêté'
+              : 'Répondez au questionnaire pour finaliser votre profil réglementaire'
             : undefined,
       },
     ];
@@ -215,6 +255,9 @@ export class GetOnboardingStatusUseCase {
       profilPP,
       profilsPM,
       kyc: conformite.dossierKycPublie,
+      classement: conformite.classement.toSnapshot(),
+      etapeSuivanteQuestionnaire,
+      etapesQuestionnaireRepondues: conformite.etapesReponduesDuQuestionnaire(),
       completionStep: etapeCourante({
         typeChoisi: !!typeChoisi,
         aCommenceSonProfil,

@@ -40,7 +40,12 @@ import { TreasuryInfrastructureModule } from 'src/treasury/infrastructure/treasu
     IamInfrastructureModule,
     // `USER_REPOSITORY` — l'identité du compte, lue par son port.
     UsersInfrastructureModule,
-    // `GetOnboardingStatusUseCase` — l'avancement du dossier réglementaire.
+    // `GetOnboardingStatusUseCase` — l'avancement du dossier réglementaire —
+    // et `ListerProfilsInvestisseurUseCase` — au nom de qui le compte agit,
+    // avec l'aptitude de chaque identité. Deux lectures **déjà composées par
+    // le contexte conformité** : les prendre telles quelles est ce qui tient
+    // la règle d'existence de ce module, puisqu'un verdict KYB recomposé ici
+    // serait précisément le « rien de métier » qu'il s'interdit.
     ProfilesModule,
     // `DOSSIER_KYC_QUERY` — le dossier de vérification, publié à côté du
     // compte. Un port de lecture du contexte voisin, jamais son repository.
