@@ -16,6 +16,9 @@ const LIGNE = {
   motifRefus: null,
   stripeReportId: 'vr_1',
   identiteExtrait: { nom: 'Dupont', prenom: 'Marie' },
+  // `null` sur un dossier que le fournisseur a su valider : le dépôt manuel
+  // n'est un recours que lorsqu'il n'a pas abouti.
+  pieceIdentiteDeposee: null,
   createdAt: new Date('2026-01-01T10:00:00.000Z'),
   updatedAt: new Date('2026-01-02T10:00:00.000Z'),
 };

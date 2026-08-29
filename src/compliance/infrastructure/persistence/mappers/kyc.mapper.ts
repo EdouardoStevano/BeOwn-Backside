@@ -2,7 +2,10 @@
 // l'agrégat et son snapshot. Celui-ci ne fait que la moitié ORM du chemin et
 // délègue l'autre.
 import { KycMapper as KycDomainMapper } from 'src/compliance/domain/mappers/kyc.mapper';
-import { KycCase } from 'src/compliance/domain/entities/kyc-case';
+import {
+  KycCase,
+  KycCaseSnapshot,
+} from 'src/compliance/domain/entities/kyc-case';
 import { KycEntity } from '../entities/kyc.entity';
 
 /**
@@ -26,6 +29,8 @@ export class KycOrmMapper {
       motifRefus: entity.motifRefus,
       stripeReportId: entity.stripeReportId,
       identiteExtrait: entity.identiteExtrait,
+      pieceIdentiteDeposee:
+        entity.pieceIdentiteDeposee as KycCaseSnapshot['pieceIdentiteDeposee'],
       createdAt: entity.createdAt,
       updatedAt: entity.updatedAt,
     });
@@ -62,6 +67,11 @@ export class KycOrmMapper {
     // à la lecture, malgré le type déclaré sur l'entité.
     entity.valideJusquAu = snapshot.valideJusquAu as unknown as Date | null;
     entity.motifRefus = snapshot.motifRefus;
+    // Écrite, elle : à la différence du rapport Stripe, la pièce déposée est
+    // posée par la racine — c'est le titulaire qui la fournit, pas un webhook —
+    // donc la recopier depuis le dossier chargé n'écrase rien.
+    entity.pieceIdentiteDeposee =
+      snapshot.pieceIdentiteDeposee as KycEntity['pieceIdentiteDeposee'];
     return entity;
   }
 }

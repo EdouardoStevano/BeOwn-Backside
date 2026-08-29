@@ -7,6 +7,7 @@ import {
   TypePieceJustificative,
 } from '../enums/type-piece-justificative.enum';
 import { DecisionPiece } from '../value-objects/decision-piece.vo';
+import { TypePieceIdentite } from '../enums/type-piece-identite.enum';
 import { StatutKyb } from '../enums/statut-kyb.enum';
 import { FichierDepose } from '../value-objects/fichier-depose.vo';
 import {
@@ -16,6 +17,18 @@ import {
 
 const LE_JOUR = new Date('2026-08-28T10:00:00.000Z');
 const BENEFICIAIRE = 'beneficiaire-1';
+
+/**
+ * La nature du document, pour les seules pièces d'identité.
+ *
+ * La carte d'identité sert de cas nominal — recto-verso, comme trois documents
+ * sur quatre. Le passeport, qui est l'exception, a ses tests dédiés.
+ */
+function natureDe(type: TypePieceJustificative): TypePieceIdentite | null {
+  return type === TypePieceJustificative.PIECE_IDENTITE_BENEFICIAIRE
+    ? TypePieceIdentite.CARTE_IDENTITE
+    : null;
+}
 
 const fichier = () =>
   FichierDepose.depose({
@@ -55,6 +68,7 @@ function dossierComplet(beneficiaires: string[]): DossierDePieces {
             id: `piece-${rang + 1}`,
             type: attendue.type,
             beneficiaireId: attendue.beneficiaireId,
+            natureIdentite: natureDe(attendue.type),
             // Le KBIS est le seul daté : émis de la veille, il est frais.
             dateEmission:
               attendue.type === TypePieceJustificative.KBIS
@@ -63,7 +77,9 @@ function dossierComplet(beneficiaires: string[]): DossierDePieces {
             deposeeLe: LE_JOUR,
           },
           fichier: fichier(),
-          verso: exigeUnVerso(attendue.type) ? fichier() : null,
+          verso: exigeUnVerso(attendue.type, natureDe(attendue.type))
+            ? fichier()
+            : null,
           decision: DecisionPiece.enAttente(),
         }),
     ),

@@ -5,6 +5,7 @@ import {
   type DossierDePiecesRepository,
 } from 'src/compliance/domain/repositories/dossier-de-pieces.repository';
 import { TypePieceJustificative } from 'src/compliance/domain/enums/type-piece-justificative.enum';
+import { TypePieceIdentite } from 'src/compliance/domain/enums/type-piece-identite.enum';
 import { FichierDepose } from 'src/compliance/domain/value-objects/fichier-depose.vo';
 import { BeneficiaireDeLaPieceIncoherentError } from 'src/compliance/domain/errors';
 import {
@@ -44,6 +45,14 @@ export interface DepotDePiece {
    * `DossierDePieces.deposer` qui le tranche, pas ce use case (§14).
    */
   verso?: FaceDeposee | null;
+  /**
+   * Quel document d'identité est déposé.
+   *
+   * Exigé pour la pièce d'identité d'un bénéficiaire, interdit ailleurs — et
+   * c'est lui, non le type, qui décide si un verso est attendu. `DossierDePieces`
+   * tranche les deux (§14).
+   */
+  natureIdentite?: TypePieceIdentite | null;
 }
 
 /**
@@ -116,6 +125,7 @@ export class DeposerPieceUseCase {
       type: depot.type,
       beneficiaireId: depot.beneficiaireId,
       dateEmission: depot.dateEmission,
+      natureIdentite: depot.natureIdentite ?? null,
       fichier: recto,
       verso,
     });
@@ -153,7 +163,7 @@ export class DeposerPieceUseCase {
       contenu: face.contenu,
       nomOrigine: face.nomOrigine,
       mimeType: face.mimeType,
-      societeId,
+      proprietaire: { societeId },
     });
 
     return FichierDepose.depose({

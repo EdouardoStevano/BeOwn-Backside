@@ -7,6 +7,7 @@ import {
   TypePieceJustificative,
 } from 'src/compliance/domain/enums/type-piece-justificative.enum';
 import { FichierDepose } from 'src/compliance/domain/value-objects/fichier-depose.vo';
+import { TypePieceIdentite } from 'src/compliance/domain/enums/type-piece-identite.enum';
 import { DossierDePiecesCompleteDomainEvent } from 'src/compliance/domain/events/dossier-de-pieces-complete.domain-event';
 import { DossierDePiecesIncompletDomainEvent } from 'src/compliance/domain/events/dossier-de-pieces-incomplet.domain-event';
 import { annoncerLaCompletude } from './annoncer-la-completude';
@@ -14,6 +15,18 @@ import { annoncerLaCompletude } from './annoncer-la-completude';
 const LE_JOUR = new Date('2026-08-28T10:00:00.000Z');
 const BENEFICIAIRE = 'beneficiaire-1';
 const SOCIETE = { id: 's-1', utilisateurId: 42 };
+
+/**
+ * La nature du document, pour les seules pièces d'identité.
+ *
+ * La carte d'identité sert de cas nominal — recto-verso, comme trois documents
+ * sur quatre. Le passeport, qui est l'exception, a ses tests dédiés.
+ */
+function natureDe(type: TypePieceJustificative): TypePieceIdentite | null {
+  return type === TypePieceJustificative.PIECE_IDENTITE_BENEFICIAIRE
+    ? TypePieceIdentite.CARTE_IDENTITE
+    : null;
+}
 
 const fichier = () =>
   FichierDepose.depose({
@@ -56,7 +69,10 @@ function dossierComplet(beneficiaires: string[]): DossierDePieces {
           ? new Date('2026-08-27')
           : null,
       fichier: fichier(),
-      verso: exigeUnVerso(attendue.type) ? fichier() : null,
+      natureIdentite: natureDe(attendue.type),
+      verso: exigeUnVerso(attendue.type, natureDe(attendue.type))
+        ? fichier()
+        : null,
       maintenant: LE_JOUR,
     });
   }

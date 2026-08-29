@@ -28,6 +28,7 @@ import {
   PIECES_EXIGEES_DE_LA_SOCIETE,
   PIECES_EXIGEES_DU_BENEFICIAIRE,
 } from 'src/compliance/domain/enums/type-piece-justificative.enum';
+import { TypePieceIdentite } from 'src/compliance/domain/enums/type-piece-identite.enum';
 import {
   DeposerPieceUseCase,
   type FaceDeposee,
@@ -205,9 +206,13 @@ export class PieceJustificativeController {
       'DBE-S1 et sa pièce d’identité. Une seule pièce de chaque type par ' +
       'personne — redéposer remplace la précédente et remet son instruction ' +
       'en attente.\n\n' +
-      '`verso` est **obligatoire** pour `piece_identite_beneficiaire` : la ' +
-      'date d’expiration est au dos, et un recto seul ne permet pas de ' +
-      'vérifier que la pièce est encore valide. Il est refusé pour le DBE-S1.',
+      '`natureIdentite` est **obligatoire** pour ' +
+      '`piece_identite_beneficiaire`, et interdit pour le DBE-S1 : quatre ' +
+      'documents sont acceptés — carte nationale d’identité, passeport, ' +
+      'permis de conduire, titre de séjour.\n\n' +
+      'C’est lui qui décide du `verso` : **seule la carte nationale ' +
+      'd’identité** en exige un, sa date d’expiration étant au dos. Les trois ' +
+      'autres se déposent en une seule page, et un verso y est refusé.',
   })
   @ApiConsumes('multipart/form-data')
   @ApiParam({
@@ -229,6 +234,10 @@ export class PieceJustificativeController {
         type: {
           type: 'string',
           enum: [...PIECES_EXIGEES_DU_BENEFICIAIRE],
+        },
+        natureIdentite: {
+          type: 'string',
+          enum: Object.values(TypePieceIdentite),
         },
         dateEmission: { type: 'string', example: '2026-08-01' },
       },
@@ -258,6 +267,9 @@ export class PieceJustificativeController {
       // Il vient du chemin : une URL ne peut pas être à moitié renseignée,
       // là où un champ de corps absent passait pour un dépôt de société.
       beneficiaireId,
+      // `null` et non `undefined` : le domaine oppose « aucune nature » à
+      // « nature exigée », et c'est lui qui refuse le dépôt incohérent.
+      natureIdentite: dto.natureIdentite ?? null,
       dateEmission: dto.dateEmission ? new Date(dto.dateEmission) : null,
       ...this.faces(fichiers),
     });

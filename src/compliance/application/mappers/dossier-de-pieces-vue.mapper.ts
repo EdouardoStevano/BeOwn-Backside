@@ -7,6 +7,10 @@ import {
   LIBELLE_PIECE,
   TypePieceJustificative,
 } from 'src/compliance/domain/enums/type-piece-justificative.enum';
+import {
+  LIBELLE_PIECE_IDENTITE,
+  TypePieceIdentite,
+} from 'src/compliance/domain/enums/type-piece-identite.enum';
 import { StatutPiece } from 'src/compliance/domain/value-objects/decision-piece.vo';
 import { BeneficiaireDeclare } from '../ports/beneficiaires-de-la-societe.query';
 
@@ -70,6 +74,12 @@ export interface VuePieceJustificative {
   /** Absents pour une pièce de la société : elle ne documente personne. */
   beneficiaireId?: string;
   beneficiaire?: string;
+  /**
+   * Quel document d'identité c'est, et son libellé — absents pour tout ce qui
+   * n'en est pas un. C'est ce qui dit à l'écran si un verso est attendu.
+   */
+  natureIdentite?: TypePieceIdentite;
+  libelleNatureIdentite?: string;
   /** Absente pour les types sans durée de validité — cf. `VALIDITE_EN_MOIS`. */
   dateEmission?: Date;
   instruction: VueInstruction;
@@ -136,6 +146,12 @@ export function vuePiece(
       ? {
           beneficiaireId: piece.beneficiaireId,
           ...(nom !== undefined ? { beneficiaire: nom } : {}),
+        }
+      : {}),
+    ...(piece.natureIdentite !== null
+      ? {
+          natureIdentite: piece.natureIdentite,
+          libelleNatureIdentite: LIBELLE_PIECE_IDENTITE[piece.natureIdentite],
         }
       : {}),
     ...(piece.dateEmission !== null

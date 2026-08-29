@@ -2,6 +2,7 @@ import {
   TypePieceJustificative,
   VALIDITE_EN_MOIS,
 } from '../enums/type-piece-justificative.enum';
+import { TypePieceIdentite } from '../enums/type-piece-identite.enum';
 import {
   DecisionPiece,
   DecisionPieceSnapshot,
@@ -32,6 +33,15 @@ export interface EntetePiece {
    * de janvier en juin ne le rajeunit pas.
    */
   dateEmission: Date | null;
+  /**
+   * Quel document d'identité c'est — `null` pour tout ce qui n'en est pas un.
+   *
+   * « Pièce d'identité » ne désigne pas un document mais une famille de quatre,
+   * et ils ne se prouvent pas de la même façon : trois portent leur date
+   * d'expiration au dos, le passeport porte tout sur sa page de données. Sans
+   * cette précision, le dossier ne saurait pas s'il lui manque un verso.
+   */
+  natureIdentite: TypePieceIdentite | null;
   deposeeLe: Date;
 }
 
@@ -81,10 +91,11 @@ export interface PieceJustificativeSnapshot
  * deux pièces à instruire séparément, ce qui aurait permis d'accepter un recto
  * et de refuser son verso.
  *
- * Le verso est `null` partout ailleurs : un KBIS n'a pas de dos. Quels types en
- * exigent un est dit par `PIECES_RECTO_VERSO`, et éprouvé au dépôt par
- * `DossierDePieces` — l'entité, elle, accepte ce qu'on lui donne, comme pour le
- * reste de ses invariants de composition (§6).
+ * Le verso est `null` partout ailleurs : un KBIS n'a pas de dos, et un passeport
+ * non plus. Qui en exige un ne se lit pas sur le type mais sur la
+ * {@link EntetePiece.natureIdentite} — `exigeUnVerso` tranche —, et c'est
+ * `DossierDePieces` qui l'éprouve au dépôt ; l'entité, elle, accepte ce qu'on
+ * lui donne, comme pour le reste de ses invariants de composition (§6).
  *
  * Ce qui reste ici est ce qui n'appartient à aucun d'eux : ce que la pièce
  * **est** (son type, qui elle documente), quand elle a été émise, et la seule
@@ -99,6 +110,7 @@ export class PieceJustificative {
   private readonly _id: string;
   private readonly _type: TypePieceJustificative;
   private readonly _beneficiaireId: string | null;
+  private _natureIdentite: TypePieceIdentite | null;
   private _fichier: FichierDepose;
   private _verso: FichierDepose | null;
   private _dateEmission: Date | null;
@@ -122,6 +134,7 @@ export class PieceJustificative {
     this._id = etat.entete.id;
     this._type = etat.entete.type;
     this._beneficiaireId = etat.entete.beneficiaireId;
+    this._natureIdentite = etat.entete.natureIdentite;
     this._dateEmission = etat.entete.dateEmission;
     this._deposeeLe = etat.entete.deposeeLe;
     this._fichier = etat.fichier;
@@ -150,10 +163,15 @@ export class PieceJustificative {
     fichier: FichierDepose,
     verso: FichierDepose | null,
     dateEmission: Date | null,
+    natureIdentite: TypePieceIdentite | null,
     maintenant: Date,
   ): void {
     this._fichier = fichier;
     this._verso = verso;
+    // La nature change avec le document : un bénéficiaire qui remplace sa carte
+    // d'identité par un passeport dépose la même *pièce* du dossier, mais plus
+    // le même document — et le verso qu'on lui réclame change avec.
+    this._natureIdentite = natureIdentite;
     this._dateEmission = dateEmission;
     this._deposeeLe = maintenant;
     this._decision = DecisionPiece.enAttente();
@@ -212,6 +230,10 @@ export class PieceJustificative {
   get beneficiaireId(): string | null {
     return this._beneficiaireId;
   }
+  /** Quel document d'identité c'est ; `null` pour tout ce qui n'en est pas un. */
+  get natureIdentite(): TypePieceIdentite | null {
+    return this._natureIdentite;
+  }
   /** Le recto — ou l'unique face, pour les pièces qui n'ont pas de dos. */
   get fichier(): FichierDepose {
     return this._fichier;
@@ -243,6 +265,7 @@ export class PieceJustificative {
       id: this._id,
       type: this._type,
       beneficiaireId: this._beneficiaireId,
+      natureIdentite: this._natureIdentite,
       dateEmission: this._dateEmission,
       deposeeLe: this._deposeeLe,
       ...this._fichier.toSnapshot(),

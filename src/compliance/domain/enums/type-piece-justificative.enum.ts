@@ -1,3 +1,8 @@
+import {
+  exigeUnVersoDIdentite,
+  TypePieceIdentite,
+} from './type-piece-identite.enum';
+
 /**
  * Les pièces qu'un dossier personne morale doit réunir.
  *
@@ -83,26 +88,45 @@ export function exigeUnBeneficiaire(type: TypePieceJustificative): boolean {
 }
 
 /**
- * Les pièces dont le **verso** fait partie du document.
+ * Cette pièce doit-elle dire **quel document d'identité** elle est ?
  *
- * Une carte d'identité ne se prouve pas par sa seule face : la date
- * d'expiration, l'adresse et la bande MRZ sont au dos, et un dossier instruit
- * sur le seul recto ne permet pas de vérifier que la pièce est encore valide.
+ * Une seule le doit : la pièce d'identité du bénéficiaire. Un KBIS est un KBIS,
+ * mais « pièce d'identité » ne désigne pas un document — c'est une famille de
+ * quatre, et ils ne se prouvent pas de la même façon.
+ *
+ * Le type reste **unique** malgré ces quatre natures, et c'est délibéré : la
+ * règle de complétude en réclame *une* par bénéficiaire, quelle qu'elle soit.
+ * Quatre types d'enum auraient obligé `piecesManquantes` à exprimer « l'un de
+ * ces quatre », ou pire, à les réclamer tous les quatre.
+ */
+export function exigeUneNatureDIdentite(type: TypePieceJustificative): boolean {
+  return type === TypePieceJustificative.PIECE_IDENTITE_BENEFICIAIRE;
+}
+
+/**
+ * Le **verso** fait-il partie de ce document ?
+ *
+ * La question ne se pose que pour la pièce d'identité d'un bénéficiaire, et sa
+ * réponse ne dépend pas du type mais de la **nature** : seule la carte
+ * nationale d'identité porte au dos la date d'expiration et la bande MRZ. Le
+ * passeport, le permis de conduire et le titre de séjour se prouvent d'une
+ * seule page.
+ *
+ * La table qui tranche est {@link PIECES_IDENTITE_RECTO_VERSO}, partagée avec
+ * le dépôt manuel du **titulaire** — c'est le même jeu de quatre documents, et
+ * les mêmes raisons. Deux tables séparées auraient fini par diverger : un
+ * passeport accepté sans verso d'un côté, refusé de l'autre.
+ *
  * Recto et verso restent **une seule pièce** avec **une seule décision** :
  * l'équipe conformité accepte ou refuse un document d'identité, pas une face.
- *
- * Un ensemble plutôt qu'un `if` sur le type, pour la même raison que
- * {@link VALIDITE_EN_MOIS} : si un passeport — qui n'a pas de verso utile —
- * devait être accepté un jour, c'est ici que la règle se relâche, sans rouvrir
- * `DossierDePieces` (§4 — Open/Closed).
  */
-export const PIECES_RECTO_VERSO: ReadonlySet<TypePieceJustificative> = new Set([
-  TypePieceJustificative.PIECE_IDENTITE_BENEFICIAIRE,
-]);
+export function exigeUnVerso(
+  type: TypePieceJustificative,
+  natureIdentite: TypePieceIdentite | null,
+): boolean {
+  if (!exigeUneNatureDIdentite(type)) return false;
 
-/** @see PIECES_RECTO_VERSO */
-export function exigeUnVerso(type: TypePieceJustificative): boolean {
-  return PIECES_RECTO_VERSO.has(type);
+  return natureIdentite !== null && exigeUnVersoDIdentite(natureIdentite);
 }
 
 /**
@@ -131,5 +155,5 @@ export const LIBELLE_PIECE: Record<TypePieceJustificative, string> = {
   [TypePieceJustificative.LISTE_ACTIONNAIRES]: 'liste des actionnaires à jour',
   [TypePieceJustificative.DBE_S1]: 'formulaire DBE-S1 du bénéficiaire effectif',
   [TypePieceJustificative.PIECE_IDENTITE_BENEFICIAIRE]:
-    "pièce d'identité du bénéficiaire effectif (recto et verso)",
+    "pièce d'identité du bénéficiaire effectif",
 };

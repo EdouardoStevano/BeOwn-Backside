@@ -89,3 +89,36 @@ export class VersoDeLaPieceIncoherentError extends ComplianceError {
     );
   }
 }
+
+/**
+ * Une pièce d'identité a été déposée sans dire quel document elle est — ou un
+ * KBIS s'est vu attribuer une nature qu'il n'a pas.
+ *
+ * **« Pièce d'identité » ne désigne pas un document**, mais une famille de
+ * quatre : carte d'identité, passeport, permis de conduire, titre de séjour.
+ * Sans savoir lequel, le dossier ne peut pas dire s'il lui manque un verso —
+ * trois d'entre eux portent au dos la date d'expiration, le quatrième porte
+ * tout sur sa page de données. La nature n'est donc pas une étiquette
+ * d'affichage : c'est ce dont dépend la règle de composition.
+ *
+ * Dans l'autre sens, un KBIS ou des statuts n'ont pas de nature à choisir : il
+ * n'existe qu'une façon d'être un extrait d'immatriculation.
+ */
+export class NatureDeLaPieceIdentiteIncoherenteError extends ComplianceError {
+  readonly kind = ComplianceErrorKind.INVALID_INPUT;
+
+  constructor(
+    readonly type: TypePieceJustificative,
+    readonly attendue: boolean,
+  ) {
+    super(
+      attendue
+        ? `Une ${LIBELLE_PIECE[type]} doit dire de quel document il s'agit : carte d'identité, passeport, permis de conduire ou titre de séjour.`
+        : `Une ${LIBELLE_PIECE[type]} n'est pas un document d'identité — sa nature n'a pas à être précisée.`,
+      {
+        code: 'NATURE_DE_LA_PIECE_IDENTITE_INCOHERENTE',
+        details: { type, natureAttendue: attendue },
+      },
+    );
+  }
+}

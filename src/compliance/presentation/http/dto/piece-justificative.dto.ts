@@ -12,6 +12,7 @@ import {
   PIECES_EXIGEES_DU_BENEFICIAIRE,
   TypePieceJustificative,
 } from 'src/compliance/domain/enums/type-piece-justificative.enum';
+import { TypePieceIdentite } from 'src/compliance/domain/enums/type-piece-identite.enum';
 
 /**
  * Le dépôt d'une pièce **de la société** : `POST .../pieces`.
@@ -69,6 +70,19 @@ export class DeposerPieceDuBeneficiaireDto {
       'sur /profiles/pm/{societeId}/pieces.',
   })
   type: TypePieceJustificative;
+
+  @ApiPropertyOptional({
+    enum: TypePieceIdentite,
+    description:
+      "Quel document d'identité est déposé. **Obligatoire** pour " +
+      '`piece_identite_beneficiaire`, interdit pour le DBE-S1. ' +
+      "C'est lui, et non le type, qui décide du verso : exigé pour la seule " +
+      "carte nationale d'identité, dont la date d'expiration est au dos, et " +
+      'refusé pour les trois autres, qui se prouvent en une seule page.',
+  })
+  @IsOptional()
+  @IsEnum(TypePieceIdentite)
+  natureIdentite?: TypePieceIdentite;
 
   @ApiPropertyOptional({
     example: '2026-08-01',

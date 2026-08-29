@@ -3,6 +3,7 @@ export * from './compliance.error';
 export * from './champ-kyc.errors';
 export * from './revue-manuelle.errors';
 export * from './kyb.errors';
+export * from './piece-identite.errors';
 // Dossier investisseur et questionnaire d'adéquation (M3).
 export * from './champ-profil.errors';
 export * from './beneficiaire-effectif.errors';

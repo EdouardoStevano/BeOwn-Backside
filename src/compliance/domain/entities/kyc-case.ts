@@ -9,6 +9,22 @@ import {
   DecisionKycSnapshot,
   DecisionKycSnapshotBrut,
 } from '../value-objects/decision-kyc.vo';
+import {
+  PieceIdentiteDeposee,
+  PieceIdentiteDeposeeSnapshot,
+} from '../value-objects/piece-identite-deposee.vo';
+
+/**
+ * Cause inscrite au dossier quand il part en revue manuelle.
+ *
+ * C'est ce que la conformité lit dans `motifRefus` pour distinguer un dossier
+ * arrivé là par dépôt manuel d'un dossier que Stripe Identity n'a pas su
+ * valider. Elle vit dans le domaine parce que **deux écrivains la posent** —
+ * le dépôt d'une pièce d'identité et `RequestKycManualReviewUseCase` — et que
+ * la laisser dans l'un des deux aurait fait dépendre le domaine de
+ * l'application.
+ */
+export const MOTIF_REVUE_MANUELLE = 'Dépôt manuel de documents — revue requise';
 
 /** Ce que le fournisseur a lu sur la pièce d'identité, tel qu'il le rend. */
 export interface KycIdentiteExtrait {
@@ -63,6 +79,17 @@ export interface KycCaseSnapshot extends EnteteKycCase, DecisionKycSnapshot {
   fournisseurRef: string | null;
   stripeReportId: string | null;
   identiteExtrait: KycIdentiteExtrait | null;
+  /**
+   * Le document déposé à la main pour la revue manuelle — `null` tant que le
+   * parcours automatique suffit.
+   *
+   * À ne pas confondre avec {@link KycIdentiteExtrait}, qui est ce que le
+   * **fournisseur** a lu sur la pièce qu'il a capturée lui-même. Les deux
+   * peuvent coexister sur un dossier que Stripe a examiné sans conclure : l'un
+   * dit ce que la machine a vu, l'autre ce que le titulaire donne à lire à
+   * l'humain.
+   */
+  pieceIdentiteDeposee: PieceIdentiteDeposeeSnapshot | null;
 }
 
 /**
@@ -79,12 +106,14 @@ export interface KycCaseSnapshotBrut
       | 'fournisseurRef'
       | 'stripeReportId'
       | 'identiteExtrait'
+      | 'pieceIdentiteDeposee'
     >,
     DecisionKycSnapshotBrut {
   scoreRisque?: number | null;
   fournisseurRef?: string | null;
   stripeReportId?: string | null;
   identiteExtrait?: KycIdentiteExtrait | null;
+  pieceIdentiteDeposee?: PieceIdentiteDeposeeSnapshot | null;
 }
 
 /**
@@ -123,6 +152,7 @@ export class KycCase {
   private _fournisseurRef: string | null;
   private _stripeReportId: string | null;
   private _identiteExtrait: KycIdentiteExtrait | null;
+  private _pieceIdentiteDeposee: PieceIdentiteDeposee | null;
   private readonly _createdAt: Date;
   private readonly _updatedAt: Date;
 
@@ -144,6 +174,8 @@ export class KycCase {
     fournisseurRef: string | null;
     stripeReportId: string | null;
     identiteExtrait: KycIdentiteExtrait | null;
+    /** Absente d'un dossier qui n'est jamais passé par la revue manuelle. */
+    pieceIdentiteDeposee?: PieceIdentiteDeposee | null;
   }) {
     this._id = etat.entete.id;
     this._createdAt = etat.entete.createdAt;
@@ -155,6 +187,7 @@ export class KycCase {
     this._fournisseurRef = etat.fournisseurRef;
     this._stripeReportId = etat.stripeReportId;
     this._identiteExtrait = etat.identiteExtrait;
+    this._pieceIdentiteDeposee = etat.pieceIdentiteDeposee ?? null;
   }
 
   // ── Règles propres au dossier ─────────────────────────────────────────────
@@ -291,6 +324,22 @@ export class KycCase {
     this._identiteExtrait = identite;
   }
 
+  /**
+   * Le titulaire dépose lui-même son document, pour qu'un humain l'examine.
+   *
+   * **Remplace, n'accumule pas.** Un dossier ne porte qu'une pièce d'identité :
+   * redéposer après un refus, c'est corriger, pas ajouter — deux documents dont
+   * on ne saurait lequel fait foi seraient exactement ce que la règle « une
+   * seule source par fait » cherche à éviter.
+   *
+   * Ne touche pas au statut : c'est la racine qui enchaîne le passage en revue
+   * manuelle, parce qu'elle seule sait que le dossier n'est pas déjà validé
+   * (§6). Cette entité ne fait qu'accepter le document.
+   */
+  deposerLaPieceIdentite(piece: PieceIdentiteDeposee): void {
+    this._pieceIdentiteDeposee = piece;
+  }
+
   // ── Lectures ──────────────────────────────────────────────────────────────
 
   get id(): string {
@@ -317,6 +366,10 @@ export class KycCase {
   }
   get identiteExtrait(): KycIdentiteExtrait | null {
     return this._identiteExtrait;
+  }
+  /** Le document déposé pour la revue manuelle, `null` s'il n'y en a pas. */
+  get pieceIdentiteDeposee(): PieceIdentiteDeposee | null {
+    return this._pieceIdentiteDeposee;
   }
   get createdAt(): Date {
     return this._createdAt;

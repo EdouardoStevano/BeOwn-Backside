@@ -71,6 +71,38 @@ export class KycEntity {
     selfieFileId?: string;
   } | null;
 
+  /**
+   * Le document que le titulaire a déposé lui-même pour la revue manuelle.
+   *
+   * `jsonb` et non douze colonnes à plat, contrairement aux justificatifs de
+   * société : rien ici ne se filtre ni ne se trie — on lit ce document pour
+   * l'instruire, jamais pour chercher parmi d'autres. La colonne
+   * `identiteExtrait` juste au-dessus fait déjà ce choix, pour la même raison.
+   *
+   * Distinct d'elle, malgré la proximité : `identiteExtrait` est ce que **le
+   * fournisseur** a lu sur la pièce qu'il a capturée, celle-ci est ce que le
+   * **titulaire** donne à lire à l'humain quand le fournisseur n'a pas conclu.
+   */
+  @Column({ type: 'jsonb', nullable: true })
+  pieceIdentiteDeposee: {
+    type: string;
+    recto: {
+      nomOrigine: string;
+      cleStockage: string;
+      url: string;
+      mimeType: string;
+      tailleOctets: number;
+    };
+    verso: {
+      nomOrigine: string;
+      cleStockage: string;
+      url: string;
+      mimeType: string;
+      tailleOctets: number;
+    } | null;
+    deposeeLe: string;
+  } | null;
+
   @CreateDateColumn()
   createdAt: Date;
 

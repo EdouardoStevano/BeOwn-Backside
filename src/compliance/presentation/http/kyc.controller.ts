@@ -12,10 +12,16 @@ import {
   Patch,
   Post,
   Query,
+  UploadedFiles,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileFieldsInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
 import {
   ApiBearerAuth,
+  ApiBody,
+  ApiConsumes,
   ApiOperation,
   ApiParam,
   ApiResponse,
@@ -40,10 +46,71 @@ import { RequestKycManualReviewUseCase } from 'src/compliance/application/usecas
 import { DecideKycManualReviewUseCase } from 'src/compliance/application/usecases/kyc/decide-kyc-manual-review.usecase';
 import { StartKycSessionUseCase } from 'src/compliance/application/usecases/kyc/start-kyc-session.usecase';
 import { ConsultKycSessionUseCase } from 'src/compliance/application/usecases/kyc/consult-kyc-session.usecase';
-import { UpdateKycStatusDto } from './dto/kyc.dto';
+import { DeposerPieceIdentiteUseCase } from 'src/compliance/application/usecases/kyc/deposer-piece-identite.usecase';
+import type { FaceDeposee } from 'src/compliance/application/usecases/pieces/deposer-piece.usecase';
+import { TypePieceIdentite } from 'src/compliance/domain/enums/type-piece-identite.enum';
+import { DeposerPieceIdentiteDto, UpdateKycStatusDto } from './dto/kyc.dto';
 
 /** Rôles détenant `kyc:validate` — Compliance (+ super_admin via wildcard). */
 const KYC_REVIEWER_ROLES: string[] = rolesWithPermission('kyc:validate');
+
+/** 10 Mo : au-delà, c'est un scan non compressé, pas un justificatif. */
+const TAILLE_MAX_OCTETS = 10 * 1024 * 1024;
+
+const MIMES_ACCEPTES = [
+  'application/pdf',
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+];
+
+/** Ce que `FileFieldsInterceptor` range dans la requête, un tableau par champ. */
+interface FacesDeposees {
+  recto?: Express.Multer.File[];
+  verso?: Express.Multer.File[];
+}
+
+/**
+ * Les deux faces arrivent en **un seul appel**.
+ *
+ * Les envoyer par deux requêtes aurait laissé exister, entre les deux, une
+ * pièce à moitié déposée que l'instruction aurait pu prendre pour un document
+ * complet. `verso` est déclaré même pour les trois documents qui n'en ont pas :
+ * c'est le domaine qui répond alors 400 en disant pourquoi, là où Multer aurait
+ * rejeté la requête par une erreur technique que personne ne sait lire (§21).
+ */
+const INTERCEPTEUR_DES_FACES = FileFieldsInterceptor(
+  [
+    { name: 'recto', maxCount: 1 },
+    { name: 'verso', maxCount: 1 },
+  ],
+  {
+    storage: memoryStorage(),
+    limits: { fileSize: TAILLE_MAX_OCTETS },
+    fileFilter: (_req, file, cb) => {
+      if (MIMES_ACCEPTES.includes(file.mimetype)) {
+        cb(null, true);
+      } else {
+        cb(
+          new BadRequestException(
+            'Format non accepté. Formats acceptés : PDF, JPEG, PNG, WEBP.',
+          ),
+          false,
+        );
+      }
+    },
+  },
+);
+
+/** Le fichier multipart, réduit à ce que la couche applicative attend. */
+function face(fichier: Express.Multer.File): FaceDeposee {
+  return {
+    contenu: fichier.buffer,
+    nomOrigine: fichier.originalname,
+    mimeType: fichier.mimetype,
+    tailleOctets: fichier.size,
+  };
+}
 
 /**
  * Point d'entrée HTTP du contexte KYC.
@@ -72,6 +139,7 @@ export class KycController {
     private readonly decideKycManualReview: DecideKycManualReviewUseCase,
     private readonly startKycSession: StartKycSessionUseCase,
     private readonly consultKycSession: ConsultKycSessionUseCase,
+    private readonly deposerPieceIdentite: DeposerPieceIdentiteUseCase,
     // Port du contexte IAM : le contrôleur relit le rôle du compte, il n'a pas
     // à connaître la table qui le porte (§12.9).
     @Inject(USER_REPOSITORY)
@@ -137,6 +205,66 @@ export class KycController {
     // `KycRevueManuelleDemandeeEventHandler`, abonné au fait métier levé par le
     // use case. Le contrôleur ne sait pas quels rôles prévenir (§12.5).
     return this.requestKycManualReview.execute(user.userId);
+  }
+
+  @ApiOperation({
+    summary: 'Déposer ma pièce d’identité pour la revue manuelle',
+    description:
+      'Le recours quand la vérification automatique n’aboutit pas — refus, ' +
+      'revue requise, ou parcours jamais ouvert. **Le dépôt vaut demande de ' +
+      'revue** : il fait passer le dossier en `EN_REVUE` et prévient la ' +
+      'conformité, sans qu’il faille appeler `me/manual-review` en plus.\n\n' +
+      'Quatre documents acceptés. `verso` est obligatoire pour la **seule** ' +
+      'carte nationale d’identité, dont la date d’expiration est au dos ; il ' +
+      'est refusé pour le passeport, le permis de conduire et le titre de ' +
+      'séjour, qui se prouvent d’une seule page.\n\n' +
+      'Redéposer remplace : un dossier ne porte qu’une pièce d’identité.',
+  })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        recto: { type: 'string', format: 'binary' },
+        verso: { type: 'string', format: 'binary' },
+        type: { type: 'string', enum: Object.values(TypePieceIdentite) },
+      },
+      required: ['recto', 'type'],
+    },
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Pièce déposée ; dossier passé en revue manuelle',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Fichier invalide, ou verso incohérent avec le type',
+  })
+  @ApiResponse({
+    status: 409,
+    description:
+      'Identité déjà vérifiée — le dépôt manuel est un recours, pas un ' +
+      'second chemin',
+  })
+  @Post('me/piece-identite')
+  @UseInterceptors(INTERCEPTEUR_DES_FACES)
+  deposerMaPieceIdentite(
+    @CurrentUser() user: ActiveUser,
+    @UploadedFiles() fichiers: FacesDeposees,
+    @Body() dto: DeposerPieceIdentiteDto,
+  ) {
+    const recto = fichiers?.recto?.[0];
+    if (!recto) throw new BadRequestException('Le recto est manquant.');
+
+    const verso = fichiers?.verso?.[0];
+
+    return this.deposerPieceIdentite.execute(user.userId, {
+      type: dto.type,
+      recto: face(recto),
+      // `null` et non `undefined` : le domaine oppose « aucun verso » à
+      // « verso exigé », et c'est lui qui refuse le dépôt incohérent.
+      verso: verso ? face(verso) : null,
+    });
   }
 
   @ApiOperation({

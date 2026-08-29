@@ -11,6 +11,8 @@ import { GetKycUseCase } from './usecases/kyc/get-kyc.usecase';
 import { GetKycImagesUseCase } from './usecases/kyc/get-kyc-images.usecase';
 import { UpdateKycStatusUseCase } from './usecases/kyc/update-kyc-status.usecase';
 import { RequestKycManualReviewUseCase } from './usecases/kyc/request-kyc-manual-review.usecase';
+import { DeposerPieceIdentiteUseCase } from './usecases/kyc/deposer-piece-identite.usecase';
+import { ProfilesInfrastructureModule } from '../infrastructure/profiles-infrastructure.module';
 import { DecideKycManualReviewUseCase } from './usecases/kyc/decide-kyc-manual-review.usecase';
 import { StartKycSessionUseCase } from './usecases/kyc/start-kyc-session.usecase';
 import { ConsultKycSessionUseCase } from './usecases/kyc/consult-kyc-session.usecase';
@@ -60,6 +62,11 @@ import { ComplianceErrorFilter } from '../presentation/http/filters/compliance-e
     // chaque dossier, et la décision manuelle relit le rôle de l'appelant.
     UsersInfrastructureModule,
     NotificationsModule,
+    // `PIECE_JUSTIFICATIVE_STORAGE` : le dépôt manuel d'une pièce d'identité
+    // range ses octets dans le même magasin que les justificatifs de société.
+    // L'adaptateur est un détail technique — stocker des octets à une clé — et
+    // se partage donc entre les deux, chacun passant par le port (§20).
+    ProfilesInfrastructureModule,
   ],
   providers: [
     CreateKycUseCase,
@@ -67,6 +74,7 @@ import { ComplianceErrorFilter } from '../presentation/http/filters/compliance-e
     GetKycImagesUseCase,
     UpdateKycStatusUseCase,
     RequestKycManualReviewUseCase,
+    DeposerPieceIdentiteUseCase,
     DecideKycManualReviewUseCase,
     StartKycSessionUseCase,
     ConsultKycSessionUseCase,

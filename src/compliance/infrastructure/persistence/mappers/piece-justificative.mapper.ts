@@ -24,6 +24,7 @@ export class PieceJustificativeOrmMapper {
         id: entity.id,
         type: entity.type,
         beneficiaireId: entity.beneficiaireId,
+        natureIdentite: entity.natureIdentite,
         dateEmission: dateOuNull(entity.dateEmission),
         deposeeLe: entity.deposeeLe,
       },
@@ -56,6 +57,7 @@ export class PieceJustificativeOrmMapper {
     entity.societeId = societeId;
     entity.type = snapshot.type;
     entity.beneficiaireId = snapshot.beneficiaireId;
+    entity.natureIdentite = snapshot.natureIdentite;
     entity.nomOrigine = snapshot.nomOrigine;
     entity.cleStockage = snapshot.cleStockage;
     entity.url = snapshot.url;

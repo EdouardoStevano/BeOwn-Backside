@@ -10,6 +10,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { TypePieceJustificative } from 'src/compliance/domain/enums/type-piece-justificative.enum';
+import { TypePieceIdentite } from 'src/compliance/domain/enums/type-piece-identite.enum';
 import { StatutPiece } from 'src/compliance/domain/value-objects/decision-piece.vo';
 import { ProfilPMEntity } from './profil-pm.entity';
 
@@ -60,6 +61,17 @@ export class PieceJustificativeEntity {
    */
   @Column({ type: 'uuid', nullable: true })
   beneficiaireId: string | null;
+
+  /**
+   * Quel document d'identité c'est — `null` pour tout ce qui n'en est pas un.
+   *
+   * Hors de la contrainte d'unicité, délibérément : un bénéficiaire ne dépose
+   * **qu'une** pièce d'identité, quelle qu'elle soit. L'y inclure aurait laissé
+   * coexister sa carte d'identité et son passeport, sans qu'on sache lequel
+   * fait foi.
+   */
+  @Column({ type: 'varchar', nullable: true })
+  natureIdentite: TypePieceIdentite | null;
 
   // ── Le fichier déposé ───────────────────────────────────────────────────
 

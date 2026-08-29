@@ -4,6 +4,7 @@ import {
   KycCaseSnapshotBrut,
 } from 'src/compliance/domain/entities/kyc-case';
 import { DecisionKyc } from 'src/compliance/domain/value-objects/decision-kyc.vo';
+import { PieceIdentiteDeposee } from 'src/compliance/domain/value-objects/piece-identite-deposee.vo';
 
 /**
  * Traductions entre le dossier KYC et sa représentation de persistance
@@ -44,6 +45,12 @@ export class KycMapper {
       identiteExtrait: snapshot.identiteExtrait
         ? { ...snapshot.identiteExtrait }
         : null,
+      // Même précaution que pour `identiteExtrait` : le `jsonb` appartient à
+      // l'entité ORM. `restore` en reconstruit un Value Object immuable, donc
+      // rien n'est partagé avec la ligne.
+      pieceIdentiteDeposee: snapshot.pieceIdentiteDeposee
+        ? PieceIdentiteDeposee.restore(snapshot.pieceIdentiteDeposee)
+        : null,
     });
   }
 
@@ -64,6 +71,7 @@ export class KycMapper {
       fournisseurRef: kyc.fournisseurRef,
       stripeReportId: kyc.stripeReportId,
       identiteExtrait: kyc.identiteExtrait,
+      pieceIdentiteDeposee: kyc.pieceIdentiteDeposee?.toSnapshot() ?? null,
       createdAt: kyc.createdAt,
       updatedAt: kyc.updatedAt,
       ...kyc.decision.toSnapshot(),

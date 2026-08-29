@@ -24,18 +24,34 @@ export interface PieceRangee {
  * `stocker` ne rend pas de fichier : c'est `FichierDepose` qui décide si ce qui
  * a été déposé est recevable, et il vit dans le domaine.
  */
+/**
+ * À qui appartient la pièce rangée.
+ *
+ * **Ce n'est pas un détail de chemin, c'est ce qui rend la purge possible.** La
+ * conservation de cinq ans (RG-KYC-10) se compte par dossier, et un dossier est
+ * soit celui d'une société — ses justificatifs — soit celui d'un titulaire —
+ * la pièce d'identité qu'il dépose pour la revue manuelle. Les ranger ensemble
+ * obligerait, à l'échéance, à ouvrir chaque objet pour savoir de qui il relève.
+ *
+ * Une union et non deux champs optionnels : `{ societeId, titulaireId }` tous
+ * deux nuls, ou tous deux renseignés, sont deux états que rien n'aurait
+ * empêchés d'écrire (même raison que `ProfilInvestisseur`).
+ */
+export type ProprietaireDeLaPiece =
+  | { societeId: string }
+  | { titulaireId: number };
+
 export interface PieceJustificativeStorage {
   /**
    * Range les octets et rend de quoi les retrouver.
    *
-   * @param societeId sert à ranger les pièces d'une même société ensemble —
-   *   utile à l'exploitation, et surtout à une purge par société le jour où la
-   *   durée de conservation est atteinte.
+   * @param proprietaire décide du rangement, et donc de ce qu'une purge saura
+   *   retrouver — voir {@link ProprietaireDeLaPiece}.
    */
   stocker(fichier: {
     contenu: Buffer;
     nomOrigine: string;
     mimeType: string;
-    societeId: string;
+    proprietaire: ProprietaireDeLaPiece;
   }): Promise<PieceRangee>;
 }

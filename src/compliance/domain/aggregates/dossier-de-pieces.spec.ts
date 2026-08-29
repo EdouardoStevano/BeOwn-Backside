@@ -1,6 +1,7 @@
 import { ChampProfilInvalideError } from '../errors';
 import {
   BeneficiaireDeLaPieceIncoherentError,
+  NatureDeLaPieceIdentiteIncoherenteError,
   PieceJustificativeIntrouvableError,
   VersoDeLaPieceIncoherentError,
 } from '../errors/piece-justificative.errors';
@@ -9,6 +10,7 @@ import {
   TypePieceJustificative,
 } from '../enums/type-piece-justificative.enum';
 import { PieceJustificative } from '../entities/piece-justificative';
+import { TypePieceIdentite } from '../enums/type-piece-identite.enum';
 import { DecisionPiece } from '../value-objects/decision-piece.vo';
 import { FichierDepose } from '../value-objects/fichier-depose.vo';
 import { DossierDePieces } from './dossier-de-pieces';
@@ -17,6 +19,18 @@ const SOCIETE = 'societe-1';
 const BENEFICIAIRE = 'beneficiaire-1';
 
 const AUJOURD_HUI = new Date('2026-08-28T10:00:00.000Z');
+
+/**
+ * La nature du document, pour les seules pièces d'identité.
+ *
+ * La carte d'identité sert de cas nominal — recto-verso, comme trois documents
+ * sur quatre. Le passeport, qui est l'exception, a ses tests dédiés.
+ */
+function natureDe(type: TypePieceJustificative): TypePieceIdentite | null {
+  return type === TypePieceJustificative.PIECE_IDENTITE_BENEFICIAIRE
+    ? TypePieceIdentite.CARTE_IDENTITE
+    : null;
+}
 
 const fichier = () =>
   FichierDepose.depose({
@@ -50,6 +64,7 @@ function dossierAvec(
             id: `piece-${rang + 1}`,
             type: depot.type,
             beneficiaireId: depot.beneficiaireId ?? null,
+            natureIdentite: natureDe(depot.type),
             dateEmission: depot.dateEmission ?? null,
             deposeeLe: AUJOURD_HUI,
           },
@@ -57,7 +72,9 @@ function dossierAvec(
           // Le dos suit le type, comme au dépôt : une pièce d'identité
           // reconstituée sans son verso ne serait pas un état que l'agrégat
           // sait produire.
-          verso: exigeUnVerso(depot.type) ? fichier() : null,
+          verso: exigeUnVerso(depot.type, natureDe(depot.type))
+            ? fichier()
+            : null,
           decision: DecisionPiece.enAttente(),
         }),
     ),
@@ -104,6 +121,7 @@ describe('DossierDePieces — le dépôt', () => {
         type: TypePieceJustificative.PIECE_IDENTITE_BENEFICIAIRE,
         beneficiaireId,
         dateEmission: null,
+        natureIdentite: TypePieceIdentite.CARTE_IDENTITE,
         fichier: fichier(),
         verso: fichier(),
         maintenant: AUJOURD_HUI,
@@ -180,7 +198,7 @@ describe('DossierDePieces — le dépôt', () => {
           beneficiaireId,
           dateEmission: null,
           fichier: fichier(),
-          verso: exigeUnVerso(type) ? fichier() : null,
+          verso: exigeUnVerso(type, natureDe(type)) ? fichier() : null,
           maintenant: AUJOURD_HUI,
         });
 
@@ -214,6 +232,7 @@ describe('DossierDePieces — le dépôt', () => {
         type: TypePieceJustificative.PIECE_IDENTITE_BENEFICIAIRE,
         beneficiaireId: BENEFICIAIRE,
         dateEmission: null,
+        natureIdentite: TypePieceIdentite.CARTE_IDENTITE,
         fichier: fichier(),
         maintenant: AUJOURD_HUI,
       }),
@@ -233,6 +252,66 @@ describe('DossierDePieces — le dépôt', () => {
     ).toThrow(VersoDeLaPieceIncoherentError);
   });
 
+  it('n’exige le verso que de la carte nationale d’identité', () => {
+    // C'est la **nature** qui décide, pas le type : seule la carte porte au dos
+    // sa date d'expiration. Les trois autres se prouvent d'une seule page.
+    const dossier = DossierDePieces.vierge(SOCIETE);
+    const depot = (natureIdentite: TypePieceIdentite, avecVerso: boolean) =>
+      dossier.deposer({
+        type: TypePieceJustificative.PIECE_IDENTITE_BENEFICIAIRE,
+        beneficiaireId: BENEFICIAIRE,
+        dateEmission: null,
+        natureIdentite,
+        fichier: fichier(),
+        verso: avecVerso ? fichier() : null,
+        maintenant: AUJOURD_HUI,
+      });
+
+    for (const nature of [
+      TypePieceIdentite.PASSEPORT,
+      TypePieceIdentite.PERMIS_CONDUIRE,
+      TypePieceIdentite.TITRE_SEJOUR,
+    ]) {
+      expect(depot(nature, false).verso).toBeNull();
+      expect(() => depot(nature, true)).toThrow(VersoDeLaPieceIncoherentError);
+    }
+
+    // La carte, à l'inverse : le dos fait partie de la preuve.
+    const carte = TypePieceIdentite.CARTE_IDENTITE;
+    expect(() => depot(carte, false)).toThrow(VersoDeLaPieceIncoherentError);
+    expect(depot(carte, true).verso).not.toBeNull();
+  });
+
+  it('exige la nature d’une pièce d’identité, et l’interdit ailleurs', () => {
+    // « Pièce d'identité » ne désigne pas un document mais une famille de
+    // quatre : sans savoir lequel, le dossier ne peut pas dire s'il lui manque
+    // un verso.
+    const dossier = DossierDePieces.vierge(SOCIETE);
+
+    expect(() =>
+      dossier.deposer({
+        type: TypePieceJustificative.PIECE_IDENTITE_BENEFICIAIRE,
+        beneficiaireId: BENEFICIAIRE,
+        dateEmission: null,
+        fichier: fichier(),
+        verso: fichier(),
+        maintenant: AUJOURD_HUI,
+      }),
+    ).toThrow(NatureDeLaPieceIdentiteIncoherenteError);
+
+    // Un KBIS n'a qu'une façon d'être un extrait d'immatriculation.
+    expect(() =>
+      dossier.deposer({
+        type: TypePieceJustificative.KBIS,
+        beneficiaireId: null,
+        dateEmission: null,
+        natureIdentite: TypePieceIdentite.PASSEPORT,
+        fichier: fichier(),
+        maintenant: AUJOURD_HUI,
+      }),
+    ).toThrow(NatureDeLaPieceIdentiteIncoherenteError);
+  });
+
   it('remplace le verso avec le recto, jamais séparément', () => {
     // Garder l'ancien dos accolerait le verso de la pièce périmée au recto de
     // la nouvelle : l'instruction porterait sur un document qui n'existe pas.
@@ -242,6 +321,7 @@ describe('DossierDePieces — le dépôt', () => {
       type: TypePieceJustificative.PIECE_IDENTITE_BENEFICIAIRE,
       beneficiaireId: BENEFICIAIRE,
       dateEmission: null,
+      natureIdentite: TypePieceIdentite.CARTE_IDENTITE,
       fichier: fichier(),
       verso: premier,
       maintenant: AUJOURD_HUI,
@@ -258,6 +338,7 @@ describe('DossierDePieces — le dépôt', () => {
       type: TypePieceJustificative.PIECE_IDENTITE_BENEFICIAIRE,
       beneficiaireId: BENEFICIAIRE,
       dateEmission: null,
+      natureIdentite: TypePieceIdentite.CARTE_IDENTITE,
       fichier: fichier(),
       verso: second,
       maintenant: AUJOURD_HUI,

@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsEnum, IsOptional, IsString } from 'class-validator';
 import { KycStatus } from 'src/compliance/domain/enums/kyc-status.enum';
+import { TypePieceIdentite } from 'src/compliance/domain/enums/type-piece-identite.enum';
 
 /**
  * Décision manuelle d'un administrateur sur un dossier en revue.
@@ -18,4 +19,23 @@ export class UpdateKycStatusDto {
   @IsOptional()
   @IsString()
   motifRefus?: string;
+}
+
+/**
+ * Le dépôt d'une pièce d'identité pour la revue manuelle.
+ *
+ * Le type seul : les deux faces arrivent en multipart, et la règle qui dit
+ * laquelle est exigée vit dans le domaine — le DTO ne saurait pas l'écrire sans
+ * la dupliquer (§12.5).
+ */
+export class DeposerPieceIdentiteDto {
+  @ApiProperty({
+    enum: TypePieceIdentite,
+    description:
+      'Nature du document. `verso` est obligatoire pour la seule carte ' +
+      'nationale d’identité ; refusé pour le passeport, le permis de conduire ' +
+      'et le titre de séjour.',
+  })
+  @IsEnum(TypePieceIdentite)
+  type: TypePieceIdentite;
 }

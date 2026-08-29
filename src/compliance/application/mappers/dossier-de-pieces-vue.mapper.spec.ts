@@ -1,5 +1,6 @@
 import { PieceJustificativeSnapshot } from 'src/compliance/domain/entities/piece-justificative';
 import { TypePieceJustificative } from 'src/compliance/domain/enums/type-piece-justificative.enum';
+import { TypePieceIdentite } from 'src/compliance/domain/enums/type-piece-identite.enum';
 import { StatutPiece } from 'src/compliance/domain/value-objects/decision-piece.vo';
 import { vuePiece } from './dossier-de-pieces-vue.mapper';
 
@@ -14,6 +15,7 @@ function snapshot(
     id: 'piece-1',
     type: TypePieceJustificative.KBIS,
     beneficiaireId: null,
+    natureIdentite: null,
     dateEmission: null,
     deposeeLe: DEPOSEE_LE,
     nomOrigine: 'Annexe 1 KBIS SAS.pdf',
@@ -70,6 +72,7 @@ describe('vuePiece', () => {
       snapshot({
         type: TypePieceJustificative.PIECE_IDENTITE_BENEFICIAIRE,
         beneficiaireId: 'b-1',
+        natureIdentite: TypePieceIdentite.CARTE_IDENTITE,
         versoNomOrigine: 'cni-verso.jpg',
         versoCleStockage: 'beown/conformite/societes/s-1/verso',
         versoUrl: 'https://exemple/verso',

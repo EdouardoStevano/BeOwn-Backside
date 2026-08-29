@@ -6,10 +6,15 @@ import { CategoriePsfp } from 'src/compliance/domain/enums/categorie-psfp.enum';
 import { EtapeQuestionnaire } from 'src/compliance/domain/enums/etape-questionnaire.enum';
 import {
   EtapeQuestionnaireFermeeError,
+  IdentiteDejaVerifieeError,
   KybNeConcernePasUnePersonnePhysiqueError,
   KybPasEnInstructionError,
+  PieceIdentiteNeConcernePasUneSocieteError,
 } from 'src/compliance/domain/errors';
 import { StatutKyb } from 'src/compliance/domain/enums/statut-kyb.enum';
+import { TypePieceIdentite } from 'src/compliance/domain/enums/type-piece-identite.enum';
+import { FichierDepose } from 'src/compliance/domain/value-objects/fichier-depose.vo';
+import { PieceIdentiteDeposee } from 'src/compliance/domain/value-objects/piece-identite-deposee.vo';
 import { ProfilInvestisseur } from 'src/compliance/domain/value-objects/profil-investisseur.vo';
 import { PLANCHER_PLAFOND_NON_AVERTI } from 'src/compliance/domain/domain-services/plafond-psfp.domain-service';
 import {
@@ -345,6 +350,98 @@ describe('InvestorComplianceProfile', () => {
       // La porte `pieces` écrit une ligne de table, pas une vue : rendre `null`
       // ici écrirait la colonne à `NULL` là où `restore` attend un statut.
       expect(profil().pieces.kyb.kybStatut).toBe(StatutKyb.EN_CONSTITUTION);
+    });
+  });
+  describe('le dépôt manuel de la pièce d’identité', () => {
+    const identite = () =>
+      PieceIdentiteDeposee.deposer({
+        type: TypePieceIdentite.PASSEPORT,
+        recto: FichierDepose.depose({
+          nomOrigine: 'passeport.jpg',
+          cleStockage: 'conformite/titulaires/42/passeport',
+          url: 'https://exemple/passeport.jpg',
+          mimeType: 'image/jpeg',
+          tailleOctets: 9_000,
+        }),
+      });
+
+    it('fait passer le dossier en revue manuelle, du même geste', () => {
+      // Le dépôt **est** la demande : un document déposé sans passage en revue
+      // attendrait un examen que personne n'a réclamé.
+      const p = profil(dossier(KycStatus.REFUSE));
+
+      p.deposerLaPieceIdentitePourRevue(identite());
+
+      expect(p.statutKyc).toBe(KycStatus.EN_REVUE);
+      expect(p.pieceIdentitePubliee?.type).toBe(TypePieceIdentite.PASSEPORT);
+    });
+
+    it('ouvre un dossier au titulaire qui n’en avait aucun', () => {
+      // Parcours abandonné, ou refus d'y passer : lui fermer le recours manuel
+      // pour cette raison le laisserait sans aucun chemin vers la vérification.
+      const p = profil();
+      expect(p.aUnDossierKyc()).toBe(false);
+
+      p.deposerLaPieceIdentitePourRevue(identite());
+
+      expect(p.aUnDossierKyc()).toBe(true);
+      expect(p.statutKyc).toBe(KycStatus.EN_REVUE);
+    });
+
+    it('remplace le document précédent au lieu d’en accumuler un second', () => {
+      const p = profil(dossier(KycStatus.EN_REVUE));
+      p.deposerLaPieceIdentitePourRevue(identite());
+
+      p.deposerLaPieceIdentitePourRevue(
+        PieceIdentiteDeposee.deposer({
+          type: TypePieceIdentite.CARTE_IDENTITE,
+          recto: FichierDepose.depose({
+            nomOrigine: 'cni-recto.jpg',
+            cleStockage: 'conformite/titulaires/42/cni-recto',
+            url: 'https://exemple/cni-recto.jpg',
+            mimeType: 'image/jpeg',
+            tailleOctets: 8_000,
+          }),
+          verso: FichierDepose.depose({
+            nomOrigine: 'cni-verso.jpg',
+            cleStockage: 'conformite/titulaires/42/cni-verso',
+            url: 'https://exemple/cni-verso.jpg',
+            mimeType: 'image/jpeg',
+            tailleOctets: 8_000,
+          }),
+        }),
+      );
+
+      expect(p.pieceIdentitePubliee?.type).toBe(
+        TypePieceIdentite.CARTE_IDENTITE,
+      );
+    });
+
+    it('refuse le dépôt sur une identité déjà vérifiée', () => {
+      // Le dépôt manuel est un recours, pas un second chemin : sur un dossier
+      // que le fournisseur a validé, il rouvrirait une question tranchée.
+      const p = profil(dossier(KycStatus.VALIDE));
+
+      expect(() => p.deposerLaPieceIdentitePourRevue(identite())).toThrow(
+        IdentiteDejaVerifieeError,
+      );
+    });
+
+    it('laisse redéposer sur une validation périmée', () => {
+      // Sa validité ne prouve plus rien : c'est `peutOperer` qui fait la
+      // différence, pas le seul statut.
+      const hier = new Date(Date.now() - JOUR).toISOString();
+      const p = profil(dossier(KycStatus.VALIDE, hier));
+
+      expect(() => p.deposerLaPieceIdentitePourRevue(identite())).not.toThrow();
+    });
+
+    it('refuse le dépôt sur le dossier d’une société', () => {
+      // Une société n'a pas d'identité à vérifier — c'est le pendant exact de
+      // l'invariant KYB, et les deux ferment la question dans les deux sens.
+      expect(() =>
+        societe().deposerLaPieceIdentitePourRevue(identite()),
+      ).toThrow(PieceIdentiteNeConcernePasUneSocieteError);
     });
   });
 });

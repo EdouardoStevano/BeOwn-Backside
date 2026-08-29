@@ -2,8 +2,10 @@ import {
   PieceJustificative,
   PieceJustificativeSnapshot,
 } from '../entities/piece-justificative';
+import { TypePieceIdentite } from '../enums/type-piece-identite.enum';
 import {
   exigeUnBeneficiaire,
+  exigeUneNatureDIdentite,
   exigeUnVerso,
   PIECES_EXIGEES_DE_LA_SOCIETE,
   PIECES_EXIGEES_DU_BENEFICIAIRE,
@@ -11,6 +13,7 @@ import {
 } from '../enums/type-piece-justificative.enum';
 import {
   BeneficiaireDeLaPieceIncoherentError,
+  NatureDeLaPieceIdentiteIncoherenteError,
   PieceJustificativeIntrouvableError,
   VersoDeLaPieceIncoherentError,
 } from '../errors/piece-justificative.errors';
@@ -87,13 +90,19 @@ export class DossierDePieces {
     type: TypePieceJustificative;
     beneficiaireId: string | null;
     fichier: FichierDepose;
-    /** Le dos du document — exigé pour une pièce d'identité, interdit ailleurs. */
+    /** Le dos du document — exigé selon la nature, interdit ailleurs. */
     verso?: FichierDepose | null;
+    /**
+     * Quel document d'identité est déposé — exigé pour la pièce d'identité
+     * d'un bénéficiaire, interdit pour tout le reste.
+     */
+    natureIdentite?: TypePieceIdentite | null;
     dateEmission: Date | null;
     maintenant?: Date;
   }): PieceJustificative {
     const maintenant = depot.maintenant ?? new Date();
     const verso = depot.verso ?? null;
+    const natureIdentite = depot.natureIdentite ?? null;
 
     // Le bénéficiaire est exigé par les pièces qui documentent une personne —
     // DBE-S1 et pièce d'identité —, interdit par celles qui documentent la
@@ -105,11 +114,23 @@ export class DossierDePieces {
       throw new BeneficiaireDeLaPieceIncoherentError(depot.type, attendu);
     }
 
-    // Même forme, pour le dos du document. Un recto seul de carte d'identité ne
-    // permet pas d'en vérifier la validité — la date d'expiration est au verso —
-    // et un verso attaché à un KBIS désignerait une seconde page qui n'existe
-    // pas.
-    const versoAttendu = exigeUnVerso(depot.type);
+    // Même forme, pour la nature du document. « Pièce d'identité » ne désigne
+    // pas un document mais une famille de quatre, et sans savoir lequel on ne
+    // peut pas dire si un verso manque. Un KBIS, lui, n'a pas de nature à
+    // choisir.
+    const natureAttendue = exigeUneNatureDIdentite(depot.type);
+    if (natureAttendue !== (natureIdentite !== null)) {
+      throw new NatureDeLaPieceIdentiteIncoherenteError(
+        depot.type,
+        natureAttendue,
+      );
+    }
+
+    // Le dos, enfin — et c'est la **nature** qui le décide, pas le type. Un
+    // recto seul de carte nationale d'identité ne permet pas d'en vérifier la
+    // validité, la date d'expiration étant au verso ; les trois autres
+    // documents se prouvent d'une seule page.
+    const versoAttendu = exigeUnVerso(depot.type, natureIdentite);
     if (versoAttendu !== (verso !== null)) {
       throw new VersoDeLaPieceIncoherentError(depot.type, versoAttendu);
     }
@@ -123,6 +144,7 @@ export class DossierDePieces {
         depot.fichier,
         verso,
         depot.dateEmission,
+        natureIdentite,
         maintenant,
       );
       return existante;
@@ -134,6 +156,7 @@ export class DossierDePieces {
         id: undefined as unknown as string,
         type: depot.type,
         beneficiaireId: depot.beneficiaireId,
+        natureIdentite,
         dateEmission: depot.dateEmission,
         deposeeLe: maintenant,
       },

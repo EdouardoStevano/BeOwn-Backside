@@ -62,6 +62,7 @@ describe('KycController.patchKycStatus', () => {
       decideKycManualReview as unknown as DecideKycManualReviewUseCase,
       undefined as never, // startKycSession
       undefined as never, // consultKycSession
+      undefined as never, // deposerPieceIdentite
       userRepository as never,
     );
   });

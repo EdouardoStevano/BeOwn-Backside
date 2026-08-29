@@ -8,7 +8,13 @@ import {
   KycCase,
   KycCaseSnapshot,
   KycIdentiteExtrait,
+  MOTIF_REVUE_MANUELLE,
 } from 'src/compliance/domain/entities/kyc-case';
+import { KycFactory } from 'src/compliance/domain/factories/kyc.factory';
+import {
+  PieceIdentiteDeposee,
+  PieceIdentiteDeposeeSnapshot,
+} from 'src/compliance/domain/value-objects/piece-identite-deposee.vo';
 import {
   ClassementPsfp,
   ClassementPsfpSnapshot,
@@ -17,7 +23,9 @@ import { EtapeQuestionnaire } from 'src/compliance/domain/enums/etape-questionna
 import { ProfilInvestisseur } from 'src/compliance/domain/value-objects/profil-investisseur.vo';
 import {
   EtapeQuestionnaireFermeeError,
+  IdentiteDejaVerifieeError,
   KybNeConcernePasUnePersonnePhysiqueError,
+  PieceIdentiteNeConcernePasUneSocieteError,
 } from 'src/compliance/domain/errors';
 import {
   DecisionKyb,
@@ -466,6 +474,50 @@ export class InvestorComplianceProfile {
 
   enregistrerRapportKyc(reportId: string, identite: KycIdentiteExtrait): void {
     this._kycCase?.enregistrerRapport(reportId, identite);
+  }
+
+  /**
+   * Le titulaire dépose son document d'identité et demande, par ce geste même,
+   * l'examen humain de son dossier.
+   *
+   * **Le dépôt *est* la demande.** Les deux ne se séparent pas : un document
+   * déposé sans passage en revue attendrait un examen que personne n'a
+   * réclamé, et une revue demandée sans document laisserait l'équipe conformité
+   * devant un dossier vide. Ils sont donc posés dans le même geste, comme
+   * `repondreAuQuestionnaire` reprend le classement dans le sien.
+   *
+   * **Le dossier naît s'il n'existe pas.** Un titulaire peut n'avoir jamais
+   * ouvert de session chez le fournisseur — parcours abandonné, ou refus d'y
+   * passer — et lui refuser le recours manuel pour cette raison le laisserait
+   * sans aucun chemin vers la vérification.
+   *
+   * @throws PieceIdentiteNeConcernePasUneSocieteError sur un dossier de société.
+   * @throws IdentiteDejaVerifieeError si la vérification est déjà acquise et
+   *   non périmée : le dépôt manuel est un recours, pas un second chemin.
+   */
+  deposerLaPieceIdentitePourRevue(
+    piece: PieceIdentiteDeposee,
+    maintenant: Date = new Date(),
+  ): void {
+    if (this._souscripteur.estSociete()) {
+      throw new PieceIdentiteNeConcernePasUneSocieteError();
+    }
+
+    // `peutOperer` et non le seul statut : un dossier validé mais **périmé** ne
+    // prouve plus rien, et son titulaire doit pouvoir le refaire établir.
+    if (this.peutOperer(maintenant)) {
+      throw new IdentiteDejaVerifieeError();
+    }
+
+    this._kycCase ??= KycFactory.creer();
+
+    this._kycCase.deposerLaPieceIdentite(piece);
+    this._kycCase.changerStatut(KycStatus.EN_REVUE, MOTIF_REVUE_MANUELLE);
+  }
+
+  /** Le document déposé pour la revue manuelle, tel qu'il se publie. */
+  get pieceIdentitePubliee(): PieceIdentiteDeposeeSnapshot | null {
+    return this._kycCase?.pieceIdentiteDeposee?.toSnapshot() ?? null;
   }
 
   /**
