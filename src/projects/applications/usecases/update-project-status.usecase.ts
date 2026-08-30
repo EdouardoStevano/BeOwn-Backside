@@ -100,31 +100,32 @@ export class UpdateProjectStatusUseCase {
   }
 
   /**
-   * Art. 23 : la fiche d'informations clés est mise à disposition des
-   * investisseurs potentiels AVANT qu'ils puissent s'engager. Le contrôle
-   * couvre donc aussi le pré-investissement : une réservation est un
-   * engagement, même si la collecte n'est pas formellement ouverte.
+   * Le document d'informations clés est mis à disposition des investisseurs
+   * AVANT qu'ils puissent s'engager. Le contrôle couvre donc aussi le
+   * pré-investissement : une réservation est un engagement, même si la collecte
+   * n'est pas formellement ouverte.
+   *
+   * Libellés : gabarit §5.4 (docs/conformite/2026-08-29-gabarit-document-informations-cles.md).
+   * Le message « réservations » est la transposition mécanique du message
+   * « collecte » fourni par le gabarit ; aucune formulation juridique nouvelle.
    */
   private assertFiciPubliable(project: Project, newStatus: ProjectStatus): void {
-    const statutsExigeantFici: ProjectStatus[] = [
-      ProjectStatus.PRE_INVESTISSEMENT,
-      ProjectStatus.EN_COLLECTE,
-    ];
-    if (!statutsExigeantFici.includes(newStatus)) return;
+    const refusParStatut: Partial<Record<ProjectStatus, string>> = {
+      [ProjectStatus.PRE_INVESTISSEMENT]:
+        "Les réservations ne peuvent pas être ouvertes : le document d'informations clés est absent ou incomplet.",
+      [ProjectStatus.EN_COLLECTE]:
+        "La collecte ne peut pas être ouverte : le document d'informations clés est absent ou incomplet.",
+    };
+    const refus = refusParStatut[newStatus];
+    if (!refus) return;
 
     if (!project.fici) {
-      throw new BadRequestException(
-        "Aucune fiche d'informations clés sur l'investissement n'est renseignée pour " +
-          "ce projet. L'article 23 du règlement (UE) 2020/1503 impose de la mettre à " +
-          "disposition des investisseurs avant toute possibilité d'engagement.",
-      );
+      throw new BadRequestException(refus);
     }
 
     const verdict = verifierFici(project.fici);
     if (!verdict.valide) {
-      throw new BadRequestException(
-        `Fiche d'informations clés incomplète. ${decrireVerdict(verdict)}`,
-      );
+      throw new BadRequestException(`${refus} ${decrireVerdict(verdict)}`);
     }
   }
 }

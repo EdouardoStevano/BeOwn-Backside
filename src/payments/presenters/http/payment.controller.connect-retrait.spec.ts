@@ -153,7 +153,7 @@ describe('PaymentController — retrait Stripe Connect (E3, sécurité argent)',
       type: TransactionType.RETRAIT,
       statut: TransactionStatus.EN_COURS,
       montant: 100,
-      walletId: 'w1',
+      walletSource: 'w1',
       metadata: { method: 'stripe_connect', connectedAccountId: 'acct_1', userId: 42 },
     };
     const recreditQB = chainableQB({ affected: 1 });
@@ -192,7 +192,7 @@ describe('PaymentController — retrait Stripe Connect (E3, sécurité argent)',
       type: TransactionType.RETRAIT,
       statut: TransactionStatus.EN_COURS,
       montant: 100,
-      walletId: 'w1',
+      walletSource: 'w1',
       metadata: { userId: 42 },
     };
     const qb1 = chainableQB({ affected: 1 });
@@ -229,7 +229,7 @@ describe('PaymentController — retrait Stripe Connect (E3, sécurité argent)',
       type: TransactionType.RETRAIT,
       statut: TransactionStatus.EN_COURS,
       montant: 100,
-      walletId: 'w1',
+      walletSource: 'w1',
       metadata: { userId: 42, transferId: 'tr_1', connectedAccountId: 'acct_1' },
     };
     // txRepo.findOne (lecture initiale du handler) renvoie le retrait.
@@ -268,7 +268,7 @@ describe('PaymentController — retrait Stripe Connect (E3, sécurité argent)',
       type: TransactionType.RETRAIT,
       statut: TransactionStatus.EN_COURS,
       montant: 100,
-      walletId: 'w1',
+      walletSource: 'w1',
       metadata: { userId: 42, transferId: 'tr_1' },
     };
     txRepo.findOne.mockResolvedValue(txRow);

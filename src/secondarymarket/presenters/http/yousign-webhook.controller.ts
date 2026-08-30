@@ -36,6 +36,7 @@ import {
   WalletType,
 } from 'src/wallets/domains/enums/wallet.enum';
 import { ProjectStatus } from 'src/projects/domains/enums/project-status.enum';
+import { ModeleEconomique } from 'src/projects/domains/enums/modele-economique.enum';
 import { YouSignService } from 'src/common/yousign/yousign.service';
 import { CloudStorageService } from 'src/shared/cloud-storage/cloud-storage.service';
 import { NotificationService } from 'src/notifications/applications/notification.service';
@@ -579,8 +580,15 @@ export class YouSignWebhookController {
     });
     await em.save(TransactionEntity, tx);
 
-    // Générer les écheances (in_fine par défaut)
-    if (project) {
+    // Générer les écheances (in_fine par défaut) — MODÈLE OBLIGATAIRE UNIQUEMENT.
+    //
+    // Les deux moteurs de rendement s'excluent : un projet EQUITY rémunère
+    // exclusivement par les distributions de loyers réels
+    // (CalculateDistributionPeriodeUseCase) et par la cession
+    // (DeclareSortieUseCase). Lui générer en plus un échéancier de coupons
+    // calculé sur `triCible` ferait compter deux fois le rendement dû à
+    // l'investisseur.
+    if (project && this.genereEcheancierDeCoupons(project)) {
       const echeances = this.buildEcheances(
         investment.id,
         montant,
@@ -652,6 +660,18 @@ export class YouSignWebhookController {
       .catch(() => {});
 
     this.logger.log(`Investment signature done: investmentId=${investment.id} userId=${investment.utilisateurId}`);
+  }
+
+  /**
+   * Un échéancier de coupons n'est dû que par le moteur OBLIGATAIRE.
+   *
+   * Repli sur `obligataire` quand la colonne est absente ou nulle (lignes
+   * antérieures à l'ajout du champ) : le comportement historique est préservé
+   * à l'identique, seul le modèle EQUITY change de traitement.
+   */
+  private genereEcheancierDeCoupons(project: ProjectEntity): boolean {
+    const modele = project.modeleEconomique ?? ModeleEconomique.OBLIGATAIRE;
+    return modele === ModeleEconomique.OBLIGATAIRE;
   }
 
   private buildEcheances(

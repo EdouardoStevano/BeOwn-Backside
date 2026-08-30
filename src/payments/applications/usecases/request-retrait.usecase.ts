@@ -161,9 +161,12 @@ export class RequestRetraitUseCase {
         ? `retrait:${user.userId}:${dto.idempotencyKey}`
         : `retrait:${user.userId}:${randomUUID()}`;
 
+      // ANO-02 : le portefeuille est DÉBITÉ → `walletSource`. La destination
+      // est le compte bancaire du bénéficiaire, hors plateforme, donc NULL.
       const tx = await manager.save(
         manager.create(TransactionEntity, {
-          walletId: walletRow.id,
+          walletSource: walletRow.id,
+          walletDestination: null,
           type: TransactionType.RETRAIT,
           montant: dto.amount,
           devise: dto.currency,
@@ -208,13 +211,13 @@ export class RequestRetraitUseCase {
         tx.statut === TransactionStatus.ANNULE;
       if (alreadyRecredited) return 'noop' as const;
 
-      if (tx.walletId) {
+      if (tx.walletSource) {
         await manager
           .createQueryBuilder()
           .update(WalletEntity)
           .set({ solde: () => 'solde + :amount' })
           .setParameter('amount', tx.montant)
-          .where('id = :id', { id: tx.walletId })
+          .where('id = :id', { id: tx.walletSource })
           .execute();
       }
 

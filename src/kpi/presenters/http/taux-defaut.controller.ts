@@ -17,7 +17,7 @@ export class TauxDefautController {
 
   @ApiOperation({
     summary:
-      'Taux de défaut des projets sur les trente-six derniers mois (art. 20 du règlement (UE) 2020/1503)',
+      'Taux de défaut des projets sur les trente-six derniers mois (publication volontaire)',
   })
   @ApiResponse({
     status: 200,

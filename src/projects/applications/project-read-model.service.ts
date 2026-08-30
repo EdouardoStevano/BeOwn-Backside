@@ -28,11 +28,57 @@ export class ProjectReadModelService {
     private readonly avisRepository: AvisRepository,
   ) {}
 
+  /**
+   * Statuts d'investissement qui comptent dans les agrégats d'un projet :
+   * l'engagement est pris (ou déjà dénoué par un remboursement), la ligne
+   * représente donc un investisseur réel. Les lignes annulées, expirées ou en
+   * attente de paiement en sont exclues.
+   *
+   * Source UNIQUE pour la liste (`enrichFractions`) et le détail
+   * (`buildProjectDetail`) : les deux vues doivent compter la même chose.
+   */
+  private static readonly STATUTS_ACTIFS: InvestmentStatus[] = [
+    InvestmentStatus.CONFIRME,
+    InvestmentStatus.EN_DELAI_RETRACTATION,
+    InvestmentStatus.SIGNE,
+    InvestmentStatus.PAYE,
+    InvestmentStatus.REMBOURSE_CAPITAL,
+    InvestmentStatus.REMBOURSE_TOTAL,
+  ];
+
+  /** Investisseurs DISTINCTS d'un projet : une personne, une voix, quel que soit son nombre de lignes. */
+  private compterInvestisseurs(
+    investments: { statut: InvestmentStatus; utilisateurId: number }[],
+  ): number {
+    return new Set(
+      investments
+        .filter((i) =>
+          ProjectReadModelService.STATUTS_ACTIFS.includes(i.statut),
+        )
+        .map((i) => i.utilisateurId),
+    ).size;
+  }
+
   async enrichFractions(projects: any[]) {
     if (projects.length === 0) return projects;
     const ids = projects.map((p) => p.id);
-    const venduesMap =
-      await this.investmentRepository.countFractionsVenduesBatch(ids);
+    // `nbInvestisseurs` était câblé à 0 : la liste annonçait « 0 investisseur »
+    // sur des projets intégralement souscrits, alors que le détail affichait le
+    // bon compte. Une requête par projet, comme enrichImages ; le port
+    // d'investissement n'expose pas encore de compteur groupé (suivi : ajouter
+    // un `countInvestisseursBatch` côté investments, hors périmètre ici).
+    const [venduesMap, investissementsParProjet] = await Promise.all([
+      this.investmentRepository.countFractionsVenduesBatch(ids),
+      Promise.all(
+        ids.map((id) => this.investmentRepository.findByProjetId(id)),
+      ),
+    ]);
+    const investisseursParProjet = new Map<string, number>(
+      ids.map((id, index) => [
+        id,
+        this.compterInvestisseurs(investissementsParProjet[index]),
+      ]),
+    );
 
     return projects.map((p) => {
       const prixFraction = Number(p.ticketMinimum);
@@ -60,7 +106,7 @@ export class ProjectReadModelService {
         },
         stats: {
           montantCollecte: fractionsVendues * prixFraction,
-          nbInvestisseurs: 0,
+          nbInvestisseurs: investisseursParProjet.get(p.id) ?? 0,
           tauxRemplissage,
         },
       };
@@ -103,24 +149,14 @@ export class ProjectReadModelService {
       project.nbFractions ??
       Math.floor(Number(project.capitalCible) / prixFraction);
 
-    const activeStatuses: InvestmentStatus[] = [
-      InvestmentStatus.CONFIRME,
-      InvestmentStatus.EN_DELAI_RETRACTATION,
-      InvestmentStatus.SIGNE,
-      InvestmentStatus.PAYE,
-      InvestmentStatus.REMBOURSE_CAPITAL,
-      InvestmentStatus.REMBOURSE_TOTAL,
-    ];
     const activeInvestments = allInvestments.filter((i) =>
-      activeStatuses.includes(i.statut),
+      ProjectReadModelService.STATUTS_ACTIFS.includes(i.statut),
     );
     const montantCollecte = activeInvestments.reduce(
       (sum, inv) => sum + Number(inv.montant),
       0,
     );
-    const nbInvestisseurs = new Set(
-      activeInvestments.map((i) => i.utilisateurId),
-    ).size;
+    const nbInvestisseurs = this.compterInvestisseurs(allInvestments);
 
     const images = allDocs
       .filter(

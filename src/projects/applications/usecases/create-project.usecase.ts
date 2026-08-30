@@ -15,6 +15,7 @@ import type { ProjectRepository } from '../ports/repositories/project.repository
 import { CreateProjectDto } from 'src/projects/presenters/dto/project.dto';
 import { Project } from 'src/projects/domains/project';
 import { ProjectStatus } from 'src/projects/domains/enums/project-status.enum';
+import { ModeleEconomique } from 'src/projects/domains/enums/modele-economique.enum';
 import { ConflitsInteretsService } from '../conflits-interets.service';
 
 @Injectable()
@@ -54,6 +55,11 @@ export class CreateProjectUseCase {
     project.indiceRisque = dto.indiceRisque ?? 3;
     project.dureeMois = dto.dureeMois;
     project.instrument = dto.instrument;
+    // Commutateur de moteur économique : posé UNE fois à la création. Absent du
+    // DTO = obligataire, pour la rétrocompatibilité des intégrations qui ne
+    // connaissent pas encore le champ.
+    project.modeleEconomique =
+      dto.modeleEconomique ?? ModeleEconomique.OBLIGATAIRE;
     project.statut = dto.statut ?? ProjectStatus.BROUILLON;
     project.estPreInvestissable = dto.estPreInvestissable ?? false;
     project.plafondPreInvestissement = dto.plafondPreInvestissement ?? null;
@@ -103,10 +109,10 @@ export class CreateProjectUseCase {
     const resultat = verifierPlafondPorteur(offres, capitalCible);
     if (!resultat.autorise) {
       throw new BadRequestException(
-        `Plafond de financement participatif dépassé : ce porteur a déjà ouvert ` +
+        `Plafond de collecte dépassé : ce porteur a déjà ouvert ` +
           `${formatEur(resultat.dejaCollecte)} d'offres sur les douze derniers mois. ` +
-          `Le plafond réglementaire est de ${formatEur(PLAFOND_PORTEUR_12_MOIS_EUR)} ` +
-          `par porteur sur douze mois glissants (art. 1(2)(c) du règlement (UE) 2020/1503). ` +
+          `La limite fixée par BeOwn est de ${formatEur(PLAFOND_PORTEUR_12_MOIS_EUR)} ` +
+          `par porteur sur douze mois glissants. ` +
           `Marge restante : ${formatEur(resultat.disponible)}.`,
       );
     }

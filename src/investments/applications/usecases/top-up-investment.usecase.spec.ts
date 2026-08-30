@@ -7,6 +7,12 @@ import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entit
 import { ProjectEntity } from 'src/projects/infrastructure/persistences/entities/project.entity';
 import { InvestmentStatus } from 'src/investments/domains/enums/investment-status.enum';
 import { ProjectStatus } from 'src/projects/domains/enums/project-status.enum';
+import { TransactionType } from 'src/wallets/domains/enums/wallet.enum';
+import {
+  mouvementsDepuisInstantanes,
+  variationTotale,
+  PositionWallet,
+} from 'src/wallets/domains/grand-livre';
 
 /**
  * Vérifie l'atomicité du top-up (ajout de fractions à un investissement
@@ -32,10 +38,21 @@ describe('TopUpInvestmentUseCase — atomicité', () => {
 
   let projectRow: any;
   let walletRow: any;
+  let projectWalletRow: any; // wallet technique du projet (grand livre)
+  let projectWalletResolver: any;
   let lockedSoldTotal: number;
 
   const USER_ID = 42;
   const INVEST_ID = 'inv1';
+
+  /** Instantané { walletId → position } pour la preuve d'invariant comptable. */
+  const snapshotWallets = (): Map<string, PositionWallet> =>
+    new Map(
+      [walletRow, projectWalletRow].map((w: any) => [
+        w.id,
+        { solde: Number(w.solde), soldeBloque: Number(w.soldeBloque ?? 0) },
+      ]),
+    );
 
   const baseInvestment = () => ({
     id: INVEST_ID,
@@ -65,8 +82,14 @@ describe('TopUpInvestmentUseCase — atomicité', () => {
 
   beforeEach(() => {
     projectRow = { id: 'p1', statut: ProjectStatus.EN_COLLECTE };
-    walletRow = { id: 'w1', solde: 1000, devise: 'EUR' };
+    walletRow = { id: 'w1', solde: 1000, soldeBloque: 0, devise: 'EUR' };
+    projectWalletRow = { id: 'wp1', solde: 500, soldeBloque: 0, devise: 'EUR' };
     lockedSoldTotal = 5;
+
+    projectWalletResolver = {
+      executeInTransaction: jest.fn().mockImplementation(async () => projectWalletRow),
+      findInTransaction: jest.fn().mockImplementation(async () => projectWalletRow),
+    };
 
     investmentRepository = {
       findInvestmentById: jest.fn().mockResolvedValue(baseInvestment()),
@@ -137,6 +160,7 @@ describe('TopUpInvestmentUseCase — atomicité', () => {
       notificationService,
       notificationEvents,
       dataSource,
+      projectWalletResolver,
     );
   });
 
@@ -145,7 +169,8 @@ describe('TopUpInvestmentUseCase — atomicité', () => {
   const walletSaves = () =>
     manager.save.mock.calls.filter((c: any) => c[0] === WalletEntity);
 
-  it('chemin heureux : débite une fois et met à jour nbTitres + montant dans la transaction', async () => {
+  it('chemin heureux : débite une fois, crédite le wallet projet et met à jour nbTitres + montant dans la transaction', async () => {
+    const avant = snapshotWallets();
     const result = await useCase.execute(INVEST_ID, USER_ID, 2);
 
     expect(dataSource.transaction).toHaveBeenCalledTimes(1);
@@ -163,9 +188,27 @@ describe('TopUpInvestmentUseCase — atomicité', () => {
     expect(investmentUpdates()).toHaveLength(1);
     expect(investmentUpdates()[0][2]).toEqual({ nbTitres: 7, montant: 700 });
 
-    // Débit unique : 1000 − 200 = 800.
-    expect(walletSaves()).toHaveLength(1);
-    expect(walletSaves()[0][1].solde).toBe(800);
+    // GRAND LIVRE — double entrée : débit investisseur (1000 − 200 = 800) ET
+    // crédit du wallet technique du projet (500 + 200 = 700).
+    expect(walletSaves()).toHaveLength(2);
+    expect(walletRow.solde).toBe(800);
+    expect(projectWalletRow.solde).toBe(700);
+
+    // ── INVARIANT COMPTABLE (scénario : ajout de fractions) — Σ des
+    //    variations de solde de TOUS les wallets = 0. ──────────────────────
+    const mouvements = mouvementsDepuisInstantanes(avant, snapshotWallets());
+    expect(variationTotale(mouvements)).toBe(0);
+
+    // La transaction ledger relie les deux jambes du mouvement : jamais de
+    // destination nulle sur une SOUSCRIPTION (non-régression grand livre).
+    const txSaves = manager.save.mock.calls.filter(
+      (c: any) => c[0] === TransactionEntity,
+    );
+    expect(txSaves).toHaveLength(1);
+    expect(txSaves[0][1].type).toBe(TransactionType.SOUSCRIPTION);
+    expect(txSaves[0][1].walletSource).toBe('w1');
+    expect(txSaves[0][1].walletDestination).toBe('wp1');
+    expect(txSaves[0][1].walletDestination).not.toBeNull();
 
     // Échéancier régénéré dans la transaction (delete + save).
     expect(

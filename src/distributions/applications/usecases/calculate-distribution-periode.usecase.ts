@@ -65,8 +65,9 @@ export interface CalculateDistributionResult {
  *   les frais ne dépassent jamais le revenu distribuable (loyers − charges)
  *   — plafonnement proportionnel sinon (flag fraisPlafonnes).
  * - Crée une PeriodeDistribution (statut CALCULEE)
- * - Crée une DistributionPart par investisseur CONFIRME, au prorata
- *   de son investissement / capitalCible du projet
+ * - Crée une DistributionPart par investisseur CONFIRME, au prorata des
+ *   FRACTIONS détenues (nbTitres / nbFractions du projet) — jamais des montants
+ *   investis, qui dérivent avec les prix du marché secondaire
  * - Prélève IR 12.8 % + CSG 17.2 % sur le brut (uniquement si brut > 0)
  *
  * Idempotent : si la période existe déjà pour (projet, periode), throw 409.
@@ -128,6 +129,16 @@ export class CalculateDistributionPeriodeUseCase {
     if (!projet.capitalCible || projet.capitalCible <= 0) {
       throw new BadRequestException(
         'Le projet n\'a pas de capitalCible valide.',
+      );
+    }
+    // La quote-part de distribution se calcule sur les FRACTIONS détenues :
+    // sans nombre total de fractions, aucune répartition n'est calculable. On
+    // refuse explicitement plutôt que de retomber sur les montants investis,
+    // qui dérivent avec les prix du marché secondaire (voir plus bas).
+    const nbFractionsTotal = Number(projet.nbFractions ?? 0);
+    if (!nbFractionsTotal || nbFractionsTotal <= 0) {
+      throw new BadRequestException(
+        "Le projet n'a pas de nbFractions valide : la quote-part de distribution est calculée sur les fractions détenues.",
       );
     }
 
@@ -217,13 +228,21 @@ export class CalculateDistributionPeriodeUseCase {
       return { periode: savedPeriode, parts: [] };
     }
 
-    const capitalCible = Number(projet.capitalCible);
     const parts: DistributionPart[] = eligibles.map((inv) => {
       const part = new DistributionPart();
       part.periodeDistributionId = savedPeriode.id;
       part.investissementId = inv.id;
-      // Pourcentage de détention = montant investi / capital cible (8 décimales)
-      const pourcentage = Number(inv.montant) / capitalCible;
+      // Pourcentage de détention = fractions détenues / fractions totales
+      // (8 décimales).
+      //
+      // Il ne peut PAS être calculé sur `montant / capitalCible` : le champ
+      // `montant` est muté au prix de revente lors d'une cession secondaire.
+      // Une revente au-dessus du pair augmenterait alors mécaniquement le droit
+      // aux loyers de l'acheteur, et la somme des détentions pourrait dépasser
+      // 100 % du revenu distribuable. Le nombre de fractions, lui, est
+      // conservatif : une cession le déplace d'un porteur à l'autre sans jamais
+      // en créer.
+      const pourcentage = Number(inv.nbTitres ?? 0) / nbFractionsTotal;
       part.pourcentageDetention = Math.round(pourcentage * 1e8) / 1e8;
       part.montantBrut = round2(revenuNet * pourcentage);
       // Fiscalité seulement si revenu positif

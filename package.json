@@ -116,6 +116,9 @@
     "typescript-eslint": "^8.20.0"
   },
   "jest": {
+    "//": "maxWorkers/workerIdleMemoryLimit : en parallelisme large, 5 suites sur 126 etaient tuees par 'Jest worker ran out of memory' (mesure du 2026-08-29 : 5 failed / 121 passed, exit 1). Brider a 2 workers et recycler le worker des qu'il depasse 1 Go rend la commande nue 'npx jest' reproductible : 126 suites / 1207 tests, exit 0. Cout en duree quasi nul (12,5 s mesurees). NB : ne pas remplacer '1024MB' par le nombre nu 1024, que jest lit comme 1024 OCTETS et qui recycle le worker a chaque test (~69 s).",
+    "maxWorkers": 2,
+    "workerIdleMemoryLimit": "1024MB",
     "moduleFileExtensions": [
       "js",
       "json",

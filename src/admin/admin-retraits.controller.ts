@@ -151,9 +151,10 @@ export class AdminRetraitsController {
    *
    * Deux chemins de résolution parce que les deux existent en base : le jsonb
    * `metadata.userId` (posé par les deux parcours de retrait) et, à défaut, le
-   * wallet source — dont l'id vit tantôt sur `walletSource`, tantôt sur
-   * `walletId` (colonne `wallet_source`). Les lectures sont groupées : deux
-   * requêtes au total, quel que soit le nombre de lignes (pas de N+1).
+   * wallet source. Depuis la correction d'ANO-02, ce dernier vit sur la SEULE
+   * colonne `walletSource` — le doublon `wallet_source` a été supprimé, plus de
+   * repli à tenter. Les lectures sont groupées : deux requêtes au total, quel
+   * que soit le nombre de lignes (pas de N+1).
    */
   private async resolveBeneficiaires(
     rows: TransactionEntity[],
@@ -168,7 +169,7 @@ export class AdminRetraitsController {
         parTransaction.set(tx.id, userId);
         continue;
       }
-      const walletId = tx.walletSource ?? tx.walletId;
+      const walletId = tx.walletSource;
       if (walletId) walletParTransaction.set(tx.id, walletId);
     }
 
@@ -217,9 +218,9 @@ export class AdminRetraitsController {
     tx.statut = TransactionStatus.REUSSI;
     await this.txRepo.save(tx);
 
-    const wallet = await this.walletRepo.findOne({
-      where: { id: (tx as any).walletSource ?? (tx as any).walletId },
-    });
+    const wallet = tx.walletSource
+      ? await this.walletRepo.findOne({ where: { id: tx.walletSource } })
+      : null;
     if (wallet && wallet.proprietaireUserId) {
       await this.notificationEvents.retraitProcessed(
         wallet.proprietaireUserId,

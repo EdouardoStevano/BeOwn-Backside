@@ -89,9 +89,15 @@ describe('construirePublication', () => {
     expect(publication.global.tauxPerteCapital).toBe(0);
   });
 
-  it('expose la méthodologie exigée par le RTS 2022/2115', () => {
+  it('expose la méthode de calcul sans revendiquer aucun régime réglementaire', () => {
     const publication = construirePublication([], REFERENCE);
+    // Le seuil de défaut reste énoncé : c'est ce qui rend le taux interprétable.
     expect(publication.methodologie).toContain('90 jours');
-    expect(publication.methodologie).toContain('2022/2115');
+    // BeOwn ne relève d'aucun agrément (audit du 2026-08-20) : ce texte est
+    // publié tel quel sur la page statistiques, il ne doit donc citer ni
+    // règlement ni autorité de marché, sous peine d'affirmer un statut absent.
+    expect(publication.methodologie).not.toMatch(
+      /2020\/1503|2022\/2115|AMF|AEMF|PSFP|ECSP/i,
+    );
   });
 });

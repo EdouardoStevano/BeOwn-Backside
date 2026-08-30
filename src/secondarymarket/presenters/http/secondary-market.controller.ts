@@ -8,6 +8,7 @@ import {
   HttpCode,
   HttpStatus,
   BadRequestException,
+  GoneException,
   NotFoundException,
   ForbiddenException,
   UseGuards,
@@ -25,12 +26,15 @@ import { SkipThrottle } from '@nestjs/throttler';
 import { OrdreMarcheEntity } from 'src/secondarymarket/infrastructure/persistences/entities/ordre-marche.entity';
 import { InvestmentEntity } from 'src/investments/infrastructure/persistences/entities/investment.entity';
 import { ProjectEntity } from 'src/projects/infrastructure/persistences/entities/project.entity';
-import { CreateOrdreMarcheDto, ExecuteOrderDto } from '../dto/ordre-marche.dto';
+import {
+  CreateOrdreMarcheDto,
+  ExprimerInteretDto,
+  InteretRecuDto,
+} from '../dto/ordre-marche.dto';
 import {
   OrdreMarcheStatus,
   OrdreMarcheSens,
 } from 'src/secondarymarket/domains/ordre-marche';
-import { InvestmentStatus } from 'src/investments/domains/enums/investment-status.enum';
 import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
 import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
@@ -38,27 +42,23 @@ import { KycValidatedGuard } from 'src/common/auth/kyc-validated.guard';
 import { Public } from 'src/common/auth/public.decorator';
 import { NotificationService } from 'src/notifications/applications/notification.service';
 import { NotificationEventService } from 'src/notifications/applications/notification-event.service';
-import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
 import { InitiateBuyUseCase } from 'src/secondarymarket/applications/usecases/initiate-buy.usecase';
 import { ExprimerInteretUseCase } from 'src/secondarymarket/applications/usecases/exprimer-interet.usecase';
 import { RepondreInteretUseCase } from 'src/secondarymarket/applications/usecases/repondre-interet.usecase';
 import {
+  DUREE_DETENTION_MINIMALE_MOIS,
   MENTION_NON_SYSTEME_DE_NEGOCIATION,
   METHODE_PRIX_REFERENCE,
   PRIX_REFERENCE_CONTRAIGNANT,
+  verifierEligibiliteMiseEnVente,
 } from 'src/secondarymarket/domains/tableau-affichage';
+import {
+  DevisCession,
+  DevisCessionService,
+} from 'src/secondarymarket/applications/devis-cession.service';
 import { CancelInitiationUseCase } from 'src/secondarymarket/applications/usecases/cancel-initiation.usecase';
 import { SignatureEntity } from 'src/signatures/infrastructure/persistences/entities/signature.entity';
-import { SignatureStatus } from 'src/signatures/domains/enums/signature-status.enum';
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
-import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/wallet.entity';
-import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entities/transaction.entity';
-import {
-  TransactionFournisseur,
-  TransactionStatus,
-  TransactionType,
-  WalletType,
-} from 'src/wallets/domains/enums/wallet.enum';
 import { MetricsPort } from 'src/observability/metrics/metrics.port';
 import { METRIC } from 'src/observability/metrics/metric-names';
 
@@ -86,26 +86,149 @@ export class SecondaryMarketController {
     @InjectRepository(SignatureEntity)
     private readonly signatureRepo: Repository<SignatureEntity>,
     private readonly metrics: MetricsPort,
+    private readonly devisCession: DevisCessionService,
   ) {}
 
   @Public()
-  @ApiOperation({ summary: "Carnet d'ordres disponibles (public)" })
+  @ApiOperation({
+    summary:
+      "Annonces publiées sur le tableau d'affichage (public). Chaque annonce porte le devis de frais du vendeur.",
+  })
   @Get('orders')
-  listOrders() {
-    return this.ordresWithRelations()
+  async listOrders() {
+    const ordres = await this.ordresWithRelations()
       .where('ord.statut = :statut', { statut: OrdreMarcheStatus.EN_CARNET })
       .orderBy('ord.createdAt', 'DESC')
       .getMany();
+    return this.avecDevis(ordres);
   }
 
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: "Mes annonces de vente (ordres du vendeur connecté)" })
   @Get('orders/mine')
   async myOrders(@CurrentUser() user: ActiveUser) {
-    return this.ordresWithRelations()
+    const ordres = await this.ordresWithRelations()
       .where('ord.vendeurId = :vendeurId', { vendeurId: user.userId })
       .orderBy('ord.createdAt', 'DESC')
       .getMany();
+    return this.avecDevis(ordres);
+  }
+
+  /**
+   * Marques d'intérêt reçues sur les annonces du demandeur.
+   *
+   * Le filtre `vendeurId = utilisateur courant` est posé dans la requête
+   * elle-même : il n'existe aucun chemin par lequel un appelant puisse lire
+   * l'intérêt reçu par un autre vendeur, y compris en devinant un identifiant.
+   */
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({
+    summary:
+      "Marques d'intérêt reçues sur mes annonces. Seule mon acceptation forme le contrat.",
+  })
+  @ApiResponse({ status: 200, type: [InteretRecuDto] })
+  @Get('orders/mine/interets')
+  async myReceivedInterests(
+    @CurrentUser() user: ActiveUser,
+  ): Promise<InteretRecuDto[]> {
+    const ordres = await this.ordresWithRelations()
+      .leftJoinAndMapOne(
+        'ord.acheteur',
+        UserEntity,
+        'buyer',
+        'buyer."userId" = ord."acheteurId"',
+      )
+      .where('ord.vendeurId = :vendeurId', { vendeurId: user.userId })
+      .andWhere('ord.statut = :statut', {
+        statut: OrdreMarcheStatus.INTERET_EXPRIME,
+      })
+      .orderBy('ord.interetExprimeLe', 'DESC')
+      .getMany();
+
+    // Une seule lecture de la grille de frais pour toute la liste : la page
+    // entière est ainsi chiffrée sur des taux cohérents.
+    const taux = await this.devisCession.chargerTaux();
+
+    return Promise.all(
+      ordres.map(async (ordre) => {
+        const nbFractions = Number(ordre.interetNbFractions ?? 0);
+        const prixUnitaire = Number(ordre.prixUnitaire);
+        const acheteur = (ordre as any).acheteur as UserEntity | undefined;
+        const projet = ordre.investissement?.projet;
+
+        return {
+          ordreId: ordre.id,
+          statut: ordre.statut,
+          projet: {
+            id: projet?.id ?? '',
+            slug: projet?.slug ?? '',
+            titre: projet?.titre ?? '',
+            ville: projet?.ville ?? null,
+            statut: projet?.statut ?? '',
+          },
+          nbFractions,
+          nbFractionsAnnonce: Number(ordre.nbFractions),
+          prixUnitaire,
+          montantIndicatif: Math.round(nbFractions * prixUnitaire * 100) / 100,
+          exprimeLe: (ordre.interetExprimeLe ?? ordre.createdAt).toISOString(),
+          acheteur: {
+            prenom: acheteur?.firstname ?? 'Investisseur',
+            initialeNom: acheteur?.lastname
+              ? `${acheteur.lastname.charAt(0).toUpperCase()}.`
+              : '',
+          },
+          devis: await this.devisCession.calculer(
+            {
+              nbFractions,
+              prixUnitaire,
+              prixRevientUnitaire: this.prixRevientVendeur(ordre.investissement),
+            },
+            taux,
+          ),
+        };
+      }),
+    );
+  }
+
+  /**
+   * Attache à chaque annonce le devis de frais que supporterait son vendeur.
+   * Les taux sont lus une seule fois pour toute la liste.
+   */
+  private async avecDevis(
+    ordres: OrdreMarcheEntity[],
+  ): Promise<Array<OrdreMarcheEntity & { devis: DevisCession }>> {
+    if (ordres.length === 0) return [];
+    const taux = await this.devisCession.chargerTaux();
+    return Promise.all(
+      ordres.map(async (ordre) => {
+        const devis = await this.devisCession.calculer(
+          {
+            nbFractions: Number(ordre.nbFractions),
+            prixUnitaire: Number(ordre.prixUnitaire),
+            prixRevientUnitaire: this.prixRevientVendeur(ordre.investissement),
+          },
+          taux,
+        );
+        return Object.assign(ordre, { devis });
+      }),
+    );
+  }
+
+  /**
+   * Prix de revient unitaire du vendeur, ou `null` s'il est inconnu.
+   *
+   * `valeurTitre` fait foi ; à défaut on le reconstitue depuis le montant
+   * investi. Sans aucune des deux, on ne devine pas : la plus-value sera
+   * réputée nulle plutôt que surestimée.
+   */
+  private prixRevientVendeur(
+    investissement: InvestmentEntity | null | undefined,
+  ): number | null {
+    if (!investissement) return null;
+    if (investissement.valeurTitre != null) return Number(investissement.valeurTitre);
+    const titres = Number(investissement.nbTitres ?? 0);
+    if (titres <= 0) return null;
+    return Number(investissement.montant) / titres;
   }
 
   private ordresWithRelations() {
@@ -126,8 +249,18 @@ export class SecondaryMarketController {
   }
 
   @UseGuards(JwtAuthGuard, KycValidatedGuard)
-  @ApiOperation({ summary: 'Passer un ordre de vente' })
+  @ApiOperation({
+    summary:
+      "Publier une annonce de vente. Refusée si la détention est inférieure à " +
+      `${DUREE_DETENTION_MINIMALE_MOIS} mois ou si le projet n'est pas en exploitation.`,
+  })
   @ApiResponse({ status: 403, description: 'KYC non validé' })
+  @ApiResponse({
+    status: 400,
+    description:
+      'SECONDARY_HOLDING_TOO_RECENT (détention < 6 mois) ou ' +
+      "SECONDARY_PROJECT_NOT_ELIGIBLE (projet hors exploitation).",
+  })
   @Post('orders')
   async createOrder(
     @Body() dto: CreateOrdreMarcheDto,
@@ -147,6 +280,28 @@ export class SecondaryMarketController {
       if (!investment) throw new NotFoundException('Investissement introuvable');
       if (investment.utilisateurId !== user.userId) {
         throw new ForbiddenException("Cet investissement ne vous appartient pas");
+      }
+
+      // ── Éligibilité à la mise en vente ────────────────────────────────────
+      // Deux conditions annoncées publiquement — détention minimale et projet
+      // en exploitation — appliquées ici, côté serveur : l'interface peut les
+      // afficher, elle ne peut pas les garantir.
+      const projet = await em.findOne(ProjectEntity, {
+        where: { id: investment.projetId },
+      });
+      if (!projet) throw new NotFoundException('Projet introuvable');
+
+      const eligibilite = verifierEligibiliteMiseEnVente({
+        dateAcquisition: investment.createdAt,
+        statutProjet: projet.statut,
+        maintenant: new Date(),
+      });
+      if (!eligibilite.eligible) {
+        throw new BadRequestException({
+          code: eligibilite.code,
+          message: eligibilite.motif,
+          cessibleAPartirDu: eligibilite.cessibleAPartirDu.toISOString(),
+        });
       }
 
       // Compter les fractions déjà en carnet — la lecture est sérialisée par
@@ -203,241 +358,57 @@ export class SecondaryMarketController {
     return saved;
   }
 
-  @UseGuards(JwtAuthGuard, KycValidatedGuard)
-  @ApiOperation({ summary: 'Exécuter un ordre (achat total ou partiel)' })
-  @ApiParam({ name: 'id', description: "UUID de l'ordre" })
-  @ApiResponse({ status: 403, description: 'KYC non validé' })
-  @HttpCode(HttpStatus.OK)
-  @Post('orders/:id/execute')
-  async executeOrder(
-    @Param('id') id: string,
-    @Body() dto: ExecuteOrderDto,
-    @CurrentUser() user: ActiveUser,
-  ) {
-    const ordre = await this.ordreRepo.findOne({
-      where: { id },
-      relations: ['investissement', 'investissement.projet'],
-    });
-
-    if (!ordre) throw new NotFoundException('Ordre introuvable');
-    if (ordre.statut !== OrdreMarcheStatus.EN_CARNET) {
-      throw new BadRequestException('Ordre non disponible');
-    }
-    if (ordre.vendeurId === user.userId) {
-      throw new ForbiddenException('Vous ne pouvez pas acheter votre propre ordre');
-    }
-
-    const qtyToBuy = dto.nbFractions ?? ordre.nbFractions;
-
-    if (qtyToBuy < 1 || qtyToBuy > ordre.nbFractions) {
-      throw new BadRequestException(
-        `Quantité invalide : doit être entre 1 et ${ordre.nbFractions}`,
-      );
-    }
-
-    const investOriginal = ordre.investissement;
-    if (!investOriginal) throw new NotFoundException('Investissement source introuvable');
-
-    const vendeurId = ordre.vendeurId;
-    const totalCost = qtyToBuy * Number(ordre.prixUnitaire);
-
-    let result: {
-      success: true;
-      investissementId: string;
-      fractionsAchetees: number;
-      restantDansOrdre: number;
-      fusionnee: boolean;
-    };
-    try {
-      result = await this.dataSource.transaction(async (em) => {
-      // ── Verrou + re-validation de l'ordre (anti survente concurrente) ────────
-      // On recharge l'ordre SOUS VERROU dans la transaction : deux achats
-      // concurrents (total/partiel) sur le même ordre sont ainsi sérialisés,
-      // impossible de survendre au-delà des fractions restantes.
-      const lockedOrdre = await em.findOne(OrdreMarcheEntity, {
-        where: { id },
-        lock: { mode: 'pessimistic_write' },
-      });
-      if (!lockedOrdre || lockedOrdre.statut !== OrdreMarcheStatus.EN_CARNET) {
-        throw new BadRequestException('Ordre non disponible');
-      }
-      if (qtyToBuy > lockedOrdre.nbFractions) {
-        throw new BadRequestException(
-          `Quantité invalide : doit être entre 1 et ${lockedOrdre.nbFractions}`,
-        );
-      }
-
-      // ── Règlement financier ATOMIQUE (correctif C-1) ─────────────────────────
-      // Avant tout transfert de fractions : débit du wallet acheteur (garde de
-      // solde conditionnelle) + crédit du wallet vendeur, dans la même
-      // transaction. Sans ce règlement, `execute` transférait des titres
-      // GRATUITEMENT (acheteur non débité, vendeur non payé).
-      const buyerWallet = await em.findOne(WalletEntity, {
-        where: { proprietaireUserId: user.userId, type: WalletType.INVESTISSEUR },
-        lock: { mode: 'pessimistic_write' },
-      });
-      if (!buyerWallet) {
-        throw new BadRequestException(
-          "Wallet introuvable. Alimentez votre compte avant d'acheter.",
-        );
-      }
-      if (Number(buyerWallet.solde) < totalCost) {
-        throw new BadRequestException('Solde insuffisant pour cet achat.');
-      }
-      // Débit conditionnel (anti double-débit / solde négatif).
-      const debit = await em
-        .createQueryBuilder()
-        .update(WalletEntity)
-        .set({ solde: () => 'solde - :cost' })
-        .setParameter('cost', totalCost)
-        .where('id = :id AND solde >= :cost', { id: buyerWallet.id, cost: totalCost })
-        .execute();
-      if (!debit.affected) {
-        throw new BadRequestException('Solde insuffisant pour cet achat.');
-      }
-
-      // Crédit du vendeur (wallet créé au besoin).
-      let sellerWallet = await em.findOne(WalletEntity, {
-        where: { proprietaireUserId: vendeurId, type: WalletType.INVESTISSEUR },
-      });
-      if (!sellerWallet) {
-        sellerWallet = await em.save(
-          em.create(WalletEntity, {
-            type: WalletType.INVESTISSEUR,
-            proprietaireUserId: vendeurId,
-            fournisseurRef: `INV-${vendeurId}-auto`,
-            devise: buyerWallet.devise,
-            solde: 0,
-          }),
-        );
-      }
-      await em
-        .createQueryBuilder()
-        .update(WalletEntity)
-        .set({ solde: () => 'solde + :cost' })
-        .setParameter('cost', totalCost)
-        .where('id = :id', { id: sellerWallet.id })
-        .execute();
-
-      // Traces ledger acheteur (débit) + vendeur (crédit).
-      await em.save(TransactionEntity, em.create(TransactionEntity, {
-        walletSource: buyerWallet.id,
-        type: TransactionType.SOUSCRIPTION,
-        montant: totalCost,
-        devise: buyerWallet.devise,
-        statut: TransactionStatus.REUSSI,
-        fournisseur: TransactionFournisseur.INTERNE,
-        projetId: investOriginal.projetId,
-        metadata: { kind: 'achat_marche_secondaire', ordreId: id, vendeurId, nbFractions: qtyToBuy },
-      }));
-      await em.save(TransactionEntity, em.create(TransactionEntity, {
-        walletDestination: sellerWallet.id,
-        type: TransactionType.INTERNE,
-        montant: totalCost,
-        devise: sellerWallet.devise,
-        statut: TransactionStatus.REUSSI,
-        fournisseur: TransactionFournisseur.INTERNE,
-        projetId: investOriginal.projetId,
-        metadata: { kind: 'vente_marche_secondaire', ordreId: id, acheteurId: user.userId, nbFractions: qtyToBuy },
-      }));
-
-      // 1. Merge with existing buyer investment in same project, or create new
-      const buyerExisting = await em.findOne(InvestmentEntity, {
-        where: {
-          utilisateurId: user.userId,
-          projetId: investOriginal.projetId,
-          statut: InvestmentStatus.CONFIRME,
-        },
-      });
-
-      let buyerInvestId: string;
-      if (buyerExisting) {
-        buyerExisting.nbTitres = (buyerExisting.nbTitres ?? 0) + qtyToBuy;
-        buyerExisting.montant = Number(buyerExisting.montant) + qtyToBuy * Number(ordre.prixUnitaire);
-        await em.save(InvestmentEntity, buyerExisting);
-        buyerInvestId = buyerExisting.id;
-      } else {
-        const newInvest = em.create(InvestmentEntity, {
-          projetId: investOriginal.projetId,
-          utilisateurId: user.userId,
-          montant: qtyToBuy * Number(ordre.prixUnitaire),
-          instrument: investOriginal.instrument,
-          nbTitres: qtyToBuy,
-          valeurTitre: Number(ordre.prixUnitaire),
-          statut: InvestmentStatus.CONFIRME,
-        });
-        await em.save(InvestmentEntity, newInvest);
-        buyerInvestId = newInvest.id;
-      }
-
-      // 2. Reduce seller's investment fractions
-      const sellerInvest = await em.findOne(InvestmentEntity, { where: { id: ordre.investissementId } });
-      if (sellerInvest && sellerInvest.nbTitres != null) {
-        const remaining = Number(sellerInvest.nbTitres) - qtyToBuy;
-        sellerInvest.nbTitres = Math.max(0, remaining);
-        sellerInvest.montant = remaining > 0
-          ? Number(sellerInvest.montant) - qtyToBuy * Number(sellerInvest.valeurTitre ?? ordre.prixUnitaire)
-          : 0;
-        await em.save(InvestmentEntity, sellerInvest);
-      }
-
-      // 3. Update order status (sur l'ordre VERROUILLÉ).
-      if (qtyToBuy === lockedOrdre.nbFractions) {
-        lockedOrdre.acheteurId = user.userId;
-        lockedOrdre.statut = OrdreMarcheStatus.EXECUTE;
-      } else {
-        lockedOrdre.nbFractions = lockedOrdre.nbFractions - qtyToBuy;
-        lockedOrdre.montant = lockedOrdre.nbFractions * Number(lockedOrdre.prixUnitaire);
-      }
-      await em.save(OrdreMarcheEntity, lockedOrdre);
-
-      return {
-        success: true as const,
-        investissementId: buyerInvestId,
-        fractionsAchetees: qtyToBuy,
-        restantDansOrdre:
-          lockedOrdre.statut === OrdreMarcheStatus.EXECUTE ? 0 : lockedOrdre.nbFractions,
-        fusionnee: !!buyerExisting,
-      };
-      });
-    } catch (err) {
-      this.metrics.incrementCounter(METRIC.SECONDARY_EXECUTION_FAILED_TOTAL, {
-        reason: this.classifyExecutionFailure(err),
-      });
-      throw err;
-    }
-
-    this.metrics.incrementCounter(METRIC.SECONDARY_ORDERS_TOTAL, { action: 'executed' });
-    this.metrics.observeHistogram(METRIC.SECONDARY_ORDER_AMOUNT_EUR, totalCost, {
-      action: 'executed',
-    });
-
-    const [project, buyerUser, sellerUser] = await Promise.all([
-      this.projectRepo.findOne({ where: { id: investOriginal.projetId } }),
-      this.userRepo.findOne({ where: { userId: user.userId } }),
-      this.userRepo.findOne({ where: { userId: vendeurId } }),
-    ]);
-    if (project && buyerUser && sellerUser) {
-      await this.notificationEvents.secondaryTradeExecuted(
-        ordre, project, buyerUser, sellerUser, qtyToBuy,
-      );
-    }
-
-    return result;
-  }
-
   /**
-   * Classe une exception d'exécution d'ordre en raison BORNÉE (jamais le
-   * message brut — cardinalité Prometheus, cf. metric-names.ts) pour
-   * `secondary_execution_failed_total{reason}`.
+   * Ancienne exécution directe d'un ordre — DÉBRANCHÉE.
+   *
+   * Cette route prenait une annonce en carnet et, dans une seule transaction,
+   * débitait l'acheteur, créditait le vendeur et transférait les fractions,
+   * SANS que le vendeur ait jamais donné son accord. C'était un appariement
+   * automatique : exactement ce que le tableau d'affichage exclut, et le
+   * contraire de ce que la page publique du marché secondaire décrit.
+   *
+   * La route est conservée pour répondre explicitement aux clients qui
+   * l'appellent encore — un 404 les laisserait croire à une panne. Elle ne lit
+   * ni n'écrit plus rien : même l'existence de l'ordre n'est plus vérifiée,
+   * pour qu'aucune information sur l'état du carnet ne fuie par ses codes de
+   * réponse.
+   *
+   * Parcours de remplacement : POST orders/:id/interet → le vendeur consulte
+   * GET orders/mine/interets → POST orders/:id/interet/acceptation (ou /refus).
    */
-  private classifyExecutionFailure(err: unknown): string {
-    const message = err instanceof Error ? err.message : String(err);
-    if (message.startsWith('Ordre non disponible')) return 'order_unavailable';
-    if (message.startsWith('Quantité invalide')) return 'invalid_quantity';
-    if (message.startsWith('Wallet introuvable')) return 'buyer_wallet_missing';
-    if (message.startsWith('Solde insuffisant')) return 'insufficient_balance';
-    return 'other';
+  @UseGuards(JwtAuthGuard, KycValidatedGuard)
+  @ApiOperation({
+    summary:
+      "DÉBRANCHÉE — l'exécution directe est remplacée par l'accord explicite du vendeur.",
+    deprecated: true,
+  })
+  @ApiParam({ name: 'id', description: "UUID de l'ordre" })
+  @ApiResponse({
+    status: 410,
+    description:
+      "SECONDARY_EXECUTE_DISABLED — la cession passe par une marque d'intérêt " +
+      'puis son acceptation par le vendeur.',
+  })
+  @Post('orders/:id/execute')
+  executeOrder(): never {
+    // Compté pour savoir si un client appelle encore le mécanisme retiré.
+    // `reason` reste une valeur bornée (cardinalité Prometheus).
+    this.metrics.incrementCounter(METRIC.SECONDARY_EXECUTION_FAILED_TOTAL, {
+      reason: 'execute_disabled',
+    });
+    throw new GoneException({
+      code: 'SECONDARY_EXECUTE_DISABLED',
+      message:
+        "L'achat immédiat n'existe plus sur le marché secondaire. Exprimez votre " +
+        "intérêt sur l'annonce : la cession ne sera formée que si le vendeur " +
+        "l'accepte explicitement.",
+      parcours: {
+        exprimerInteret: 'POST /secondary-market/orders/:id/interet',
+        interetsRecus: 'GET /secondary-market/orders/mine/interets',
+        acceptation: 'POST /secondary-market/orders/:id/interet/acceptation',
+        refus: 'POST /secondary-market/orders/:id/interet/refus',
+      },
+    });
   }
 
   @UseGuards(JwtAuthGuard)
@@ -486,7 +457,7 @@ export class SecondaryMarketController {
   @Post('orders/:id/interet')
   async exprimerInteret(
     @Param('id') id: string,
-    @Body() dto: ExecuteOrderDto,
+    @Body() dto: ExprimerInteretDto,
     @CurrentUser() user: ActiveUser,
   ) {
     return this.exprimerInteretUseCase.execute(id, user.userId, dto.nbFractions ?? 1);

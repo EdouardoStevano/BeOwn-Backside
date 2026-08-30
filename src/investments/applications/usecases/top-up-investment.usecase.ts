@@ -47,6 +47,7 @@ import { ProjectEntity } from 'src/projects/infrastructure/persistences/entities
 import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/wallet.entity';
 import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entities/transaction.entity';
 import { WalletMapper } from 'src/wallets/infrastructure/persistences/mappers/wallet.mapper';
+import { ResolveProjectWalletUseCase } from 'src/wallets/applications/usecases/resolve-project-wallet.usecase';
 
 @Injectable()
 export class TopUpInvestmentUseCase {
@@ -69,6 +70,7 @@ export class TopUpInvestmentUseCase {
     private readonly notificationEvents: NotificationEventService,
     @InjectDataSource()
     private readonly dataSource: DataSource,
+    private readonly projectWalletResolver: ResolveProjectWalletUseCase,
   ) {}
 
   async execute(
@@ -182,10 +184,24 @@ export class TopUpInvestmentUseCase {
       walletRow.solde = Number(walletRow.solde) - montantDelta;
       await manager.save(WalletEntity, walletRow);
 
-      // 6. Écriture de la transaction ledger.
+      // 5 bis. Contrepartie du débit — GRAND LIVRE INTERNE. Un ajout de
+      //    fractions ne porte que sur un investissement CONFIRMÉ (contrôlé plus
+      //    haut) : l'engagement est définitif, les fonds sont donc acquis au
+      //    projet dès maintenant et crédités sur son wallet technique.
+      const walletProjet =
+        await this.projectWalletResolver.executeInTransaction(
+          manager,
+          investment.projetId,
+          { devise: walletRow.devise },
+        );
+      walletProjet.solde = Number(walletProjet.solde) + montantDelta;
+      await manager.save(WalletEntity, walletProjet);
+
+      // 6. Écriture de la transaction ledger (double entrée : le débit
+      //    investisseur a pour contrepartie le crédit du wallet projet).
       const tx = new Transaction();
       tx.walletSource = wallet.id;
-      tx.walletDestination = null;
+      tx.walletDestination = walletProjet.id;
       tx.type = TransactionType.SOUSCRIPTION;
       tx.montant = montantDelta;
       tx.devise = wallet.devise;

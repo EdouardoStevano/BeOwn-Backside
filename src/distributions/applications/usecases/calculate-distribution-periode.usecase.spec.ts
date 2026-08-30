@@ -35,6 +35,9 @@ describe('CalculateDistributionPeriodeUseCase', () => {
         modeleEconomique: ModeleEconomique.EQUITY,
         statut: ProjectStatus.FINANCE,
         capitalCible: 1_000_000,
+        // 10 000 fractions de 100 € : la quote-part se calcule sur les
+        // fractions détenues, jamais sur les montants investis.
+        nbFractions: 10_000,
       }),
     };
     investmentRepo = { findByProjetId: jest.fn().mockResolvedValue([]) };
@@ -136,9 +139,9 @@ describe('CalculateDistributionPeriodeUseCase', () => {
       { montant: 1_000_000 },
     ]);
     investmentRepo.findByProjetId.mockResolvedValue([
-      { id: 'inv-1', montant: 500_000, statut: InvestmentStatus.CONFIRME },
-      { id: 'inv-2', montant: 300_000, statut: InvestmentStatus.CONFIRME },
-      { id: 'inv-cancel', montant: 200_000, statut: InvestmentStatus.ANNULE }, // ignoré
+      { id: 'inv-1', montant: 500_000, nbTitres: 5_000, statut: InvestmentStatus.CONFIRME },
+      { id: 'inv-2', montant: 300_000, nbTitres: 3_000, statut: InvestmentStatus.CONFIRME },
+      { id: 'inv-cancel', montant: 200_000, nbTitres: 2_000, statut: InvestmentStatus.ANNULE }, // ignoré
     ]);
     const r = await useCase.execute('proj-1', '2026-06');
     expect(r.parts).toHaveLength(2);
@@ -154,7 +157,12 @@ describe('CalculateDistributionPeriodeUseCase', () => {
       { montant: 100_000 },
     ]);
     investmentRepo.findByProjetId.mockResolvedValue([
-      { id: 'inv-1', montant: 1_000_000, statut: InvestmentStatus.CONFIRME },
+      {
+        id: 'inv-1',
+        montant: 1_000_000,
+        nbTitres: 10_000,
+        statut: InvestmentStatus.CONFIRME,
+      },
     ]);
     const r = await useCase.execute('proj-1', '2026-06');
     // frais = 833.33 (plateforme) + 7 000 (gestion 7 % de 100 000)
@@ -170,7 +178,12 @@ describe('CalculateDistributionPeriodeUseCase', () => {
       { montant: 200_000 },
     ]);
     investmentRepo.findByProjetId.mockResolvedValue([
-      { id: 'inv-1', montant: 1_000_000, statut: InvestmentStatus.CONFIRME },
+      {
+        id: 'inv-1',
+        montant: 1_000_000,
+        nbTitres: 10_000,
+        statut: InvestmentStatus.CONFIRME,
+      },
     ]);
     const r = await useCase.execute('proj-1', '2026-06');
     // Aucun loyer, 200 000 de charges : frais plafonnés à 0
@@ -230,5 +243,140 @@ describe('CalculateDistributionPeriodeUseCase', () => {
     const r = await useCase.execute('proj-1', '2026-06');
     expect(r.parts).toHaveLength(0);
     expect(r.periode.statut).toBe(StatutPeriodeDistribution.CALCULEE);
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // Quote-part calculée sur les FRACTIONS et non sur les montants investis.
+  //
+  // `InvestmentEntity.montant` est muté au prix de revente lors d'une cession
+  // secondaire : l'ancien calcul `montant / capitalCible` faisait donc croître
+  // le droit aux loyers de l'acheteur avec le prix payé, et la somme des
+  // détentions pouvait dépasser 100 % du revenu distribuable.
+  // ══════════════════════════════════════════════════════════════════════════
+  describe('quote-part = nbTitres / nbFractions (indépendante des montants)', () => {
+    /** Projet à 100 fractions, pour lire les pourcentages à l'œil nu. */
+    const projet100Fractions = {
+      id: 'proj-1',
+      modeleEconomique: ModeleEconomique.EQUITY,
+      statut: ProjectStatus.FINANCE,
+      capitalCible: 10_000,
+      nbFractions: 100,
+    };
+
+    beforeEach(() => {
+      projectRepo.findProjectById.mockResolvedValue(projet100Fractions);
+      // 10 000 € de loyers, aucune charge : le revenu distribuable est connu
+      // exactement, donc les parts sont vérifiables au centime.
+      loyerRepo.findValidesParProjetEtPeriode.mockResolvedValue([
+        { montant: 10_000 },
+      ]);
+    });
+
+    it('répartit 30 % / 70 % pour 30 et 70 fractions sur 100, quels que soient les montants portés par les lignes', async () => {
+      investmentRepo.findByProjetId.mockResolvedValue([
+        // Montants volontairement incohérents avec les fractions (l'un a
+        // acheté au pair, l'autre au double du pair sur le secondaire) :
+        // le résultat ne doit pas en dépendre.
+        {
+          id: 'inv-30',
+          montant: 3_000,
+          nbTitres: 30,
+          statut: InvestmentStatus.CONFIRME,
+        },
+        {
+          id: 'inv-70',
+          montant: 14_000,
+          nbTitres: 70,
+          statut: InvestmentStatus.CONFIRME,
+        },
+      ]);
+
+      const r = await useCase.execute('proj-1', '2026-06');
+      const revenuNet = r.periode.revenuNet;
+
+      expect(r.parts[0].pourcentageDetention).toBe(0.3);
+      expect(r.parts[1].pourcentageDetention).toBe(0.7);
+      expect(r.parts[0].montantBrut).toBeCloseTo(revenuNet * 0.3, 2);
+      expect(r.parts[1].montantBrut).toBeCloseTo(revenuNet * 0.7, 2);
+
+      // Preuve de l'indépendance : l'ancien calcul montant/capitalCible aurait
+      // donné 3 000/10 000 = 30 % et 14 000/10 000 = 140 %, soit 170 % au total.
+      const ancienCalcul =
+        3_000 / projet100Fractions.capitalCible +
+        14_000 / projet100Fractions.capitalCible;
+      expect(ancienCalcul).toBeGreaterThan(1);
+    });
+
+    it('somme des quotes-parts exactement égale à 1 après une cession secondaire au-dessus du pair', async () => {
+      // Cession : inv-vendeur a cédé 40 de ses 100 fractions à inv-acheteur,
+      // au double du pair. Le `montant` de l'acheteur porte le prix payé
+      // (8 000 € pour 40 fractions à 200 € au lieu de 100 €), celui du vendeur
+      // a été réduit du coût d'acquisition d'origine.
+      investmentRepo.findByProjetId.mockResolvedValue([
+        {
+          id: 'inv-vendeur',
+          montant: 6_000,
+          nbTitres: 60,
+          statut: InvestmentStatus.CONFIRME,
+        },
+        {
+          id: 'inv-acheteur',
+          montant: 8_000,
+          nbTitres: 40,
+          statut: InvestmentStatus.CONFIRME,
+        },
+      ]);
+
+      const r = await useCase.execute('proj-1', '2026-06');
+
+      const sommeDetentions = r.parts.reduce(
+        (s, p) => s + p.pourcentageDetention,
+        0,
+      );
+      // Arrondi à la précision effectivement persistée (8 décimales).
+      expect(Math.round(sommeDetentions * 1e8) / 1e8).toBe(1);
+
+      // Le revenu distribué n'excède jamais le revenu net de la période.
+      const sommeBrute = round2(r.parts.reduce((s, p) => s + p.montantBrut, 0));
+      expect(sommeBrute).toBeCloseTo(r.periode.revenuNet, 2);
+
+      // Avec l'ancien calcul, la somme aurait valu (6 000 + 8 000)/10 000 = 140 %.
+      expect((6_000 + 8_000) / projet100Fractions.capitalCible).toBeCloseTo(
+        1.4,
+        2,
+      );
+    });
+
+    it('attribue une quote-part nulle à une ligne sans fraction (nbTitres null)', async () => {
+      investmentRepo.findByProjetId.mockResolvedValue([
+        {
+          id: 'inv-sans-titre',
+          montant: 5_000,
+          nbTitres: null,
+          statut: InvestmentStatus.CONFIRME,
+        },
+        {
+          id: 'inv-100',
+          montant: 10_000,
+          nbTitres: 100,
+          statut: InvestmentStatus.CONFIRME,
+        },
+      ]);
+
+      const r = await useCase.execute('proj-1', '2026-06');
+      expect(r.parts[0].pourcentageDetention).toBe(0);
+      expect(r.parts[0].montantBrut).toBe(0);
+      expect(r.parts[1].pourcentageDetention).toBe(1);
+    });
+
+    it("refuse le calcul si le projet n'a pas de nbFractions exploitable", async () => {
+      projectRepo.findProjectById.mockResolvedValue({
+        ...projet100Fractions,
+        nbFractions: null,
+      });
+      await expect(useCase.execute('proj-1', '2026-06')).rejects.toThrow(
+        /nbFractions/,
+      );
+    });
   });
 });

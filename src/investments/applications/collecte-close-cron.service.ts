@@ -13,6 +13,7 @@ import { formatEur } from 'src/shared/money/format-eur';
 import { RefundCollecteService } from './refund-collecte.service';
 import { MetricsPort } from 'src/observability/metrics/metrics.port';
 import { METRIC } from 'src/observability/metrics/metric-names';
+import { ProjectLedgerService } from 'src/wallets/applications/project-ledger.service';
 
 /**
  * Daily cron that closes EN_COLLECTE projects whose dateCloturePrevue has
@@ -34,6 +35,7 @@ export class CollecteCloseCronService {
     private readonly notifications: NotificationService,
     private readonly refundService: RefundCollecteService,
     private readonly metrics: MetricsPort,
+    private readonly projectLedger: ProjectLedgerService,
   ) {}
 
   @Cron(CronExpression.EVERY_DAY_AT_8AM)
@@ -68,19 +70,42 @@ export class CollecteCloseCronService {
             { id: project.id },
             { statut: ProjectStatus.FINANCE },
           );
+
+          // GRAND LIVRE — constat de clôture : le solde du wallet technique
+          // du projet est relu, les frais dus dérivés de la grille
+          // PlatformFeesService (aucun taux en dur) et le NET À VERSER au
+          // porteur exposé aux équipes finance. Aucun virement n'est émis :
+          // le versement reste un geste manuel, constaté ensuite via
+          // POST /admin/projets/:id/versement-porteur.
+          const etat = await this.projectLedger.etatFinancier(project.id);
+
           await this.notifications
             .pushToAdmins({
               type: NotificationType.AUTRE,
               titre: 'Collecte financée — créer l\'échéancier',
-              message: `« ${project.titre} » a atteint son objectif minimum (${formatEur(raised)} / min ${formatEur(minimum)}, cible ${formatEur(target)}). Créez l'échéancier emprunteur depuis la fiche projet.`,
+              message:
+                `« ${project.titre} » a atteint son objectif minimum (${formatEur(raised)} / min ${formatEur(minimum)}, cible ${formatEur(target)}). ` +
+                `Wallet projet : ${formatEur(etat.soldeWalletProjet)} — net à verser au porteur : ${formatEur(etat.netAVerser)} ` +
+                `(frais retenus : ${formatEur(etat.fraisRetenus)}${etat.enDelaiReflexion > 0 ? `, encore en délai de réflexion : ${formatEur(etat.enDelaiReflexion)}` : ''}). ` +
+                `Créez l'échéancier emprunteur depuis la fiche projet.`,
               roles: [UserRole.SUPER_ADMIN, UserRole.FINANCIER, UserRole.COMPLIANCE],
-              metadata: { projectId: project.id, raised, minimum, target },
+              metadata: {
+                projectId: project.id,
+                raised,
+                minimum,
+                target,
+                soldeWalletProjet: etat.soldeWalletProjet,
+                fraisRetenus: etat.fraisRetenus,
+                netAVerser: etat.netAVerser,
+                enDelaiReflexion: etat.enDelaiReflexion,
+              },
             })
             .catch(() => {});
           financed++;
           this.metrics.incrementCounter(METRIC.COLLECTE_CLOSED_TOTAL, { outcome: 'finance' });
           this.logger.log(
-            `Project ${project.id} (${project.titre}) auto-FINANCE: raised ${raised} / min ${minimum}`,
+            `Project ${project.id} (${project.titre}) auto-FINANCE: raised ${raised} / min ${minimum} — ` +
+              `wallet projet ${etat.soldeWalletProjet}, net à verser ${etat.netAVerser}`,
           );
         } else {
           // Objectif minimum non atteint → échec + remboursement intégral

@@ -105,8 +105,9 @@ async function bootstrap() {
     .setTitle('BeOwn API')
     .setDescription(
       `## Plateforme d'investissement immobilier fractionné — Afrique\n\n` +
-        `BeOwn est une plateforme PSFP (Prestataire de Services de Financement Participatif) ` +
-        `permettant l'investissement fractionné dans l'immobilier africain.\n\n` +
+        `BeOwn permet l'investissement fractionné dans l'immobilier africain. ` +
+        `La plateforme ne détient aucun agrément d'autorité de marché et n'est ` +
+        `soumise à la supervision d'aucune d'entre elles.\n\n` +
         `### Authentification\n` +
         `La majorité des routes nécessitent un **JWT Bearer token** obtenu via \`POST /auth/sign-in\`.\n` +
         `Utilisez le bouton **Authorize** ci-dessus pour renseigner votre token.\n\n` +

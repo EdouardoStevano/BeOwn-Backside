@@ -18,6 +18,7 @@ import {
 import { EcheanceStatus } from 'src/investments/domains/enums/investment-status.enum';
 import { InvestmentMapper } from 'src/investments/infrastructure/persistences/mappers/investment.mapper';
 import { Echeance } from 'src/investments/domains/echeance';
+import { ResolveProjectWalletUseCase } from 'src/wallets/applications/usecases/resolve-project-wallet.usecase';
 
 /**
  * Confirme les souscriptions dont le délai de réflexion de l'art. 22 du
@@ -40,7 +41,10 @@ import { Echeance } from 'src/investments/domains/echeance';
 export class ConfirmRetractationCronService {
   private readonly logger = new Logger(ConfirmRetractationCronService.name);
 
-  constructor(@InjectDataSource() private readonly dataSource: DataSource) {}
+  constructor(
+    @InjectDataSource() private readonly dataSource: DataSource,
+    private readonly projectWalletResolver: ResolveProjectWalletUseCase,
+  ) {}
 
   @Cron(CronExpression.EVERY_HOUR)
   async confirmExpiredRetractationDelays(): Promise<void> {
@@ -96,8 +100,20 @@ export class ConfirmRetractationCronService {
       });
       const montant = Number(inv.montant);
 
-      // 1. Libération des fonds bloqués. Le solde disponible a déjà été débité
+      // 1. Verrou sur la ligne projet AVANT le wallet — même ordre de prise de
+      //    verrous que CreateInvestmentUseCase (projet puis wallet), pour ne
+      //    jamais croiser une souscription concurrente en étreinte fatale.
+      const project = await manager.findOne(ProjectEntity, {
+        where: { id: inv.projetId },
+        lock: { mode: 'pessimistic_write' },
+      });
+
+      // 2. Libération des fonds bloqués. Le solde disponible a déjà été débité
       //    à la souscription : seul le solde bloqué se dénoue ici.
+      //    GRAND LIVRE — l'engagement devient définitif : les fonds quittent
+      //    réellement l'investisseur et sont acquis au projet. Le wallet
+      //    technique du projet est crédité en contrepartie exacte du
+      //    déblocage, sinon la libération d'escrow détruirait de l'argent.
       const wallet = await manager.findOne(WalletEntity, {
         where: {
           proprietaireUserId: inv.utilisateurId,
@@ -109,10 +125,20 @@ export class ConfirmRetractationCronService {
         wallet.soldeBloque = Math.max(0, Number(wallet.soldeBloque ?? 0) - montant);
         await manager.save(WalletEntity, wallet);
 
+        const walletProjet =
+          await this.projectWalletResolver.executeInTransaction(
+            manager,
+            inv.projetId,
+            { verrouillerProjet: false, devise: wallet.devise },
+          );
+        walletProjet.solde = Number(walletProjet.solde) + montant;
+        await manager.save(WalletEntity, walletProjet);
+
         await manager.save(
           TransactionEntity,
           manager.create(TransactionEntity, {
             walletSource: wallet.id,
+            walletDestination: walletProjet.id,
             type: TransactionType.ESCROW_RELEASE,
             montant,
             devise: wallet.devise,
@@ -128,12 +154,8 @@ export class ConfirmRetractationCronService {
         );
       }
 
-      // 2. Échéancier investisseur — généré seulement maintenant que
+      // 3. Échéancier investisseur — généré seulement maintenant que
       //    l'engagement est définitif.
-      const project = await manager.findOne(ProjectEntity, {
-        where: { id: inv.projetId },
-        lock: { mode: 'pessimistic_write' },
-      });
       if (project) {
         const dejaGenere = await manager.count(EcheanceEntity, {
           where: { investissementId: inv.id },
@@ -151,7 +173,7 @@ export class ConfirmRetractationCronService {
           );
         }
 
-        // 3. Bascule en FINANCE si plus rien n'est en suspens.
+        // 4. Bascule en FINANCE si plus rien n'est en suspens.
         await this.basculerEnFinanceSiComplet(manager, project);
       }
 

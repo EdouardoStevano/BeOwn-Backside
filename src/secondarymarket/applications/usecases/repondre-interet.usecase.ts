@@ -39,7 +39,7 @@ export class RepondreInteretUseCase {
   async accepter(
     ordreId: string,
     vendeurId: number,
-  ): Promise<{ signingUrl: string; signatureId: string }> {
+  ): Promise<{ ordreId: string; signingUrl: string; signatureId: string }> {
     const ordre = await this.chargerPourVendeur(ordreId, vendeurId);
     const acheteurId = ordre.acheteurId;
     const nbFractions = ordre.interetNbFractions;
@@ -78,10 +78,41 @@ export class RepondreInteretUseCase {
 
     // La rencontre des volontés est acquise : le parcours contractuel peut
     // s'exécuter. `InitiateBuyUseCase` n'est jamais appelé en dehors d'ici.
-    return this.initiateBuy.execute(ordreId, acheteurId, nbFractions);
+    //
+    // Si l'initiation échoue (génération du contrat, stockage, prestataire de
+    // signature), l'annonce ne doit pas rester coincée en ACCEPTE : ni le
+    // vendeur ni l'acheteur n'auraient alors de porte de sortie. On la ramène à
+    // l'état antérieur, qui laisse au vendeur le choix de réessayer ou de
+    // refuser.
+    try {
+      const initiation = await this.initiateBuy.execute(
+        ordreId,
+        acheteurId,
+        nbFractions,
+      );
+      return { ordreId, ...initiation };
+    } catch (err) {
+      await this.ordreRepo
+        .createQueryBuilder()
+        .update(OrdreMarcheEntity)
+        .set({ statut: OrdreMarcheStatus.INTERET_EXPRIME })
+        .where('id = :id AND statut = :accepte', {
+          id: ordreId,
+          accepte: OrdreMarcheStatus.ACCEPTE,
+        })
+        .execute();
+      this.logger.error(
+        `Initiation de cession impossible sur l'annonce ${ordreId} : ` +
+          `statut ramené à ${OrdreMarcheStatus.INTERET_EXPRIME}`,
+      );
+      throw err;
+    }
   }
 
-  async refuser(ordreId: string, vendeurId: number): Promise<{ statut: OrdreMarcheStatus }> {
+  async refuser(
+    ordreId: string,
+    vendeurId: number,
+  ): Promise<{ ordreId: string; statut: OrdreMarcheStatus }> {
     const ordre = await this.chargerPourVendeur(ordreId, vendeurId);
     const acheteurId = ordre.acheteurId;
 
@@ -114,7 +145,7 @@ export class RepondreInteretUseCase {
       });
     }
 
-    return { statut: OrdreMarcheStatus.EN_CARNET };
+    return { ordreId, statut: OrdreMarcheStatus.EN_CARNET };
   }
 
   private async chargerPourVendeur(

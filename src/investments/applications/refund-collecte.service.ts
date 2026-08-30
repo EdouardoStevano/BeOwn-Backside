@@ -17,6 +17,7 @@ import { NotificationType } from 'src/notifications/infrastructure/persistences/
 import { formatEur } from 'src/shared/money/format-eur';
 import { MetricsPort } from 'src/observability/metrics/metrics.port';
 import { METRIC } from 'src/observability/metrics/metric-names';
+import { ResolveProjectWalletUseCase } from 'src/wallets/applications/usecases/resolve-project-wallet.usecase';
 
 /** Investissements remboursables (fonds engagés, ni rétractés ni déjà annulés). */
 const REFUNDABLE_INVESTMENT_STATUSES = [
@@ -47,6 +48,7 @@ export class RefundCollecteService {
     private readonly dataSource: DataSource,
     private readonly notifications: NotificationService,
     private readonly metrics: MetricsPort,
+    private readonly projectWalletResolver: ResolveProjectWalletUseCase,
   ) {}
 
   /**
@@ -94,16 +96,68 @@ export class RefundCollecteService {
       let refundedCount = 0;
       let refundedAmount = 0;
 
+      // Wallet technique du projet, résolu paresseusement au premier
+      // remboursement d'un engagement définitif (le verrou projet est déjà
+      // détenu par cette transaction : pas de re-verrouillage).
+      let projectWallet: WalletEntity | null = null;
+      // Solde du wallet projet suivi HORS entité : les débits passent par un
+      // UPDATE SQL atomique (`solde - :amount`), l'entité chargée n'est jamais
+      // réécrite. Muter son champ ferait croire à une seconde source de
+      // vérité ; on ne garde qu'un compteur local, pour la détection d'écart.
+      let soldeProjetSuivi = 0;
+
       for (const inv of investments) {
         const amount = Number(inv.montant);
+        const enDelaiReflexion =
+          inv.statut === InvestmentStatus.EN_DELAI_RETRACTATION;
         const wallet = await this.creditInvestorWallet(
           manager,
           inv.utilisateurId,
           amount,
+          enDelaiReflexion,
         );
 
+        // GRAND LIVRE — chaque crédit a une contrepartie explicite :
+        //  • engagement encore sous délai de réflexion : les fonds n'avaient
+        //    jamais quitté le wallet de l'investisseur (poche bloquée) — le
+        //    remboursement est un mouvement interne bloqué → disponible,
+        //    source = destination ;
+        //  • engagement définitif : les fonds avaient été crédités au wallet
+        //    du projet — ils en repartent vers l'investisseur.
+        let txSource: string;
+        if (enDelaiReflexion) {
+          txSource = wallet.id;
+        } else {
+          if (!projectWallet) {
+            projectWallet =
+              await this.projectWalletResolver.executeInTransaction(
+                manager,
+                project.id,
+                { verrouillerProjet: false, devise: wallet.devise ?? 'EUR' },
+              );
+            soldeProjetSuivi = Number(projectWallet.solde);
+          }
+          await manager
+            .createQueryBuilder()
+            .update(WalletEntity)
+            .set({ solde: () => 'solde - :amount' })
+            .setParameter('amount', amount)
+            .where('id = :id', { id: projectWallet.id })
+            .execute();
+          soldeProjetSuivi -= amount;
+          if (soldeProjetSuivi < 0) {
+            // Données antérieures au grand livre : le débit est quand même
+            // inscrit (double entrée honnête) et l'écart devient visible
+            // dans l'état financier au lieu de disparaître.
+            this.logger.warn(
+              `Wallet projet ${projectWallet.id} négatif après remboursement de ${inv.id} — écritures antérieures au grand livre probables.`,
+            );
+          }
+          txSource = projectWallet.id;
+        }
+
         const tx = manager.create(TransactionEntity, {
-          walletSource: null,
+          walletSource: txSource,
           walletDestination: wallet.id,
           montant: amount,
           devise: wallet.devise ?? 'EUR',
@@ -112,9 +166,11 @@ export class RefundCollecteService {
           statut: TransactionStatus.REUSSI,
           investissementId: inv.id,
           projetId: project.id,
+          idempotencyKey: `refund-collecte:${inv.id}`,
           metadata: {
             reason: options.reason ?? null,
             triggeredBy: options.triggeredByUserId ?? 'system',
+            enDelaiReflexion,
           },
         } as Partial<TransactionEntity>);
         await manager.save(tx);
@@ -183,10 +239,17 @@ export class RefundCollecteService {
     });
   }
 
+  /**
+   * Recrédite l'investisseur. Pour un engagement encore sous délai de
+   * réflexion, le montant vivait sur sa poche bloquée : elle est dénouée dans
+   * le même mouvement (disponible +montant, bloqué −montant), conservant la
+   * somme des fonds détenus par le wallet.
+   */
   private async creditInvestorWallet(
     manager: EntityManager,
     userId: number,
     amount: number,
+    depuisPocheBloquee: boolean,
   ): Promise<WalletEntity> {
     let wallet = await manager.findOne(WalletEntity, {
       where: { proprietaireUserId: userId, type: WalletType.INVESTISSEUR },
@@ -200,10 +263,16 @@ export class RefundCollecteService {
       } as Partial<WalletEntity>);
       wallet = await manager.save(wallet);
     }
+    const setClause = depuisPocheBloquee
+      ? {
+          solde: () => 'solde + :amount',
+          soldeBloque: () => 'GREATEST(0, "soldeBloque" - :amount)',
+        }
+      : { solde: () => 'solde + :amount' };
     await manager
       .createQueryBuilder()
       .update(WalletEntity)
-      .set({ solde: () => 'solde + :amount' })
+      .set(setClause)
       .setParameter('amount', amount)
       .where('id = :id', { id: wallet.id })
       .execute();

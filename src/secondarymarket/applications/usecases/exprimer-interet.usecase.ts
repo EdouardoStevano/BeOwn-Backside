@@ -17,6 +17,11 @@ import {
 } from 'src/secondarymarket/domains/tableau-affichage';
 import { NotificationService } from 'src/notifications/applications/notification.service';
 import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
+import { InvestmentEntity } from 'src/investments/infrastructure/persistences/entities/investment.entity';
+import {
+  DevisCession,
+  DevisCessionService,
+} from 'src/secondarymarket/applications/devis-cession.service';
 
 export interface ResultatExpressionInteret {
   ordreId: string;
@@ -24,6 +29,12 @@ export interface ResultatExpressionInteret {
   nbFractions: number;
   montantIndicatif: number;
   mention: string;
+  /**
+   * Frais que supporterait le vendeur si la cession se formait. Exposés à
+   * l'acheteur aussi : le coût réel de l'opération doit être connu des deux
+   * parties AVANT qu'un engagement soit pris.
+   */
+  devis: DevisCession;
 }
 
 /**
@@ -45,7 +56,10 @@ export class ExprimerInteretUseCase {
     private readonly ordreRepo: Repository<OrdreMarcheEntity>,
     @InjectRepository(WalletEntity)
     private readonly walletRepo: Repository<WalletEntity>,
+    @InjectRepository(InvestmentEntity)
+    private readonly investRepo: Repository<InvestmentEntity>,
     private readonly notifications: NotificationService,
+    private readonly devisCession: DevisCessionService,
   ) {}
 
   async execute(
@@ -132,6 +146,37 @@ export class ExprimerInteretUseCase {
       nbFractions,
       montantIndicatif,
       mention: MENTION_NON_SYSTEME_DE_NEGOCIATION,
+      devis: await this.calculerDevis(ordre.investissementId, nbFractions, ordre.prixUnitaire),
     };
+  }
+
+  /**
+   * Devis de frais de la cession envisagée.
+   *
+   * Le prix de revient du vendeur vient de son investissement d'origine ;
+   * inconnu, la plus-value est réputée nulle plutôt que devinée.
+   */
+  private async calculerDevis(
+    investissementId: string,
+    nbFractions: number,
+    prixUnitaire: number | string,
+  ): Promise<DevisCession> {
+    const investissement = await this.investRepo.findOne({
+      where: { id: investissementId },
+    });
+
+    let prixRevientUnitaire: number | null = null;
+    if (investissement?.valeurTitre != null) {
+      prixRevientUnitaire = Number(investissement.valeurTitre);
+    } else if (investissement && Number(investissement.nbTitres ?? 0) > 0) {
+      prixRevientUnitaire =
+        Number(investissement.montant) / Number(investissement.nbTitres);
+    }
+
+    return this.devisCession.calculer({
+      nbFractions,
+      prixUnitaire: Number(prixUnitaire),
+      prixRevientUnitaire,
+    });
   }
 }

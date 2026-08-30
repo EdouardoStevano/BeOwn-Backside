@@ -24,6 +24,22 @@ import { ContractGeneratorService } from 'src/investments/applications/usecases/
 import { YouSignService } from 'src/common/yousign/yousign.service';
 import { formatEur } from 'src/shared/money/format-eur';
 
+/**
+ * Initiation du parcours contractuel d'une cession : génération du contrat de
+ * rachat, dépôt du document et ouverture de la signature électronique.
+ *
+ * **Précondition** : l'annonce est en `ACCEPTE`, c'est-à-dire que le vendeur a
+ * déjà donné son accord et que `RepondreInteretUseCase.accepter()` a posé la
+ * transition de manière conditionnelle et atomique. Ce use case ne se prononce
+ * pas sur l'opportunité de la cession : cette décision appartient au vendeur,
+ * et elle est déjà inscrite en base quand on arrive ici.
+ *
+ * Historiquement ce use case servait l'achat immédiat (`POST orders/:id/execute`)
+ * et exigeait donc `EN_CARNET`. Cette route est débranchée en 410 : accepter
+ * encore `EN_CARNET` reviendrait à laisser ouverte une porte par laquelle une
+ * cession pourrait s'initier SANS l'accord du vendeur, ce que l'article 25
+ * exclut. La précondition est donc `ACCEPTE`, et seulement lui.
+ */
 @Injectable()
 export class InitiateBuyUseCase {
   private readonly logger = new Logger(InitiateBuyUseCase.name);
@@ -59,8 +75,16 @@ export class InitiateBuyUseCase {
       relations: ['investissement', 'investissement.projet'],
     });
     if (!ordre) throw new NotFoundException('Ordre introuvable');
-    if (ordre.statut !== OrdreMarcheStatus.EN_CARNET) {
-      throw new BadRequestException('Cet ordre n\'est plus disponible');
+    // Seule l'acceptation du vendeur ouvre le parcours de signature. Une
+    // annonce encore en carnet, déjà exécutée, annulée ou expirée n'a rien à
+    // faire ici : la refuser explicitement empêche qu'une cession se forme
+    // sans accord, et empêche aussi qu'un second contrat soit émis sur une
+    // annonce déjà servie.
+    if (ordre.statut !== OrdreMarcheStatus.ACCEPTE) {
+      throw new BadRequestException(
+        "Cette annonce n'est pas au stade de la signature : la cession ne " +
+          "s'initie qu'une fois l'accord du vendeur enregistré.",
+      );
     }
     if (ordre.vendeurId === userId) {
       throw new ForbiddenException('Vous ne pouvez pas acheter votre propre ordre');

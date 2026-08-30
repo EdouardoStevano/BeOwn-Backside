@@ -58,8 +58,9 @@ export const METHODOLOGIE_TAUX_DEFAUT =
   "rapporte le nombre de projets en défaut au nombre de projets de la cohorte, " +
   "définie par l'année d'ouverture de la collecte. Le taux de perte rapporte le " +
   "capital constaté en perte définitive au capital collecté. Les projets encore " +
-  "en collecte sont exclus. Publication conforme à l'article 20 du règlement " +
-  "(UE) 2020/1503 et au règlement délégué (UE) 2022/2115.";
+  "en collecte sont exclus. Cette publication est une démarche de transparence " +
+  "propre à BeOwn : elle ne relève d'aucun régime d'agrément et n'est encadrée " +
+  "par aucune autorité de marché.";
 
 /** Début de la fenêtre de publication de trente-six mois. */
 export function debutPeriodePublication(reference: Date): Date {

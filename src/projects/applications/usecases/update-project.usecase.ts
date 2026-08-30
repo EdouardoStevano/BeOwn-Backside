@@ -47,9 +47,9 @@ export class UpdateProjectUseCase {
         const resultat = verifierPlafondPorteur(offres, dto.capitalCible);
         if (!resultat.autorise) {
           throw new BadRequestException(
-            `Plafond de financement participatif dépassé : ce porteur a déjà ouvert ` +
+            `Plafond de collecte dépassé : ce porteur a déjà ouvert ` +
               `${formatEur(resultat.dejaCollecte)} d'offres sur les douze derniers mois. ` +
-              `Le plafond réglementaire est de ${formatEur(PLAFOND_PORTEUR_12_MOIS_EUR)} ` +
+              `La limite fixée par BeOwn est de ${formatEur(PLAFOND_PORTEUR_12_MOIS_EUR)} ` +
               `par porteur sur douze mois glissants. Marge restante : ${formatEur(resultat.disponible)}.`,
           );
         }
@@ -66,6 +66,11 @@ export class UpdateProjectUseCase {
     if (dto.indiceRisque !== undefined) project.indiceRisque = dto.indiceRisque;
     if (dto.dureeMois !== undefined) project.dureeMois = dto.dureeMois;
     if (dto.instrument !== undefined) project.instrument = dto.instrument;
+    // Commutateur de moteur économique. `undefined` (champ absent du PATCH) ne
+    // touche à rien ; une valeur explicite est propagée telle quelle jusqu'à la
+    // persistance — le mapper ne la réécrit plus en `obligataire`.
+    if (dto.modeleEconomique !== undefined)
+      project.modeleEconomique = dto.modeleEconomique;
     if (dto.estPreInvestissable !== undefined)
       project.estPreInvestissable = dto.estPreInvestissable ?? false;
     if (dto.plafondPreInvestissement !== undefined)
