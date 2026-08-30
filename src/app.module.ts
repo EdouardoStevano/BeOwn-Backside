@@ -15,7 +15,8 @@ import { RolesGuard } from 'src/iam/presentation/guards/roles.guard';
 import { PermissionsGuard } from 'src/iam/presentation/guards/permissions.guard';
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 import { AuditInterceptor } from './common/audit/audit.interceptor';
-import { ComplianceModule } from './compliance/compliance.module';
+import { OnboardingModule } from './onboarding/onboarding.module';
+import { AdequacyModule } from './adequacy/adequacy.module';
 import { CatalogModule } from './catalog/catalog.module';
 import { ReservationModule } from './reservation/reservation.module';
 import { SubscriptionModule } from './subscription/subscription.module';
@@ -31,7 +32,7 @@ import { CgpModule } from './iam/application/cgp.module';
 import { NewsModule } from './news/news.module';
 import { KpiModule } from './kpi/kpi.module';
 import { RegulatoryReportingModule } from './regulatory-reporting/regulatory-reporting.module';
-import { AmlModule } from './compliance/application/aml.module';
+import { AmlModule } from './onboarding/application/aml.module';
 import { PlatformFeesModule } from './treasury/application/platform-fees.module';
 import { PlatformSettingsModule } from './common/platform-settings/platform-settings.module';
 import { ContactModule } from './common/contact/contact.module';
@@ -91,7 +92,10 @@ function requireEnv(name: string): string {
     // UsersModule n'est plus monté ici : le compte utilisateur est devenu une
     // feature d'IAM, agrégée par IamModule au même titre qu'Authentication.
     IamModule,
-    ComplianceModule,
+    OnboardingModule,
+    // Monté après l'entrée en relation, dont il est en amont : `onboarding`
+    // lit son classement pour composer l'éligibilité, l'inverse n'existe pas.
+    AdequacyModule,
     CatalogModule,
     ReservationModule,
     SubscriptionModule,

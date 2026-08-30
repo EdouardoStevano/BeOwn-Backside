@@ -2,7 +2,7 @@ import { Module } from '@nestjs/common';
 import { APP_FILTER } from '@nestjs/core';
 import { CqrsModule } from '@nestjs/cqrs';
 import { CatalogInfrastructureModule } from 'src/catalog/infrastructure/catalog-infrastructure.module';
-import { KycModule } from 'src/compliance/application/kyc.module';
+import { KycModule } from 'src/onboarding/application/kyc.module';
 import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructure.module';
 import {
   FifoRankingPolicy,

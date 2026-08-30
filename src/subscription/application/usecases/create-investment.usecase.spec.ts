@@ -96,16 +96,21 @@ describe('CreateInvestmentUseCase — atomicité', () => {
         email: 'jean@example.com',
       }),
     };
-    // Le port de conformité rend un verdict, pas un dossier : sans
-    // questionnaire, le titulaire est non averti et se voit opposer le
-    // plancher réglementaire.
+    // Le port de conformité rend un verdict en deux moitiés, pas un dossier :
+    // l'aptitude que décide l'entrée en relation, le classement que décide
+    // l'adéquation. Sans questionnaire, le titulaire est non averti et se voit
+    // opposer le plancher réglementaire.
     profilPPRepository = {
       eligibilite: jest.fn().mockResolvedValue({
         investorId: 1,
-        categoriePsfp: 'non_averti',
-        estNonAverti: true,
-        plafondConseille: null,
-        patrimoineDeclare: null,
+        societeId: null,
+        aptitude: { peutOperer: true, motifs: [] },
+        classement: {
+          categoriePsfp: 'non_averti',
+          estNonAverti: true,
+          plafondConseille: null,
+          patrimoineDeclare: null,
+        },
       }),
     };
     contractGenerator = {

@@ -20,7 +20,7 @@ import { CurrentUser } from 'src/iam/presentation/decorators/current-user.decora
 import type { ActiveUser } from 'src/iam/presentation/decorators/current-user.decorator';
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 import { UserRole } from 'src/iam/domain/enums/user.enum';
-import { RiskScoringService } from 'src/compliance/application/services/risk-scoring.service';
+import { RiskScoringService } from 'src/adequacy/application/services/risk-scoring.service';
 
 const ADMIN_ROLES: string[] = rolesWithPermission('users:read');
 const ROLE_ASSIGN_ROLES: string[] = rolesWithPermission('roles:assign');

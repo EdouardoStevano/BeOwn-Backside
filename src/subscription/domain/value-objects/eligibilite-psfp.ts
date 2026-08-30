@@ -1,7 +1,7 @@
 /**
  * **L'investisseur, vu par la souscription** — sa seule facette réglementaire.
  *
- * `subscription` ne connaît ni `InvestorComplianceProfile` ni `ProfilPP` : il
+ * `subscription` ne connaît ni `EvaluationDAdequation` ni `ProfilPP` : il
  * consomme le verdict de `compliance`, en amont (§3.4, Customer/Supplier),
  * traduit par `EligibilitePsfpTranslator` (§13, §20).
  *

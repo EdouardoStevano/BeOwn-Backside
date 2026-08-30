@@ -26,7 +26,7 @@ import { Public } from 'src/iam/presentation/decorators/public.decorator';
 import { CurrentUser } from 'src/iam/presentation/decorators/current-user.decorator';
 import type { ActiveUser } from 'src/iam/presentation/decorators/current-user.decorator';
 import { JwtAuthGuard } from 'src/iam/presentation/guards/jwt-auth.guard';
-import { KycValidatedGuard } from 'src/compliance/presentation/guards/kyc-validated.guard';
+import { KycValidatedGuard } from 'src/onboarding/presentation/guards/kyc-validated.guard';
 import { Money } from 'src/treasury/domain/value-objects/money.vo';
 import {
   CONNECT_GATEWAY,

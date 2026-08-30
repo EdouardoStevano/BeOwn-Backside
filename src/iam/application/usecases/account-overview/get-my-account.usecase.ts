@@ -9,11 +9,11 @@ import {
   type UserRepository,
 } from 'src/iam/domain/repositories/user.repository';
 import { GetPreferencesUseCase } from 'src/iam/application/usecases/preferences/get-preferences.usecase';
-import { GetOnboardingStatusUseCase } from 'src/compliance/application/usecases/profiles/get-onboarding-status.usecase';
+import { GetOnboardingStatusUseCase } from 'src/onboarding/application/usecases/profiles/get-onboarding-status.usecase';
 import {
   ListerProfilsInvestisseurUseCase,
   type ProfilDisponible,
-} from 'src/compliance/application/usecases/investisseur/lister-profils-investisseur.usecase';
+} from 'src/onboarding/application/usecases/investisseur/lister-profils-investisseur.usecase';
 import { WalletType } from 'src/treasury/domain/enums/wallet.enum';
 import {
   WALLET_REPOSITORY,

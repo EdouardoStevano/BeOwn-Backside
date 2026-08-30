@@ -112,13 +112,14 @@ Avant de fixer les Bounded Contexts, on classe les capacités métier par valeur
 |---|---|---|
 | Pré-investissement (Réservations) | **Core** | Différenciateur explicite du cahier des charges (§1.2) : verrouillage de fonds (HOLD), rang FIFO, conversion automatique sur la fenêtre ANNONCÉ→PUBLIÉ. Aucun concurrent PSFP standard n'a ce mécanisme. |
 | Souscription / Investissement | Support, adjacent au Core | Émission obligataire assez standard dans le secteur, mais fortement couplée au Core par la conversion des réservations. |
-| Conformité (KYC/KYB + adéquation) | Support critique | Métier réglementé (PSFP art. 21, LCB-FT) ; différenciation faible, mais bloquant — aucune opération financière ne doit pouvoir le contourner. |
+| Entrée en relation (KYC/KYB) | Support critique | Métier réglementé (LCB-FT) ; différenciation faible, mais bloquant — aucune opération financière ne doit pouvoir le contourner. |
+| Adéquation & profil de risque | Support critique | Obligation d'adéquation du règlement 2020/1503 (art. 21) : catégorisation Averti/Non-averti, capacité de perte, plafond opposable, surveillance périodique. |
 | Catalogue de projets & SPV | Support | Cycle de vie commercial d'un projet ; peu différenciant en soi. |
 | Trésorerie / Wallets | Support | Orchestration des 5 types de wallets et réconciliation ; la brique de paiement elle-même est déléguée (Generic, voir ci-dessous). |
 | Échéancier / Servicing | Support | Calcul des coupons, application de la fiscalité, détection des défauts. |
 | Marché secondaire | Support | Fonctionnalité de liquidité, utile mais non cœur de l'offre initiale. |
 | Documents & Signature | Support transversal | Utilisé par plusieurs contextes (bulletins, actes de cession, KIIS) — orchestration de Doclift/Universign. |
-| Reporting réglementaire / Fiscalité | Support, essentiellement en lecture | Agrégation et mise en forme de données déjà produites par Conformité, Servicing et Marché secondaire. |
+| Reporting réglementaire / Fiscalité | Support, essentiellement en lecture | Agrégation et mise en forme de données déjà produites par Entrée en relation, Adéquation, Servicing et Marché secondaire. |
 | Authentification & comptes | **Generic** | Résolu par des standards (OIDC/OAuth2, 2FA TOTP/WebAuthn) — cf. §6.2 du cahier des charges (Keycloak / Auth.js). |
 | Vérification documentaire KYC/KYB | **Generic** | Sous-traitée (Smile Identity / Onfido / Stripe Identity). Ce qui reste propre à BeOwn — statut, catégorisation, gate d'accès — est Support, pas Generic (voir §3.2). |
 | Paiement bas niveau, signature électronique, envoi d'email/SMS | **Generic** | Acheté (Stripe, Universign, Brevo, Twilio / Africa's Talking) — à isoler derrière des Anti-Corruption Layers (§20), jamais reconstruit. |
@@ -129,7 +130,8 @@ Avant de fixer les Bounded Contexts, on classe les capacités métier par valeur
 |---|---|---|---|
 | `reservation` | `Reservation`, `ReservationCapacity` | M5 | **Core.** Engagement financier verrouillé, rang, conversion. |
 | `subscription` | `Investment` | M6 (+ reçoit la conversion issue de M5) | Souscription signée, échéancier déclenché à la signature. |
-| `compliance` | `InvestorComplianceProfile` (entités `KycCase`, `AdequacyAssessment`) | M2 + M3 | Éligibilité réglementaire : KYC/KYB, catégorisation Averti/Non-averti, questionnaire d'adéquation. |
+| `onboarding` | `DossierDEntreeEnRelation` (entité `KycCase`), `ProfilPP`, `ProfilPM`, `DossierDePieces`, `RegistreDesBeneficiaires` | M2 + une partie de M3 | Entrée en relation : KYC, KYB, profils déclarés, pièces justificatives, bénéficiaires effectifs. Publie l'aptitude à opérer. |
+| `adequacy` | `EvaluationDAdequation` (entité `AdequacyAssessment`) | le reste de M3 | Questionnaire en trois étapes, catégorisation Averti/Non-averti, capacité de perte, plafond conseillé, surveillance périodique. |
 | `catalog` | `RealEstateProject` (référence `Spv`) | M4 | Cycle de vie commercial d'un projet, fiche, cible de collecte. |
 | `identity` | `UserAccount` | M1 | Compte, identifiants, sessions, 2FA. |
 | `treasury` | `Wallet` | M7 | 5 types de wallets, MoneyIn/MoneyOut/MassPay, réconciliation. |
@@ -143,7 +145,8 @@ Structure de dossiers correspondante :
 ```text
 src/
 ├── identity/
-├── compliance/
+├── onboarding/
+├── adequacy/
 ├── catalog/
 ├── reservation/
 ├── subscription/
@@ -184,11 +187,12 @@ Préférer l'utilisation :
 
 Le cahier des charges n'est pas la spécification finale de l'architecture — c'est un point de départ métier à challenger, comme le rappelle la consigne d'origine de ce document. Voici les écarts délibérés, et pourquoi :
 
-- **M2 + M3 fusionnés dans `compliance`.** Le cahier des charges les présente comme deux modules, mais RG-KYC-13 indique explicitement que la catégorisation KYC *provient* du questionnaire d'adéquation (M3) — c'est un seul concept métier (« l'investisseur est-il éligible, et pour quoi »), pas deux. Les séparer créerait une dépendance cyclique entre deux Bounded Contexts pour un seul agrégat conceptuel.
+- **M3 est scindé entre `onboarding` et `adequacy`, et la frontière ne suit pas celle du cahier des charges.** Ce document a longtemps fusionné M2 et M3 en un seul contexte `compliance`, au motif que RG-KYC-13 fait dériver la catégorisation PSFP du questionnaire d'adéquation : les séparer aurait créé une dépendance cyclique entre deux Bounded Contexts pour un seul agrégat conceptuel. **Ce cycle n'existe plus, et l'argument est caduc.** Il tenait à ce que le classement PSFP soit recopié sur `ProfilPP` — une copie que le questionnaire écrivait et que le profil relisait, donc une flèche dans chaque sens. Le classement vit désormais sur `EvaluationDAdequation`, qui le calcule et le porte ; la dérivation est à sens unique et entièrement contenue dans cette racine. Restaient deux responsabilités qui n'ont ni le même vocabulaire (dossier, pièce, vérification, verdict / questionnaire, étape, catégorie, plafond), ni le même rythme, ni le même interlocuteur — le RCCI et la LCB-FT d'un côté, l'obligation d'adéquation de l'article 21 de l'autre. Le découpage retenu place donc la frontière **au milieu de M3** : les profils déclarés PP/PM restent avec le dossier d'entrée en relation qu'ils complètent, le questionnaire part avec le classement qu'il produit.
+  > Leçon générale, valable au-delà de ce cas : une justification de frontière qui repose sur une dépendance cyclique doit être **revérifiée dans le code** avant d'être invoquée. Le cycle est souvent le symptôme d'une donnée dupliquée, pas d'un concept indivisible — supprimer la copie fait disparaître la raison de fusionner.
 - **M5 et M6 restent deux Bounded Contexts distincts** (`reservation` et `subscription`) malgré leur forte proximité fonctionnelle, précisément *parce que* le cahier des charges qualifie M5 de différenciateur stratégique méritant « une attention particulière » (§1.2, §4.5). Isoler `reservation` lui permet d'évoluer à son propre rythme sans faire porter ce risque au module de souscription, plus standard et plus stable. Alternative valable pour une petite équipe : fusionner en un seul contexte avec un agrégat `Commitment` à deux variantes (`PRE_INVESTMENT` / `DIRECT`) — à n'envisager que si le Core Domain cesse d'être une priorité produit.
 - **`documents` est un Bounded Context ajouté**, absent du découpage en modules. Le cahier des charges fait référence à trois reprises à de la génération de documents et de la signature électronique (bulletin M5/M6, acte de cession M9, KIIS/IFU M4/M11) sans jamais le regrouper — traité comme un détail d'implémentation dans chaque module. En pratique c'est une capacité récurrente avec ses propres règles (qui signe quoi, avec quel OTP, avec quelle durée d'archivage légal) : elle mérite son propre modèle plutôt que d'être dupliquée trois fois.
 - **M10 (Notifications) n'est pas modélisé comme un Bounded Context.** Le catalogue d'emails (§4.10.1, ≈25 templates) est une table déclencheur → template → destinataire sans règle métier propre ; c'est un abonné technique aux événements de domaine des autres contextes, pas une capacité métier avec ses propres agrégats. Le modéliser comme un Bounded Context à part entière produirait l'équivalent, à l'échelle stratégique, d'un Anemic Domain Model (§7).
-- **M12 (Back-Office Administrateur) n'est pas un Bounded Context.** C'est une application de présentation interne (rôles/permissions RCCI, Ops, Finance, Compliance, Support — §4.12.2 du cahier des charges) qui orchestre des Commands et Queries à travers `identity`, `compliance`, `catalog`, `reservation`, `subscription`, `treasury`, `servicing`, `secondary-market`, `documents` et `regulatory-reporting`. La logique métier doit rester dans ces contextes ; le back-office n'implémente que du RBAC et de la composition d'écrans.
+- **M12 (Back-Office Administrateur) n'est pas un Bounded Context.** C'est une application de présentation interne (rôles/permissions RCCI, Ops, Finance, Compliance, Support — §4.12.2 du cahier des charges) qui orchestre des Commands et Queries à travers `identity`, `onboarding`, `adequacy`, `catalog`, `reservation`, `subscription`, `treasury`, `servicing`, `secondary-market`, `documents` et `regulatory-reporting`. La logique métier doit rester dans ces contextes ; le back-office n'implémente que du RBAC et de la composition d'écrans.
 - **`regulatory-reporting` a volontairement un domaine « fin ».** L'essentiel de M11 (rapports AMF, IFU) est un calcul déjà fait ailleurs — les intérêts et la retenue à la source sont calculés par `servicing` (RG-ECH-04/05) — puis mis en forme et agrégé. Ne pas dupliquer ce calcul : construire ce contexte comme des projections/read models alimentés par les événements des autres contextes (§11, Queries), avec un petit noyau de règles propres réservé à la gestion extinctive (run-off, §2.6), qui a un véritable cycle de vie.
 - **Le site public / marketing n'a pas de Bounded Context.** C'est du contenu éditorial (CMS, SEO, blog, FAQ) qui vit en *Separate Ways* : il consomme en lecture seule les données publiques de `catalog`, sans dépendance dans l'autre sens.
 
@@ -197,8 +201,14 @@ Le cahier des charges n'est pas la spécification finale de l'architecture — c
 Relations entre Bounded Contexts, avec le pattern DDD correspondant :
 
 ```text
-compliance  →  reservation, subscription, secondary-market
-            (Customer/Supplier — fournit l'éligibilité de l'investisseur)
+adequacy  →  onboarding
+          (Customer/Supplier — fournit le classement PSFP et l'avancement
+           du questionnaire, par trois ports de lecture. Seule arête entre
+           les deux, et elle ne va que dans ce sens.)
+
+onboarding  →  reservation, subscription, secondary-market, treasury
+            (Customer/Supplier — fournit l'éligibilité de l'investisseur,
+             composée de son aptitude à opérer et du classement d'adequacy)
 
 catalog  →  reservation, subscription
          (Customer/Supplier — fournit statut du projet et cible de collecte)
@@ -236,7 +246,9 @@ back-office  →  *
 
 Remarques :
 
-- `compliance` et `catalog` sont **en amont (upstream/supplier)** de plusieurs contextes : ils publient des faits (`InvestorKycValidated`, `InvestorKycInvalidated`, `ProjectPublished`) que les contextes en aval consomment sans jamais réécrire l'agrégat source.
+- `onboarding` et `catalog` sont **en amont (upstream/supplier)** de plusieurs contextes : ils publient des faits (`InvestorKycValidated`, `InvestorKycInvalidated`, `ProjectPublished`) que les contextes en aval consomment sans jamais réécrire l'agrégat source.
+- `adequacy` est **en amont d'`onboarding`**, et de lui seul. Trois ports de lecture franchissent la frontière — le classement opposable, l'avancement du questionnaire, la surveillance périodique — et tous rendent des primitives, jamais l'agrégat. `adequacy` ignore l'existence du KYC, du KYB et des pièces justificatives : si un jour il a besoin d'en lire un, c'est le signal que la frontière a été mal tracée.
+- `EligibiliteDuTitulaire`, que publie `onboarding`, est **la composition explicite des deux** : une moitié `aptitude` (peut-il opérer, et sinon pourquoi) et une moitié `classement` (jusqu'où il peut aller). Les aplatir en une seule liste de clés ferait croire à l'aval que les deux verdicts sortent du même calcul. Les contextes financiers posent la question d'un seul tenant et n'ont ainsi qu'un contexte à connaître.
 - La relation `reservation → subscription` est un **Customer/Supplier asynchrone** : `subscription` ne connaît jamais l'agrégat `Reservation`, seulement l'événement `ReservationConverted` et son contrat (Published Language).
 - `treasury` est **Conformist** vis-à-vis de Stripe (BeOwn adopte son modèle de wallets/webhooks) mais protège son propre domaine par une **Anti-Corruption Layer** (§20).
 - `notifications` et `regulatory-reporting` ne sont **jamais en amont** de quoi que ce soit. Si un jour un contexte métier a besoin de lire une donnée de reporting pour prendre une décision (ce n'est pas le cas aujourd'hui), c'est le signal que la frontière a été mal tracée.
@@ -298,7 +310,7 @@ Le cahier des charges (§1.5) fournit déjà un glossaire ; en voici la traducti
 | Échéance / Coupon | `Echeance` | `servicing` |
 | Wallet | `Wallet` | `treasury` |
 | MoneyIn / MoneyOut / MassPay | méthodes de `Wallet` / port `PaymentGateway` | `treasury` |
-| Investisseur Averti / Non-averti | `InvestorCategory` (Value Object) | `compliance` |
+| Investisseur Averti / Non-averti | `CategoriePsfp` / `ClassementPsfp` (Value Objects) | `adequacy` |
 | Gestion extinctive (Run-off) | `RunOffPlan` | `regulatory-reporting` |
 | Marché secondaire | `SecondaryMarketOrder` | `secondary-market` |
 | IFU | read model, pas d'agrégat dédié | `regulatory-reporting` |
@@ -449,7 +461,7 @@ Incorrect :
 
 ```ts
 class Reservation {
-  private investor: InvestorComplianceProfile;
+  private investor: DossierDEntreeEnRelation;
 }
 ```
 
@@ -526,7 +538,7 @@ class Investment {
 }
 ```
 
-> Noter `sign()`, pas `approve()` : le cahier des charges (RG-INV-06) décrit une signature électronique en self-service (Universign + OTP), pas une validation manuelle interne. Le pattern « approbation par un tiers » existe bien chez BeOwn, mais côté `compliance`, pour la validation KYC par le RCCI (RG-KYC-07) — voir §9.
+> Noter `sign()`, pas `approve()` : le cahier des charges (RG-INV-06) décrit une signature électronique en self-service (Universign + OTP), pas une validation manuelle interne. Le pattern « approbation par un tiers » existe bien chez BeOwn, mais côté `onboarding`, pour la validation KYC par le RCCI (RG-KYC-07) — voir §9.
 
 Éviter les **Anemic Domain Models**.
 
@@ -1078,7 +1090,7 @@ PaymentGateway Port
 treasury (Application / Domain)
 ```
 
-Même logique pour le stockage de fichiers, utilisé par plusieurs contextes (`documents` pour les documents signés, `compliance` pour les pièces KYC/KYB, `catalog` pour les photos/vidéos et le KIIS) :
+Même logique pour le stockage de fichiers, utilisé par plusieurs contextes (`documents` pour les documents signés, `onboarding` pour les pièces KYC/KYB, `catalog` pour les photos/vidéos et le KIIS) :
 
 ```text
 MinIO (driver S3)
@@ -1087,10 +1099,10 @@ MinioStorageAdapter
         ↓
 FileStoragePort
         ↓
-documents / compliance / catalog (Application / Domain)
+documents / onboarding / catalog (Application / Domain)
 ```
 
-> Chaque contexte définit son **propre** port, à son propre niveau métier — `DocumentStoragePort` dans `documents`, potentiellement `KycDocumentStoragePort` dans `compliance` avec ses propres règles de rétention (RG-KYC-10 : 5 ans pour les pièces KYC ; RG-Q-07 : 10 ans pour le questionnaire d'adéquation signé). `MinioStorageAdapter`, lui, est un détail purement technique — stocker et lire des octets à une clé, sans aucune notion métier — et peut donc être partagé entre les infrastructures de plusieurs contextes sans violer les frontières du §3, à condition que chaque contexte y accède via son propre port et jamais directement. Ne pas confondre ce partage d'un adaptateur technique avec le Shared Kernel du §25, qui est un partage de concepts de *modélisation du domaine* (`AggregateRoot`, `DomainEvent`…) — deux choses de nature différente, même si les deux sont « partagés ».
+> Chaque contexte définit son **propre** port, à son propre niveau métier — `DocumentStoragePort` dans `documents`, potentiellement `KycDocumentStoragePort` dans `onboarding` avec ses propres règles de rétention (RG-KYC-10 : 5 ans pour les pièces KYC) et un autre dans `adequacy` avec les siennes (RG-Q-07 : 10 ans pour le questionnaire d'adéquation signé) — deux durées légales différentes, donc deux ports, quand bien même l'adaptateur derrière est le même. `MinioStorageAdapter`, lui, est un détail purement technique — stocker et lire des octets à une clé, sans aucune notion métier — et peut donc être partagé entre les infrastructures de plusieurs contextes sans violer les frontières du §3, à condition que chaque contexte y accède via son propre port et jamais directement. Ne pas confondre ce partage d'un adaptateur technique avec le Shared Kernel du §25, qui est un partage de concepts de *modélisation du domaine* (`AggregateRoot`, `DomainEvent`…) — deux choses de nature différente, même si les deux sont « partagés ».
 
 Le domaine ne doit jamais connaître directement :
 
@@ -1129,7 +1141,8 @@ Le cahier des charges définit déjà les codes d'erreur HTTP exposés côté AP
 |---|---|---|
 | `ReservationCapacityExceededError` | `reservation` | `RESERVATION_FULL` |
 | `ProjectNotOpenForReservationError` | `reservation` / `catalog` | `PROJECT_NOT_OPEN` |
-| `InvestorNotEligibleError` | `compliance` | `KYC_PENDING` / `ADEQUATION_REQUIRED` |
+| `InvestorNotEligibleError` | `onboarding` | `KYC_PENDING` |
+| `AdequationRequiseError` | `adequacy` | `ADEQUATION_REQUIRED` |
 | `InvalidInvestmentAmountError` | `subscription` | `TICKET_BELOW_MIN` / `TICKET_ABOVE_MAX` |
 | `InsufficientWalletBalanceError` | `treasury` | `WALLET_INSUFFICIENT` |
 | `WalletFrozenError` | `treasury` | `WALLET_FROZEN` |
@@ -1154,7 +1167,9 @@ interface Specification<T> {
 Exemple (BeOwn) :
 
 ```text
-EligibleInvestorSpecification            (KYC_VALIDATED + adéquation valide + catégorie compatible — RG-RES-03 et RG-INV-01, même règle des deux côtés)
+EligibleInvestorSpecification            (aptitude à opérer + classement compatible — RG-RES-03 et RG-INV-01, même règle des deux côtés.
+                                          Se construit sur `EligibiliteDuTitulaire`, qui porte déjà les deux moitiés :
+                                          ne pas rejouer ici la règle qui les a produites.)
 ProjectOpenForReservationSpecification   (statut ANNONCE + estPreInvestissable = true)
 ProjectOpenForSubscriptionSpecification  (statut PUBLIE — RG-INV : « investir sur un projet PUBLIE en cours de collecte »)
 TicketWithinBoundsSpecification          (RG-INV-02 / RG-INV-03)
@@ -1505,7 +1520,7 @@ Domain
 
 Le `Domain` ne doit connaître aucune couche externe.
 
-Ce schéma s'applique **à l'intérieur de chaque Bounded Context** défini en §3 — `reservation`, `subscription`, `compliance`, etc. possèdent chacun leurs quatre anneaux ; il n'y a pas un anneau `Domain` unique partagé par toute l'application (ce serait un Shared Kernel géant, proscrit en §25).
+Ce schéma s'applique **à l'intérieur de chaque Bounded Context** défini en §3 — `reservation`, `subscription`, `onboarding`, `adequacy`, etc. possèdent chacun leurs quatre anneaux ; il n'y a pas un anneau `Domain` unique partagé par toute l'application (ce serait un Shared Kernel géant, proscrit en §25).
 
 ---
 
@@ -1664,7 +1679,7 @@ DDD
 └── ReservationConverted
 ```
 
-> Noter `InvestorId`, pas `Investor` : `reservation` référence l'investisseur par identifiant, il ne possède pas d'agrégat `Investor` en propre — celui-ci n'existe nulle part comme entité unique, chaque contexte n'en connaît que la portion qui le concerne (`UserAccount` dans `identity`, `InvestorComplianceProfile` dans `compliance`). Écrire un agrégat `Investor` générique ici referait exactement l'erreur que §3 corrige.
+> Noter `InvestorId`, pas `Investor` : `reservation` référence l'investisseur par identifiant, il ne possède pas d'agrégat `Investor` en propre — celui-ci n'existe nulle part comme entité unique, chaque contexte n'en connaît que la portion qui le concerne (`UserAccount` dans `identity`, `DossierDEntreeEnRelation` dans `onboarding`, `EvaluationDAdequation` dans `adequacy`). Écrire un agrégat `Investor` générique ici referait exactement l'erreur que §3 corrige.
 
 Clean Architecture décide où ces éléments vivent :
 
@@ -1867,7 +1882,7 @@ Exemple (BeOwn) — un écran du back-office (§3.3) qui a besoin de plusieurs l
 ```text
 Complexe :
 reservation   (lecture)
-compliance    (lecture)
+onboarding    (lecture)
 treasury      (lecture)
 
         ↓
@@ -2258,7 +2273,8 @@ src/
 │       │   └── DomainError.ts
 │
 ├── identity/
-├── compliance/
+├── onboarding/
+├── adequacy/
 ├── catalog/
 ├── reservation/            (structure interne détaillée : §5)
 ├── subscription/

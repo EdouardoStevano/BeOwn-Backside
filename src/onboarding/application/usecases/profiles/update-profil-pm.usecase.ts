@@ -1,0 +1,44 @@
+import { Inject, Injectable } from '@nestjs/common';
+import {
+  PROFIL_PM_REPOSITORY,
+  type ProfilPMRepository,
+} from 'src/onboarding/domain/repositories/profil-pm.repository';
+import { ProfilPM } from 'src/onboarding/domain/aggregates/profil-pm';
+import { UpdateProfilPMDto } from '../../../presentation/http/dto/profil.dto';
+import { champsDeclaresDepuisDto } from '../../mappers/profil-pm-champs.mapper';
+import { GetProfilPMUseCase } from './get-profil-pm.usecase';
+
+/**
+ * Mise à jour du profil investisseur — personne morale.
+ *
+ * Comble le trou qui rendait `POST /profiles/pm/me` piégeur : la création
+ * étant idempotente, un second appel rendait le profil existant **sans
+ * appliquer** les données envoyées. Corriger une raison sociale ou ajouter un
+ * SIREN oublié n'avait donc aucun chemin ; c'est celui-ci.
+ *
+ * Le use case n'orchestre que des accès (§6 — Application Service) : la
+ * validité de chaque champ et la cohérence de l'ensemble sont dans
+ * `ProfilPM.mettreAJour`, où elles valent pour tout point d'entrée.
+ */
+@Injectable()
+export class UpdateProfilPMUseCase {
+  constructor(
+    @Inject(PROFIL_PM_REPOSITORY)
+    private readonly profilPMRepository: ProfilPMRepository,
+    private readonly getProfilPM: GetProfilPMUseCase,
+  ) {}
+
+  async execute(
+    userId: number,
+    profilPMId: string,
+    dto: UpdateProfilPMDto,
+  ): Promise<ProfilPM> {
+    // La société est désignée par son identité, et non déduite du compte : il
+    // peut y en avoir plusieurs. Le contrôle d'appartenance vit dans
+    // `GetProfilPMUseCase` — un seul endroit où il puisse être oublié.
+    const profil = await this.getProfilPM.execute(userId, profilPMId);
+
+    profil.mettreAJour(champsDeclaresDepuisDto(dto));
+    return this.profilPMRepository.update(profil);
+  }
+}

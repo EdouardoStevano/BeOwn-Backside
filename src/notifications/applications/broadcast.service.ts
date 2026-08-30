@@ -18,7 +18,7 @@ import { TokenService } from 'src/iam/application/services/token/token.service';
 import { ProjectEntity } from 'src/catalog/infrastructure/persistence/entities/project.entity';
 import { UserPreferencesEntity } from 'src/iam/infrastructure/persistence/entities/user-preferences.entity';
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
-import { ProfilPPEntity } from 'src/compliance/infrastructure/persistence/entities/profil-pp.entity';
+import { ProfilPPEntity } from 'src/onboarding/infrastructure/persistence/entities/profil-pp.entity';
 import { UserStatus } from 'src/iam/domain/enums/user.enum';
 import { NotificationType } from '../infrastructure/persistences/entities/notification.entity';
 import { AuditLogService } from './audit-log.service';

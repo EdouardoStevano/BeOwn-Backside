@@ -11,9 +11,9 @@ import { TransactionEntity } from 'src/treasury/infrastructure/persistence/entit
 import { InvestmentEntity } from 'src/subscription/infrastructure/persistence/entities/investment.entity';
 import { EcheanceEntity } from 'src/servicing/infrastructure/persistence/entities/echeance.entity';
 import { ReservationEntity } from 'src/reservation/infrastructure/persistence/entities/reservation.entity';
-import { ProfilPPEntity } from 'src/compliance/infrastructure/persistence/entities/profil-pp.entity';
-import { ProfilPMEntity } from 'src/compliance/infrastructure/persistence/entities/profil-pm.entity';
-import { KycEntity } from 'src/compliance/infrastructure/persistence/entities/kyc.entity';
+import { ProfilPPEntity } from 'src/onboarding/infrastructure/persistence/entities/profil-pp.entity';
+import { ProfilPMEntity } from 'src/onboarding/infrastructure/persistence/entities/profil-pm.entity';
+import { KycEntity } from 'src/onboarding/infrastructure/persistence/entities/kyc.entity';
 import { NotificationEntity } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
 import { AuditLogEntity } from 'src/notifications/infrastructure/persistences/entities/audit-log.entity';
 import { DocumentEntity } from 'src/documents/infrastructure/persistence/entities/document.entity';

@@ -29,7 +29,7 @@ import { OrdreMarcheStatus } from 'src/secondary-market/domain/enums/ordre-march
 import { CurrentUser } from 'src/iam/presentation/decorators/current-user.decorator';
 import type { ActiveUser } from 'src/iam/presentation/decorators/current-user.decorator';
 import { JwtAuthGuard } from 'src/iam/presentation/guards/jwt-auth.guard';
-import { KycValidatedGuard } from 'src/compliance/presentation/guards/kyc-validated.guard';
+import { KycValidatedGuard } from 'src/onboarding/presentation/guards/kyc-validated.guard';
 import { Public } from 'src/iam/presentation/decorators/public.decorator';
 import { PasserOrdreDeVenteUseCase } from 'src/secondary-market/application/usecases/passer-ordre-de-vente.usecase';
 import { ExecuterOrdreUseCase } from 'src/secondary-market/application/usecases/executer-ordre.usecase';

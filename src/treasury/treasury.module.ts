@@ -32,7 +32,7 @@ import { NotificationTreasuryAdapter } from './infrastructure/external-services/
 import { TreasuryErrorFilter } from './presentation/http/filters/treasury-error.filter';
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructure.module';
-import { KycModule } from 'src/compliance/application/kyc.module';
+import { KycModule } from 'src/onboarding/application/kyc.module';
 import { CloudStorageModule } from 'src/shared/cloud-storage/cloud-storage.module';
 import { NotificationsModule } from 'src/notifications/notifications.module';
 

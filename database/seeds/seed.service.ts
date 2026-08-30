@@ -23,14 +23,14 @@ import {
 import { TransactionEntity } from 'src/treasury/infrastructure/persistence/entities/transaction.entity';
 import { InvestmentEntity } from 'src/subscription/infrastructure/persistence/entities/investment.entity';
 import { InvestmentStatus } from 'src/subscription/domain/enums/investment-status.enum';
-import { ProfilPPEntity } from 'src/compliance/infrastructure/persistence/entities/profil-pp.entity';
-import { ProfilPMEntity } from 'src/compliance/infrastructure/persistence/entities/profil-pm.entity';
-import { KycEntity } from 'src/compliance/infrastructure/persistence/entities/kyc.entity';
+import { ProfilPPEntity } from 'src/onboarding/infrastructure/persistence/entities/profil-pp.entity';
+import { ProfilPMEntity } from 'src/onboarding/infrastructure/persistence/entities/profil-pm.entity';
+import { KycEntity } from 'src/onboarding/infrastructure/persistence/entities/kyc.entity';
 import {
   KycStatus,
   KycNiveau,
-} from 'src/compliance/domain/enums/kyc-status.enum';
-import { CategoriePsfp } from 'src/compliance/domain/enums/categorie-psfp.enum';
+} from 'src/onboarding/domain/enums/kyc-status.enum';
+import { CategoriePsfp } from 'src/adequacy/domain/enums/categorie-psfp.enum';
 import {
   NotificationEntity,
   NotificationCanal,

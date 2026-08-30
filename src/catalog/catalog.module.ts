@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { APP_FILTER } from '@nestjs/core';
 import { CqrsModule } from '@nestjs/cqrs';
-import { AmlModule } from 'src/compliance/application/aml.module';
+import { AmlModule } from 'src/onboarding/application/aml.module';
 import { DocumentsInfrastructureModule } from 'src/documents/infrastructure/documents-infrastructure.module';
 import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructure.module';
 import { SubscriptionInfrastructureModule } from 'src/subscription/infrastructure/subscription-infrastructure.module';

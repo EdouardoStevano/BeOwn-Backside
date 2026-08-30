@@ -1,8 +1,8 @@
 import { GetMyAccountUseCase } from './get-my-account.usecase';
 import { UtilisateurIntrouvableError } from 'src/iam/domain/errors';
-import { NatureProfilInvestisseur } from 'src/compliance/domain/value-objects/profil-investisseur.vo';
-import { CategoriePsfp } from 'src/compliance/domain/enums/categorie-psfp.enum';
-import { EtapeQuestionnaire } from 'src/compliance/domain/enums/etape-questionnaire.enum';
+import { NatureProfilInvestisseur } from 'src/onboarding/domain/value-objects/profil-investisseur.vo';
+import { CategoriePsfp } from 'src/adequacy/domain/enums/categorie-psfp.enum';
+import { EtapeQuestionnaire } from 'src/adequacy/domain/enums/etape-questionnaire.enum';
 
 const UTILISATEUR = 42;
 

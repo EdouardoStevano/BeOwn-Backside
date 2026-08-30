@@ -6,7 +6,7 @@ import {
 } from 'src/iam/domain/errors';
 import { buildUser } from 'src/iam/domain/aggregates/user.fixture';
 import type { UserRepository } from 'src/iam/domain/repositories/user.repository';
-import type { DossierKycQuery } from 'src/compliance/application/ports/dossier-kyc.query';
+import type { DossierKycQuery } from 'src/onboarding/application/ports/dossier-kyc.query';
 import type { WalletRepository } from 'src/treasury/domain/repositories/wallet.repository';
 
 const CIBLE = 7;

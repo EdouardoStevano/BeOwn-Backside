@@ -19,7 +19,7 @@ import { NotificationsModule } from 'src/notifications/notifications.module';
 import { CloudStorageModule } from 'src/shared/cloud-storage/cloud-storage.module';
 import { YouSignModule } from 'src/documents/infrastructure/external-services/yousign.module';
 import { ContractGeneratorService } from 'src/subscription/application/services/contract-generator.service';
-import { KycModule } from 'src/compliance/application/kyc.module';
+import { KycModule } from 'src/onboarding/application/kyc.module';
 import { ProjectEntity } from 'src/catalog/infrastructure/persistence/entities/project.entity';
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 import { InvestmentEntity } from 'src/subscription/infrastructure/persistence/entities/investment.entity';

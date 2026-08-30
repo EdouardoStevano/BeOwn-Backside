@@ -27,11 +27,11 @@ import { EcheanceStatus } from 'src/servicing/domain/enums/echeance.enum';
 import { EcheanceEntity } from 'src/servicing/infrastructure/persistence/entities/echeance.entity';
 import { ReservationEntity } from 'src/reservation/infrastructure/persistence/entities/reservation.entity';
 import { ReservationStatus } from 'src/reservation/domain/enums/reservation-status.enum';
-import { ProfilPPEntity } from 'src/compliance/infrastructure/persistence/entities/profil-pp.entity';
-import { ProfilPMEntity } from 'src/compliance/infrastructure/persistence/entities/profil-pm.entity';
-import { KycEntity } from 'src/compliance/infrastructure/persistence/entities/kyc.entity';
-import { KycStatus, KycNiveau } from 'src/compliance/domain/enums/kyc-status.enum';
-import { CategoriePsfp } from 'src/compliance/domain/enums/categorie-psfp.enum';
+import { ProfilPPEntity } from 'src/onboarding/infrastructure/persistence/entities/profil-pp.entity';
+import { ProfilPMEntity } from 'src/onboarding/infrastructure/persistence/entities/profil-pm.entity';
+import { KycEntity } from 'src/onboarding/infrastructure/persistence/entities/kyc.entity';
+import { KycStatus, KycNiveau } from 'src/onboarding/domain/enums/kyc-status.enum';
+import { CategoriePsfp } from 'src/adequacy/domain/enums/categorie-psfp.enum';
 import {
   NotificationEntity,
   NotificationCanal,

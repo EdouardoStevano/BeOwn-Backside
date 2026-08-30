@@ -13,7 +13,7 @@ import { EmailTemplateEntity } from 'src/shared/email/entities/email-template.en
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 import { ProjectEntity } from 'src/catalog/infrastructure/persistence/entities/project.entity';
 import { InvestmentEntity } from 'src/subscription/infrastructure/persistence/entities/investment.entity';
-import { KycEntity } from 'src/compliance/infrastructure/persistence/entities/kyc.entity';
+import { KycEntity } from 'src/onboarding/infrastructure/persistence/entities/kyc.entity';
 import { OrdreMarcheEntity } from 'src/secondary-market/infrastructure/persistence/entities/ordre-marche.entity';
 import { WalletEntity } from 'src/treasury/infrastructure/persistence/entities/wallet.entity';
 import { TransactionEntity } from 'src/treasury/infrastructure/persistence/entities/transaction.entity';
@@ -24,7 +24,8 @@ import { NotificationsModule } from 'src/notifications/notifications.module';
 import { SubscriptionModule } from 'src/subscription/subscription.module';
 import { ServicingModule } from 'src/servicing/servicing.module';
 import { RegulatoryReportingModule } from 'src/regulatory-reporting/regulatory-reporting.module';
-import { ProfilesModule } from 'src/compliance/application/profiles.module';
+import { ProfilesModule } from 'src/onboarding/application/profiles.module';
+import { AdequacyModule } from 'src/adequacy/adequacy.module';
 import { UsersModule } from 'src/iam/application/users.module';
 
 @Module({
@@ -51,6 +52,10 @@ import { UsersModule } from 'src/iam/application/users.module';
     // déclenche appartient à `regulatory-reporting`.
     RegulatoryReportingModule,
     ProfilesModule,
+    // `RiskScoringService` — la liste des contacts périodiques dus, que
+    // `AdminInvestorsController` exporte. Elle a suivi le questionnaire dont
+    // elle découle lors de la scission de la conformité.
+    AdequacyModule,
     UsersModule,
   ],
   controllers: [

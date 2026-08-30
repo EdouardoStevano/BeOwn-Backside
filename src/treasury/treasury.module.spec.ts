@@ -2,11 +2,11 @@ import { Test } from '@nestjs/testing';
 import { CqrsModule } from '@nestjs/cqrs';
 import { ConfigService } from '@nestjs/config';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { HandleIdentityWebhookUseCase } from 'src/compliance/application/usecases/kyc/handle-identity-webhook.usecase';
+import { HandleIdentityWebhookUseCase } from 'src/onboarding/application/usecases/kyc/handle-identity-webhook.usecase';
 import { NotificationService } from 'src/notifications/applications/notification.service';
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 import { TokenService } from 'src/iam/application/services/token/token.service';
-import { INVESTOR_COMPLIANCE_PROFILE_REPOSITORY } from 'src/compliance/domain/repositories/investor-compliance-profile.repository';
+import { DOSSIER_ENTREE_EN_RELATION_REPOSITORY } from 'src/onboarding/domain/repositories/dossier-d-entree-en-relation.repository';
 import { PaymentController } from './presentation/http/payment.controller';
 import { WalletController } from './presentation/http/wallet.controller';
 import { OuvrirUnDepotUseCase } from './application/usecases/ouvrir-un-depot.usecase';
@@ -64,8 +64,6 @@ describe('TreasuryModule — câblage', () => {
         ConsulterUnPortefeuilleUseCase,
         ConsulterLePortefeuilleDunTitulaireUseCase,
         ListerLesMouvementsDunPortefeuilleUseCase,
-        ConsulterLePortefeuilleDunTitulaireUseCase,
-        ListerLesMouvementsDunPortefeuilleUseCase,
         OuvrirUnPortefeuilleDePlateformeUseCase,
         ConsignerUnMouvementManuelUseCase,
         OuvrirUnDepotUseCase,
@@ -76,7 +74,6 @@ describe('TreasuryModule — câblage', () => {
         SortieDeFondsService,
         AcheminementDuRetraitService,
         RetraitEventHandler,
-        DepotEventHandler,
         DepotEventHandler,
         DemanderUnRetraitUseCase,
         RendreLeSoldeUseCase,
@@ -95,7 +92,7 @@ describe('TreasuryModule — câblage', () => {
         // Les gardes montées par les contrôleurs sont résolues à la compilation
         // du module : leurs dépendances viennent d'IAM et de la conformité.
         { provide: TokenService, useValue: {} },
-        { provide: INVESTOR_COMPLIANCE_PROFILE_REPOSITORY, useValue: {} },
+        { provide: DOSSIER_ENTREE_EN_RELATION_REPOSITORY, useValue: {} },
         {
           provide: ConfigService,
           useValue: { get: jest.fn(), getOrThrow: jest.fn(() => 'sk_test_x') },

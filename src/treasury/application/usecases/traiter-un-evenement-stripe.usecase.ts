@@ -1,6 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { EventBus } from '@nestjs/cqrs';
-import { HandleIdentityWebhookUseCase } from 'src/compliance/application/usecases/kyc/handle-identity-webhook.usecase';
+import { HandleIdentityWebhookUseCase } from 'src/onboarding/application/usecases/kyc/handle-identity-webhook.usecase';
 import {
   TRANSACTION_REPOSITORY,
   type TransactionRepository,

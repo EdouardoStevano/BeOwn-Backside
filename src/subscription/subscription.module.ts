@@ -7,7 +7,7 @@ import { CatalogInfrastructureModule } from 'src/catalog/infrastructure/catalog-
 import { TreasuryInfrastructureModule } from 'src/treasury/infrastructure/treasury-infrastructure.module';
 import { DocumentsInfrastructureModule } from 'src/documents/infrastructure/documents-infrastructure.module';
 import { UsersInfrastructureModule } from 'src/iam/infrastructure/users-infrastructure.module';
-import { ComplianceInfrastructureModule } from 'src/compliance/infrastructure/compliance-infrastructure.module';
+import { ComplianceInfrastructureModule } from 'src/onboarding/infrastructure/compliance-infrastructure.module';
 import { CloudStorageModule } from 'src/shared/cloud-storage/cloud-storage.module';
 import { YouSignModule } from 'src/documents/infrastructure/external-services/yousign.module';
 import { CreateInvestmentUseCase } from './application/usecases/create-investment.usecase';
@@ -26,7 +26,7 @@ import { SignatureEntity } from 'src/documents/infrastructure/persistence/entiti
 import { WalletEntity } from 'src/treasury/infrastructure/persistence/entities/wallet.entity';
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 import { UserEmailEntity } from 'src/iam/infrastructure/persistence/entities/user-email.entity';
-import { KycModule } from 'src/compliance/application/kyc.module';
+import { KycModule } from 'src/onboarding/application/kyc.module';
 import { EcheanceEntity } from 'src/servicing/infrastructure/persistence/entities/echeance.entity';
 import { CollecteCloseCronService } from './application/services/collecte-close-cron.service';
 import { RefundCollecteService } from './application/services/refund-collecte.service';

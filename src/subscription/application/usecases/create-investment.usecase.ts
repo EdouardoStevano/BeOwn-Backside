@@ -17,7 +17,7 @@ import { USER_REPOSITORY } from 'src/iam/domain/repositories/user.repository';
 import {
   PROFIL_CONFORMITE_QUERY,
   type ProfilConformiteQuery,
-} from 'src/compliance/application/ports/profil-conformite.query';
+} from 'src/onboarding/application/ports/profil-conformite.query';
 import { CollecteCapacity } from 'src/subscription/domain/aggregates/collecte-capacity';
 import { Investment } from 'src/subscription/domain/aggregates/investment';
 import { EcheancierGenerator } from 'src/servicing/domain/domain-services/echeancier.domain-service';

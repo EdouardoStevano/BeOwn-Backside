@@ -11,7 +11,7 @@ import {
 import {
   DOSSIER_KYC_QUERY,
   type DossierKycQuery,
-} from 'src/compliance/application/ports/dossier-kyc.query';
+} from 'src/onboarding/application/ports/dossier-kyc.query';
 import { WalletType } from 'src/treasury/domain/enums/wallet.enum';
 import {
   WALLET_REPOSITORY,
