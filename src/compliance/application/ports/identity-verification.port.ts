@@ -5,6 +5,16 @@ export interface VerificationSessionResult {
   sessionId: string;
   url: string;
   status: string;
+  /**
+   * Pourquoi le fournisseur n'a pas conclu — `undefined` quand il a conclu, ou
+   * quand il n'en dit rien.
+   *
+   * Il ne transitait jusqu'ici que par les **événements** : la lecture directe
+   * d'une session rendait son statut sans jamais dire ce qui l'avait bloquée.
+   * C'est pourtant la seule information dont le titulaire a besoin quand on
+   * relit son dossier sans attendre le webhook.
+   */
+  motifEchec?: string;
 }
 
 /** Où consulter les pièces déposées, quand elles sont consultables. */

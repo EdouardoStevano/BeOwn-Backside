@@ -1,6 +1,6 @@
 import { WalletStatut, WalletType } from '../enums/wallet.enum';
+import { Money } from '../value-objects/money.vo';
 import {
-  DeviseIncoherenteError,
   MontantDeMouvementInvalideError,
   SoldeInsuffisantError,
   WalletGeleError,
@@ -64,24 +64,30 @@ export type WalletNaissant = Omit<WalletSnapshot, 'id' | 'createdAt'>;
  * > peut déjà s'appuyer dessus.
  */
 export class Wallet {
-  private _solde: number;
+  private _solde: Money;
   private _statut: WalletStatut;
-  private readonly _entete: Omit<WalletSnapshot, 'solde' | 'statut'>;
+  private readonly _entete: Omit<WalletSnapshot, 'solde' | 'devise' | 'statut'>;
 
   /** @internal Réservé à `WalletFactory` et `WalletOrmMapper`. */
   constructor(etat: WalletSnapshot) {
-    const { solde, statut, ...entete } = etat;
-    this._solde = solde;
+    const { solde, devise, statut, ...entete } = etat;
+    this._solde = Money.restore(solde, devise);
     this._statut = statut;
     this._entete = entete;
   }
 
   // ── Mouvements ────────────────────────────────────────────────────────────
 
-  /** Alimente le portefeuille — dépôt, remboursement, coupon perçu. */
-  crediter(montant: number, devise?: string): void {
-    this.eprouverMouvement(montant, devise);
-    this._solde += montant;
+  /**
+   * Alimente le portefeuille — dépôt, remboursement, coupon perçu.
+   *
+   * Le montant est une **somme**, pas un nombre : la devise voyage avec lui, et
+   * n'est donc plus un paramètre facultatif qu'un appelant pouvait omettre pour
+   * se dispenser du contrôle.
+   */
+  crediter(montant: Money): void {
+    this.eprouverMouvement(montant);
+    this._solde = this._solde.plus(montant);
   }
 
   /**
@@ -89,19 +95,19 @@ export class Wallet {
    * ne couvre pas le montant : c'est ici, et pas dans un `WHERE`, que la règle
    * « un solde ne passe jamais sous zéro » est écrite.
    */
-  debiter(montant: number, devise?: string): void {
-    this.eprouverMouvement(montant, devise);
+  debiter(montant: Money): void {
+    this.eprouverMouvement(montant);
     if (!this.couvre(montant)) {
-      throw new SoldeInsuffisantError(this._solde, montant);
+      throw new SoldeInsuffisantError(this._solde.montant, montant.montant);
     }
-    this._solde -= montant;
+    this._solde = this._solde.moins(montant);
   }
 
   // ── Interrogations ────────────────────────────────────────────────────────
 
   /** Le solde suffit-il à ce débit ? Sans rien modifier. */
-  couvre(montant: number): boolean {
-    return this._solde >= montant;
+  couvre(montant: Money): boolean {
+    return this._solde.couvre(montant);
   }
 
   /** Le portefeuille accepte-t-il des mouvements ? */
@@ -139,10 +145,15 @@ export class Wallet {
   }
 
   get devise(): string {
-    return this._entete.devise;
+    return this._solde.devise;
   }
 
   get solde(): number {
+    return this._solde.montant;
+  }
+
+  /** Le solde comme somme — ce que les mouvements manipulent. */
+  get avoir(): Money {
     return this._solde;
   }
 
@@ -154,27 +165,57 @@ export class Wallet {
     return this._entete.createdAt;
   }
 
-  /** L'état complet, pour la persistance et la présentation. */
+  /**
+   * L'état complet, pour la persistance et la présentation — **des primitives**.
+   *
+   * `Money` ne franchit pas cette frontière : `solde` et `devise` en ressortent
+   * à plat, exactement comme la table les range et comme les routes
+   * `/wallets/*` les publient déjà. C'est la condition pour que le VO reste
+   * confiné au contexte (voir {@link Money}).
+   */
   snapshot(): WalletSnapshot {
     return {
       ...this._entete,
-      solde: this._solde,
+      ...this.soldeAPlat(),
       statut: this._statut,
     };
   }
 
+  /**
+   * Point d'accroche de `JSON.stringify`, donc de `res.json()`.
+   *
+   * Il manquait, et cela se voyait : `GET /users/me` publie le portefeuille tel
+   * que le port le rend, sans appeler `snapshot()`. Sans cette méthode,
+   * l'agrégat ressortait avec ses clés privées — `_solde`, `_statut`,
+   * `_entete` — au lieu de son JSON public. Même raison et même remède que
+   * `ProfilPP`, `User` et `KycCase`, qui la portent tous.
+   */
+  toJSON(): WalletSnapshot {
+    return this.snapshot();
+  }
+
   // ── Règles internes ───────────────────────────────────────────────────────
 
-  /** Les trois portes que tout mouvement franchit, crédit comme débit. */
-  private eprouverMouvement(montant: number, devise?: string): void {
+  /** Le solde tel que la table le range : le nombre d'un côté, sa devise de l'autre. */
+  private soldeAPlat(): Pick<WalletSnapshot, 'solde' | 'devise'> {
+    return { solde: this._solde.montant, devise: this._solde.devise };
+  }
+
+  /**
+   * Les trois portes que tout mouvement franchit, crédit comme débit.
+   *
+   * La cohérence des devises n'y figure plus : elle est désormais portée par
+   * `Money.plus` / `Money.moins`, qui ne savent pas additionner deux devises
+   * différentes. Elle était ici sous condition — `if (devise !== undefined)` —
+   * c'est-à-dire qu'un appelant s'en dispensait en n'en passant aucune, ce que
+   * faisaient tous les appelants du contexte.
+   */
+  private eprouverMouvement(montant: Money): void {
     if (!this.estActif) {
       throw new WalletGeleError(this._statut);
     }
-    if (!Number.isFinite(montant) || montant <= 0) {
-      throw new MontantDeMouvementInvalideError(montant);
-    }
-    if (devise !== undefined && devise !== this._entete.devise) {
-      throw new DeviseIncoherenteError(this._entete.devise, devise);
+    if (!montant.estPositif()) {
+      throw new MontantDeMouvementInvalideError(montant.montant);
     }
   }
 }

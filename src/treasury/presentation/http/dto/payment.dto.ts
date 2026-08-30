@@ -1,5 +1,13 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsIn, IsInt, IsNotEmpty, IsOptional, IsPositive, IsString, Min } from 'class-validator';
+import {
+  IsIn,
+  IsInt,
+  IsNotEmpty,
+  IsOptional,
+  IsPositive,
+  IsString,
+  Min,
+} from 'class-validator';
 
 export class CreatePaymentIntentDto {
   @ApiProperty({ example: 500, description: 'Montant en EUR' })
@@ -11,12 +19,18 @@ export class CreatePaymentIntentDto {
   @IsNotEmpty()
   currency: string;
 
-  @ApiPropertyOptional({ example: 'souscription', description: 'Type operation' })
+  @ApiPropertyOptional({
+    example: 'souscription',
+    description: 'Type operation',
+  })
   @IsOptional()
   @IsString()
   operationType?: string;
 
-  @ApiPropertyOptional({ example: 'uuid-projet', description: 'ID du projet concerné' })
+  @ApiPropertyOptional({
+    example: 'uuid-projet',
+    description: 'ID du projet concerné',
+  })
   @IsOptional()
   @IsString()
   projetId?: string;
@@ -35,7 +49,10 @@ export class CreateRetraitDto {
   @Min(10, { message: 'Le montant minimum de retrait est de 10 €.' })
   amount: number;
 
-  @ApiProperty({ example: 'EUR', description: "Code devise ISO 4217 (seul l'EUR est accepté)" })
+  @ApiProperty({
+    example: 'EUR',
+    description: "Code devise ISO 4217 (seul l'EUR est accepté)",
+  })
   @IsString()
   @IsIn(['EUR'], { message: 'Seule la devise EUR est acceptée.' })
   currency: string;
@@ -72,7 +89,7 @@ export class CreateRetraitDto {
 export class ConnectOnboardingDto {
   @ApiPropertyOptional({
     description:
-      "URL de retour après onboarding Stripe (défaut: FRONTEND_URL/dashboard/wallet?connect=done).",
+      'URL de retour après onboarding Stripe (défaut: FRONTEND_URL/dashboard/wallet?connect=done).',
   })
   @IsOptional()
   @IsString()

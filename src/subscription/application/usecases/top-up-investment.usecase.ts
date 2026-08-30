@@ -25,7 +25,7 @@ import {
   SoldeInsuffisantError,
   WalletIntrouvableError,
 } from 'src/subscription/domain/errors/subscription.errors';
-import { Transaction } from 'src/treasury/domain/aggregates/transaction';
+import type { TransactionNaissante } from 'src/treasury/domain/aggregates/transaction';
 import {
   TransactionFournisseur,
   TransactionStatus,
@@ -163,7 +163,7 @@ export class TopUpInvestmentUseCase {
       // 7. Écriture de la transaction ledger.
       await manager.save(
         TransactionEntity,
-        WalletOrmMapper.txToEntity(
+        WalletOrmMapper.txNaissanteToEntity(
           this.tracerComplement(investment, wallet, userId, delta),
         ),
       );
@@ -237,31 +237,40 @@ export class TopUpInvestmentUseCase {
     return Number(raw?.total ?? 0);
   }
 
+  /**
+   * La trace comptable du complément au registre de la trésorerie.
+   *
+   * Rend une `TransactionNaissante` depuis que `Transaction` est un agrégat aux
+   * champs privés ; `walletId` accompagne désormais `walletSource`, la table
+   * portant deux colonnes pour ce même rattachement.
+   */
   private tracerComplement(
     investment: Investment,
     wallet: { id: string; devise: string },
     userId: number,
     montantDelta: number,
-  ): Transaction {
-    const tx = new Transaction();
-    tx.walletSource = wallet.id;
-    tx.walletDestination = null;
-    tx.type = TransactionType.SOUSCRIPTION;
-    tx.montant = montantDelta;
-    tx.devise = wallet.devise;
-    tx.statut = TransactionStatus.REUSSI;
-    tx.fournisseur = TransactionFournisseur.INTERNE;
-    tx.referenceExterne = null;
-    tx.investissementId = investment.id;
-    tx.echeanceId = null;
-    tx.reservationId = null;
-    tx.projetId = investment.projetId;
-    tx.idempotencyKey = `topup:${userId}:${investment.id}:${Date.now()}`;
-    tx.fraisPsp = 0;
-    tx.fraisPlateforme = 0;
-    tx.metadata = null;
-    tx.motifEchec = null;
-    return tx;
+  ): TransactionNaissante {
+    return {
+      walletSource: wallet.id,
+      walletId: wallet.id,
+      walletDestination: null,
+      type: TransactionType.SOUSCRIPTION,
+      montant: montantDelta,
+      devise: wallet.devise,
+      statut: TransactionStatus.REUSSI,
+      fournisseur: TransactionFournisseur.INTERNE,
+      fournisseurRef: null,
+      referenceExterne: null,
+      investissementId: investment.id,
+      echeanceId: null,
+      reservationId: null,
+      projetId: investment.projetId,
+      idempotencyKey: `topup:${userId}:${investment.id}:${Date.now()}`,
+      fraisPsp: 0,
+      fraisPlateforme: 0,
+      metadata: null,
+      motifEchec: null,
+    };
   }
 
   /**

@@ -79,6 +79,25 @@ export class MontantDeMouvementInvalideError extends TreasuryError {
 }
 
 /**
+ * Une somme qui n'en est pas une : un `NaN`, un infini, ou un nombre négatif.
+ *
+ * Distincte de {@link MontantDeMouvementInvalideError}, qui refuse le **zéro**
+ * parce qu'un mouvement nul n'est pas un mouvement. Ici c'est la somme
+ * elle-même qui est inexprimable, et zéro l'est parfaitement — c'est le solde
+ * d'un portefeuille qui vient d'être ouvert.
+ */
+export class MontantInvalideError extends TreasuryError {
+  readonly kind = TreasuryErrorKind.INVALID_INPUT;
+
+  constructor(montant: number) {
+    super(
+      'Un montant doit être un nombre fini et positif : ce contexte ne connaît pas de solde débiteur.',
+      { code: 'INVALID_AMOUNT', details: { montant } },
+    );
+  }
+}
+
+/**
  * Un mouvement dans une devise étrangère au portefeuille — la conversion n'est
  * pas du ressort de ce contexte, et mélanger deux devises sur un même solde le
  * rendrait faux.
@@ -94,6 +113,80 @@ export class DeviseIncoherenteError extends TreasuryError {
         details: { deviseWallet, deviseMouvement },
       },
     );
+  }
+}
+
+/**
+ * Le paiement qu'on demande à créditer appartient à quelqu'un d'autre.
+ *
+ * L'invariant est celui de l'audit H-1 : le `PaymentIntent` porte le compte
+ * qui l'a ouvert, et lui seul peut en récolter le crédit. Sans cette règle,
+ * connaître un identifiant `pi_xxx` — qui transite par le navigateur du
+ * payeur — suffirait à s'en attribuer le montant.
+ *
+ * Elle vivait dans le contrôleur, en `ForbiddenException` levée à la main
+ * (§14, §21). Le statut HTTP rendu est le même : `TreasuryErrorFilter` traduit
+ * `FORBIDDEN` en 403, avec en plus le `code` que le front peut lire.
+ */
+export class PaiementEtrangerAuCompteError extends TreasuryError {
+  readonly kind = TreasuryErrorKind.FORBIDDEN;
+
+  constructor(details?: Record<string, unknown>) {
+    super("Ce paiement n'appartient pas à votre compte.", {
+      code: 'PAYMENT_NOT_OWNED',
+      details,
+    });
+  }
+}
+
+/** Le mouvement de retrait visé n'existe pas, ou n'est pas un retrait. */
+export class RetraitIntrouvableError extends TreasuryError {
+  readonly kind = TreasuryErrorKind.NOT_FOUND;
+
+  constructor(transactionId?: string) {
+    super('Retrait introuvable.', {
+      code: 'WITHDRAWAL_NOT_FOUND',
+      details: transactionId !== undefined ? { transactionId } : undefined,
+    });
+  }
+}
+
+/**
+ * Retirer suppose un compte de retrait en état de recevoir les fonds.
+ *
+ * Ce n'est pas un échec technique : tant que l'investisseur n'a pas terminé
+ * l'onboarding de son compte connecté — ou fourni un IBAN pour le parcours
+ * manuel de secours — il n'y a nulle part où verser. Le message dit le geste
+ * qui débloque, plutôt que de constater l'impossibilité.
+ */
+export class CompteDeRetraitNonPretError extends TreasuryError {
+  readonly kind = TreasuryErrorKind.CONFLICT;
+
+  constructor() {
+    super(
+      'Connectez votre compte de retrait Stripe pour effectuer un retrait.',
+      { code: 'CONNECT_NOT_READY' },
+    );
+  }
+}
+
+/**
+ * L'événement reçu ne porte pas la signature attendue.
+ *
+ * Le seul cas où ce contexte refuse quelque chose au **transport** plutôt qu'à
+ * un titulaire : l'endpoint webhook est public, et sa signature HMAC est la
+ * seule preuve que l'événement vient bien de Stripe. Elle est éprouvée avant
+ * toute lecture du corps — un événement non signé ne doit atteindre ni la
+ * trésorerie ni le contexte de conformité, avec qui l'endpoint est partagé.
+ */
+export class SignatureWebhookInvalideError extends TreasuryError {
+  readonly kind = TreasuryErrorKind.INVALID_INPUT;
+
+  constructor(raison: string, cause?: unknown) {
+    super(`Webhook signature invalide: ${raison}`, {
+      code: 'INVALID_WEBHOOK_SIGNATURE',
+      cause,
+    });
   }
 }
 

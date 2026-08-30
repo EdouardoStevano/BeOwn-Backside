@@ -1,4 +1,5 @@
 import { HandleIdentityWebhookUseCase } from './handle-identity-webhook.usecase';
+import { AppliquerUnVerdictUseCase } from './appliquer-un-verdict.usecase';
 import { AnnoncesKycService } from 'src/compliance/application/services/annonces-kyc.service';
 import { ArchivageRapportKycService } from 'src/compliance/application/services/archivage-rapport-kyc.service';
 import {
@@ -69,6 +70,9 @@ const kycCase = (etat: {
 
 describe('HandleIdentityWebhookUseCase — webhook Stripe Identity (KYC auto + fallback revue manuelle)', () => {
   let usecase: HandleIdentityWebhookUseCase;
+  // Le journal a suivi les transitions : c'est `AppliquerUnVerdictUseCase`
+  // qui écarte un verdict tardif, donc lui qui le consigne.
+  let appliquer: AppliquerUnVerdictUseCase;
   let identityService: any;
   let updateKycStatus: any;
   let notificationService: any;
@@ -101,12 +105,18 @@ describe('HandleIdentityWebhookUseCase — webhook Stripe Identity (KYC auto + f
     // eux qui portent le detail que les tests eprouvent — le type de
     // notification, les roles alertes, le contenu du journal d'audit. Les
     // mocker reviendrait a verifier qu'on les appelle, pas ce qu'ils font.
-    usecase = new HandleIdentityWebhookUseCase(
+    // `AppliquerUnVerdictUseCase` est monté pour de vrai lui aussi : c'est lui
+    // qui porte désormais les transitions du dossier, et le webhook n'en est
+    // qu'une des deux sources. Le mocker reviendrait à ne plus éprouver que la
+    // traduction de l'événement, alors que ce que ces tests protègent est la
+    // machine à états.
+    appliquer = new AppliquerUnVerdictUseCase(
       updateKycStatus,
       kycRepository,
       new AnnoncesKycService(notificationService, auditLog),
       new ArchivageRapportKycService(kycRepository, identityService),
     );
+    usecase = new HandleIdentityWebhookUseCase(appliquer);
   });
   describe('identity.verification_session.verified', () => {
     it('valide automatiquement le KYC (VALIDE) sans intervention admin', async () => {
@@ -219,7 +229,7 @@ describe('HandleIdentityWebhookUseCase — webhook Stripe Identity (KYC auto + f
         }),
       );
       const warnSpy = jest
-        .spyOn((usecase as any).logger, 'warn')
+        .spyOn((appliquer as any).logger, 'warn')
         .mockImplementation(() => {});
 
       await usecase.handle(event);
@@ -402,7 +412,7 @@ describe('HandleIdentityWebhookUseCase — webhook Stripe Identity (KYC auto + f
         }),
       );
       const warnSpy = jest
-        .spyOn((usecase as any).logger, 'warn')
+        .spyOn((appliquer as any).logger, 'warn')
         .mockImplementation(() => {});
 
       await usecase.handle(event);
@@ -530,7 +540,7 @@ describe('HandleIdentityWebhookUseCase — webhook Stripe Identity (KYC auto + f
         }),
       );
       const warnSpy = jest
-        .spyOn((usecase as any).logger, 'warn')
+        .spyOn((appliquer as any).logger, 'warn')
         .mockImplementation(() => {});
 
       await usecase.handle(event);

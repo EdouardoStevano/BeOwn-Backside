@@ -1,4 +1,15 @@
 import { Injectable, Logger } from '@nestjs/common';
+/* eslint-disable @typescript-eslint/no-unsafe-member-access,
+                  @typescript-eslint/no-unsafe-assignment,
+                  @typescript-eslint/no-unsafe-call,
+                  @typescript-eslint/no-unsafe-return --
+   Le client Stripe est typé `any` : c'est le propre d'une Anti-Corruption
+   Layer que d'absorber un modèle externe non maîtrisé (§20). Les `any`
+   s'arrêtent à ce fichier — tout ce qui en sort est typé par
+   `IdentityVerificationPort`. Ce qui protège réellement la traduction, c'est
+   `stripe-identity.adapter.spec.ts`, qui épingle la forme observée des
+   réponses : c'est l'absence d'un tel test, et non l'absence de types, qui a
+   laissé `document.files` être lu comme un objet pendant si longtemps. */
 import { ConfigService } from '@nestjs/config';
 import Stripe from 'stripe';
 import { CloudStorageService } from 'src/shared/cloud-storage/cloud-storage.service';
@@ -66,6 +77,9 @@ export class StripeIdentityAdapter implements IdentityVerificationPort {
       sessionId: session.id,
       url: session.url ?? '',
       status: session.status,
+      // Même repli que pour les événements : la raison si elle existe, le code
+      // technique sinon — il renseigne mieux le RCCI qu'un silence.
+      motifEchec: session.last_error?.reason ?? session.last_error?.code,
     };
   }
 
@@ -125,6 +139,22 @@ export class StripeIdentityAdapter implements IdentityVerificationPort {
       const doc = report.document;
       const selfie = report.selfie;
 
+      // `document.files` est un **tableau** d'identifiants, ordonné recto puis
+      // verso — pas un objet `{ front, back }`. La lecture précédente
+      // (`doc.files.front`) rendait donc toujours `undefined`, et avec elle
+      // les trois pièces du dossier : les images n'ont jamais pu s'afficher,
+      // indépendamment du webhook. Un passeport n'a qu'une entrée.
+      const fichiers = (Array.isArray(doc?.files) ? doc.files : []) as string[];
+
+      // Idem pour le selfie : `selfie.selfie` **est** l'identifiant, non un
+      // objet qui en contiendrait un. `selfie.document` désigne la pièce à
+      // laquelle le visage a été comparé — c'est déjà `fichiers[0]`, et la
+      // rendre ici ferait passer une photo de document pour un portrait.
+      const sonSelfie: string | undefined =
+        typeof selfie?.selfie === 'string'
+          ? (selfie.selfie as string)
+          : undefined;
+
       return {
         reportId: report.id,
         nom: doc?.name?.last_name ?? undefined,
@@ -138,10 +168,9 @@ export class StripeIdentityAdapter implements IdentityVerificationPort {
         dateExpiration: doc?.expiration_date
           ? `${doc.expiration_date.year}-${String(doc.expiration_date.month).padStart(2, '0')}-${String(doc.expiration_date.day).padStart(2, '0')}`
           : undefined,
-        documentFrontFileId: doc?.files?.front ?? undefined,
-        documentBackFileId: doc?.files?.back ?? undefined,
-        selfieFileId:
-          selfie?.document?.file ?? selfie?.selfie?.file ?? undefined,
+        documentFrontFileId: fichiers[0],
+        documentBackFileId: fichiers[1],
+        selfieFileId: sonSelfie,
       };
     } catch (err) {
       this.logger.warn(`extractReportData failed: ${err?.message}`);

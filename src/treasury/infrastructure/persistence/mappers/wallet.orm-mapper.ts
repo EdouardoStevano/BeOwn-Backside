@@ -2,7 +2,10 @@ import {
   Wallet,
   type WalletNaissant,
 } from 'src/treasury/domain/aggregates/wallet';
-import { Transaction } from 'src/treasury/domain/aggregates/transaction';
+import {
+  Transaction,
+  type TransactionNaissante,
+} from 'src/treasury/domain/aggregates/transaction';
 import { WalletStatut } from 'src/treasury/domain/enums/wallet.enum';
 import { WalletEntity } from '../entities/wallet.entity';
 import { TransactionEntity } from '../entities/transaction.entity';
@@ -55,50 +58,71 @@ export class WalletOrmMapper {
   }
 
   static txToDomain(this: void, entity: TransactionEntity): Transaction {
-    const d = new Transaction();
-    d.id = entity.id;
-    d.walletSource = entity.walletSource;
-    d.walletDestination = entity.walletDestination;
-    d.montant = Number(entity.montant);
-    d.devise = entity.devise;
-    d.type = entity.type;
-    d.referenceExterne = entity.referenceExterne;
-    d.fournisseur = entity.fournisseur;
-    d.statut = entity.statut;
-    d.investissementId = entity.investissementId;
-    d.echeanceId = entity.echeanceId;
-    d.reservationId = entity.reservationId;
-    d.projetId = entity.projetId;
-    d.idempotencyKey = entity.idempotencyKey;
-    d.fraisPsp = Number(entity.fraisPsp);
-    d.fraisPlateforme = Number(entity.fraisPlateforme);
-    d.metadata = entity.metadata;
-    d.motifEchec = entity.motifEchec;
-    d.createdAt = entity.createdAt;
-    d.updatedAt = entity.updatedAt;
-    return d;
+    return new Transaction({
+      id: entity.id,
+      walletSource: entity.walletSource,
+      walletId: entity.walletId,
+      walletDestination: entity.walletDestination,
+      montant: Number(entity.montant),
+      devise: entity.devise,
+      type: entity.type,
+      referenceExterne: entity.referenceExterne,
+      fournisseur: entity.fournisseur,
+      fournisseurRef: entity.fournisseurRef,
+      statut: entity.statut,
+      investissementId: entity.investissementId,
+      echeanceId: entity.echeanceId,
+      reservationId: entity.reservationId,
+      projetId: entity.projetId,
+      idempotencyKey: entity.idempotencyKey,
+      fraisPsp: Number(entity.fraisPsp),
+      fraisPlateforme: Number(entity.fraisPlateforme),
+      metadata: entity.metadata,
+      motifEchec: entity.motifEchec,
+      createdAt: entity.createdAt,
+      updatedAt: entity.updatedAt,
+    });
   }
 
-  static txToEntity(domain: Transaction): TransactionEntity {
+  /**
+   * Une ligne prête à être insérée, pour un mouvement qui vient d'être décidé.
+   *
+   * `walletId` et `fournisseurRef` y figurent enfin. Le modèle anémique qu'ils
+   * remplacent ne les portait pas — les colonnes existaient, les parcours de
+   * paiement les remplissaient par des écritures directes, mais tout mouvement
+   * passé par ce mapper les perdait en route.
+   */
+  static txNaissanteToEntity(
+    naissante: TransactionNaissante,
+  ): TransactionEntity {
     const e = new TransactionEntity();
-    if (domain.id) e.id = domain.id;
-    e.walletSource = domain.walletSource;
-    e.walletDestination = domain.walletDestination;
-    e.montant = domain.montant;
-    e.devise = domain.devise;
-    e.type = domain.type;
-    e.referenceExterne = domain.referenceExterne;
-    e.fournisseur = domain.fournisseur;
-    e.statut = domain.statut;
-    e.investissementId = domain.investissementId;
-    e.echeanceId = domain.echeanceId;
-    e.reservationId = domain.reservationId;
-    e.projetId = domain.projetId;
-    e.idempotencyKey = domain.idempotencyKey;
-    e.fraisPsp = domain.fraisPsp;
-    e.fraisPlateforme = domain.fraisPlateforme;
-    e.metadata = domain.metadata;
-    e.motifEchec = domain.motifEchec;
+    e.walletSource = naissante.walletSource;
+    e.walletId = naissante.walletId;
+    e.walletDestination = naissante.walletDestination;
+    e.montant = naissante.montant;
+    e.devise = naissante.devise;
+    e.type = naissante.type;
+    e.referenceExterne = naissante.referenceExterne;
+    e.fournisseur = naissante.fournisseur;
+    e.fournisseurRef = naissante.fournisseurRef;
+    e.statut = naissante.statut;
+    e.investissementId = naissante.investissementId;
+    e.echeanceId = naissante.echeanceId;
+    e.reservationId = naissante.reservationId;
+    e.projetId = naissante.projetId;
+    e.idempotencyKey = naissante.idempotencyKey;
+    e.fraisPsp = naissante.fraisPsp;
+    e.fraisPlateforme = naissante.fraisPlateforme;
+    e.metadata = naissante.metadata;
+    e.motifEchec = naissante.motifEchec;
+    return e;
+  }
+
+  /** La ligne correspondant à un mouvement existant, identité comprise. */
+  static txToEntity(domain: Transaction): TransactionEntity {
+    const etat = domain.snapshot();
+    const e = WalletOrmMapper.txNaissanteToEntity(etat);
+    e.id = etat.id;
     return e;
   }
 }
@@ -110,4 +134,9 @@ export class WalletOrmMapper {
  * solde.
  */
 const statutDepuisLaBase = (statut: string): WalletStatut =>
-  statut === WalletStatut.ACTIF ? WalletStatut.ACTIF : WalletStatut.GELE;
+  // La comparaison passe par la valeur de l'enum, et non par l'enum lui-même :
+  // `statut` est un `string` venu d'une colonne libre, et confronter les deux
+  // directement laisse croire à un typage que la base ne garantit pas.
+  statut === String(WalletStatut.ACTIF)
+    ? WalletStatut.ACTIF
+    : WalletStatut.GELE;

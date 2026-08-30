@@ -46,6 +46,7 @@ import { RequestKycManualReviewUseCase } from 'src/compliance/application/usecas
 import { DecideKycManualReviewUseCase } from 'src/compliance/application/usecases/kyc/decide-kyc-manual-review.usecase';
 import { StartKycSessionUseCase } from 'src/compliance/application/usecases/kyc/start-kyc-session.usecase';
 import { ConsultKycSessionUseCase } from 'src/compliance/application/usecases/kyc/consult-kyc-session.usecase';
+import { SynchroniserLaVerificationUseCase } from 'src/compliance/application/usecases/kyc/synchroniser-la-verification.usecase';
 import { DeposerPieceIdentiteUseCase } from 'src/compliance/application/usecases/kyc/deposer-piece-identite.usecase';
 import type { FaceDeposee } from 'src/compliance/application/usecases/pieces/deposer-piece.usecase';
 import { TypePieceIdentite } from 'src/compliance/domain/enums/type-piece-identite.enum';
@@ -139,6 +140,7 @@ export class KycController {
     private readonly decideKycManualReview: DecideKycManualReviewUseCase,
     private readonly startKycSession: StartKycSessionUseCase,
     private readonly consultKycSession: ConsultKycSessionUseCase,
+    private readonly synchroniserLaVerification: SynchroniserLaVerificationUseCase,
     private readonly deposerPieceIdentite: DeposerPieceIdentiteUseCase,
     // Port du contexte IAM : le contrôleur relit le rôle du compte, il n'a pas
     // à connaître la table qui le porte (§12.9).
@@ -331,6 +333,43 @@ export class KycController {
     @CurrentUser() user: ActiveUser,
   ) {
     return this.consultKycSession.consulter(sessionId, this.demandeur(user));
+  }
+
+  @ApiOperation({
+    summary:
+      'Relire ma vérification chez le fournisseur et appliquer le verdict',
+    description:
+      "Va chercher l'état de la session chez Stripe Identity et l'applique au " +
+      'dossier, sans attendre le webhook. Utile quand la plateforme n’est pas ' +
+      'joignable depuis l’extérieur (poste de développement) ou après une ' +
+      'livraison d’événement échouée. Le verdict lu passe par les mêmes ' +
+      'transitions que celui d’un webhook : une décision manuelle déjà prise ' +
+      'par la conformité l’écarte.',
+  })
+  @ApiResponse({ status: 200, description: 'État lu et suite donnée' })
+  @HttpCode(HttpStatus.OK)
+  @Post('me/synchroniser')
+  synchroniserMaVerification(@CurrentUser() user: ActiveUser) {
+    return this.synchroniserLaVerification.execute(user.userId);
+  }
+
+  @ApiOperation({
+    summary: 'Relire la vérification d’un titulaire (admin)',
+    description:
+      'Même réconciliation, pour un dossier tiers — réservée aux équipes ' +
+      'conformité.',
+  })
+  @ApiParam({ name: 'userId', description: "ID numérique de l'utilisateur" })
+  @ApiResponse({ status: 200, description: 'État lu et suite donnée' })
+  @ApiResponse({ status: 403, description: 'Accès refusé' })
+  @HttpCode(HttpStatus.OK)
+  @Post(':userId/synchroniser')
+  async synchroniserLaVerificationDe(
+    @Param('userId', ParseIntPipe) userId: number,
+    @CurrentUser() currentUser: ActiveUser,
+  ) {
+    await this.assertKycReviewer(currentUser);
+    return this.synchroniserLaVerification.execute(userId);
   }
 
   @ApiOperation({ summary: 'Annuler une session KYC' })

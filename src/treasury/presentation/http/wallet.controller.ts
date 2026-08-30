@@ -2,7 +2,6 @@ import {
   Body,
   Controller,
   Get,
-  Inject,
   Param,
   ParseIntPipe,
   Post,
@@ -14,167 +13,153 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import { WALLET_REPOSITORY } from 'src/treasury/domain/repositories/wallet.repository';
-import type { WalletRepository } from 'src/treasury/domain/repositories/wallet.repository';
-import { TRANSACTION_REPOSITORY } from 'src/treasury/domain/repositories/transaction.repository';
-import type { TransactionRepository } from 'src/treasury/domain/repositories/transaction.repository';
-import type {
-  Wallet,
-  WalletSnapshot,
-} from 'src/treasury/domain/aggregates/wallet';
-import { Transaction } from 'src/treasury/domain/aggregates/transaction';
-import { WalletFactory } from 'src/treasury/domain/factories/wallet.factory';
-import {
-  AccesWalletRefuseError,
-  WalletIntrouvableError,
-} from 'src/treasury/domain/errors/treasury.errors';
+import type { WalletSnapshot } from 'src/treasury/domain/aggregates/wallet';
+import type { TransactionSnapshot } from 'src/treasury/domain/aggregates/transaction';
+import { Money } from 'src/treasury/domain/value-objects/money.vo';
 import { CurrentUser } from 'src/iam/presentation/decorators/current-user.decorator';
 import type { ActiveUser } from 'src/iam/presentation/decorators/current-user.decorator';
 import { RequirePermission } from 'src/iam/presentation/decorators/require-permission.decorator';
 import { hasPermission } from 'src/iam/domain/policies/role-permissions.policy';
-import {
-  TransactionFournisseur,
-  TransactionStatus,
-  WalletType,
-} from 'src/treasury/domain/enums/wallet.enum';
+import type { DemandeurDePortefeuille } from 'src/treasury/domain/specifications/portefeuille-lisible.specification';
+import { ConsulterUnPortefeuilleUseCase } from '../../application/usecases/consulter-un-portefeuille.usecase';
+import { ConsulterLePortefeuilleDunTitulaireUseCase } from '../../application/usecases/consulter-le-portefeuille-dun-titulaire.usecase';
+import { ListerLesMouvementsDunPortefeuilleUseCase } from '../../application/usecases/lister-les-mouvements-dun-portefeuille.usecase';
+import { OuvrirUnPortefeuilleDePlateformeUseCase } from '../../application/usecases/ouvrir-un-portefeuille-de-plateforme.usecase';
+import { ConsignerUnMouvementManuelUseCase } from '../../application/usecases/consigner-un-mouvement-manuel.usecase';
 import { CreateTransactionDto, CreateWalletDto } from './dto/wallet.dto';
 
 /**
- * Routes de la trésorerie. Le contrôleur ne compose que des lectures et des
- * ouvertures de portefeuille, et rend des snapshots — mêmes clés JSON que
- * l'ancien modèle anémique qu'il sérialisait tel quel. Les erreurs métier
- * remontent telles quelles : `TreasuryErrorFilter` les traduit (§21).
+ * Les routes du portefeuille : consultation, ouverture d'un portefeuille de
+ * plateforme, et relevé des mouvements.
  *
- * L'ouverture d'un portefeuille passe par {@link WalletFactory} : les deux
- * blocs de dix affectations de champs qui vivaient ici — dont un
- * `statut = 'actif'` en chaîne littérale — sont partis dans le domaine.
+ * **Le contrôleur route, il ne décide de rien** (§14). Il se faisait injecter
+ * les deux repositories du contexte et portait deux règles qui n'ont rien de
+ * la présentation : qui a le droit de lire un solde, et le fait qu'un
+ * portefeuille naisse de la première visite de son titulaire — mais pas de
+ * celle d'un administrateur. La première est une Specification du domaine
+ * ({@link PortefeuilleLisibleSpecification}), la seconde vit dans
+ * {@link ConsulterLePortefeuilleDunTitulaireUseCase}.
  *
- * Le RBAC (`RequirePermission`, `hasPermission`) reste ici : c'est de la
- * composition d'accès, pas une règle du domaine (§3.3).
+ * Ce qui reste ici est le **RBAC**, et lui seul : traduire la permission
+ * `platform:wallet` en un booléen que l'application comprend, sans lui faire
+ * connaître le nom d'une permission ni la table des rôles (§3.3). C'est la
+ * même frontière que `KycController` trace avec `DemandeurDeSession`.
+ *
+ * Les erreurs métier remontent telles quelles : `TreasuryErrorFilter` les
+ * traduit en réponses HTTP (§21). Les clés JSON publiées sont inchangées.
  */
 @ApiTags('Wallets & Transactions')
 @ApiBearerAuth()
 @Controller('wallets')
 export class WalletController {
   constructor(
-    @Inject(WALLET_REPOSITORY)
-    private readonly wallets: WalletRepository,
-    @Inject(TRANSACTION_REPOSITORY)
-    private readonly transactions: TransactionRepository,
+    private readonly consulterUnPortefeuille: ConsulterUnPortefeuilleUseCase,
+    private readonly consulterCeluiDunTitulaire: ConsulterLePortefeuilleDunTitulaireUseCase,
+    private readonly listerLesMouvements: ListerLesMouvementsDunPortefeuilleUseCase,
+    private readonly ouvrirPourLaPlateforme: OuvrirUnPortefeuilleDePlateformeUseCase,
+    private readonly consignerUnMouvement: ConsignerUnMouvementManuelUseCase,
   ) {}
 
-  private canManageWallets(user: ActiveUser): boolean {
-    return hasPermission(user.role, 'platform:wallet');
-  }
-
-  private assertCanReadWallet(user: ActiveUser, wallet: Wallet): void {
-    if (wallet.appartientA(user.userId)) return;
-    if (this.canManageWallets(user)) return;
-    throw new AccesWalletRefuseError();
+  /** Le demandeur, permission déjà résolue en booléen. */
+  private demandeur(user: ActiveUser): DemandeurDePortefeuille {
+    return {
+      utilisateurId: user.userId,
+      peutGererLesPortefeuilles: hasPermission(user.role, 'platform:wallet'),
+    };
   }
 
   @ApiOperation({ summary: 'Créer un wallet de plateforme' })
   @ApiResponse({ status: 201, description: 'Wallet créé' })
+  @ApiResponse({
+    status: 400,
+    description: 'Un portefeuille d’investisseur ne s’ouvre pas sans titulaire',
+  })
   @Post()
   @RequirePermission('platform:wallet')
   async createWallet(@Body() dto: CreateWalletDto): Promise<WalletSnapshot> {
-    // Cette route n'a jamais ouvert que des portefeuilles sans titulaire : la
-    // Factory le dit désormais explicitement, et refuse un type `investisseur`
-    // qui produirait un solde que personne ne peut réclamer.
-    const wallet = await this.wallets.creer(
-      WalletFactory.ouvrirPourPlateforme(
-        dto.type,
-        dto.fournisseurRef,
-        dto.devise,
-      ),
-    );
+    const wallet = await this.ouvrirPourLaPlateforme.execute({
+      type: dto.type,
+      fournisseurRef: dto.fournisseurRef,
+      devise: dto.devise,
+    });
     return wallet.snapshot();
   }
 
-  @ApiOperation({ summary: "Wallet d'un utilisateur" })
+  @ApiOperation({
+    summary: "Wallet d'un utilisateur",
+    description:
+      'Le titulaire se voit ouvrir son portefeuille à la première visite ; ' +
+      'un tiers, même habilité, ne provoque pas cette ouverture.',
+  })
   @ApiParam({ name: 'userId', description: "ID numérique de l'utilisateur" })
   @ApiResponse({ status: 200, description: 'Wallet trouvé' })
+  @ApiResponse({ status: 403, description: 'Accès refusé' })
   @ApiResponse({ status: 404, description: 'Wallet introuvable' })
   @Get('user/:userId')
   async getUserWallet(
     @Param('userId', ParseIntPipe) userId: number,
     @CurrentUser() user: ActiveUser,
   ): Promise<WalletSnapshot> {
-    if (user.userId !== userId && !this.canManageWallets(user)) {
-      throw new AccesWalletRefuseError();
-    }
-
-    const existant = await this.wallets.findByUser(
+    const wallet = await this.consulterCeluiDunTitulaire.execute(
       userId,
-      WalletType.INVESTISSEUR,
+      this.demandeur(user),
     );
-    if (existant) return existant.snapshot();
-
-    // Un investisseur qui consulte son portefeuille pour la première fois se le
-    // voit ouvrir ; un tiers, même habilité, ne provoque pas cette ouverture.
-    if (user.userId !== userId) {
-      throw new WalletIntrouvableError();
-    }
-    const ouvert = await this.wallets.creer(
-      WalletFactory.ouvrirPourInvestisseur(userId),
-    );
-    return ouvert.snapshot();
+    return wallet.snapshot();
   }
 
   @ApiOperation({ summary: "Détail d'un wallet" })
   @ApiParam({ name: 'id', description: 'UUID du wallet' })
   @ApiResponse({ status: 200, description: 'Wallet trouvé' })
+  @ApiResponse({ status: 403, description: 'Accès refusé' })
   @ApiResponse({ status: 404, description: 'Wallet introuvable' })
   @Get(':id')
   async findOne(
     @Param('id') id: string,
     @CurrentUser() user: ActiveUser,
   ): Promise<WalletSnapshot> {
-    const wallet = await this.wallets.findById(id);
-    if (!wallet) throw new WalletIntrouvableError(id);
-    this.assertCanReadWallet(user, wallet);
+    const wallet = await this.consulterUnPortefeuille.execute(
+      id,
+      this.demandeur(user),
+    );
     return wallet.snapshot();
   }
 
   @ApiOperation({ summary: "Transactions d'un wallet" })
   @ApiParam({ name: 'id', description: 'UUID du wallet' })
   @ApiResponse({ status: 200, description: 'Liste des transactions' })
+  @ApiResponse({ status: 403, description: 'Accès refusé' })
   @Get(':id/transactions')
-  async getTransactions(
+  getTransactions(
     @Param('id') id: string,
     @CurrentUser() user: ActiveUser,
-  ): Promise<Transaction[]> {
-    const wallet = await this.wallets.findById(id);
-    if (!wallet) throw new WalletIntrouvableError(id);
-    this.assertCanReadWallet(user, wallet);
-    return this.transactions.findByWallet(id);
+  ): Promise<TransactionSnapshot[]> {
+    return this.listerLesMouvements.execute(id, this.demandeur(user));
   }
 
-  @ApiOperation({ summary: 'Créer une transaction' })
-  @ApiResponse({ status: 201, description: 'Transaction enregistrée' })
+  @ApiOperation({
+    summary: 'Consigner un mouvement au registre (back-office)',
+    description:
+      'Inscrit une ligne au registre **sans toucher à aucun solde** : ' +
+      'rapprochement d’un virement reçu hors plateforme, trace d’une ' +
+      'régularisation. Le mouvement naît `initie`, rien n’ayant eu lieu que ' +
+      'sa consignation.',
+  })
+  @ApiResponse({ status: 201, description: 'Mouvement consigné' })
   @Post('transactions')
   @RequirePermission('platform:wallet')
   async createTransaction(
     @Body() dto: CreateTransactionDto,
-  ): Promise<Transaction> {
-    const tx = new Transaction();
-    tx.walletSource = dto.walletSourceId ?? null;
-    tx.walletDestination = dto.walletDestinationId ?? null;
-    tx.montant = dto.montant;
-    tx.devise = 'EUR';
-    tx.type = dto.type;
-    tx.referenceExterne = null;
-    tx.fournisseur = dto.fournisseur ?? TransactionFournisseur.STRIPE;
-    tx.statut = TransactionStatus.INITIE;
-    tx.investissementId = dto.investissementId ?? null;
-    tx.echeanceId = null;
-    tx.reservationId = null;
-    tx.projetId = dto.projetId ?? null;
-    tx.idempotencyKey = dto.idempotencyKey ?? null;
-    tx.fraisPsp = 0;
-    tx.fraisPlateforme = 0;
-    tx.metadata = null;
-    tx.motifEchec = null;
-    return this.transactions.enregistrer(tx);
+  ): Promise<TransactionSnapshot> {
+    const mouvement = await this.consignerUnMouvement.execute({
+      montant: Money.euros(dto.montant),
+      type: dto.type,
+      walletSourceId: dto.walletSourceId,
+      walletDestinationId: dto.walletDestinationId,
+      fournisseur: dto.fournisseur,
+      idempotencyKey: dto.idempotencyKey,
+      projetId: dto.projetId,
+      investissementId: dto.investissementId,
+    });
+    return mouvement.snapshot();
   }
 }

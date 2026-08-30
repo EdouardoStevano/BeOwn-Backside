@@ -37,7 +37,7 @@ import type { ProjetSouscriptible } from 'src/subscription/domain/value-objects/
 import { CreateInvestmentDto } from 'src/subscription/presentation/http/dto/investment.dto';
 import { ProjectStatus } from 'src/catalog/domain/enums/project-status.enum';
 import { WalletType } from 'src/treasury/domain/enums/wallet.enum';
-import { Transaction } from 'src/treasury/domain/aggregates/transaction';
+import type { TransactionNaissante } from 'src/treasury/domain/aggregates/transaction';
 import {
   TransactionFournisseur,
   TransactionStatus,
@@ -202,7 +202,7 @@ export class CreateInvestmentUseCase {
       // 7. Écriture de la transaction ledger (clé d'idempotence conservée).
       await manager.save(
         TransactionEntity,
-        WalletOrmMapper.txToEntity(
+        WalletOrmMapper.txNaissanteToEntity(
           this.tracerSouscription(investment, wallet, userId, dto),
         ),
       );
@@ -277,33 +277,45 @@ export class CreateInvestmentUseCase {
     return Number(raw?.total ?? 0);
   }
 
+  /**
+   * La trace comptable de la souscription au registre de la trésorerie.
+   *
+   * Elle rend une `TransactionNaissante` — la forme d'un mouvement qui n'est
+   * pas encore en base — depuis que `Transaction` est un agrégat aux champs
+   * privés. Le contenu est inchangé, à ceci près que `walletId` accompagne
+   * désormais `walletSource` : la table porte deux colonnes pour ce même
+   * rattachement, et n'en remplir qu'une rendait le mouvement invisible à la
+   * moitié des lectures.
+   */
   private tracerSouscription(
     investment: Investment,
     wallet: { id: string; devise: string },
     userId: number,
     dto: CreateInvestmentDto,
-  ): Transaction {
-    const tx = new Transaction();
-    tx.walletSource = wallet.id;
-    tx.walletDestination = null;
-    tx.type = TransactionType.SOUSCRIPTION;
-    tx.montant = investment.montant;
-    tx.devise = wallet.devise;
-    tx.statut = TransactionStatus.REUSSI;
-    tx.fournisseur = TransactionFournisseur.INTERNE;
-    tx.referenceExterne = null;
-    tx.investissementId = investment.id;
-    tx.echeanceId = null;
-    tx.reservationId = null;
-    tx.projetId = investment.projetId;
-    tx.idempotencyKey = dto.idempotencyKey
-      ? cleDIdempotence(userId, dto.idempotencyKey)
-      : `invest:${userId}:${investment.id}`;
-    tx.fraisPsp = 0;
-    tx.fraisPlateforme = 0;
-    tx.metadata = null;
-    tx.motifEchec = null;
-    return tx;
+  ): TransactionNaissante {
+    return {
+      walletSource: wallet.id,
+      walletId: wallet.id,
+      walletDestination: null,
+      type: TransactionType.SOUSCRIPTION,
+      montant: investment.montant,
+      devise: wallet.devise,
+      statut: TransactionStatus.REUSSI,
+      fournisseur: TransactionFournisseur.INTERNE,
+      fournisseurRef: null,
+      referenceExterne: null,
+      investissementId: investment.id,
+      echeanceId: null,
+      reservationId: null,
+      projetId: investment.projetId,
+      idempotencyKey: dto.idempotencyKey
+        ? cleDIdempotence(userId, dto.idempotencyKey)
+        : `invest:${userId}:${investment.id}`,
+      fraisPsp: 0,
+      fraisPlateforme: 0,
+      metadata: null,
+      motifEchec: null,
+    };
   }
 
   /**

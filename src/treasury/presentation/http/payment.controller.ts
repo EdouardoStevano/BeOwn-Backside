@@ -1,88 +1,94 @@
 import {
-  BadRequestException,
   Body,
   Controller,
-  ForbiddenException,
   Get,
   Headers,
   HttpCode,
   HttpStatus,
-  Logger,
+  Inject,
+  Param,
   Post,
   Req,
+  UseGuards,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiHeader,
   ApiOperation,
+  ApiParam,
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { ConfigService } from '@nestjs/config';
-import { StripePaymentAdapter } from '../../infrastructure/external-services/stripe-payment.adapter';
-import { StripeConnectAdapter } from '../../infrastructure/external-services/stripe-connect.adapter';
-import type { ConnectAccountStatus } from '../../infrastructure/external-services/stripe-connect.adapter';
-import { RequestRetraitUseCase } from '../../application/usecases/request-retrait.usecase';
+import { SkipThrottle } from '@nestjs/throttler';
+import { Public } from 'src/iam/presentation/decorators/public.decorator';
+import { CurrentUser } from 'src/iam/presentation/decorators/current-user.decorator';
+import type { ActiveUser } from 'src/iam/presentation/decorators/current-user.decorator';
+import { JwtAuthGuard } from 'src/iam/presentation/guards/jwt-auth.guard';
+import { KycValidatedGuard } from 'src/compliance/presentation/guards/kyc-validated.guard';
+import { Money } from 'src/treasury/domain/value-objects/money.vo';
+import {
+  CONNECT_GATEWAY,
+  type ConnectGateway,
+} from '../../application/ports/connect.gateway';
+import {
+  PAYMENT_GATEWAY,
+  type PaymentGateway,
+} from '../../application/ports/payment.gateway';
+import { OuvrirUnDepotUseCase } from '../../application/usecases/ouvrir-un-depot.usecase';
+import { ConfirmerUnDepotUseCase } from '../../application/usecases/confirmer-un-depot.usecase';
+import {
+  DemanderUnRetraitUseCase,
+  type IssueDuRetrait,
+} from '../../application/usecases/demander-un-retrait.usecase';
+import { TraiterUnEvenementStripeUseCase } from '../../application/usecases/traiter-un-evenement-stripe.usecase';
+import { SynchroniserUnRetraitUseCase } from '../../application/usecases/synchroniser-un-retrait.usecase';
 import {
   ConfirmDepotDto,
   ConnectOnboardingDto,
   CreatePaymentIntentDto,
   CreateRetraitDto,
 } from './dto/payment.dto';
-import { InjectRepository, InjectDataSource } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
-import { WalletEntity } from 'src/treasury/infrastructure/persistence/entities/wallet.entity';
-import { TransactionEntity } from 'src/treasury/infrastructure/persistence/entities/transaction.entity';
-import {
-  TransactionFournisseur,
-  TransactionStatus,
-  TransactionType,
-  WalletType,
-} from 'src/treasury/domain/enums/wallet.enum';
-import { Public } from 'src/iam/presentation/decorators/public.decorator';
-import { formatEur } from 'src/shared/money/format-eur';
-import { CurrentUser } from 'src/iam/presentation/decorators/current-user.decorator';
-import type { ActiveUser } from 'src/iam/presentation/decorators/current-user.decorator';
-import { UseGuards } from '@nestjs/common';
-import { JwtAuthGuard } from 'src/iam/presentation/guards/jwt-auth.guard';
-import { KycValidatedGuard } from 'src/compliance/presentation/guards/kyc-validated.guard';
-import { SkipThrottle } from '@nestjs/throttler';
-import { NotificationService } from 'src/notifications/applications/notification.service';
-import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
-import { UserRole } from 'src/iam/domain/enums/user.enum';
-import { HandleIdentityWebhookUseCase } from 'src/compliance/application/usecases/kyc/handle-identity-webhook.usecase';
 
 /**
  * Dépôts, retraits Stripe Connect, et l'endpoint webhook Stripe.
  *
- * Les routes KYC — session Stripe Identity, images, statut de session — ont
- * quitté ce contrôleur avec leur contexte : voir `KycController` (`/kyc/*`).
- * Les anciennes URLs `/payments/kyc/*` restent servies par
- * `KycLegacyPaymentsController`, et sont dépréciées.
+ * **Le contrôleur route, il ne décide de rien** (§14). Il tenait auparavant
+ * toute la logique financière du contexte : deux `Repository<…Entity>` TypeORM
+ * et le `DataSource` injectés dans une classe de présentation, le crédit
+ * atomique d'un dépôt écrit en `QueryBuilder`, le verrou pessimiste d'un
+ * retrait, et cinq branches de webhook manipulant les colonnes à la main. Tout
+ * cela est parti dans des use cases et derrière des ports — le contrôleur
+ * traduit une requête HTTP en commande, et une issue en réponse.
+ *
+ * **Les formes de réponse sont inchangées**, y compris les refus rendus en
+ * `202 { success: false, code }` plutôt qu'en `4xx`. Elles ne sont pas ce que
+ * le contexte ferait aujourd'hui — les erreurs de domaine et leur filtre
+ * existent (§21) — mais les déplacer casserait le front, et ce n'est pas ce
+ * qu'un refactoring doit faire. La traduction est désormais au bon endroit
+ * pour le jour où ce changement sera décidé.
+ *
+ * Les routes KYC ont quitté ce contrôleur avec leur contexte : voir
+ * `KycController` (`/kyc/*`). Les anciennes URLs `/payments/kyc/*` restent
+ * servies par `KycLegacyPaymentsController`, et sont dépréciées.
  */
 @ApiTags('Payments')
 @ApiBearerAuth()
 @Controller('payments')
 @UseGuards(JwtAuthGuard)
 export class PaymentController {
-  private readonly logger = new Logger(PaymentController.name);
-
   constructor(
-    private readonly stripeService: StripePaymentAdapter,
-    private readonly stripeConnect: StripeConnectAdapter,
-    private readonly notificationService: NotificationService,
+    private readonly ouvrirUnDepot: OuvrirUnDepotUseCase,
+    private readonly confirmerUnDepot: ConfirmerUnDepotUseCase,
+    private readonly demanderUnRetrait: DemanderUnRetraitUseCase,
+    private readonly traiterUnEvenement: TraiterUnEvenementStripeUseCase,
+    private readonly synchroniser: SynchroniserUnRetraitUseCase,
+    @Inject(PAYMENT_GATEWAY)
+    private readonly paiements: PaymentGateway,
+    @Inject(CONNECT_GATEWAY)
+    private readonly connect: ConnectGateway,
     private readonly config: ConfigService,
-    // Les événements `identity.*` du webhook partagé sont passés au contexte
-    // KYC : cet endpoint authentifie l'événement, il ne l'interprète pas.
-    private readonly identityWebhook: HandleIdentityWebhookUseCase,
-    @InjectRepository(WalletEntity)
-    private readonly walletRepo: Repository<WalletEntity>,
-    @InjectRepository(TransactionEntity)
-    private readonly txRepo: Repository<TransactionEntity>,
-    @InjectDataSource()
-    private readonly dataSource: DataSource,
-    private readonly requestRetrait: RequestRetraitUseCase,
   ) {}
 
   // ─── Dépôt ───────────────────────────────────────────────────────────────
@@ -99,20 +105,29 @@ export class PaymentController {
     @Body() dto: CreatePaymentIntentDto,
     @CurrentUser() user: ActiveUser,
   ) {
-    return this.stripeService.createPaymentIntent({
-      amount: dto.amount,
-      currency: dto.currency,
-      userId: user.userId,
-      metadata: {
-        operationType: dto.operationType ?? 'depot',
-        ...(dto.projetId ? { projetId: dto.projetId } : {}),
-      },
+    const paiement = await this.ouvrirUnDepot.execute({
+      utilisateurId: user.userId,
+      montant: Money.of(dto.amount, dto.currency),
+      operationType: dto.operationType,
+      projetId: dto.projetId,
     });
+
+    // Les clés publiées sont celles d'avant : `amount` reste le montant dans la
+    // plus petite unité, que le front passe tel quel à Stripe.
+    return {
+      clientSecret: paiement.clientSecret,
+      intentId: paiement.intentId,
+      status: paiement.statut,
+      amount: paiement.montant.enCentimes(),
+    };
   }
 
   @ApiOperation({ summary: 'Confirmer un dépôt et créditer le wallet' })
   @ApiResponse({ status: 200, description: 'Wallet crédité' })
-  @ApiResponse({ status: 403, description: 'KYC non validé' })
+  @ApiResponse({
+    status: 403,
+    description: 'KYC non validé, ou paiement d’un tiers',
+  })
   @UseGuards(KycValidatedGuard)
   @HttpCode(HttpStatus.OK)
   @Post('depot/confirm')
@@ -120,135 +135,22 @@ export class PaymentController {
     @Body() dto: ConfirmDepotDto,
     @CurrentUser() user: ActiveUser,
   ) {
-    const intent = await this.stripeService.retrievePaymentIntent(
-      dto.paymentIntentId,
-    );
-
-    if (intent.status !== 'succeeded') {
-      return { success: false, status: intent.status };
-    }
-
-    // ── Garde anti-BOLA (H-1) ────────────────────────────────────────────────
-    // Le PaymentIntent porte `metadata.userId` (posé à la création, cf.
-    // stripe-payment.service.ts). On refuse tout crédit si l'appelant n'est pas
-    // le propriétaire du PaymentIntent — sinon un utilisateur pourrait créditer
-    // son wallet avec le dépôt d'un tiers dont il connaît l'id `pi_xxx`.
-    if (intent.metadata?.userId !== String(user.userId)) {
-      this.logger.warn(
-        `Tentative de confirmation de dépôt non autorisée: appelant=${user.userId} ` +
-          `propriétaire PaymentIntent=${intent.metadata?.userId ?? 'inconnu'} pi=${dto.paymentIntentId}`,
-      );
-      throw new ForbiddenException(
-        "Ce paiement n'appartient pas à votre compte.",
-      );
-    }
-
-    const amountMajor = Number(intent.amount) / 100;
-
-    // Crédit atomique + idempotent (H-A) — voir creditDepositAtomic.
-    const { credited, walletId } = await this.creditDepositAtomic(
-      user.userId,
-      dto.paymentIntentId,
-      amountMajor,
-    );
-    if (!credited) return { success: true, alreadyProcessed: true };
-
-    this.notificationService
-      .push({
-        utilisateurId: user.userId,
-        type: NotificationType.DEPOT_CONFIRME,
-        titre: 'Dépôt confirmé',
-        message: `Votre dépôt de ${formatEur(amountMajor)} a été crédité sur votre wallet.`,
-        metadata: {
-          paymentIntentId: dto.paymentIntentId,
-          montant: amountMajor,
-        },
-      })
-      .catch(() => {});
-
-    this.notificationService
-      .pushToAdmins({
-        type: NotificationType.DEPOT_CONFIRME,
-        titre: 'Dépôt utilisateur',
-        message: `User #${user.userId} a déposé ${formatEur(amountMajor)}.`,
-        roles: [UserRole.SUPER_ADMIN, UserRole.FINANCIER],
-        metadata: {
-          userId: user.userId,
-          paymentIntentId: dto.paymentIntentId,
-          montant: amountMajor,
-        },
-      })
-      .catch(() => {});
-
-    return { success: true, walletId };
-  }
-
-  /**
-   * Crédit de dépôt ATOMIQUE et idempotent (correctif H-A). Dans une seule
-   * transaction DB : on INSÈRE d'abord la ligne ledger (clé unique
-   * `depot:<pi>`) — un doublon lève une violation d'unicité (23505) qui
-   * court-circuite le crédit — PUIS on incrémente le wallet. L'incrément ne
-   * peut donc jamais s'exécuter deux fois pour un même PaymentIntent, même sous
-   * appels concurrents (confirmDepot + webhook, ou rafales de confirmDepot).
-   *
-   * @returns credited=true si le wallet vient d'être crédité, false si le
-   *          PaymentIntent avait déjà été traité (no-op idempotent).
-   */
-  private async creditDepositAtomic(
-    userId: number,
-    paymentIntentId: string,
-    amountMajor: number,
-  ): Promise<{ credited: boolean; walletId: string }> {
-    // Wallet garanti présent hors section critique (idempotent : 1 par user/type).
-    let wallet = await this.walletRepo.findOne({
-      where: { proprietaireUserId: userId, type: WalletType.INVESTISSEUR },
+    const issue = await this.confirmerUnDepot.execute({
+      utilisateurId: user.userId,
+      paymentIntentId: dto.paymentIntentId,
     });
-    if (!wallet) {
-      wallet = await this.walletRepo.save(
-        this.walletRepo.create({
-          type: WalletType.INVESTISSEUR,
-          proprietaireUserId: userId,
-          fournisseurRef: `INV-${userId}-auto`,
-          devise: 'EUR',
-          solde: 0,
-        }),
-      );
-    }
 
-    const idempotencyKey = `depot:${paymentIntentId}`;
-    try {
-      await this.dataSource.transaction(async (em) => {
-        // 1. Insert ledger FIRST — la contrainte unique rejette tout doublon.
-        await em.insert(TransactionEntity, {
-          walletId: wallet.id,
-          type: TransactionType.DEPOT,
-          montant: amountMajor,
-          devise: 'EUR',
-          statut: TransactionStatus.REUSSI,
-          fournisseur: TransactionFournisseur.STRIPE,
-          fournisseurRef: paymentIntentId,
-          idempotencyKey,
-        });
-        // 2. Crédit atomique — atteint uniquement au 1er traitement.
-        await em
-          .createQueryBuilder()
-          .update(WalletEntity)
-          .set({ solde: () => 'solde + :amount' })
-          .setParameter('amount', amountMajor)
-          .where('id = :id', { id: wallet.id })
-          .execute();
-      });
-      return { credited: true, walletId: wallet.id };
-    } catch (err: any) {
-      if (err?.code === '23505' || err?.driverError?.code === '23505') {
-        // Dépôt déjà traité (violation d'unicité) → no-op idempotent.
-        return { credited: false, walletId: wallet.id };
-      }
-      throw err;
+    switch (issue.issue) {
+      case 'credite':
+        return { success: true, walletId: issue.walletId };
+      case 'deja-credite':
+        return { success: true, alreadyProcessed: true };
+      case 'paiement-non-abouti':
+        return { success: false, status: issue.statut };
     }
   }
 
-  // ─── Retrait Stripe Connect Express (E3) ──────────────────────────────────
+  // ─── Retrait Stripe Connect Express ───────────────────────────────────────
 
   @ApiOperation({
     summary: "Lien d'onboarding Stripe Connect Express (compte de retrait)",
@@ -265,17 +167,14 @@ export class PaymentController {
     @CurrentUser() user: ActiveUser,
   ) {
     const frontend = this.config.get<string>('FRONTEND_URL') ?? '';
-    const returnUrl =
-      dto.returnUrl ?? `${frontend}/dashboard/wallet?connect=done`;
-    const refreshUrl =
-      dto.refreshUrl ?? `${frontend}/dashboard/wallet?connect=refresh`;
 
-    const url = await this.stripeConnect.createAccountLink(
-      user.userId,
-      returnUrl,
-      refreshUrl,
-      user.email,
-    );
+    const url = await this.connect.lienDOnboarding({
+      utilisateurId: user.userId,
+      email: user.email,
+      retourUrl: dto.returnUrl ?? `${frontend}/dashboard/wallet?connect=done`,
+      rafraichirUrl:
+        dto.refreshUrl ?? `${frontend}/dashboard/wallet?connect=refresh`,
+    });
     return { url };
   }
 
@@ -286,8 +185,8 @@ export class PaymentController {
   })
   @ApiResponse({ status: 200, description: 'Statut du compte connecté' })
   @Get('connect/status')
-  async connectStatus(@CurrentUser() user: ActiveUser) {
-    return this.stripeConnect.getAccountStatus(user.userId);
+  connectStatus(@CurrentUser() user: ActiveUser) {
+    return this.connect.statutDuCompte(user.userId);
   }
 
   @ApiOperation({ summary: 'Initier un retrait vers compte bancaire' })
@@ -304,7 +203,40 @@ export class PaymentController {
     @Body() dto: CreateRetraitDto,
     @CurrentUser() user: ActiveUser,
   ) {
-    return this.requestRetrait.execute(dto, user);
+    const issue = await this.demanderUnRetrait.execute({
+      utilisateurId: user.userId,
+      montant: Money.of(dto.amount, dto.currency),
+      walletId: dto.walletId,
+      ibanDestination: dto.ibanDestination,
+      cleDIdempotence: dto.idempotencyKey,
+    });
+
+    return rendreLIssueDuRetrait(issue);
+  }
+
+  @ApiOperation({
+    summary: 'Relire un retrait chez le fournisseur et appliquer son sort',
+    description:
+      "Va chercher l'état du versement chez Stripe et l'applique au retrait, " +
+      'sans attendre le webhook `payout.*`. Utile quand la plateforme n’est ' +
+      'pas joignable depuis l’extérieur (poste de développement) ou après une ' +
+      'livraison d’événement échouée. Sans effet sur un retrait déjà versé ou ' +
+      'déjà recrédité — les gardes du domaine sont les mêmes que pour le ' +
+      'webhook.',
+  })
+  @ApiParam({ name: 'transactionId', description: 'UUID du retrait' })
+  @ApiResponse({ status: 200, description: 'État lu et suite donnée' })
+  @ApiResponse({ status: 404, description: 'Retrait introuvable' })
+  @HttpCode(HttpStatus.OK)
+  @Post('retrait/:transactionId/synchroniser')
+  synchroniserUnRetrait(
+    @Param('transactionId') transactionId: string,
+    @CurrentUser() user: ActiveUser,
+  ) {
+    // Le titulaire est passé au use case, qui refuse un retrait qui n'est pas
+    // le sien : ouvrir cette route sans cette garde donnerait de quoi sonder
+    // les retraits des autres par leur identifiant.
+    return this.synchroniser.execute(transactionId, user.userId);
   }
 
   // ─── Webhook Stripe ────────────────────────────────────────────────────────
@@ -327,253 +259,72 @@ export class PaymentController {
     @Headers('stripe-signature') signature: string,
     @Req() req: Request,
   ) {
-    const rawBody: Buffer =
-      (req as any).rawBody ??
-      (req.body instanceof Buffer
-        ? req.body
-        : Buffer.from(JSON.stringify(req.body)));
+    // Le corps **brut** : la signature porte sur les octets reçus, et un JSON
+    // re-sérialisé n'est plus les mêmes octets.
+    const requete = req as Request & { rawBody?: Buffer };
+    const charge: Buffer =
+      requete.rawBody ??
+      (Buffer.isBuffer(requete.body)
+        ? requete.body
+        : Buffer.from(JSON.stringify(requete.body)));
 
-    this.logger.debug(
-      `Webhook rawBody length=${rawBody?.length}, sig present=${!!signature}`,
-    );
+    // La signature est éprouvée avant toute lecture du corps — c'est ce qui
+    // protège aussi le contexte de conformité, avec qui l'endpoint est partagé.
+    // Une signature invalide lève `SignatureWebhookInvalideError`, que le
+    // filtre du contexte rend en 400 comme le faisait la `BadRequestException`.
+    const evenement = this.paiements.authentifierLEvenement(charge, signature);
 
-    let event: any;
-    try {
-      event = this.stripeService.constructWebhookEvent(rawBody, signature);
-    } catch (err) {
-      this.logger.error(`Webhook signature failed: ${err.message}`);
-      throw new BadRequestException(
-        `Webhook signature invalide: ${err.message}`,
-      );
-    }
+    await this.traiterUnEvenement.execute(evenement);
 
-    this.logger.log(`Stripe webhook: type=${event.type}, id=${event.id}`);
-
-    if (event.type === 'payment_intent.succeeded') {
-      const intent = event.data.object;
-      const userId = parseInt(intent.metadata?.userId, 10);
-      const operationType = intent.metadata?.operationType ?? 'depot';
-
-      if (!isNaN(userId) && operationType === 'depot') {
-        const amountMajor = Number(intent.amount) / 100;
-        // Crédit atomique + idempotent partagé avec confirmDepot (H-A).
-        const { credited } = await this.creditDepositAtomic(
-          userId,
-          intent.id,
-          amountMajor,
-        );
-        if (credited) {
-          this.logger.log(
-            `Wallet crédité: userId=${userId}, montant=${amountMajor}`,
-          );
-          this.notificationService
-            .push({
-              utilisateurId: userId,
-              type: NotificationType.DEPOT_CONFIRME,
-              titre: 'Dépôt confirmé',
-              message: `Votre dépôt de ${formatEur(amountMajor)} a été crédité sur votre wallet.`,
-              metadata: { paymentIntentId: intent.id, montant: amountMajor },
-            })
-            .catch(() => {});
-        }
-      }
-    } else if (HandleIdentityWebhookUseCase.concerne(event.type)) {
-      // Vérification d'identité : cet endpoint est partagé avec le contexte
-      // KYC, qui décide seul de ce qu'un `identity.*` fait au dossier. Payments
-      // n'en connaît ni les statuts, ni les transitions, ni les notifications.
-      await this.identityWebhook.handle(event);
-    } else if (event.type === 'account.updated') {
-      // Stripe Connect (E3) — maj des drapeaux du compte connecté (payoutsEnabled…)
-      await this.handleAccountUpdated(event);
-    } else if (event.type === 'payout.paid') {
-      // Stripe Connect (E3) — payout arrivé en banque → finalise le retrait
-      await this.handlePayoutPaid(event);
-    } else if (event.type === 'payout.failed') {
-      // Stripe Connect (E3) — payout échoué → reversal + recrédit du wallet
-      await this.handlePayoutFailed(event);
-    }
-
-    return { received: true, type: event.type, eventId: event.id };
+    return { received: true, type: evenement.type, eventId: evenement.id };
   }
+}
 
-  // ─── Stripe Connect — helpers webhook (E3) ─────────────────────────────────
-
-  /**
-   * `account.updated` — Stripe notifie une évolution du compte connecté.
-   * On rafraîchit les drapeaux en base (dont payoutsEnabled) et on prévient
-   * l'investisseur si son compte de retrait vient d'être activé.
-   */
-  private async handleAccountUpdated(event: any): Promise<void> {
-    const account = event.data.object;
-    const { found, payoutsJustEnabled } =
-      await this.stripeConnect.syncAccountFromWebhook(account);
-    if (!found) return;
-
-    this.logger.log(
-      `account.updated: compte=${account.id} payouts_enabled=${!!account.payouts_enabled} ` +
-        `details_submitted=${!!account.details_submitted}`,
-    );
-
-    if (payoutsJustEnabled) {
-      const user = await this.stripeConnect.findUserByConnectAccountId(
-        account.id,
-      );
-      if (user) {
-        this.notificationService
-          .push({
-            utilisateurId: user.userId,
-            type: NotificationType.RETRAIT_TRAITE,
-            titre: 'Compte de retrait activé',
-            message:
-              'Votre compte de retrait Stripe est configuré. Vous pouvez désormais retirer vos fonds.',
-            metadata: { accountId: account.id },
-          })
-          .catch(() => {});
-      }
-    }
-  }
-
-  /**
-   * `payout.paid` — le payout est arrivé sur le compte bancaire de
-   * l'investisseur. Finalise le retrait (EN_COURS → REUSSI). Idempotent (un
-   * retrait déjà REUSSI ou recrédité est un no-op). Mappé via
-   * `payout.metadata.retraitTxId` (posé lors du payout explicite) ; un payout
-   * automatique sans metadata est simplement journalisé.
-   */
-  private async handlePayoutPaid(event: any): Promise<void> {
-    const payout = event.data.object;
-    const retraitTxId = payout?.metadata?.retraitTxId as string | undefined;
-    if (!retraitTxId) {
-      this.logger.debug(
-        `payout.paid sans retraitTxId (payout automatique) payout=${payout?.id} account=${event.account} — info`,
-      );
-      return;
-    }
-
-    const tx = await this.txRepo.findOne({ where: { id: retraitTxId } });
-    if (!tx || tx.type !== TransactionType.RETRAIT) {
-      this.logger.warn(`payout.paid: retrait introuvable txId=${retraitTxId}`);
-      return;
-    }
-    const meta = tx.metadata ?? {};
-    if (
-      tx.statut === TransactionStatus.REUSSI ||
-      tx.statut === TransactionStatus.ECHOUE ||
-      meta.recredited === true
-    ) {
-      return; // idempotent / retrait déjà finalisé ou recrédité
-    }
-
-    tx.statut = TransactionStatus.REUSSI;
-    await this.txRepo.save(tx);
-    this.logger.log(
-      `Retrait finalisé (payout.paid): tx=${tx.id} payout=${payout?.id}`,
-    );
-
-    const userId = meta.userId as number | undefined;
-    if (userId) {
-      this.notificationService
-        .push({
-          utilisateurId: userId,
-          type: NotificationType.RETRAIT_TRAITE,
-          titre: 'Retrait effectué',
-          message: `Votre retrait de ${formatEur(Number(tx.montant))} a été versé sur votre compte bancaire.`,
-          metadata: { transactionId: tx.id },
-        })
-        .catch(() => {});
-    }
-  }
-
-  /**
-   * `payout.failed` — le versement bancaire a échoué. Les fonds sont revenus
-   * sur le solde du compte connecté ; pour ne pas double-créditer, on rapatrie
-   * d'abord les fonds vers la plateforme (reversal du transfert) PUIS on
-   * recrédite le wallet (idempotent). Si le reversal n'aboutit pas, on ne
-   * recrédite pas à l'aveugle : alerte admin pour traitement manuel.
-   *
-   * Mapping via `payout.metadata.retraitTxId`. Un payout automatique sans
-   * metadata est escaladé aux admins (recrédit manuel) plutôt que deviné.
-   */
-  private async handlePayoutFailed(event: any): Promise<void> {
-    const payout = event.data.object;
-    const accountId = event.account as string | undefined;
-    const retraitTxId = payout?.metadata?.retraitTxId as string | undefined;
-
-    if (!retraitTxId) {
-      this.logger.warn(
-        `payout.failed sans retraitTxId (payout automatique) payout=${payout?.id} account=${accountId} — revue manuelle`,
-      );
-      this.notificationService
-        .pushToAdmins({
-          type: NotificationType.RETRAIT_TRAITE,
-          titre: 'Payout Stripe échoué — revue manuelle',
-          message: `Un payout Stripe a échoué (payout=${payout?.id}, compte=${accountId}) sans référence de retrait. Vérifier et recréditer manuellement si besoin.`,
-          roles: [UserRole.SUPER_ADMIN, UserRole.FINANCIER],
-          metadata: { payoutId: payout?.id, accountId },
-        })
-        .catch(() => {});
-      return;
-    }
-
-    const tx = await this.txRepo.findOne({ where: { id: retraitTxId } });
-    if (!tx || tx.type !== TransactionType.RETRAIT) {
-      this.logger.warn(
-        `payout.failed: retrait introuvable txId=${retraitTxId}`,
-      );
-      return;
-    }
-    const meta = tx.metadata ?? {};
-    if (meta.recredited === true) {
-      this.logger.debug(
-        `payout.failed: retrait déjà recrédité (idempotent) tx=${tx.id}`,
-      );
-      return;
-    }
-
-    // Rapatrier les fonds (reversal) avant de recréditer, sinon double-crédit.
-    const transferId = meta.transferId as string | undefined;
-    if (transferId) {
-      try {
-        await this.stripeConnect.reverseTransfer(
-          transferId,
-          `retrait-reverse:${tx.id}`,
-        );
-      } catch (err) {
-        this.logger.error(
-          `payout.failed: reversal du transfert échoué tx=${tx.id} transfer=${transferId}: ${err?.message}`,
-        );
-        this.notificationService
-          .pushToAdmins({
-            type: NotificationType.RETRAIT_TRAITE,
-            titre: 'Retrait — reversal échoué, revue manuelle',
-            message: `Le payout du retrait ${tx.id} a échoué mais le reversal du transfert n'a pas abouti. Vérifier l'état Stripe avant tout recrédit manuel.`,
-            roles: [UserRole.SUPER_ADMIN, UserRole.FINANCIER],
-            metadata: {
-              transactionId: tx.id,
-              transferId,
-              payoutId: payout?.id,
-            },
-          })
-          .catch(() => {});
-        return;
-      }
-    }
-
-    const outcome = await this.requestRetrait.recreditRetrait(
-      tx.id,
-      `Payout Stripe échoué (payout=${payout?.id ?? 'inconnu'})`,
-      TransactionStatus.ECHOUE,
-    );
-    if (outcome === 'recredited') {
-      this.logger.log(`Retrait recrédité (payout.failed): tx=${tx.id}`);
-      const userId = meta.userId as number | undefined;
-      if (userId) {
-        this.requestRetrait.notifyRetraitEchec(
-          userId,
-          Number(tx.montant),
-          tx.id,
-        );
-      }
-    }
+/**
+ * Traduit l'issue d'une demande de retrait dans la forme historique.
+ *
+ * Cette fonction est la trace exacte de ce que le contexte devrait rendre
+ * autrement : trois de ces six issues sont des refus, et ils sortent en `202`
+ * avec `success: false`. C'est le contrat en place ; le mettre à jour est une
+ * décision produit, pas un effet de bord de ce refactoring.
+ */
+function rendreLIssueDuRetrait(issue: IssueDuRetrait): Record<string, unknown> {
+  switch (issue.issue) {
+    case 'en-route':
+      return {
+        success: true,
+        transactionId: issue.transactionId,
+        status: issue.statut,
+        transferId: issue.transfertId,
+        payoutId: issue.versementId,
+      };
+    case 'a-traiter-manuellement':
+      return {
+        success: true,
+        transactionId: issue.transactionId,
+        status: issue.statut,
+      };
+    case 'deja-demande':
+      return {
+        success: true,
+        transactionId: issue.transactionId,
+        status: issue.statut,
+        alreadyProcessed: true,
+      };
+    case 'transfert-refuse':
+      return {
+        success: false,
+        code: 'TRANSFER_FAILED',
+        message: 'Le versement a échoué, votre solde a été recrédité.',
+      };
+    case 'compte-de-retrait-non-pret':
+      return {
+        success: false,
+        code: 'CONNECT_NOT_READY',
+        message:
+          'Connectez votre compte de retrait Stripe pour effectuer un retrait.',
+      };
+    case 'solde-insuffisant':
+      return { success: false, message: issue.motif };
   }
 }

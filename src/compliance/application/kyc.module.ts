@@ -19,6 +19,8 @@ import { ConsultKycSessionUseCase } from './usecases/kyc/consult-kyc-session.use
 import { AnnoncesKycService } from './services/annonces-kyc.service';
 import { ArchivageRapportKycService } from './services/archivage-rapport-kyc.service';
 import { HandleIdentityWebhookUseCase } from './usecases/kyc/handle-identity-webhook.usecase';
+import { AppliquerUnVerdictUseCase } from './usecases/kyc/appliquer-un-verdict.usecase';
+import { SynchroniserLaVerificationUseCase } from './usecases/kyc/synchroniser-la-verification.usecase';
 import { KycValideEventHandler } from './handlers/kyc-valide.event-handler';
 import { KycRefuseEventHandler } from './handlers/kyc-refuse.event-handler';
 import { KycRevueManuelleDemandeeEventHandler } from './handlers/kyc-revue-manuelle-demandee.event-handler';
@@ -79,6 +81,10 @@ import { ComplianceErrorFilter } from '../presentation/http/filters/compliance-e
     StartKycSessionUseCase,
     ConsultKycSessionUseCase,
     HandleIdentityWebhookUseCase,
+    // La machine à états du verdict, partagée par le webhook et la
+    // réconciliation : deux sources, un seul jeu de transitions.
+    AppliquerUnVerdictUseCase,
+    SynchroniserLaVerificationUseCase,
     AnnoncesKycService,
     ArchivageRapportKycService,
     KycValideEventHandler,

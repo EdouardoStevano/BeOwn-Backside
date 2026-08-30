@@ -15,6 +15,25 @@ export interface EvenementDeVerification {
 /** Motif par défaut quand le fournisseur n'en donne aucun. */
 const MOTIF_PAR_DEFAUT = 'Vérification en attente de révision manuelle';
 
+/**
+ * Le verdict que porte l'**état** d'une session, indépendamment de tout
+ * événement.
+ *
+ * Les mêmes trois mots que les événements, parce que le fournisseur nomme
+ * l'événement d'après l'état qu'il annonce. Ils sont écrits ici séparément
+ * plutôt que dérivés du nom d'événement : la coïncidence est celle de Stripe
+ * aujourd'hui, pas un contrat, et la déduire par découpage de chaîne ferait
+ * dépendre notre lecture d'une convention de nommage tierce.
+ *
+ * `canceled` n'y figure pas : une session annulée n'apprend rien sur
+ * l'identité, elle dit seulement qu'on ne saura pas par ce chemin-là.
+ */
+const VERDICT_PAR_ETAT_DE_SESSION: Readonly<Record<string, VerdictIdentite>> = {
+  verified: VerdictIdentite.VERIFIEE,
+  processing: VerdictIdentite.EN_TRAITEMENT,
+  requires_input: VerdictIdentite.REVUE_REQUISE,
+};
+
 const VERDICT_PAR_EVENEMENT: Readonly<Record<string, VerdictIdentite>> = {
   'identity.verification_session.verified': VerdictIdentite.VERIFIEE,
   'identity.verification_session.processing': VerdictIdentite.EN_TRAITEMENT,
@@ -72,6 +91,43 @@ export class EvenementIdentiteTranslator {
         (session?.last_error?.reason as string) ??
         (session?.last_error?.code as string) ??
         MOTIF_PAR_DEFAUT,
+    };
+  }
+
+  /**
+   * Le même fait métier, lu sur l'**état** d'une session plutôt que sur un
+   * événement.
+   *
+   * Deux chemins mènent au verdict d'un fournisseur : il nous l'annonce
+   * (webhook), ou nous allons le chercher (réconciliation). Le second existe
+   * parce que le premier n'arrive pas toujours — un poste de développement
+   * n'est pas joignable depuis l'extérieur, et une livraison peut échouer en
+   * production.
+   *
+   * Le titulaire est **fourni** et non lu dans les métadonnées : on relit une
+   * session parce qu'on cherche le dossier de quelqu'un de précis, et il n'y a
+   * aucune raison de faire confiance au fournisseur sur ce point-là quand on
+   * le connaît déjà.
+   *
+   * @returns `null` si l'état ne porte aucun verdict — une session annulée, ou
+   *   un état que ce fournisseur ajouterait demain.
+   */
+  static depuisLaSession(
+    session: { sessionId: string; status: string; motifEchec?: string },
+    utilisateurId: number,
+  ): EvenementDeVerification | null {
+    const verdict = VERDICT_PAR_ETAT_DE_SESSION[session.status];
+    if (!verdict) return null;
+
+    return {
+      verdict,
+      utilisateurId,
+      sessionId: session.sessionId,
+      // Il n'y a pas d'événement : la trace d'audit dit d'où vient le fait.
+      // Un identifiant inventé qui ressemblerait à celui du fournisseur
+      // rendrait les deux chemins indiscernables dans le journal.
+      evenementId: `reconciliation:${session.sessionId}`,
+      motif: session.motifEchec ?? MOTIF_PAR_DEFAUT,
     };
   }
 }
