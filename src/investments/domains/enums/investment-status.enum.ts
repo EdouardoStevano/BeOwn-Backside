@@ -5,9 +5,9 @@ export enum InvestmentStatus {
   PAYE = 'paye',
   SIGNE = 'signe',
   /**
-   * Art. 22 du règlement (UE) 2020/1503 : délai de réflexion précontractuel de
-   * quatre jours calendaires, réservé aux investisseurs non avertis. Les
-   * fractions sont réservées et les fonds bloqués sur le wallet, mais
+   * Délai de réflexion que BeOwn s'engage à ouvrir aux investisseurs non
+   * avertis. Durée et libellé : `src/investments/domains/retractation.ts`.
+   * Les fractions sont réservées et les fonds bloqués sur le wallet, mais
    * l'engagement n'est pas définitif : rien n'est mis à disposition du porteur
    * et aucune échéance n'est générée tant que le délai n'a pas expiré.
    */

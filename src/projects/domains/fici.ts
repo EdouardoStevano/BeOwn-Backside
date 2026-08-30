@@ -24,6 +24,8 @@
  * utilisateur, et le renommer coûterait une migration pour un gain nul.
  */
 
+import { LIBELLE_DELAI_RETRACTATION } from 'src/investments/domains/retractation';
+
 /** Longueur maximale, hors annexes — règle éditoriale interne de concision. */
 export const NOMBRE_MAX_PAGES = 6;
 
@@ -53,14 +55,21 @@ export const AVERTISSEMENT_ABSENCE_GARANTIE =
 
 /**
  * Délai de réflexion — section 8. Gabarit §4.3.
- * Engagement contractuel propre à BeOwn, implémenté par
- * `src/investments/domains/retractation.ts` (quatre jours calendaires).
+ *
+ * Engagement contractuel propre à BeOwn. La DURÉE n'est pas écrite ici : elle
+ * est composée à partir de `LIBELLE_DELAI_RETRACTATION`, dérivé de l'unique
+ * constante `DELAI_RETRACTATION_JOURS` du domaine investissement. C'est la
+ * seule dépendance de ce fichier vers un autre contexte, et elle est
+ * délibérée : dupliquer la durée ferait diverger le document servi à
+ * l'investisseur de la règle réellement appliquée par le serveur.
+ *
+ * Le reste de la phrase reste la transcription littérale du gabarit.
  */
 export const MENTION_DELAI_REFLEXION =
   'Si vous relevez de la catégorie des investisseurs non avertis au sens du ' +
   "questionnaire de la plateforme, vous disposez d'un délai de réflexion de " +
-  'quatre jours calendaires à compter de votre souscription, pendant lequel ' +
-  'vous pouvez y renoncer sans avoir à vous justifier et sans pénalité.';
+  `${LIBELLE_DELAI_RETRACTATION} à compter de votre souscription, pendant ` +
+  'lequel vous pouvez y renoncer sans avoir à vous justifier et sans pénalité.';
 
 /** Absence de conseil — section 1. Gabarit §4.4. */
 export const MENTION_ABSENCE_CONSEIL =

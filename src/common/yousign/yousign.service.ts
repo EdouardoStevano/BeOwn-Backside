@@ -1,6 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
+import {
+  SignatureProviderUnavailableError,
+  motifIndisponibilite,
+} from './signature-provider.error';
 
 export interface EmbeddedSignatureResult {
   requestId: string;
@@ -8,12 +12,16 @@ export interface EmbeddedSignatureResult {
   signingUrl: string;
 }
 
+/** Au-delà, on considère que le prestataire ne répondra pas. */
+const DELAI_APPEL_MS_PAR_DEFAUT = 20_000;
+
 @Injectable()
 export class YouSignService {
   private readonly logger = new Logger(YouSignService.name);
   private readonly baseUrl: string;
   private readonly apiKey: string;
   private readonly webhookSecret: string;
+  private readonly delaiAppelMs: number;
 
   constructor(private readonly configService: ConfigService) {
     this.baseUrl =
@@ -22,6 +30,74 @@ export class YouSignService {
     this.apiKey = configService.get<string>('YOUSIGN_API_KEY') ?? '';
     this.webhookSecret =
       configService.get<string>('YOUSIGN_WEBHOOK_SECRET') ?? '';
+    const delaiConfigure = Number(
+      configService.get<string>('YOUSIGN_TIMEOUT_MS'),
+    );
+    this.delaiAppelMs =
+      Number.isFinite(delaiConfigure) && delaiConfigure > 0
+        ? delaiConfigure
+        : DELAI_APPEL_MS_PAR_DEFAUT;
+  }
+
+  /**
+   * Appel réseau au prestataire, borné dans le temps.
+   *
+   * Sans borne, une API qui ne répond plus fait pendre la requête de
+   * l'utilisateur jusqu'au timeout du reverse proxy — et l'ordre reste alors
+   * en `ACCEPTE` bien plus longtemps que nécessaire. Un délai dépassé est une
+   * indisponibilité, au même titre qu'un 503 : il est signalé comme tel.
+   */
+  private async appeler(
+    url: string,
+    init: RequestInit,
+    operation: string,
+  ): Promise<Response> {
+    const controleur = new AbortController();
+    const minuterie = setTimeout(() => controleur.abort(), this.delaiAppelMs);
+    try {
+      return await fetch(url, { ...init, signal: controleur.signal });
+    } catch (err: unknown) {
+      const delaiDepasse = controleur.signal.aborted;
+      const detail = err instanceof Error ? err.message : String(err);
+      this.logger.error(
+        `YouSign ${operation} injoignable (${delaiDepasse ? 'délai dépassé' : 'réseau'}) : ${detail}`,
+      );
+      throw new SignatureProviderUnavailableError({
+        operation,
+        motif: delaiDepasse ? 'delai_depasse' : 'reseau',
+        detailFournisseur: detail,
+      });
+    } finally {
+      clearTimeout(minuterie);
+    }
+  }
+
+  /**
+   * Corps brut d'une réponse en échec — ou lève si l'échec incombe au
+   * prestataire (panne, abonnement expiré, clé refusée, quota, délai).
+   *
+   * Les échecs APPLICATIFS (400, 404, 422…) repartent avec leur corps : le
+   * caller compose son message historique et le traitement reste identique.
+   */
+  private async corpsOuIndisponibilite(
+    res: Response,
+    operation: string,
+  ): Promise<string> {
+    const texte = await res.text();
+    const motif = motifIndisponibilite(res.status);
+    if (!motif) return texte;
+
+    // Le journal serveur garde TOUT : c'est ici qu'un exploitant lit
+    // « subscription expired » et va renouveler l'abonnement.
+    this.logger.error(
+      `YouSign ${operation} → ${res.status} (${motif}) : ${texte}`,
+    );
+    throw new SignatureProviderUnavailableError({
+      operation,
+      motif,
+      statutFournisseur: res.status,
+      detailFournisseur: texte,
+    });
   }
 
   /**
@@ -51,16 +127,20 @@ export class YouSignService {
     path: string,
     body?: unknown,
   ): Promise<T> {
-    const res = await fetch(`${this.baseUrl}${path}`, {
-      method,
-      headers: {
-        Authorization: `Bearer ${this.apiKey}`,
-        'Content-Type': 'application/json',
+    const res = await this.appeler(
+      `${this.baseUrl}${path}`,
+      {
+        method,
+        headers: {
+          Authorization: `Bearer ${this.apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: body !== undefined ? JSON.stringify(body) : undefined,
       },
-      body: body !== undefined ? JSON.stringify(body) : undefined,
-    });
+      `${method} ${path}`,
+    );
     if (!res.ok) {
-      const text = await res.text();
+      const text = await this.corpsOuIndisponibilite(res, `${method} ${path}`);
       throw new Error(`YouSign ${method} ${path} → ${res.status}: ${text}`);
     }
     if (res.status === 204) return undefined as T;
@@ -104,16 +184,22 @@ export class YouSignService {
     );
     formData.append('nature', 'signable_document');
 
-    const uploadRes = await fetch(
+    const uploadRes = await this.appeler(
       `${this.baseUrl}/signature_requests/${signatureRequest.id}/documents`,
       {
         method: 'POST',
         headers: { Authorization: `Bearer ${this.apiKey}` },
         body: formData,
       },
+      'POST /signature_requests/:id/documents',
     );
     if (!uploadRes.ok) {
-      throw new Error(`YouSign doc upload error: ${await uploadRes.text()}`);
+      throw new Error(
+        `YouSign doc upload error: ${await this.corpsOuIndisponibilite(
+          uploadRes,
+          'POST /signature_requests/:id/documents',
+        )}`,
+      );
     }
     const document = (await uploadRes.json()) as { id: string };
 
@@ -206,12 +292,16 @@ export class YouSignService {
     const docId = list[0]?.id;
     if (!docId) throw new Error(`No documents found for request ${requestId}`);
 
-    const res = await fetch(
+    const operation = 'GET /signature_requests/:id/documents/:docId/download';
+    const res = await this.appeler(
       `${this.baseUrl}/signature_requests/${requestId}/documents/${docId}/download?version=completed`,
       { headers: { Authorization: `Bearer ${this.apiKey}` } },
+      operation,
     );
     if (!res.ok) {
-      throw new Error(`YouSign doc download error: ${await res.text()}`);
+      throw new Error(
+        `YouSign doc download error: ${await this.corpsOuIndisponibilite(res, operation)}`,
+      );
     }
     return Buffer.from(await res.arrayBuffer());
   }

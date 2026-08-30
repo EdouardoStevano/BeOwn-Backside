@@ -14,6 +14,7 @@ import {
   rendreSections,
   verifierFici,
 } from './fici';
+import { LIBELLE_DELAI_RETRACTATION } from 'src/investments/domains/retractation';
 
 const documentComplet = () => ({
   sections: Object.fromEntries(
@@ -188,10 +189,19 @@ describe('avertissements — textes du gabarit, mot pour mot', () => {
   });
 
   it('délai de réflexion : annoncé comme un engagement de la plateforme', () => {
+    // La durée n'est PAS écrite en dur ici : le document doit dire ce que le
+    // serveur applique. Ce test reste vert le jour où la constante change,
+    // et rouge si quelqu'un réintroduit une durée figée dans la mention.
     expect(MENTION_DELAI_REFLEXION).toContain(
-      'délai de réflexion de quatre jours calendaires',
+      `délai de réflexion de ${LIBELLE_DELAI_RETRACTATION}`,
     );
     expect(MENTION_DELAI_REFLEXION).toContain('questionnaire de la plateforme');
+  });
+
+  it("délai de réflexion : ne cite ni règlement ni autorité — c'est une règle BeOwn", () => {
+    expect(MENTION_DELAI_REFLEXION).not.toMatch(
+      /2020\/1503|ECSP|PSFP|AMF|AEMF|règlement \(UE\)|article 2[0-9]/i,
+    );
   });
 
   it('absence de conseil et responsabilité du contenu sont servies', () => {

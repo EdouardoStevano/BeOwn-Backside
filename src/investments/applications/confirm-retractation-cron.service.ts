@@ -21,8 +21,10 @@ import { Echeance } from 'src/investments/domains/echeance';
 import { ResolveProjectWalletUseCase } from 'src/wallets/applications/usecases/resolve-project-wallet.usecase';
 
 /**
- * Confirme les souscriptions dont le délai de réflexion de l'art. 22 du
- * règlement (UE) 2020/1503 a expiré.
+ * Confirme les souscriptions dont le délai de réflexion accordé par BeOwn a
+ * expiré. Durée : `DELAI_RETRACTATION_JOURS`, appliquée à la souscription par
+ * `calculerEcheanceRetractation` ; ce service ne fait que lire l'échéance
+ * persistée, il ne recalcule aucune durée.
  *
  * Tant que le délai court, l'investissement est en `EN_DELAI_RETRACTATION` :
  * les fractions sont réservées, les fonds bloqués sur le wallet, mais rien

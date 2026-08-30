@@ -10,7 +10,7 @@
  * c'est-à-dire `solde + soldeBloque` :
  *  - `solde` est la part immédiatement disponible pour le titulaire ;
  *  - `soldeBloque` est la part engagée mais encore réversible (délai de
- *    réflexion de l'art. 22 du règlement (UE) 2020/1503).
+ *    réflexion accordé par BeOwn, cf. `investments/domains/retractation.ts`).
  *
  * Raisonner sur le seul `solde` serait faux : le blocage d'escrow déplace des
  * fonds d'une poche à l'autre À L'INTÉRIEUR du même wallet, sans qu'aucun

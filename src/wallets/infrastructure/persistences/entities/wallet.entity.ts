@@ -56,8 +56,9 @@ export class WalletEntity {
 
   /**
    * Fonds engagés mais non définitifs : souscriptions encore couvertes par le
-   * délai de réflexion de l'art. 22 du règlement (UE) 2020/1503. Ils ne sont ni
-   * disponibles pour l'investisseur, ni mis à disposition du porteur de projet.
+   * délai de réflexion que BeOwn accorde aux investisseurs non avertis
+   * (`investments/domains/retractation.ts`). Ils ne sont ni disponibles pour
+   * l'investisseur, ni mis à disposition du porteur de projet.
    */
   @Column({ type: 'decimal', precision: 18, scale: 2, default: 0 })
   soldeBloque: number;

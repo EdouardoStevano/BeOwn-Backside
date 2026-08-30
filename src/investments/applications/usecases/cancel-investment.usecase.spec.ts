@@ -12,7 +12,7 @@ import {
 } from 'src/wallets/domains/grand-livre';
 
 /**
- * GRAND LIVRE — rétractation pendant le délai de réflexion (art. 22).
+ * GRAND LIVRE — rétractation pendant le délai de réflexion BeOwn.
  *
  * À la souscription d'un non averti, les fonds n'ont jamais quitté son wallet :
  * ils sont passés du disponible au bloqué. La rétractation fait le mouvement

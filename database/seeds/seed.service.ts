@@ -755,7 +755,10 @@ Financement **obligataire** d'un plateau de bureaux loué à un locataire unique
           montant: depots[i],
           devise: 'EUR',
           type: TransactionType.DEPOT,
-          fournisseur: TransactionFournisseur.CINETPAY,
+          // Dépôt en euros sur un marché SEPA : le seul prestataire branché
+          // est Stripe. Le seed ne doit pas fabriquer d'historique mobile
+          // money, qui n'a jamais eu d'adaptateur.
+          fournisseur: TransactionFournisseur.STRIPE,
           fournisseurRef: `dep_${investors[i].userId}`,
           statut: TransactionStatus.REUSSI,
         }),

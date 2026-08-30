@@ -2,6 +2,7 @@ import { BadRequestException } from '@nestjs/common';
 import { RepondreInteretUseCase } from './repondre-interet.usecase';
 import { InitiateBuyUseCase } from './initiate-buy.usecase';
 import { OrdreMarcheStatus } from 'src/secondarymarket/domains/ordre-marche';
+import { SignatureProviderUnavailableError } from 'src/common/yousign/signature-provider.error';
 
 /**
  * Intégration des deux use cases du parcours de cession — ANO-01.
@@ -86,7 +87,10 @@ describe('Acceptation vendeur → initiation de cession (intégration)', () => {
   });
 
   const construire = (
-    { ordre = construireOrdre(), yousignEnPanne = false }: { ordre?: any; yousignEnPanne?: boolean } = {},
+    {
+      ordre = construireOrdre(),
+      erreurYousign = null,
+    }: { ordre?: any; erreurYousign?: Error | null } = {},
   ) => {
     const ordreRepo = construireDepotOrdres(ordre);
 
@@ -135,7 +139,7 @@ describe('Acceptation vendeur → initiation de cession (intégration)', () => {
       // youSignService
       {
         createEmbeddedSignatureRequest: jest.fn(async () => {
-          if (yousignEnPanne) throw new Error('YouSign indisponible');
+          if (erreurYousign) throw erreurYousign;
           return {
             requestId: 'ys-req-1',
             signerId: 'ys-signer-1',
@@ -201,7 +205,9 @@ describe('Acceptation vendeur → initiation de cession (intégration)', () => {
   });
 
   it("si le prestataire de signature tombe, l'annonce revient en interet_exprime et reste répondable", async () => {
-    const { repondre, ordre } = construire({ yousignEnPanne: true });
+    const { repondre, ordre } = construire({
+      erreurYousign: new Error('YouSign indisponible'),
+    });
 
     await expect(repondre.accepter(ORDRE_ID, VENDEUR_ID)).rejects.toThrow(
       'YouSign indisponible',
@@ -210,6 +216,69 @@ describe('Acceptation vendeur → initiation de cession (intégration)', () => {
     // Compensation effective : la clause conditionnelle du retour arrière a
     // bien trouvé l'ordre en ACCEPTE et l'a ramené en attente de réponse.
     expect(ordre.statut).toBe(OrdreMarcheStatus.INTERET_EXPRIME);
+  });
+
+  // ── F-02 : abonnement Yousign expiré, reproduit en conditions réelles ──────
+
+  const panneAbonnementExpire = () =>
+    new SignatureProviderUnavailableError({
+      operation: 'POST /signature_requests',
+      motif: 'authentification_refusee',
+      statutFournisseur: 401,
+      detailFournisseur:
+        '{"detail":"You are not authorized to perform this action, please contact ' +
+        'our sales team to check your subscription and the validity of your trial period."}',
+    });
+
+  it("l'indisponibilité du prestataire remonte TYPÉE, pour que la couche HTTP réponde 503 et non 500", async () => {
+    const { repondre } = construire({ erreurYousign: panneAbonnementExpire() });
+
+    const erreur = await repondre
+      .accepter(ORDRE_ID, VENDEUR_ID)
+      .catch((e) => e);
+
+    // C'est ce type, et lui seul, que le filtre du contrôleur intercepte.
+    expect(erreur).toBeInstanceOf(SignatureProviderUnavailableError);
+    expect(erreur.code).toBe('SIGNATURE_PROVIDER_UNAVAILABLE');
+  });
+
+  it("la compensation reste jouée sur une panne prestataire : rien de perdu, le vendeur peut réessayer", async () => {
+    const { repondre, ordre, signaturesEnregistrees } = construire({
+      erreurYousign: panneAbonnementExpire(),
+    });
+
+    await expect(repondre.accepter(ORDRE_ID, VENDEUR_ID)).rejects.toBeInstanceOf(
+      SignatureProviderUnavailableError,
+    );
+
+    expect(ordre.statut).toBe(OrdreMarcheStatus.INTERET_EXPRIME);
+    // La marque d'intérêt est intacte : quantité, acheteur, date.
+    expect(ordre.interetNbFractions).toBe(3);
+    expect(ordre.acheteurId).toBe(ACHETEUR_ID);
+    // Aucune signature n'a été ouverte : rien à annuler, rien à nettoyer.
+    expect(signaturesEnregistrees).toHaveLength(0);
+  });
+
+  it("une acceptation compensée ne prévient PAS l'acheteur d'un accord qui n'existe pas", async () => {
+    const { repondre, notifications } = construire({
+      erreurYousign: panneAbonnementExpire(),
+    });
+
+    await expect(repondre.accepter(ORDRE_ID, VENDEUR_ID)).rejects.toBeInstanceOf(
+      SignatureProviderUnavailableError,
+    );
+
+    expect(notifications.push).not.toHaveBeenCalled();
+  });
+
+  it("une acceptation réussie prévient bien l'acheteur", async () => {
+    const { repondre, notifications } = construire();
+
+    await repondre.accepter(ORDRE_ID, VENDEUR_ID);
+
+    expect(notifications.push).toHaveBeenCalledWith(
+      expect.objectContaining({ utilisateurId: ACHETEUR_ID }),
+    );
   });
 
   it("une annonce déjà acceptée ne peut pas être acceptée deux fois", async () => {

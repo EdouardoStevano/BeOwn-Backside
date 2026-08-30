@@ -9,7 +9,7 @@ export class Wallet {
   fournisseurRef: string;
   devise: string;
   solde: number;
-  /** Fonds engagés sous délai de réflexion (art. 22 ECSPR), indisponibles. */
+  /** Fonds engagés sous le délai de réflexion BeOwn, indisponibles. */
   soldeBloque: number;
   statut: string;
   createdAt: Date;
