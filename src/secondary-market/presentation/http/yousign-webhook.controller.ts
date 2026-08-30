@@ -164,11 +164,11 @@ export class YouSignWebhookController {
       return;
     }
 
-    // Snapshot des taux lu UNE fois pour toute l'opération marché secondaire
+    // Le barème lu UNE fois pour toute l'opération marché secondaire
     // (cohérence R1 : pas de dérive si un admin modifie les commissions pendant
     // le traitement). Non requis pour la souscription initiale.
-    const feeRates =
-      existing.ordreId === null ? null : await this.platformFees.getRates();
+    const bareme =
+      existing.ordreId === null ? null : await this.platformFees.lireLeBareme();
 
     const result = await this.dataSource.transaction(
       async (em): Promise<SignatureDoneResult> => {
@@ -192,7 +192,7 @@ export class YouSignWebhookController {
 
         // ── Marché secondaire : rachat de fractions ───────────────────────────
         const ordre = await em.findOne(OrdreMarcheEntity, {
-          where: { id: signature.ordreId! },
+          where: { id: signature.ordreId },
           relations: ['investissement'],
         });
         if (!ordre) throw new Error(`Ordre ${signature.ordreId} introuvable`);
@@ -210,14 +210,13 @@ export class YouSignWebhookController {
           prixUnitaire,
         );
         const plusValueVendeur = round2(montantTotal - coutAcquisition);
-        // Frais vendeur : % du montant de la vente + % de la plus-value.
-        const { transactionFee, gainFee } =
-          await this.platformFees.computeResaleFees(
-            montantTotal,
-            plusValueVendeur,
-            // Non-null dans la branche marché secondaire (ordreId != null).
-            feeRates!,
-          );
+        // Frais vendeur : % du montant de la vente + % de la plus-value, tous
+        // deux issus du même barème.
+        // Non-null dans la branche marché secondaire (ordreId != null).
+        const { transactionFee, gainFee } = bareme!.fraisDeRevente(
+          montantTotal,
+          plusValueVendeur,
+        );
         const totalFrais = round2(transactionFee + gainFee);
         const montantNetVendeur = round2(montantTotal - totalFrais);
         const buyerUserId = signature.userId;

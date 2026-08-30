@@ -82,13 +82,14 @@ export class ForcerExecutionOrdreUseCase {
       prixUnitaire,
     );
     const plusValueVendeur = round2(montantTotal - coutAcquisition);
-    const feeRates = await this.platformFees.getRates();
-    const { transactionFee, gainFee } =
-      await this.platformFees.computeResaleFees(
-        montantTotal,
-        plusValueVendeur,
-        feeRates,
-      );
+    // Un seul barème pour les deux frais de la cession : lu une fois, appliqué
+    // deux fois. Le « snapshot » que l'appelant devait penser à repasser n'a
+    // plus lieu d'être.
+    const bareme = await this.platformFees.lireLeBareme();
+    const { transactionFee, gainFee } = bareme.fraisDeRevente(
+      montantTotal,
+      plusValueVendeur,
+    );
     const totalFrais = round2(transactionFee + gainFee);
     const montantNetVendeur = round2(montantTotal - totalFrais);
 

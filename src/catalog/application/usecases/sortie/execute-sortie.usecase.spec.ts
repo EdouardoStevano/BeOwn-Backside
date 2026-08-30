@@ -1,4 +1,5 @@
 import { UserRole } from 'src/iam/domain/enums/user.enum';
+import { BaremeDesFrais } from 'src/treasury/domain/value-objects/bareme-des-frais.vo';
 import { InvestmentStatus } from 'src/subscription/domain/enums/investment-status.enum';
 import { ProjectStatus } from 'src/catalog/domain/enums/project-status.enum';
 import { StatutSortie } from 'src/catalog/domain/enums/statut-sortie.enum';
@@ -70,12 +71,14 @@ function makeDeps(
   };
   const auditLog = { create: jest.fn().mockResolvedValue(undefined) };
   const amlMonitor = { check: jest.fn().mockResolvedValue(undefined) };
-  // Parité avec le vrai service : 0 sur une plus-value ≤ 0, 15 % au-delà.
+  // Le **vrai** barème plutôt qu'une doublure : il porte désormais la règle
+  // (0 sur une moins-value, 15 % au-delà), et la réimplémenter dans le montage
+  // reviendrait à éprouver la copie plutôt que l'original.
   const platformFees = {
-    computePropertySaleGainFee: jest
+    lireLeBareme: jest
       .fn()
-      .mockImplementation(async (pv: number) =>
-        pv <= 0 ? 0 : Math.round(pv * 15) / 100,
+      .mockResolvedValue(
+        BaremeDesFrais.restore({ propertySaleGainFeePct: 15 }),
       ),
   };
 

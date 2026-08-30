@@ -112,9 +112,10 @@ export class ExecuteSortieUseCase {
     );
 
     // Frais sur la plus-value à la vente du bien (taux configurable
-    // `propertySaleGainFeePct`) — prélevés par la plateforme AVANT distribution.
-    // Le service rend 0 sur une moins-value.
-    const fraisPerformance = await this.platformFees.computePropertySaleGainFee(
+    // `propertySaleGainFeePct`) — prélevés par la plateforme AVANT
+    // distribution. Le barème rend 0 sur une moins-value.
+    const bareme = await this.platformFees.lireLeBareme();
+    const fraisPerformance = bareme.fraisSurPlusValueDeSortie(
       Number(sortie.plusValueBrute),
     );
     const plusValueDistribuable = arrondirAuCentime(

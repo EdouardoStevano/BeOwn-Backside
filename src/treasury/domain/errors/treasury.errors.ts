@@ -79,6 +79,24 @@ export class MontantDeMouvementInvalideError extends TreasuryError {
 }
 
 /**
+ * Un taux qui n'en est pas un : un `NaN`, un infini, ou un taux négatif.
+ *
+ * Distincte des erreurs de montant : un pourcentage n'est pas une somme, et
+ * confondre les deux — ce que faisait le `number` nu qu'il remplace — est
+ * précisément l'erreur d'ordre de grandeur qu'on cherche à rendre impossible.
+ */
+export class PourcentageInvalideError extends TreasuryError {
+  readonly kind = TreasuryErrorKind.INVALID_INPUT;
+
+  constructor(valeur: number) {
+    super('Un taux doit être un nombre fini et positif.', {
+      code: 'INVALID_RATE',
+      details: { valeur },
+    });
+  }
+}
+
+/**
  * Une somme qui n'en est pas une : un `NaN`, un infini, ou un nombre négatif.
  *
  * Distincte de {@link MontantDeMouvementInvalideError}, qui refuse le **zéro**

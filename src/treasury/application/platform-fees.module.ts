@@ -2,6 +2,8 @@ import { Global, Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AdminSettingsEntity } from 'src/admin/entities/admin-settings.entity';
 import { PlatformFeesService } from './services/platform-fees.service';
+import { BAREME_DES_FRAIS_QUERY } from './ports/bareme-des-frais.query';
+import { AdminSettingsBaremeQuery } from '../infrastructure/repositories/admin-settings-bareme.query';
 import { PublicFeesController } from '../presentation/http/public-fees.controller';
 
 /**
@@ -38,7 +40,12 @@ import { PublicFeesController } from '../presentation/http/public-fees.controlle
 @Module({
   imports: [TypeOrmModule.forFeature([AdminSettingsEntity])],
   controllers: [PublicFeesController],
-  providers: [PlatformFeesService],
+  providers: [
+    // Le paramétrage est lu par un port : l'entité ORM de `src/admin` et
+    // TypeORM ne franchissent plus l'infrastructure (§27, §33).
+    { provide: BAREME_DES_FRAIS_QUERY, useClass: AdminSettingsBaremeQuery },
+    PlatformFeesService,
+  ],
   exports: [PlatformFeesService],
 })
 export class PlatformFeesModule {}

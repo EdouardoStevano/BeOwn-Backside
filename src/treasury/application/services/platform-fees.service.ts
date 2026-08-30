@@ -1,116 +1,71 @@
-import { Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { AdminSettingsEntity } from 'src/admin/entities/admin-settings.entity';
-import { round2 } from 'src/shared/money/round2';
+import { Inject, Injectable } from '@nestjs/common';
+import type {
+  BaremeDesFrais,
+  BaremeDesFraisSnapshot,
+} from 'src/treasury/domain/value-objects/bareme-des-frais.vo';
+import {
+  BAREME_DES_FRAIS_QUERY,
+  type BaremeDesFraisQuery,
+} from '../ports/bareme-des-frais.query';
+
+// Le vocabulaire de ce service a rejoint le domaine, où il décide de l'argent
+// que la plateforme encaisse. Ces réexports gardent les points d'import
+// existants valides — l'écran d'administration lit les taux par défaut, la
+// route publique publie leur forme.
+export {
+  BaremeDesFrais,
+  TAUX_PAR_DEFAUT as DEFAULT_FEE_RATES,
+  type BaremeDesFraisSnapshot as PlatformFeeRates,
+} from 'src/treasury/domain/value-objects/bareme-des-frais.vo';
 
 /**
- * Taux de commissions de la plateforme (en %, éditables par le super_admin
- * via les settings admin — voir AdminSettingsBlob.commissions).
- */
-export interface PlatformFeeRates {
-  /**
-   * % par an du capital initial du SPV.
-   *
-   * @deprecated Plus aucun calcul ne l'utilise : il servait à la gestion
-   * locative, sortie du périmètre (§1.4.3). La clé reste dans l'interface et
-   * dans `DEFAULT_FEE_RATES` parce qu'elle est **stockée** en base
-   * (`admin_settings.commissions`) et éditable par l'écran de paramétrage — la
-   * retirer d'ici casserait la lecture des lignes existantes.
-   */
-  annualPlatformFeePct: number;
-  /** @deprecated Idem : frais de gestion locative, hors périmètre. */
-  rentManagementFeePct: number;
-  /** % de la plus-value brute à la vente du bien (sortie) */
-  propertySaleGainFeePct: number;
-  /** % du montant de la vente, à la charge du vendeur (marché secondaire) */
-  resaleTransactionFeePct: number;
-  /** % de la plus-value du vendeur sur revente d'actions (marché secondaire) */
-  shareSaleGainFeePct: number;
-}
-
-export const DEFAULT_FEE_RATES: PlatformFeeRates = {
-  annualPlatformFeePct: 1,
-  rentManagementFeePct: 7,
-  propertySaleGainFeePct: 15,
-  resaleTransactionFeePct: 1,
-  shareSaleGainFeePct: 15,
-};
-
-/**
- * Service central de calcul des frais plateforme.
+ * L'accès au barème des commissions de la plateforme.
  *
- * Lit les taux dans la ligne singleton admin_settings (id = "default") et
- * retombe sur DEFAULT_FEE_RATES pour toute clé absente ou invalide.
- * Les clés legacy du blob (investmentFeePct…) sont simplement ignorées.
+ * **Il ne calcule plus rien**, et c'est tout le refactoring. Il portait trois
+ * méthodes `async` — un frais de sortie, deux frais de revente — qui relisaient
+ * chacune la base à moins qu'on ne leur passe un « snapshot » de taux en
+ * paramètre optionnel. Deux choses en découlaient :
+ *
+ * - **les règles étaient dans la couche application** : « pas de frais sur une
+ *   moins-value » décide de ce que BeOwn a le droit de prélever, ce qui est du
+ *   métier (§14). Elles vivent dans {@link BaremeDesFrais} ;
+ * - **la cohérence des taux tenait à une convention**. Une opération appliquant
+ *   plusieurs frais devait penser à lire les taux d'abord et à les repasser à
+ *   chaque appel, faute de quoi un administrateur modifiant les commissions
+ *   entre deux calculs faisait dériver les taux au milieu d'une vente. Le
+ *   contrôleur de signature l'honorait avec un `feeRates!`, la sortie de projet
+ *   l'ignorait. Rendre le barème **une fois** rend la dérive inexprimable : on
+ *   n'applique pas un barème qu'on n'a pas chargé.
+ *
+ * Il ne connaît plus non plus la base : la lecture passe par
+ * {@link BaremeDesFraisQuery}, là où il se faisait injecter un `Repository`
+ * TypeORM sur une entité de `src/admin` (§27).
  */
 @Injectable()
 export class PlatformFeesService {
   constructor(
-    @InjectRepository(AdminSettingsEntity)
-    private readonly settingsRepo: Repository<AdminSettingsEntity>,
+    @Inject(BAREME_DES_FRAIS_QUERY)
+    private readonly baremes: BaremeDesFraisQuery,
   ) {}
 
-  async getRates(): Promise<PlatformFeeRates> {
-    const row = await this.settingsRepo.findOne({ where: { id: 'default' } });
-    const blob = row?.settings?.commissions ?? {};
-
-    const pick = (key: keyof PlatformFeeRates): number => {
-      const value = blob[key];
-      return typeof value === 'number' && Number.isFinite(value)
-        ? value
-        : DEFAULT_FEE_RATES[key];
-    };
-
-    return {
-      annualPlatformFeePct: pick('annualPlatformFeePct'),
-      rentManagementFeePct: pick('rentManagementFeePct'),
-      propertySaleGainFeePct: pick('propertySaleGainFeePct'),
-      resaleTransactionFeePct: pick('resaleTransactionFeePct'),
-      shareSaleGainFeePct: pick('shareSaleGainFeePct'),
-    };
-  }
-
   /**
-   * Frais plateforme mensuel : capital initial × (taux annuel / 100) / 12.
+   * Le barème courant, à lire **une fois** par opération.
    *
-   * `rates` (optionnel) : snapshot de taux pré-lu via getRates(). Toute
-   * opération métier appliquant PLUSIEURS frais doit lire les taux UNE fois
-   * et passer ce snapshot à chaque helper (pas de dérive de taux en cours
-   * d'opération si un admin modifie les commissions entre deux calculs).
+   * Tout ce qui s'applique ensuite est synchrone : c'est ce qui garantit que
+   * deux frais d'une même vente sont calculés au même taux.
    */
-  /**
-   * Frais sur plus-value à la vente du bien (sortie).
-   * Pas de frais sur une moins-value.
-   */
-  async computePropertySaleGainFee(
-    plusValue: number,
-    rates?: PlatformFeeRates,
-  ): Promise<number> {
-    if (plusValue <= 0) return 0;
-    const r = rates ?? (await this.getRates());
-    return round2(plusValue * (r.propertySaleGainFeePct / 100));
+  lireLeBareme(): Promise<BaremeDesFrais> {
+    return this.baremes.lire();
   }
 
   /**
-   * Frais marché secondaire à la charge du vendeur :
-   * - transactionFee : % du montant de la vente ;
-   * - gainFee : % de la plus-value du vendeur (0 si pas de plus-value).
+   * Les taux à plat, pour l'affichage.
+   *
+   * Conservé sous ce nom parce que c'est le contrat de `GET
+   * /public/platform-fees`, que le Frontside consomme pour ses simulateurs.
    */
-  async computeResaleFees(
-    montantVente: number,
-    plusValueVendeur: number,
-    ratesSnapshot?: PlatformFeeRates,
-  ): Promise<{ transactionFee: number; gainFee: number }> {
-    const rates = ratesSnapshot ?? (await this.getRates());
-    return {
-      transactionFee: round2(
-        montantVente * (rates.resaleTransactionFeePct / 100),
-      ),
-      gainFee:
-        plusValueVendeur <= 0
-          ? 0
-          : round2(plusValueVendeur * (rates.shareSaleGainFeePct / 100)),
-    };
+  async getRates(): Promise<BaremeDesFraisSnapshot> {
+    const bareme = await this.baremes.lire();
+    return bareme.toSnapshot();
   }
 }
