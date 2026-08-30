@@ -1,6 +1,12 @@
 import {
   PRIX_REFERENCE_CONTRAIGNANT,
   MENTION_NON_SYSTEME_DE_NEGOCIATION,
+  CODE_DETENTION_TROP_RECENTE,
+  CODE_PROJET_NON_ELIGIBLE,
+  DUREE_DETENTION_MINIMALE_MOIS,
+  calculerAssietteCession,
+  dateCessibiliteMinimale,
+  verifierEligibiliteMiseEnVente,
   verifierInteret,
 } from './tableau-affichage';
 
@@ -44,5 +50,159 @@ describe('mentions réglementaires — art. 25(2) et 25(4)', () => {
       "n'exploite pas un système de négociation",
     );
     expect(MENTION_NON_SYSTEME_DE_NEGOCIATION).toContain('appariée');
+  });
+});
+
+describe('dateCessibiliteMinimale — calcul calendaire', () => {
+  it('ajoute six mois pleins', () => {
+    expect(dateCessibiliteMinimale(new Date(2026, 1, 15, 12))).toEqual(
+      new Date(2026, 7, 15, 12),
+    );
+  });
+
+  it('borne le jour au dernier jour du mois cible (31 août → 28 février)', () => {
+    // Sans bornage, un 31 août + 6 mois déborderait sur le 3 mars.
+    expect(dateCessibiliteMinimale(new Date(2026, 7, 31, 12))).toEqual(
+      new Date(2027, 1, 28, 12),
+    );
+  });
+
+  it('respecte une année bissextile (31 août 2027 → 29 février 2028)', () => {
+    expect(dateCessibiliteMinimale(new Date(2027, 7, 31, 12))).toEqual(
+      new Date(2028, 1, 29, 12),
+    );
+  });
+
+  it('franchit correctement le changement d\'année', () => {
+    expect(dateCessibiliteMinimale(new Date(2026, 9, 10, 12))).toEqual(
+      new Date(2027, 3, 10, 12),
+    );
+  });
+});
+
+describe('verifierEligibiliteMiseEnVente — bornes de détention', () => {
+  const acquisition = new Date(2026, 1, 15, 12); // 15 février 2026
+  const enExploitation = 'en_exploitation';
+
+  const verdictAu = (maintenant: Date) =>
+    verifierEligibiliteMiseEnVente({
+      dateAcquisition: acquisition,
+      statutProjet: enExploitation,
+      maintenant,
+    });
+
+  it('la durée minimale est bien de six mois', () => {
+    expect(DUREE_DETENTION_MINIMALE_MOIS).toBe(6);
+  });
+
+  it('six mois moins un jour : refus SECONDARY_HOLDING_TOO_RECENT', () => {
+    const verdict = verdictAu(new Date(2026, 7, 14, 12));
+    expect(verdict.eligible).toBe(false);
+    expect(verdict.code).toBe(CODE_DETENTION_TROP_RECENTE);
+    expect(verdict.motif).toContain('6 mois');
+  });
+
+  it('six mois pile : accepté', () => {
+    const verdict = verdictAu(new Date(2026, 7, 15, 12));
+    expect(verdict.eligible).toBe(true);
+    expect(verdict.code).toBeNull();
+  });
+
+  it('six mois plus un jour : accepté', () => {
+    expect(verdictAu(new Date(2026, 7, 16, 12)).eligible).toBe(true);
+  });
+
+  it('expose toujours la date de cessibilité, y compris en cas de refus', () => {
+    expect(verdictAu(new Date(2026, 7, 14, 12)).cessibleAPartirDu).toEqual(
+      new Date(2026, 7, 15, 12),
+    );
+    expect(verdictAu(new Date(2026, 7, 16, 12)).cessibleAPartirDu).toEqual(
+      new Date(2026, 7, 15, 12),
+    );
+  });
+});
+
+describe('verifierEligibiliteMiseEnVente — état du projet', () => {
+  const detentionAncienne = {
+    dateAcquisition: new Date(2020, 0, 1, 12),
+    maintenant: new Date(2026, 0, 1, 12),
+  };
+
+  it.each([
+    ['brouillon'],
+    ['annonce'],
+    ['pre_investissement'],
+    ['en_collecte'],
+    ['finance'],
+    ['cloture'],
+    ['echec'],
+    ['annule'],
+  ])('refuse un projet en statut %s', (statutProjet) => {
+    const verdict = verifierEligibiliteMiseEnVente({
+      ...detentionAncienne,
+      statutProjet,
+    });
+    expect(verdict.eligible).toBe(false);
+    expect(verdict.code).toBe(CODE_PROJET_NON_ELIGIBLE);
+  });
+
+  it('accepte un projet en exploitation détenu depuis longtemps', () => {
+    expect(
+      verifierEligibiliteMiseEnVente({
+        ...detentionAncienne,
+        statutProjet: 'en_exploitation',
+      }).eligible,
+    ).toBe(true);
+  });
+
+  it('quand les deux conditions manquent, le projet prime (cause non corrigeable par l\'attente)', () => {
+    const verdict = verifierEligibiliteMiseEnVente({
+      dateAcquisition: new Date(2026, 0, 1, 12),
+      statutProjet: 'en_collecte',
+      maintenant: new Date(2026, 0, 2, 12),
+    });
+    expect(verdict.code).toBe(CODE_PROJET_NON_ELIGIBLE);
+  });
+});
+
+describe('calculerAssietteCession — assiette des frais', () => {
+  it('calcule le montant brut et la plus-value', () => {
+    expect(
+      calculerAssietteCession({
+        nbFractions: 10,
+        prixUnitaire: 120,
+        prixRevientUnitaire: 100,
+      }),
+    ).toEqual({ montantBrut: 1200, plusValueVendeur: 200 });
+  });
+
+  it('plancher à zéro sur une moins-value (aucun frais de gain)', () => {
+    expect(
+      calculerAssietteCession({
+        nbFractions: 10,
+        prixUnitaire: 80,
+        prixRevientUnitaire: 100,
+      }),
+    ).toEqual({ montantBrut: 800, plusValueVendeur: 0 });
+  });
+
+  it('prix de revient inconnu : plus-value réputée nulle, jamais devinée', () => {
+    expect(
+      calculerAssietteCession({
+        nbFractions: 10,
+        prixUnitaire: 120,
+        prixRevientUnitaire: null,
+      }),
+    ).toEqual({ montantBrut: 1200, plusValueVendeur: 0 });
+  });
+
+  it('arrondit au centime', () => {
+    expect(
+      calculerAssietteCession({
+        nbFractions: 3,
+        prixUnitaire: 33.333,
+        prixRevientUnitaire: 33.331,
+      }),
+    ).toEqual({ montantBrut: 100, plusValueVendeur: 0.01 });
   });
 });

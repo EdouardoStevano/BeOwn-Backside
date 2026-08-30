@@ -6,6 +6,13 @@ import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/w
 import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entities/transaction.entity';
 import { ProjectEntity } from 'src/projects/infrastructure/persistences/entities/project.entity';
 import { ProjectStatus } from 'src/projects/domains/enums/project-status.enum';
+import { TransactionType } from 'src/wallets/domains/enums/wallet.enum';
+import { CategorieInvestisseur } from 'src/profiles/domains/investor-classification';
+import {
+  mouvementsDepuisInstantanes,
+  variationTotale,
+  PositionWallet,
+} from 'src/wallets/domains/grand-livre';
 
 /**
  * Vérifie l'atomicité de la création d'investissement (correctif de survente /
@@ -35,6 +42,8 @@ describe('CreateInvestmentUseCase — atomicité', () => {
   // État relu SOUS VERROU dans la transaction (configurable par test).
   let projectRow: any;
   let walletRow: any;
+  let projectWalletRow: any; // wallet technique du projet (grand livre)
+  let projectWalletResolver: any;
   let lockedSoldTotal: number; // fractions vendues recomptées sous verrou
 
   const USER_ID = 42;
@@ -57,8 +66,16 @@ describe('CreateInvestmentUseCase — atomicité', () => {
 
   beforeEach(() => {
     projectRow = { id: 'p1', statut: ProjectStatus.EN_COLLECTE };
-    walletRow = { id: 'w1', solde: 1000, devise: 'EUR' };
+    walletRow = { id: 'w1', solde: 1000, soldeBloque: 0, devise: 'EUR' };
+    projectWalletRow = { id: 'wp1', solde: 0, soldeBloque: 0, devise: 'EUR' };
     lockedSoldTotal = 0;
+
+    // Résolution idempotente du wallet technique du projet : renvoie toujours
+    // la même ligne (créée à la demande dans le vrai use case).
+    projectWalletResolver = {
+      executeInTransaction: jest.fn().mockImplementation(async () => projectWalletRow),
+      findInTransaction: jest.fn().mockImplementation(async () => projectWalletRow),
+    };
 
     investmentRepository = {
       findInvestmentById: jest.fn().mockResolvedValue(null),
@@ -142,6 +159,7 @@ describe('CreateInvestmentUseCase — atomicité', () => {
         observeHistogram: jest.fn(),
         setGauge: jest.fn(),
       } as any,
+      projectWalletResolver,
     );
   });
 
@@ -243,5 +261,195 @@ describe('CreateInvestmentUseCase — atomicité', () => {
     const result = await useCase.execute(USER_ID, idemDto);
     expect(result.id).toBe('inv-existing');
     expect(dataSource.transaction).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * GRAND LIVRE — la souscription est une opération interne : elle DÉPLACE des
+ * fonds sans en créer ni en détruire. Preuve par instantanés avant/après sur
+ * l'ensemble des wallets : la somme des variations (disponible + bloqué) vaut
+ * exactement zéro, pour l'investisseur averti (crédit du wallet projet) comme
+ * pour le non averti (blocage interne, art. 22).
+ */
+describe('CreateInvestmentUseCase — invariant comptable (scénario : souscription simple)', () => {
+  let harnais: ReturnType<typeof buildHarnais>;
+
+  const USER_ID = 42;
+  const dto: any = { projetId: 'p1', nbFractions: 2 };
+
+  const profilAverti = {
+    categoriePsfp: CategorieInvestisseur.AVERTI,
+    // Évaluation valide : expire dans un an.
+    evaluationExpireLe: new Date(Date.now() + 365 * 24 * 3600 * 1000),
+    patrimoineNetCalcule: 100000,
+    seuilAvertissementCalcule: 5000,
+  };
+
+  function buildHarnais() {
+    const projectRow: any = { id: 'p1', statut: ProjectStatus.EN_COLLECTE };
+    const walletRow: any = { id: 'w1', solde: 1000, soldeBloque: 0, devise: 'EUR' };
+    const projectWalletRow: any = { id: 'wp1', solde: 0, soldeBloque: 0, devise: 'EUR' };
+
+    const snapshot = (): Map<string, PositionWallet> =>
+      new Map(
+        [walletRow, projectWalletRow].map((w: any) => [
+          w.id,
+          { solde: Number(w.solde), soldeBloque: Number(w.soldeBloque ?? 0) },
+        ]),
+      );
+
+    const manager: any = {
+      findOne: jest.fn(async (entity: any) => {
+        if (entity === ProjectEntity) return projectRow;
+        if (entity === WalletEntity) return walletRow;
+        return null;
+      }),
+      createQueryBuilder: jest.fn(() => ({
+        select: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getRawOne: jest.fn().mockResolvedValue({ total: '0' }),
+      })),
+      save: jest.fn(async (entity: any, obj: any) => {
+        if (entity === InvestmentEntity) return { ...obj, id: 'inv-1' };
+        return obj;
+      }),
+      update: jest.fn().mockResolvedValue({ affected: 1 }),
+      delete: jest.fn().mockResolvedValue({ affected: 1 }),
+      count: jest.fn().mockResolvedValue(0),
+    };
+
+    const profilRepository = {
+      findProfilPPByUserId: jest.fn().mockResolvedValue(null),
+    };
+    const projectWalletResolver = {
+      executeInTransaction: jest.fn(async () => projectWalletRow),
+      findInTransaction: jest.fn(async () => projectWalletRow),
+    };
+    const dataSource: any = { transaction: jest.fn(async (cb: any) => cb(manager)) };
+
+    const useCase = new CreateInvestmentUseCase(
+      {
+        findInvestmentById: jest.fn().mockResolvedValue(null),
+        countFractionsVendues: jest.fn().mockResolvedValue(0),
+        updateBulletinDocId: jest.fn().mockResolvedValue(undefined),
+      } as any,
+      {
+        findProjectById: jest.fn().mockResolvedValue({
+          id: 'p1',
+          titre: 'Projet Test',
+          ville: 'Paris',
+          pays: 'FR',
+          instrument: 'OBLIGATION',
+          statut: ProjectStatus.EN_COLLECTE,
+          capitalCible: 10000,
+          ticketMinimum: 100,
+          ticketMaximum: null,
+          nbFractions: 100,
+          triCible: 8,
+          dureeMois: 12,
+        }),
+      } as any,
+      {
+        findTransactionByIdempotencyKey: jest.fn().mockResolvedValue(null),
+        findWalletByUser: jest
+          .fn()
+          .mockResolvedValue({ id: 'w1', solde: 1000, devise: 'EUR' }),
+      } as any,
+      { save: jest.fn().mockResolvedValue({ id: 'd1' }) } as any,
+      {
+        findById: jest.fn().mockResolvedValue({
+          userId: USER_ID,
+          firstname: 'Jean',
+          lastname: 'Test',
+          userEmail: { email: 'jean@example.com' },
+        }),
+      } as any,
+      profilRepository as any,
+      { generateBulletin: jest.fn().mockResolvedValue(Buffer.from('pdf')) } as any,
+      {
+        upload: jest.fn().mockResolvedValue({ objectName: 'o', publicUrl: 'u' }),
+      } as any,
+      { push: jest.fn(), pushToAdmins: jest.fn() } as any,
+      { investmentCreated: jest.fn() } as any,
+      dataSource,
+      {
+        incrementCounter: jest.fn(),
+        observeHistogram: jest.fn(),
+        setGauge: jest.fn(),
+      } as any,
+      projectWalletResolver as any,
+    );
+
+    return {
+      useCase,
+      manager,
+      profilRepository,
+      projectWalletResolver,
+      walletRow,
+      projectWalletRow,
+      snapshot,
+    };
+  }
+
+  beforeEach(() => {
+    harnais = buildHarnais();
+  });
+
+  const txSaves = () =>
+    harnais.manager.save.mock.calls.filter((c: any) => c[0] === TransactionEntity);
+
+  it('investisseur averti : Σ des variations de solde de TOUS les wallets = 0, débit investisseur = crédit projet', async () => {
+    harnais.profilRepository.findProfilPPByUserId.mockResolvedValue(profilAverti);
+    const avant = harnais.snapshot();
+
+    await harnais.useCase.execute(USER_ID, dto);
+
+    const apres = harnais.snapshot();
+    const mouvements = mouvementsDepuisInstantanes(avant, apres);
+
+    // ── INVARIANT COMPTABLE : somme algébrique des variations = 0. ──────────
+    expect(variationTotale(mouvements)).toBe(0);
+
+    // Double entrée explicite : -200 investisseur, +200 wallet projet.
+    expect(harnais.walletRow.solde).toBe(800);
+    expect(harnais.projectWalletRow.solde).toBe(200);
+    expect(mouvements).toHaveLength(2);
+  });
+
+  it('investisseur non averti (art. 22) : blocage interne, Σ des variations = 0, rien ne part chez le projet', async () => {
+    // Profil absent → non averti par défaut protecteur.
+    const avant = harnais.snapshot();
+
+    await harnais.useCase.execute(USER_ID, dto);
+
+    const apres = harnais.snapshot();
+    const mouvements = mouvementsDepuisInstantanes(avant, apres);
+
+    // ── INVARIANT COMPTABLE : le blocage déplace 200 € du disponible vers le
+    //    bloqué DANS le wallet investisseur — variation nette nulle. ─────────
+    expect(variationTotale(mouvements)).toBe(0);
+    expect(harnais.walletRow.solde).toBe(800);
+    expect(harnais.walletRow.soldeBloque).toBe(200);
+    expect(harnais.projectWalletRow.solde).toBe(0);
+    expect(harnais.projectWalletResolver.executeInTransaction).not.toHaveBeenCalled();
+  });
+
+  it('non-régression : walletDestination n’est JAMAIS null sur la transaction ledger de souscription', async () => {
+    // Cas averti → SOUSCRIPTION créditée au wallet projet.
+    harnais.profilRepository.findProfilPPByUserId.mockResolvedValue(profilAverti);
+    await harnais.useCase.execute(USER_ID, dto);
+    expect(txSaves()).toHaveLength(1);
+    expect(txSaves()[0][1].type).toBe(TransactionType.SOUSCRIPTION);
+    expect(txSaves()[0][1].walletDestination).toBe('wp1');
+    expect(txSaves()[0][1].walletDestination).not.toBeNull();
+  });
+
+  it('non-régression : le blocage d’escrow (non averti) porte aussi une destination non nulle', async () => {
+    await harnais.useCase.execute(USER_ID, dto);
+    expect(txSaves()).toHaveLength(1);
+    expect(txSaves()[0][1].type).toBe(TransactionType.ESCROW_LOCK);
+    expect(txSaves()[0][1].walletDestination).toBe('w1');
+    expect(txSaves()[0][1].walletDestination).not.toBeNull();
   });
 });

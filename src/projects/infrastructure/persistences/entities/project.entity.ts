@@ -175,9 +175,16 @@ export class ProjectEntity {
   avertissementMd: string | null;
 
   /**
-   * Fiche d'informations clés sur l'investissement (art. 23 du règlement
-   * (UE) 2020/1503). Rédigée par le porteur, sous sa responsabilité. Aucune
-   * collecte ne peut s'ouvrir tant qu'elle est incomplète.
+   * Document d'informations clés de l'opération, rédigé par le porteur sous sa
+   * responsabilité. Ni collecte ni réservation ne peuvent s'ouvrir tant qu'il
+   * est incomplet (voir `domains/fici.ts`).
+   *
+   * Le nom de colonne « fici » est un identifiant technique historique, jamais
+   * affiché : le renommer coûterait une migration pour un gain nul.
+   *
+   * Structure jsonb : aucun changement de schéma relationnel. Les champs
+   * `version` et `dateVersion` ajoutés au contenu vivent DANS le jsonb — rien
+   * à migrer, le `synchronize` du seed suffit.
    */
   @Column({ type: 'jsonb', nullable: true })
   fici: ContenuFici | null;

@@ -52,6 +52,9 @@ export class ProjectMapper {
     domain.previsionnel = entity.previsionnel ?? null;
     domain.chronologie = entity.chronologie ?? [];
     domain.garanties = entity.garanties ?? [];
+    // LECTURE : le repli sur OBLIGATAIRE est conservé — les lignes créées avant
+    // l'ajout de la colonne peuvent la porter à NULL. Un projet dont le modèle
+    // est inconnu est traité comme obligataire (comportement historique).
     domain.modeleEconomique =
       entity.modeleEconomique ?? ModeleEconomique.OBLIGATAIRE;
     domain.nbUnitesLouables = entity.nbUnitesLouables ?? null;
@@ -99,8 +102,15 @@ export class ProjectMapper {
     entity.previsionnel = domain.previsionnel;
     entity.chronologie = domain.chronologie ?? [];
     entity.garanties = domain.garanties ?? [];
-    entity.modeleEconomique =
-      domain.modeleEconomique ?? ModeleEconomique.OBLIGATAIRE;
+    // ÉCRITURE : aucun repli. Le `?? OBLIGATAIRE` qui figurait ici réécrivait
+    // silencieusement le modèle d'un projet EQUITY dès qu'un domaine reconstruit
+    // sans le champ était sauvegardé — le commutateur était donc inécrivable en
+    // pratique. On n'affecte la colonne que si le domaine porte une valeur ;
+    // sinon on laisse le DEFAULT de colonne (`obligataire`) jouer à l'INSERT et
+    // la valeur en base intacte à l'UPDATE. Même pattern que broadcast*At.
+    if (domain.modeleEconomique != null) {
+      entity.modeleEconomique = domain.modeleEconomique;
+    }
     entity.nbUnitesLouables = domain.nbUnitesLouables ?? null;
     // Posés uniquement par BroadcastService (UPDATE ciblé) : on ne les écrase
     // que si le domaine les porte, pour qu'un save() issu d'un domaine

@@ -26,6 +26,7 @@ import {
   ProjectType,
 } from 'src/projects/domains/enums/project-status.enum';
 import { RegimeFiscal } from 'src/projects/domains/enums/regime-fiscal.enum';
+import { ModeleEconomique } from 'src/projects/domains/enums/modele-economique.enum';
 
 // Helper: coerce string → number (sent by multipart or form)
 const toNumber = () =>
@@ -165,6 +166,34 @@ export class CreateProjectDto {
   @ApiProperty({ enum: ProjectInstrument })
   @IsEnum(ProjectInstrument)
   instrument: ProjectInstrument;
+
+  /**
+   * Moteur économique du projet. Commutateur STRUCTURANT : il détermine quel
+   * moteur de rendement s'applique, et les deux s'excluent.
+   *
+   * - `obligataire` (défaut) : titre de créance à coupon fixe. Un échéancier
+   *   de coupons est généré à la signature de chaque souscription
+   *   (`YouSignWebhookController.executeInvestmentSignature`), et le
+   *   remboursement suit `triCible` / `dureeMois`.
+   * - `equity` : parts d'une société support. AUCUN échéancier n'est généré ;
+   *   le rendement provient exclusivement des distributions de loyers réels
+   *   (`CalculateDistributionPeriodeUseCase`) et la sortie d'une cession
+   *   (`DeclareSortieUseCase`).
+   *
+   * Absent du corps de la requête = `obligataire`, pour la rétrocompatibilité
+   * des intégrations existantes.
+   */
+  @ApiPropertyOptional({
+    enum: ModeleEconomique,
+    default: ModeleEconomique.OBLIGATAIRE,
+    description:
+      "Moteur économique du projet. « obligataire » : coupon fixe, échéancier généré à la signature. " +
+      "« equity » : parts d'une société support, rendement issu des seules distributions de loyers, aucun échéancier. " +
+      'Les deux modèles sont exclusifs. Champ omis = « obligataire ».',
+  })
+  @IsOptional()
+  @IsEnum(ModeleEconomique)
+  modeleEconomique?: ModeleEconomique;
 
   @ApiPropertyOptional({
     enum: ProjectStatus,

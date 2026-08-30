@@ -225,7 +225,7 @@ describe('DeleteAccountUseCase', () => {
       (c: any) => c[0] === TransactionEntity,
     )[1];
     expect(created).toMatchObject({
-      walletId: 'w1',
+      walletSource: 'w1',
       type: TransactionType.RETRAIT,
       montant: 150,
       statut: TransactionStatus.EN_ATTENTE_PAIEMENT,

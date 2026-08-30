@@ -4,7 +4,11 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { SortieProjet, StatutSortie } from '../../domains/sortie-projet';
+import {
+  STATUTS_PROJET_CESSIBLES,
+  SortieProjet,
+  StatutSortie,
+} from '../../domains/sortie-projet';
 import {
   PROJECT_REPOSITORY,
   type ProjectRepository,
@@ -14,7 +18,6 @@ import {
   type SortieProjetRepository,
 } from '../ports/repositories/sortie-projet.repository';
 import { ModeleEconomique } from '../../domains/enums/modele-economique.enum';
-import { ProjectStatus } from '../../domains/enums/project-status.enum';
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -43,9 +46,12 @@ export class DeclareSortieUseCase {
         `Sortie disponible uniquement pour modèle EQUITY (actuel: ${projet.modeleEconomique}).`,
       );
     }
-    if (projet.statut !== ProjectStatus.FINANCE) {
+    // Un bien mis en location passe en `en_exploitation` : le limiter à
+    // `finance` rendait toute cession indéclarable dès la première mise en
+    // location, c'est-à-dire dans le cas nominal.
+    if (!STATUTS_PROJET_CESSIBLES.includes(projet.statut)) {
       throw new BadRequestException(
-        `Projet doit être en statut FINANCE (actuel: ${projet.statut}).`,
+        `Une cession ne peut être déclarée que sur un projet financé ou en exploitation (statut actuel : ${projet.statut}).`,
       );
     }
     if (input.prixRevente <= 0) {

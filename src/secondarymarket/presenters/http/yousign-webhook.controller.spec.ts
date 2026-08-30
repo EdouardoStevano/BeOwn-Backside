@@ -2,7 +2,9 @@ import { YouSignWebhookController } from './yousign-webhook.controller';
 import { SignatureEntity } from 'src/signatures/infrastructure/persistences/entities/signature.entity';
 import { SignatureStatus } from 'src/signatures/domains/enums/signature-status.enum';
 import { InvestmentEntity } from 'src/investments/infrastructure/persistences/entities/investment.entity';
+import { EcheanceEntity } from 'src/investments/infrastructure/persistences/entities/echeance.entity';
 import { ProjectEntity } from 'src/projects/infrastructure/persistences/entities/project.entity';
+import { ModeleEconomique } from 'src/projects/domains/enums/modele-economique.enum';
 import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/wallet.entity';
 import { InvestmentStatus } from 'src/investments/domains/enums/investment-status.enum';
 import { WalletType } from 'src/wallets/domains/enums/wallet.enum';
@@ -33,6 +35,12 @@ describe('YouSignWebhookController.handleSignatureDone (atomicité SIGNED)', () 
     solde: number;
     preTxSignature: Partial<SignatureEntity>;
     lockedSignature?: Partial<SignatureEntity>;
+    /**
+     * Surcharges du projet lié à la souscription — sert notamment à jouer le
+     * modèle économique (obligataire / equity). `undefined` reproduit une ligne
+     * antérieure à l'ajout de la colonne.
+     */
+    project?: Partial<ProjectEntity>;
   }) {
     const signature: any = {
       id: 'sig-1',
@@ -73,6 +81,7 @@ describe('YouSignWebhookController.handleSignatureDone (atomicité SIGNED)', () 
       nbFractions: 10,
       capitalCible: 1000,
       titre: 'Projet Test',
+      ...opts.project,
     };
 
     const manager: any = {
@@ -133,7 +142,7 @@ describe('YouSignWebhookController.handleSignatureDone (atomicité SIGNED)', () 
       metrics,
     );
 
-    return { controller, signature, lockedSignature, investment, wallet, dataSource, manager, notificationEvents };
+    return { controller, signature, lockedSignature, investment, wallet, project, dataSource, manager, notificationEvents };
   }
 
   it('laisse la signature PENDING quand l\'exécution échoue (rejouable), puis réussit au rejeu', async () => {
@@ -192,5 +201,67 @@ describe('YouSignWebhookController.handleSignatureDone (atomicité SIGNED)', () 
       (c: any[]) => c[0] === InvestmentEntity,
     );
     expect(queriedInvestment).toBe(false);
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // Exclusivité des deux moteurs de rendement.
+  //
+  // `executeInvestmentSignature` générait un échéancier de coupons à la
+  // signature de TOUTE souscription, sans regarder le modèle économique. Sur un
+  // projet equity — rémunéré par les distributions de loyers réels — cela
+  // faisait compter DEUX FOIS le rendement dû à l'investisseur : coupons
+  // calculés sur `triCible` + distributions de loyers.
+  // ══════════════════════════════════════════════════════════════════════════
+  describe('échéancier de coupons — modèle OBLIGATAIRE uniquement', () => {
+    /** Échéances effectivement envoyées à la persistance, à plat. */
+    function echeancesSauvegardees(manager: any): any[] {
+      return manager.save.mock.calls
+        .filter((c: any[]) => c[0] === EcheanceEntity)
+        .flatMap((c: any[]) => (Array.isArray(c[1]) ? c[1] : [c[1]]));
+    }
+
+    it('OBLIGATAIRE : génère un échéancier complet (une échéance par mois de durée) — comportement inchangé', async () => {
+      const ctx = setup({
+        solde: 500,
+        preTxSignature: {},
+        project: { modeleEconomique: ModeleEconomique.OBLIGATAIRE } as any,
+      });
+
+      await ctx.controller.handleSignatureDone(REQ_ID);
+
+      const echeances = echeancesSauvegardees(ctx.manager);
+      expect(echeances).toHaveLength(12); // dureeMois du projet de test
+      expect(echeances[11].montantCapital).toBe(100); // capital in fine
+      expect(ctx.investment.statut).toBe(InvestmentStatus.CONFIRME);
+    });
+
+    it('EQUITY : ne crée AUCUNE échéance (pas de double rendement loyers + coupons)', async () => {
+      const ctx = setup({
+        solde: 500,
+        preTxSignature: {},
+        project: { modeleEconomique: ModeleEconomique.EQUITY } as any,
+      });
+
+      await ctx.controller.handleSignatureDone(REQ_ID);
+
+      expect(echeancesSauvegardees(ctx.manager)).toHaveLength(0);
+      // Le reste de la souscription se déroule normalement : la garde ne
+      // concerne QUE l'échéancier.
+      expect(ctx.investment.statut).toBe(InvestmentStatus.CONFIRME);
+      expect(ctx.wallet.solde).toBe(400); // 500 − 100 investis
+      expect(ctx.notificationEvents.investmentCreated).toHaveBeenCalledTimes(1);
+    });
+
+    it('modèle absent (ligne héritée) : traité comme OBLIGATAIRE — aucune régression sur les projets existants', async () => {
+      const ctx = setup({
+        solde: 500,
+        preTxSignature: {},
+        project: { modeleEconomique: undefined } as any,
+      });
+
+      await ctx.controller.handleSignatureDone(REQ_ID);
+
+      expect(echeancesSauvegardees(ctx.manager)).toHaveLength(12);
+    });
   });
 });

@@ -93,7 +93,7 @@ describe('RequestRetraitUseCase — versement vers une destination choisie', () 
       type: TransactionType.RETRAIT,
       statut: TransactionStatus.EN_COURS,
       montant: 100,
-      walletId: 'w1',
+      walletSource: 'w1',
       metadata: { userId: 42 },
     };
     openManager = {

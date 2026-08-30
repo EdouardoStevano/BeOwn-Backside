@@ -12,6 +12,7 @@ import { InitiateBuyUseCase } from './usecases/initiate-buy.usecase';
 import { ExprimerInteretUseCase } from './usecases/exprimer-interet.usecase';
 import { RepondreInteretUseCase } from './usecases/repondre-interet.usecase';
 import { CancelInitiationUseCase } from './usecases/cancel-initiation.usecase';
+import { DevisCessionService } from './devis-cession.service';
 import { KycEntity } from 'src/profiles/infrastructure/persistences/entities/kyc.entity';
 import { KycValidatedGuard } from 'src/common/auth/kyc-validated.guard';
 import { ProjectEntity } from 'src/projects/infrastructure/persistences/entities/project.entity';
@@ -33,6 +34,9 @@ import { UsersInfrastructureModule } from 'src/iam/infrastructure/users-infrastr
   ],
   providers: [
     ContractGeneratorService,
+    // Devis de frais servi avant tout engagement. `PlatformFeesService` vient
+    // du module global `PlatformFeesModule` : aucun import supplémentaire.
+    DevisCessionService,
     InitiateBuyUseCase,
     ExprimerInteretUseCase,
     RepondreInteretUseCase,

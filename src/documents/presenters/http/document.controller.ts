@@ -45,7 +45,11 @@ import {
 } from 'src/documents/domains/enums/document-type.enum';
 import { InvestmentEntity } from 'src/investments/infrastructure/persistences/entities/investment.entity';
 import { ProjectEntity } from 'src/projects/infrastructure/persistences/entities/project.entity';
-import { SetOrdreDto, UploadDocumentDto } from '../dto/document.dto';
+import {
+  parseBooleanish,
+  SetOrdreDto,
+  UploadDocumentDto,
+} from '../dto/document.dto';
 import { CloudStorageService } from 'src/shared/cloud-storage/cloud-storage.service';
 
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
@@ -114,8 +118,15 @@ export class DocumentController {
     );
   }
 
+  /**
+   * Normalise un drapeau booleen du DTO. Le `@Transform` du DTO a deja fait le
+   * travail lorsque la requete passe par le `ValidationPipe` global ; cette
+   * seconde lecture est une defense en profondeur : elle garantit qu'une chaine
+   * `"false"` ne devient jamais `true`, et que toute valeur non reconnue vaut
+   * `false` (defaut ferme : un document n'est public que si on l'a demande).
+   */
   private isTrue(value: unknown): boolean {
-    return value === true || value === 'true';
+    return parseBooleanish(value) === true;
   }
 
   private async findProjectOrFail(projectId: string): Promise<ProjectEntity> {
@@ -247,7 +258,17 @@ export class DocumentController {
         relatedTo: { type: 'string' },
         projectId: { type: 'string' },
         investmentId: { type: 'string' },
-        isPublic: { type: 'boolean' },
+        isPublic: {
+          type: 'boolean',
+          description:
+            'Accepte true/false, "true"/"false", "1"/"0". Absent = false.',
+        },
+        ordre: { type: 'integer', minimum: 0 },
+        estPrincipale: {
+          type: 'boolean',
+          description:
+            'Accepte true/false, "true"/"false", "1"/"0". Absent = false.',
+        },
       },
       required: ['file', 'type', 'relatedTo'],
     },

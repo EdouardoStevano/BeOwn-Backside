@@ -52,6 +52,7 @@ import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entit
 import { WalletMapper } from 'src/wallets/infrastructure/persistences/mappers/wallet.mapper';
 import { MetricsPort } from 'src/observability/metrics/metrics.port';
 import { METRIC } from 'src/observability/metrics/metric-names';
+import { ResolveProjectWalletUseCase } from 'src/wallets/applications/usecases/resolve-project-wallet.usecase';
 import {
   CategorieInvestisseur,
   SEUIL_AVERTISSEMENT_PLANCHER_EUR,
@@ -84,6 +85,7 @@ export class CreateInvestmentUseCase {
     @InjectDataSource()
     private readonly dataSource: DataSource,
     private readonly metrics: MetricsPort,
+    private readonly projectWalletResolver: ResolveProjectWalletUseCase,
   ) {}
 
   async execute(userId: number, dto: CreateInvestmentDto): Promise<Investment> {
@@ -302,10 +304,36 @@ export class CreateInvestmentUseCase {
       }
       await manager.save(WalletEntity, walletRow);
 
+      // 5 bis. Contrepartie du débit — GRAND LIVRE INTERNE.
+      //    Un débit sans crédit détruit de l'argent : chaque euro qui quitte le
+      //    wallet investisseur doit arriver quelque part.
+      //     • engagement DÉFINITIF → les fonds sont acquis au projet : ils
+      //       sont crédités sur son wallet technique, créé à la demande ;
+      //     • souscription encore sous DÉLAI DE RÉFLEXION → les fonds ne
+      //       quittent pas le wallet de l'investisseur, ils passent seulement
+      //       de la poche disponible à la poche bloquée (art. 22 : rien n'est
+      //       mis à disposition du porteur tant que la rétractation est
+      //       ouverte). Le transfert vers le projet a lieu à l'expiration du
+      //       délai, dans ConfirmRetractationCronService.
+      //    Dans les deux cas la somme des fonds détenus est conservée.
+      let walletProjet: WalletEntity | null = null;
+      if (!isNonAverti) {
+        walletProjet = await this.projectWalletResolver.executeInTransaction(
+          manager,
+          dto.projetId,
+          { devise: walletRow.devise },
+        );
+        walletProjet.solde = Number(walletProjet.solde) + montant;
+        await manager.save(WalletEntity, walletProjet);
+      }
+
       // 6. Écriture de la transaction ledger (clé d'idempotence conservée).
+      //    `walletDestination` n'est JAMAIS nul : une souscription est créditée
+      //    au wallet du projet, un blocage d'escrow reste sur le wallet de
+      //    l'investisseur (mouvement interne, source = destination).
       const tx = new Transaction();
       tx.walletSource = wallet.id;
-      tx.walletDestination = null;
+      tx.walletDestination = walletProjet ? walletProjet.id : wallet.id;
       tx.type = isNonAverti
         ? TransactionType.ESCROW_LOCK
         : TransactionType.SOUSCRIPTION;

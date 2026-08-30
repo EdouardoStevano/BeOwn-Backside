@@ -114,9 +114,14 @@ export class CancelInvestmentUseCase {
 
       // Trace ledger du remboursement de rétractation (idempotent par
       // investissement : la contrainte unique verrouille tout doublon).
+      // GRAND LIVRE — les fonds n'avaient jamais quitté le wallet de
+      // l'investisseur : ils étaient sur sa poche bloquée (art. 22). La
+      // rétractation est donc un mouvement INTERNE au wallet (bloqué →
+      // disponible) : source = destination, somme des fonds détenus conservée.
       await manager.save(
         TransactionEntity,
         manager.create(TransactionEntity, {
+          walletSource: wallet.id,
           walletDestination: wallet.id,
           type: TransactionType.REMBOURSEMENT_CAPITAL,
           montant,

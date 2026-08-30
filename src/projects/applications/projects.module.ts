@@ -23,6 +23,12 @@ import { DeclareSortieUseCase } from './usecases/declare-sortie.usecase';
 import { ExecuteSortieUseCase } from './usecases/execute-sortie.usecase';
 import { ProjectController } from '../presenters/http/project.controller';
 import { AdminSortiesController } from '../presenters/http/admin-sorties.controller';
+import {
+  AdminDocumentClesController,
+  DocumentClesController,
+} from '../presenters/http/document-cles.controller';
+import { EnregistrerDocumentClesUseCase } from './usecases/enregistrer-document-cles.usecase';
+import { ConsulterDocumentClesUseCase } from './usecases/consulter-document-cles.usecase';
 import { ProjectTimelineCronService } from './project-timeline-cron.service';
 
 @Module({
@@ -52,9 +58,16 @@ import { ProjectTimelineCronService } from './project-timeline-cron.service';
     ProjectReadModelService,
     DeclareSortieUseCase,
     ExecuteSortieUseCase,
+    EnregistrerDocumentClesUseCase,
+    ConsulterDocumentClesUseCase,
     ProjectTimelineCronService,
   ],
-  controllers: [ProjectController, AdminSortiesController],
+  controllers: [
+    ProjectController,
+    AdminSortiesController,
+    DocumentClesController,
+    AdminDocumentClesController,
+  ],
   exports: [GetProjectsUseCase, DeclareSortieUseCase, ExecuteSortieUseCase],
 })
 export class ProjectsModule {}

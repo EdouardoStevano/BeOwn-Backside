@@ -277,8 +277,12 @@ export class PaymentController {
     try {
       await this.dataSource.transaction(async (em) => {
         // 1. Insert ledger FIRST — la contrainte unique rejette tout doublon.
+        //    ANO-02 : un dépôt CRÉDITE le portefeuille — l'écriture va donc en
+        //    `walletDestination`, la source restant NULL (contrepartie externe :
+        //    la carte de l'investisseur). L'inscrire côté débiteur faisait
+        //    diverger le rapprochement « Σ crédits − Σ débits = solde ».
         await em.insert(TransactionEntity, {
-          walletId: wallet!.id,
+          walletDestination: wallet!.id,
           type: TransactionType.DEPOT,
           montant: amountMajor,
           devise: 'EUR',

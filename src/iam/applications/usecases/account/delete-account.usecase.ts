@@ -256,7 +256,8 @@ export class DeleteAccountUseCase {
    */
   private async findRegisteredIban(walletId: string): Promise<string | null> {
     const lastRetrait = await this.txRepo.findOne({
-      where: { walletId, type: TransactionType.RETRAIT },
+      // ANO-02 : un retrait débite le portefeuille → il vit sur `walletSource`.
+      where: { walletSource: walletId, type: TransactionType.RETRAIT },
       order: { createdAt: 'DESC' },
     });
     if (!lastRetrait) return null;
@@ -307,7 +308,7 @@ export class DeleteAccountUseCase {
         // Anti-doublon sous verrou : un versement en attente existe déjà.
         const pending = await manager.findOne(TransactionEntity, {
           where: {
-            walletId,
+            walletSource: walletId,
             type: TransactionType.RETRAIT,
             statut: In(PENDING_RETRAIT_STATUSES),
           },
@@ -329,7 +330,8 @@ export class DeleteAccountUseCase {
         const tx = await manager.save(
           TransactionEntity,
           manager.create(TransactionEntity, {
-            walletId,
+            walletSource: walletId,
+            walletDestination: null,
             type: TransactionType.RETRAIT,
             montant: soldeVerrouille,
             devise,

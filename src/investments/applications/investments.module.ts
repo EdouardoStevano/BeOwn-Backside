@@ -34,6 +34,7 @@ import { CollecteCloseCronService } from './collecte-close-cron.service';
 import { RefundCollecteService } from './refund-collecte.service';
 import { ConfirmRetractationCronService } from './confirm-retractation-cron.service';
 import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entities/transaction.entity';
+import { WalletsModule } from 'src/wallets/applications/wallets.module';
 
 @Module({
   imports: [
@@ -53,6 +54,10 @@ import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entit
     IamInfrastructureModule,
     ProjectsInfrastructureModule,
     WalletsInfrastructureModule,
+    // Grand livre interne : résolution idempotente du wallet projet
+    // (souscription, top-up, remboursement, dénouement d'escrow) et état
+    // financier constaté à la clôture de collecte.
+    WalletsModule,
     DocumentsInfrastructureModule,
     UsersInfrastructureModule,
     ProfilesInfrastructureModule,

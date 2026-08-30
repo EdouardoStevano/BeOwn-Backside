@@ -5,7 +5,7 @@ import { SECTIONS_REQUISES, SectionFici } from 'src/projects/domains/fici';
 
 const PROJECT_ID = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
 
-/** FICI complète : sans elle, l'ouverture de collecte est refusée (art. 23). */
+/** Document complet : sans lui, l'ouverture de collecte est refusée. */
 const FICI_VALIDE = {
   sections: Object.fromEntries(
     SECTIONS_REQUISES.map((section) => [section, 'Contenu du porteur.']),
@@ -120,8 +120,8 @@ describe('UpdateProjectStatusUseCase — déclencheurs de diffusion', () => {
   });
 });
 
-describe("UpdateProjectStatusUseCase — fiche d'informations clés (art. 23)", () => {
-  it("refuse l'ouverture de collecte sans FICI", async () => {
+describe("UpdateProjectStatusUseCase — document d'informations clés", () => {
+  it("refuse l'ouverture de collecte sans document, avec le message du gabarit", async () => {
     const { usecase, projectRepository } = makeDeps(ProjectStatus.ANNONCE);
     projectRepository.findProjectById.mockResolvedValue(
       makeProject(ProjectStatus.ANNONCE, null),
@@ -129,11 +129,28 @@ describe("UpdateProjectStatusUseCase — fiche d'informations clés (art. 23)", 
 
     await expect(
       usecase.execute(PROJECT_ID, ProjectStatus.EN_COLLECTE, 1),
-    ).rejects.toBeInstanceOf(BadRequestException);
+    ).rejects.toThrow(
+      "La collecte ne peut pas être ouverte : le document d'informations clés est absent ou incomplet.",
+    );
     expect(projectRepository.updateProjectStatus).not.toHaveBeenCalled();
   });
 
-  it("refuse l'ouverture de collecte avec une FICI incomplète", async () => {
+  it("ne nomme aucune autorité ni règlement dans le refus", async () => {
+    const { usecase, projectRepository } = makeDeps(ProjectStatus.ANNONCE);
+    projectRepository.findProjectById.mockResolvedValue(
+      makeProject(ProjectStatus.ANNONCE, null),
+    );
+
+    const erreur = await usecase
+      .execute(PROJECT_ID, ProjectStatus.EN_COLLECTE, 1)
+      .catch((e: BadRequestException) => e);
+
+    expect((erreur as BadRequestException).message).not.toMatch(
+      /AMF|AEMF|PSFP|2020\/1503|2022\/2119|2014\/49|97\/9|financement participatif|art\. 2[0-9]/i,
+    );
+  });
+
+  it("refuse l'ouverture de collecte avec un document incomplet", async () => {
     const { usecase, projectRepository } = makeDeps(ProjectStatus.ANNONCE);
     const incomplete = {
       ...FICI_VALIDE,
@@ -148,7 +165,7 @@ describe("UpdateProjectStatusUseCase — fiche d'informations clés (art. 23)", 
     ).rejects.toThrow(/Facteurs de risque/);
   });
 
-  it('refuse aussi le pré-investissement sans FICI : une réservation engage', async () => {
+  it('refuse aussi le pré-investissement sans document : une réservation engage', async () => {
     const { usecase, projectRepository } = makeDeps(ProjectStatus.ANNONCE);
     projectRepository.findProjectById.mockResolvedValue(
       makeProject(ProjectStatus.ANNONCE, null),
@@ -156,7 +173,9 @@ describe("UpdateProjectStatusUseCase — fiche d'informations clés (art. 23)", 
 
     await expect(
       usecase.execute(PROJECT_ID, ProjectStatus.PRE_INVESTISSEMENT, 1),
-    ).rejects.toBeInstanceOf(BadRequestException);
+    ).rejects.toThrow(
+      "Les réservations ne peuvent pas être ouvertes : le document d'informations clés est absent ou incomplet.",
+    );
   });
 
   it("laisse passer une transition qui n'ouvre aucun engagement", async () => {

@@ -52,7 +52,7 @@ export class Project {
   dateCloturePrevue: Date | null;
   descriptionMd: string | null;
   avertissementMd: string | null;
-  /** Fiche d'informations clés (art. 23). */
+  /** Document d'informations clés de l'opération (voir `domains/fici.ts`). */
   fici: ContenuFici | null = null;
   previsionnel: PrevisionnelFinancier | null;
   chronologie: EtapeChronologie[];

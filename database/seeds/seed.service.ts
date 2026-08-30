@@ -13,6 +13,7 @@ import {
   ProjectType,
   ProjectInstrument,
 } from 'src/projects/domains/enums/project-status.enum';
+import { ModeleEconomique } from 'src/projects/domains/enums/modele-economique.enum';
 import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/wallet.entity';
 import {
   WalletType,
@@ -459,7 +460,11 @@ export class SeedService {
     // ════════════════════════════════════════════════════════════════════════
     // 4. PROJETS
     //    A) Résidence Les Jardins — porteur1 — déjà publié, financé, en exploitation
+    //       modèle EQUITY (parts + loyers)
     //    B) Brouillon — porteur2 — soumis pour publication (illustre l'étape 1)
+    //       modèle EQUITY
+    //    C) Bureaux Plateau — porteur1 — en collecte, modèle OBLIGATAIRE
+    //       (coupon fixe + échéancier)
     // ════════════════════════════════════════════════════════════════════════
     this.logger.log('🏗️ Création des projets...');
 
@@ -488,6 +493,10 @@ export class SeedService {
         triCible: 9.0,
         dureeMois: 36,
         instrument: ProjectInstrument.PART_SOCIALE,
+        // Equity locative : parts d'une société support, revenus = loyers réels
+        // distribués mensuellement, sortie par cession. AUCUN échéancier de
+        // coupons n'est généré pour ce projet (voir YouSignWebhookController).
+        modeleEconomique: ModeleEconomique.EQUITY,
         estPreInvestissable: false,
         plafondPreInvestissement: null,
         descriptionMd: `## Résidence Les Jardins — Dakar Plateau
@@ -586,6 +595,9 @@ Immeuble résidentiel de 6 appartements loués, détenu via la SPV **BeOwn Les J
         triCible: 10.0,
         dureeMois: 24,
         instrument: ProjectInstrument.PART_SOCIALE,
+        // Equity locative également : le brouillon en attente de publication
+        // illustre le modèle cible de la plateforme.
+        modeleEconomique: ModeleEconomique.EQUITY,
         estPreInvestissable: false,
         plafondPreInvestissement: null,
         descriptionMd:
@@ -626,6 +638,9 @@ Immeuble résidentiel de 6 appartements loués, détenu via la SPV **BeOwn Les J
         triCible: 8.5,
         dureeMois: 24,
         instrument: ProjectInstrument.OBLIGATION,
+        // Modèle obligataire explicite (et non par défaut implicite) : titre de
+        // créance à coupon fixe, échéancier généré à la signature.
+        modeleEconomique: ModeleEconomique.OBLIGATAIRE,
         estPreInvestissable: false,
         plafondPreInvestissement: null,
         descriptionMd: `## Bureaux Plateau — Abidjan (obligation)
@@ -1039,8 +1054,14 @@ Financement **obligataire** d'un plateau de bureaux loué à un locataire unique
         projetId: projetA.id,
       }),
     );
+    // Contrepartie obligatoire : toute écriture au grand livre a un débit ET un
+    // crédit. Le débit du wallet technique du projet manquait — le solde du
+    // wallet restait supérieur de `frais` au net des transactions, et l'état
+    // financier du projet remontait un écart de réconciliation non nul.
     fraisWallet.solde = Number(fraisWallet.solde) + frais;
     await this.walletRepo.save(fraisWallet);
+    projetWallet.solde = Number(projetWallet.solde) - frais;
+    await this.walletRepo.save(projetWallet);
 
     this.logger.log(
       `✅ Distribution ${periodeDistribuee} : ${totalVerse.toLocaleString('fr-FR')} € versés (50/30/20 %) + ${frais.toLocaleString('fr-FR')} € de frais`,

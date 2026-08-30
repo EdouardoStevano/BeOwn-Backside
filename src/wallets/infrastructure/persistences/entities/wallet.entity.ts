@@ -10,6 +10,18 @@ import {
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 import { WalletType } from 'src/wallets/domains/enums/wallet.enum';
 
+/**
+ * Un projet ne peut porter qu'UN wallet par type. Un doublon scinderait le
+ * solde du projet en deux et rendrait le montant dû au porteur incalculable :
+ * l'index unique partiel transforme une course résiduelle en erreur bruyante
+ * plutôt qu'en désalignement silencieux du grand livre. Partiel, parce que la
+ * très grande majorité des wallets (investisseurs, frais, séquestres) ont
+ * `projetId` à NULL et doivent rester libres de coexister.
+ */
+@Index('UQ_wallet_projet_type', ['projetId', 'type'], {
+  unique: true,
+  where: '"projetId" IS NOT NULL',
+})
 @Entity('wallet')
 export class WalletEntity {
   @PrimaryGeneratedColumn('uuid')

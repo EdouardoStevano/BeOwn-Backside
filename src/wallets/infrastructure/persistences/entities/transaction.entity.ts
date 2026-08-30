@@ -12,17 +12,31 @@ import {
   TransactionType,
 } from 'src/wallets/domains/enums/wallet.enum';
 
+/**
+ * Écriture du grand livre interne.
+ *
+ * DEUX colonnes de portefeuille, et deux seulement : `walletSource` (débité)
+ * et `walletDestination` (crédité). Une contrepartie hors plateforme (dépôt
+ * par carte, retrait bancaire, versement au porteur) laisse l'autre côté à
+ * NULL — c'est le seul cas légitime.
+ *
+ * HISTORIQUE — ANO-02 : le schéma portait une TROISIÈME colonne `wallet_source`
+ * (propriété `walletId`), doublon orphelin de `walletSource`. Les dépôts y
+ * inscrivaient le portefeuille BÉNÉFICIAIRE, donc du côté débiteur, et le
+ * rapprochement « Σ crédits − Σ débits = solde » divergeait à chaque dépôt.
+ * La colonne a été supprimée ; ne pas la réintroduire. Rattrapage des données
+ * existantes : docs/adr/ADR-grand-livre-deux-colonnes.md.
+ */
 @Entity('transaction_paiement')
 export class TransactionEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
+  /** Portefeuille DÉBITÉ. NULL si la contrepartie est externe (dépôt). */
   @Column({ type: 'uuid', nullable: true })
   walletSource: string | null;
 
-  @Column({ type: 'uuid', nullable: true, name: 'wallet_source' })
-  walletId: string | null;
-
+  /** Portefeuille CRÉDITÉ. NULL si la contrepartie est externe (retrait). */
   @Column({ type: 'uuid', nullable: true })
   walletDestination: string | null;
 

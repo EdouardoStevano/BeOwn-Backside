@@ -242,9 +242,9 @@ export class ContractGeneratorService {
         .text(
           'Ce bulletin de souscription confirme votre investissement sur la plateforme BeOwn. ' +
             'Il remplace toute version précédente émise pour ce même investissement. ' +
-            'Conformément à la réglementation PSFP (Règlement UE 2020/1503), cet investissement est soumis à un risque de perte partielle ou totale du capital. ' +
+            'Cet investissement est soumis à un risque de perte partielle ou totale du capital. ' +
             'Les performances passées ne préjugent pas des performances futures. ' +
-            'BeOwn SAS est enregistrée en tant que Prestataire de Services de Financement Participatif.',
+            "BeOwn SAS ne détient aucun agrément d'autorité de marché et n'est soumise à la supervision d'aucune d'entre elles.",
           M,
           y,
           { width: innerW, align: 'justify', lineGap: 2 },
@@ -439,7 +439,7 @@ export class ContractGeneratorService {
         .fontSize(7.5)
         .font('Helvetica')
         .text(
-          'Ce contrat de souscription est établi conformément à la réglementation PSFP. Investir comporte des risques incluant la perte partielle ou totale du capital. BeOwn est enregistrée en tant que Prestataire de Services de Financement Participatif.',
+          "Investir comporte des risques incluant la perte partielle ou totale du capital. BeOwn ne détient aucun agrément d'autorité de marché et n'est soumise à la supervision d'aucune d'entre elles.",
           50,
           doc.y,
           { width: doc.page.width - 100, align: 'justify' },
@@ -645,8 +645,7 @@ export class ContractGeneratorService {
         .fontSize(7.5)
         .font('Helvetica')
         .text(
-          'Ce contrat de cession est établi conformément à la réglementation PSFP. ' +
-            'BeOwn est enregistrée en tant que Prestataire de Services de Financement Participatif. ' +
+          "BeOwn ne détient aucun agrément d'autorité de marché et n'est soumise à la supervision d'aucune d'entre elles. " +
             'Les investissements immobiliers sont soumis à des risques de perte en capital.',
           50,
           doc.y,
