@@ -12,6 +12,7 @@ import {
   HttpStatus,
   Inject,
   NotFoundException,
+  UseFilters,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -47,6 +48,16 @@ import { UserRole } from 'src/iam/domains/enums/user.enum';
 import { SkipThrottle } from '@nestjs/throttler';
 import { EcheanceEntity } from 'src/investments/infrastructure/persistences/entities/echeance.entity';
 import { EcheanceStatus } from 'src/investments/domains/enums/investment-status.enum';
+import {
+  CODE_RETRACTATION_DEJA_EFFECTUEE,
+  CODE_RETRACTATION_DELAI_EXPIRE,
+  CODE_RETRACTATION_INTROUVABLE,
+  CODE_RETRACTATION_NON_APPLICABLE,
+  CODE_RETRACTATION_NON_PROPRIETAIRE,
+  CODE_RETRACTATION_STATUT_INCOMPATIBLE,
+  LIBELLE_DELAI_RETRACTATION,
+} from 'src/investments/domains/retractation';
+import { SignatureProviderExceptionFilter } from 'src/common/yousign/signature-provider-exception.filter';
 
 class InitiateInvestmentDto {
   @ApiProperty({ description: 'UUID du projet' })
@@ -62,6 +73,11 @@ class InitiateInvestmentDto {
 @SkipThrottle()
 @ApiTags('Investments')
 @ApiBearerAuth()
+// Une panne du prestataire de signature (abonnement expiré, delai depasse,
+// panne) doit se lire comme une indisponibilite temporaire et non comme un
+// defaut applicatif : le filtre traduit en 503 rejouable. Meme traitement que
+// le marche secondaire, ou la souscription passe par la meme chaine YouSign.
+@UseFilters(SignatureProviderExceptionFilter)
 @Controller('investments')
 @UseGuards(JwtAuthGuard)
 export class InvestmentController {
@@ -270,9 +286,33 @@ export class InvestmentController {
     return this.topUpInvestment.execute(id, user.userId, dto.nbFractions);
   }
 
-  @ApiOperation({ summary: 'Annuler un investissement pendant le délai de rétractation (4j, non-averti uniquement)' })
+  @ApiOperation({
+    summary: `Annuler un investissement pendant le délai de rétractation (${LIBELLE_DELAI_RETRACTATION}, investisseurs non avertis uniquement)`,
+    description:
+      'Réservé au propriétaire de la souscription. Le remboursement est ' +
+      'atomique : statut, solde et écriture de grand livre sont écrits dans ' +
+      'une seule transaction. Chaque refus porte un `code` stable dans le ' +
+      `corps de la réponse : \`${CODE_RETRACTATION_STATUT_INCOMPATIBLE}\`, ` +
+      `\`${CODE_RETRACTATION_NON_APPLICABLE}\`, ` +
+      `\`${CODE_RETRACTATION_DELAI_EXPIRE}\`, ` +
+      `\`${CODE_RETRACTATION_DEJA_EFFECTUEE}\`, ` +
+      `\`${CODE_RETRACTATION_NON_PROPRIETAIRE}\`, ` +
+      `\`${CODE_RETRACTATION_INTROUVABLE}\`.`,
+  })
   @ApiParam({ name: 'id', description: "UUID de l'investissement" })
   @ApiResponse({ status: 204, description: 'Investissement annulé avec remboursement' })
+  @ApiResponse({
+    status: 400,
+    description: `Refus métier — \`${CODE_RETRACTATION_STATUT_INCOMPATIBLE}\` (statut non annulable), \`${CODE_RETRACTATION_NON_APPLICABLE}\` (investisseur averti : aucun délai ouvert), \`${CODE_RETRACTATION_DELAI_EXPIRE}\` (délai écoulé, \`expireLe\` renvoyé), \`${CODE_RETRACTATION_DEJA_EFFECTUEE}\` (demande concurrente déjà servie)`,
+  })
+  @ApiResponse({
+    status: 403,
+    description: `\`${CODE_RETRACTATION_NON_PROPRIETAIRE}\` — la souscription appartient à un autre investisseur`,
+  })
+  @ApiResponse({
+    status: 404,
+    description: `\`${CODE_RETRACTATION_INTROUVABLE}\` — souscription inexistante`,
+  })
   @HttpCode(HttpStatus.NO_CONTENT)
   @Roles(UserRole.INVESTISSEUR)
   @Post(':id/retract')

@@ -11,6 +11,7 @@ import {
   GoneException,
   NotFoundException,
   ForbiddenException,
+  UseFilters,
   UseGuards,
 } from '@nestjs/common';
 import {
@@ -61,10 +62,16 @@ import { SignatureEntity } from 'src/signatures/infrastructure/persistences/enti
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 import { MetricsPort } from 'src/observability/metrics/metrics.port';
 import { METRIC } from 'src/observability/metrics/metric-names';
+import { SIGNATURE_PROVIDER_UNAVAILABLE } from 'src/common/yousign/signature-provider.error';
+import { SignatureProviderExceptionFilter } from 'src/common/yousign/signature-provider-exception.filter';
 
 @SkipThrottle()
 @ApiTags('Marché Secondaire')
 @ApiBearerAuth()
+// Une panne du prestataire de signature n'est pas un défaut de la plateforme :
+// déclaré ici, le filtre couvre toutes les routes du contrôleur — celles qui
+// déclenchent une signature aujourd'hui comme celles qui le feront demain.
+@UseFilters(SignatureProviderExceptionFilter)
 @Controller('secondary-market')
 export class SecondaryMarketController {
   constructor(
@@ -469,6 +476,14 @@ export class SecondaryMarketController {
       "Accepter la marque d'intérêt reçue sur son annonce. Seule cette acceptation forme le contrat et déclenche la signature.",
   })
   @ApiParam({ name: 'id', description: "UUID de l'annonce" })
+  @ApiResponse({
+    status: 503,
+    description:
+      `${SIGNATURE_PROVIDER_UNAVAILABLE} — le prestataire de signature est ` +
+      "indisponible (panne, abonnement expiré, délai dépassé). L'acceptation " +
+      "n'est PAS enregistrée : l'annonce est ramenée en attente de réponse et " +
+      "le vendeur peut réessayer à l'identique.",
+  })
   @HttpCode(HttpStatus.OK)
   @Post('orders/:id/interet/acceptation')
   async accepterInteret(@Param('id') id: string, @CurrentUser() user: ActiveUser) {

@@ -59,7 +59,7 @@ import {
   calculerSeuilAvertissement,
   evaluationExpiree,
 } from 'src/profiles/domains/investor-classification';
-import { DELAI_RETRACTATION_JOURS } from 'src/investments/domains/retractation';
+import { calculerEcheanceRetractation } from 'src/investments/domains/retractation';
 
 @Injectable()
 export class CreateInvestmentUseCase {
@@ -203,18 +203,19 @@ export class CreateInvestmentUseCase {
     investment.instrument = project.instrument;
     investment.nbTitres = dto.nbFractions;
     investment.valeurTitre = prixFraction;
-    // ── Art. 22 — délai de réflexion précontractuel ───────────────────────────
-    // Pour un investisseur non averti, l'engagement n'est pas définitif pendant
-    // quatre jours calendaires. L'investissement reste donc en attente et les
-    // fonds sont bloqués, pas transférés : ni échéancier, ni bascule du projet
-    // en FINANCE tant que le délai court. La confirmation est faite par
-    // `ConfirmRetractationCronService` une fois le délai expiré.
+    // ── Délai de réflexion accordé par BeOwn ──────────────────────────────────
+    // Pour un investisseur non averti, l'engagement n'est pas définitif tant
+    // que le délai court. L'investissement reste donc en attente et les fonds
+    // sont bloqués, pas transférés : ni échéancier, ni bascule du projet en
+    // FINANCE. La confirmation est faite par `ConfirmRetractationCronService`
+    // une fois le délai expiré.
+    //
+    // L'échéance est posée par le domaine : aucune arithmétique de date ici,
+    // pour que la durée n'ait qu'un seul point de vérité.
     if (isNonAverti) {
-      const retractationDate = new Date();
-      retractationDate.setDate(
-        retractationDate.getDate() + DELAI_RETRACTATION_JOURS,
+      investment.delaiRetractationJusquAu = calculerEcheanceRetractation(
+        new Date(),
       );
-      investment.delaiRetractationJusquAu = retractationDate;
       investment.statut = InvestmentStatus.EN_DELAI_RETRACTATION;
     } else {
       investment.delaiRetractationJusquAu = null;
@@ -297,7 +298,7 @@ export class CreateInvestmentUseCase {
       //    de la garde updateSolde qui vit hors transaction). Pour un
       //    investisseur non averti, le montant n'est pas dépensé mais BLOQUÉ :
       //    il quitte le solde disponible sans être mis à disposition du
-      //    porteur, le temps du délai de réflexion (art. 22).
+      //    porteur, le temps du délai de réflexion.
       walletRow.solde = Number(walletRow.solde) - montant;
       if (isNonAverti) {
         walletRow.soldeBloque = Number(walletRow.soldeBloque ?? 0) + montant;

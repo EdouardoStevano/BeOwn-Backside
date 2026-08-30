@@ -33,9 +33,29 @@ export enum TransactionStatus {
   EXPIRE = 'expire',
 }
 
+/**
+ * Prestataire à l'origine d'un mouvement, persisté en clair dans
+ * `transaction.fournisseur` (colonne `varchar`, sans contrainte d'énumération
+ * en base).
+ *
+ * `CINETPAY` et `FEDAPAY` sont deux agrégateurs de mobile money ouest-africain.
+ * Ils n'ont JAMAIS eu d'adaptateur : aucun code n'a jamais produit ni consulté
+ * une transaction portant ces valeurs, et le mobile money n'a aucune pertinence
+ * sur le marché retenu. Ils sont conservés ici, et nulle part ailleurs, pour
+ * une seule raison : ce sont des VALEURS PERSISTABLES. Toute ligne historique
+ * qui les porterait — base de démonstration, export, sauvegarde — doit
+ * continuer à se relire sans que le mapper ne lève. Les retirer transformerait
+ * une donnée d'historique en valeur inconnue.
+ *
+ * Ils ne doivent donc être proposés nulle part : ni écrits par un use case, ni
+ * exposés dans un libellé de moyen de paiement, ni offerts comme filtre à
+ * l'utilisateur. Un nouveau flux se rattache à `STRIPE`, `MANUEL` ou `INTERNE`.
+ */
 export enum TransactionFournisseur {
   STRIPE = 'stripe',
+  /** Historique seulement — jamais écrit par le produit. Voir le commentaire ci-dessus. */
   CINETPAY = 'cinetpay',
+  /** Historique seulement — jamais écrit par le produit. Voir le commentaire ci-dessus. */
   FEDAPAY = 'fedapay',
   MANUEL = 'manuel',
   INTERNE = 'interne',
