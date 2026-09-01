@@ -150,13 +150,42 @@ describe('Acceptation vendeur → initiation de cession (intégration)', () => {
     );
 
     const notifications = { push: jest.fn() };
+    // Réservation des fonds : simulée, avec une position d'acheteur réelle pour
+    // que blocage et libération se compensent réellement dans les scénarios de
+    // compensation ci-dessous.
+    const position = { disponible: 10_000, bloque: 0 };
+    const compensation = {
+      reserverFonds: jest.fn(async (_acheteurId: number, montant: number) => {
+        if (position.disponible < montant) {
+          throw new Error('Solde insuffisant');
+        }
+        position.disponible -= montant;
+        position.bloque += montant;
+      }),
+      libererFonds: jest.fn(async (_acheteurId: number, montant: number) => {
+        if (position.bloque < montant) return 0;
+        position.bloque -= montant;
+        position.disponible += montant;
+        return montant;
+      }),
+    };
     const repondre = new RepondreInteretUseCase(
       ordreRepo as any,
       initiateBuy,
       notifications as any,
+      compensation as any,
     );
 
-    return { repondre, initiateBuy, ordre, ordreRepo, notifications, signaturesEnregistrees };
+    return {
+      repondre,
+      initiateBuy,
+      ordre,
+      ordreRepo,
+      notifications,
+      compensation,
+      position,
+      signaturesEnregistrees,
+    };
   };
 
   it("l'acceptation du vendeur produit un parcours de signature (aucun 400 « ordre indisponible »)", async () => {
@@ -279,6 +308,31 @@ describe('Acceptation vendeur → initiation de cession (intégration)', () => {
     expect(notifications.push).toHaveBeenCalledWith(
       expect.objectContaining({ utilisateurId: ACHETEUR_ID }),
     );
+  });
+
+  it("les fonds de l'acheteur sont bloqués dès l'acceptation, pas au règlement", async () => {
+    const { repondre, position } = construire();
+
+    await repondre.accepter(ORDRE_ID, VENDEUR_ID);
+
+    // 3 fractions × 100 € : le montant quitte la poche disponible sans quitter
+    // le portefeuille — les fonds détenus sont inchangés.
+    expect(position.bloque).toBe(300);
+    expect(position.disponible).toBe(9_700);
+    expect(position.bloque + position.disponible).toBe(10_000);
+  });
+
+  it('une panne prestataire rend les fonds : rien ne reste bloqué sur une cession non initiée', async () => {
+    const { repondre, position } = construire({
+      erreurYousign: panneAbonnementExpire(),
+    });
+
+    await expect(repondre.accepter(ORDRE_ID, VENDEUR_ID)).rejects.toBeInstanceOf(
+      SignatureProviderUnavailableError,
+    );
+
+    expect(position.bloque).toBe(0);
+    expect(position.disponible).toBe(10_000);
   });
 
   it("une annonce déjà acceptée ne peut pas être acceptée deux fois", async () => {

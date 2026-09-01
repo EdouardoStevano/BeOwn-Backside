@@ -15,8 +15,12 @@ function createMockEm(
   echeance: any,
   wallets: any[], // ordre findOne(WalletEntity): investisseur, IR, CSG
   claimAffected = 1,
+  // Portefeuille technique du projet — contrepartie DÉBITÉE du règlement.
+  // Relu par `debitAtomic` avant le débit (détection de découvert), il est
+  // donc le PREMIER `findOne(WalletEntity)` de la séquence.
+  walletProjet: any = { id: 'wProjet', solde: 1_000_000, devise: 'EUR' },
 ) {
-  const walletQueue = [...wallets];
+  const walletQueue = [walletProjet, ...wallets];
   const setPayloads: any[] = [];
   const amountParams: number[] = [];
   const savedTx: any[] = [];
@@ -75,18 +79,38 @@ describe('PayEcheanceUseCase (atomique — H-C)', () => {
   let notificationEvents: any;
   let auditLog: any;
   let em: any;
+  let metrics: any;
+  let projectWalletResolver: any;
 
-  const makeUseCase = (mockEm: any) => {
+  const makeUseCase = (
+    mockEm: any,
+    walletProjetId = 'wProjet',
+  ) => {
     em = mockEm;
     dataSource = { transaction: jest.fn(async (cb: any) => cb(mockEm)) };
     notificationEvents = { echeancePaid: jest.fn().mockResolvedValue(undefined) };
     auditLog = { create: jest.fn().mockResolvedValue(undefined) };
-    const metrics: any = {
+    metrics = {
       incrementCounter: jest.fn(),
       observeHistogram: jest.fn(),
       setGauge: jest.fn(),
     };
-    return new PayEcheanceUseCase(dataSource, notificationEvents, auditLog, metrics);
+    // Le résolveur est un double : sa propre idempotence sous verrou est
+    // couverte par `resolve-project-wallet.usecase.spec.ts`. Ce qui se teste
+    // ICI, c'est que le règlement DÉBITE bien la contrepartie qu'il rend.
+    projectWalletResolver = {
+      executeInTransaction: jest
+        .fn()
+        .mockResolvedValue({ id: walletProjetId, solde: 0, devise: 'EUR' }),
+      findInTransaction: jest.fn(),
+    };
+    return new PayEcheanceUseCase(
+      dataSource,
+      notificationEvents,
+      auditLog,
+      metrics,
+      projectWalletResolver,
+    );
   };
 
   it('crédite le net (après PFU 30%), stocke les prélèvements et passe PAYE', async () => {
@@ -118,11 +142,25 @@ describe('PayEcheanceUseCase (atomique — H-C)', () => {
         prelevementCSG: 1720,
       }),
     );
-    // 2. Crédits atomiques : investisseur net puis IR puis CSG
-    expect(em._amountParams).toEqual([47000, 1280, 1720]);
-    // 3. Trois traces ledger idempotency-keyées
+    // 2. Mouvements atomiques : DÉBIT du projet (brut) puis crédits
+    //    investisseur net, IR, CSG. Le brut sort de la poche du projet — la
+    //    retenue fiscale comprise, elle est seulement consignée ailleurs.
+    expect(em._amountParams).toEqual([50000, 47000, 1280, 1720]);
+    // 3. Trois traces ledger idempotency-keyées, TOUTES adossées au
+    //    portefeuille du projet : « Σ crédits − Σ débits » se rapproche.
     const keys = em._savedTx.map((t: any) => t.idempotencyKey).sort();
     expect(keys).toEqual(['echeance:csg:e1', 'echeance:ir:e1', 'echeance:pay:e1']);
+    expect(em._savedTx.map((t: any) => t.walletSource)).toEqual([
+      'wProjet',
+      'wProjet',
+      'wProjet',
+    ]);
+    // Somme des crédits = montant débité : aucun euro créé ni détruit.
+    const totalCredite = em._savedTx.reduce(
+      (somme: number, t: any) => somme + Number(t.montant),
+      0,
+    );
+    expect(totalCredite).toBe(50000);
     // 4. Entité renvoyée reflète l'état payé
     expect(result.statut).toBe(EcheanceStatus.PAYE);
     expect(result.prelevementIR).toBe(1280);
@@ -165,6 +203,43 @@ describe('PayEcheanceUseCase (atomique — H-C)', () => {
         expect.objectContaining({ fournisseurRef: 'SEQUESTRE-IR' }),
         expect.objectContaining({ fournisseurRef: 'SEQUESTRE-CSG' }),
       ]),
+    );
+  });
+
+  it('règle quand même l\'échéance sur un projet non alimenté, et signale le découvert', async () => {
+    // Le porteur n'a pas alimenté son projet. Le règlement reste dû aux
+    // investisseurs : on paie, et le trou devient visible immédiatement —
+    // plutôt que d'inventer des euros ou de transformer le défaut du porteur
+    // en impayé pour l'investisseur.
+    const echeance: any = {
+      id: 'e5',
+      statut: EcheanceStatus.A_VENIR,
+      montantTotal: 10000,
+      montantInterets: 0,
+      investissementId: 'i5',
+      investissement: { utilisateurId: 11, projet: { id: 'p5' }, projetId: 'p5' },
+    };
+    em = createMockEm(
+      echeance,
+      [
+        { id: 'wInv5', solde: 0, devise: 'EUR' },
+        { id: 'wIR', solde: 0, devise: 'EUR' },
+        { id: 'wCSG', solde: 0, devise: 'EUR' },
+      ],
+      1,
+      { id: 'wProjet', solde: 2500, devise: 'EUR' }, // insuffisant : 2 500 < 10 000
+    );
+    useCase = makeUseCase(em);
+
+    await useCase.execute('e5', 1);
+
+    // Le débit a bien eu lieu, à hauteur du brut.
+    expect(em._amountParams[0]).toBe(10000);
+    // Et le découvert (10 000 − 2 500) est remonté sans attendre le
+    // rapprochement quotidien.
+    expect(metrics.setGauge).toHaveBeenCalledWith(
+      'beown_project_wallet_shortfall_eur',
+      7500,
     );
   });
 

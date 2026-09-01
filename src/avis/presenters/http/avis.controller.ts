@@ -19,14 +19,57 @@ import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
 import { Public } from 'src/common/auth/public.decorator';
 import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
-import { Inject } from '@nestjs/common';
+import { Inject, ParseUUIDPipe } from '@nestjs/common';
 import { AVIS_REPOSITORY } from 'src/avis/applications/ports/repositories/avis.repository';
 import type { AvisRepository } from 'src/avis/applications/ports/repositories/avis.repository';
 import { Avis } from 'src/avis/domains/avis';
 import { CreateAvisDto } from '../dto/avis.dto';
-import { SkipThrottle } from '@nestjs/throttler';
+import { Throttle } from '@nestjs/throttler';
 
-@SkipThrottle()
+/**
+ * Palier des écritures d'avis. Dix par minute : personne ne rédige dix avis
+ * dans la minute, et c'est très en dessous de ce qu'exige un dépôt d'avis
+ * automatisé.
+ */
+const DEBIT_ECRITURE_AVIS = {
+  short: { ttl: 60_000, limit: 10 },
+  medium: { ttl: 60_000, limit: 10 },
+  // Pas de surcharge `auth` : resserrer ce palier vaut déclaration « sensible
+  // au bourrage d'identifiants » et bascule la route en fail-closed sur panne
+  // Redis (cf. RedisThrottlerStorage). Poster un avis n'est pas de cet ordre ;
+  // le filet global `auth` (500/15 min, fail-open) continue de s'appliquer.
+} as const;
+
+/**
+ * Palier des lectures, dont DEUX sont publiques (`@Public()`) : la liste des
+ * avis d'un projet et ses statistiques.
+ *
+ * Ce contrôleur portait un `@SkipThrottle()` de classe, c'est-à-dire une
+ * déclaration d'intention de ne PAS limiter des routes non authentifiées,
+ * adressables par identifiant de projet et sans cache. Deux raisons de le
+ * remplacer par un palier explicite :
+ *
+ *  1. l'intention elle-même était mauvaise sur des routes publiques — c'est
+ *    l'aspiration des avis et la saturation de la base par un seul appelant
+ *    qui devenaient gratuites ;
+ *  2. il ne faisait de toute façon RIEN. Vérifié dans @nestjs/throttler 6.5.0 :
+ *    un `@SkipThrottle()` sans argument n'inscrit que la clé `default`, que le
+ *    guard ne lit jamais puisqu'il n'interroge que les throttlers déclarés
+ *    (`short`, `medium`, `auth`). Ces routes tombaient donc sur les limites
+ *    globales — larges (500/s, 2000/min) et jamais choisies pour elles.
+ *
+ * Soixante lectures par minute couvrent largement la consultation d'une fiche
+ * projet (deux appels par affichage), y compris derrière un NAT d'entreprise.
+ */
+const DEBIT_LECTURE_AVIS = {
+  short: { ttl: 60_000, limit: 60 },
+  medium: { ttl: 60_000, limit: 60 },
+  // Pas de surcharge `auth` — même raison que DEBIT_ECRITURE_AVIS, et à plus
+  // forte raison : deux de ces routes sont publiques, une panne Redis ne doit
+  // pas rendre les avis illisibles sur les fiches projets.
+} as const;
+
+@Throttle(DEBIT_LECTURE_AVIS)
 @ApiTags('Avis')
 @ApiBearerAuth()
 @Controller('avis')
@@ -41,9 +84,11 @@ export class AvisController {
   @ApiParam({ name: 'projetId', description: 'UUID du projet' })
   @ApiResponse({ status: 201, description: 'Avis enregistré' })
   @ApiResponse({ status: 409, description: 'Avis déjà soumis pour ce projet' })
+  @ApiResponse({ status: 429, description: 'Trop de demandes — 10 par minute' })
+  @Throttle(DEBIT_ECRITURE_AVIS)
   @Post('projet/:projetId')
   async create(
-    @Param('projetId') projetId: string,
+    @Param('projetId', ParseUUIDPipe) projetId: string,
     @Body() dto: CreateAvisDto,
     @CurrentUser() user: ActiveUser,
   ) {
@@ -64,9 +109,11 @@ export class AvisController {
   @ApiOperation({ summary: "Mettre à jour son avis sur un projet" })
   @ApiParam({ name: 'projetId', description: 'UUID du projet' })
   @ApiResponse({ status: 200, description: 'Avis mis à jour' })
+  @ApiResponse({ status: 429, description: 'Trop de demandes — 10 par minute' })
+  @Throttle(DEBIT_ECRITURE_AVIS)
   @Post('projet/:projetId/update')
   async update(
-    @Param('projetId') projetId: string,
+    @Param('projetId', ParseUUIDPipe) projetId: string,
     @Body() dto: CreateAvisDto,
     @CurrentUser() user: ActiveUser,
   ) {
@@ -86,7 +133,7 @@ export class AvisController {
   @ApiResponse({ status: 200, description: 'Avis de cet utilisateur ou null' })
   @Get('projet/:projetId/me')
   async getMyAvis(
-    @Param('projetId') projetId: string,
+    @Param('projetId', ParseUUIDPipe) projetId: string,
     @CurrentUser() user: ActiveUser,
   ) {
     return this.avisRepository.findByUserAndProjet(user.userId, projetId);
@@ -97,7 +144,7 @@ export class AvisController {
   @ApiResponse({ status: 200, description: 'Liste des avis' })
   @Public()
   @Get('projet/:projetId')
-  getByProjet(@Param('projetId') projetId: string) {
+  getByProjet(@Param('projetId', ParseUUIDPipe) projetId: string) {
     return this.avisRepository.findByProjetId(projetId);
   }
 
@@ -106,7 +153,7 @@ export class AvisController {
   @ApiResponse({ status: 200, description: 'Note moyenne et nombre d\'avis' })
   @Public()
   @Get('projet/:projetId/stats')
-  getStats(@Param('projetId') projetId: string) {
+  getStats(@Param('projetId', ParseUUIDPipe) projetId: string) {
     return this.avisRepository.getStats(projetId);
   }
 }

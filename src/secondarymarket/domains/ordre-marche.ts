@@ -19,6 +19,23 @@ export enum OrdreMarcheStatus {
   EXPIRE = 'expire',
 }
 
+/**
+ * Statuts sous lesquels une annonce IMMOBILISE encore ses fractions.
+ *
+ * Tant qu'une annonce peut aboutir à une cession, les fractions qu'elle porte
+ * ne sont plus disponibles pour une seconde annonce : les recompter libres
+ * autoriserait le vendeur à promettre deux fois les mêmes parts, et deux
+ * règlements à s'exécuter sur un stock qui n'existe qu'une fois.
+ *
+ * `EXECUTE`, `ANNULE` et `EXPIRE` sont exclus : la cession est faite (les
+ * fractions ont déjà quitté la position) ou définitivement abandonnée.
+ */
+export const STATUTS_ANNONCE_ENGAGEANTE: readonly OrdreMarcheStatus[] = [
+  OrdreMarcheStatus.EN_CARNET,
+  OrdreMarcheStatus.INTERET_EXPRIME,
+  OrdreMarcheStatus.ACCEPTE,
+];
+
 export class OrdreMarche {
   id: string;
   investissementId: string;

@@ -49,13 +49,23 @@ describe('PaymentController — POST /payments/kyc/start', () => {
       profilRepository,
       /* walletRepo */ {} as any,
       /* txRepo */ {} as any,
+      /* projectRepo */ { findOne: jest.fn().mockResolvedValue(null) } as any,
       /* dataSource */ {} as any,
       /* requestRetrait */ {} as any,
+      /* crediterApportPorteur */ { execute: jest.fn() } as any,
       /* metrics */ {
         incrementCounter: jest.fn(),
         observeHistogram: jest.fn(),
         setGauge: jest.fn(),
       } as any,
+      /* transactionalEmails */ {
+        depotConfirme: jest.fn().mockResolvedValue(undefined),
+        retraitExecute: jest.fn().mockResolvedValue(undefined),
+        kycValide: jest.fn().mockResolvedValue(undefined),
+        kycRefuse: jest.fn().mockResolvedValue(undefined),
+      } as any,
+      /* amlMonitor */ { check: jest.fn().mockResolvedValue(undefined) } as any,
+      /* retraitSettlement */ {} as any,
     );
   };
 

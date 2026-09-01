@@ -13,6 +13,8 @@ import { NotificationService } from 'src/notifications/applications/notification
 import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
 import { InitiateBuyUseCase } from './initiate-buy.usecase';
 import { estIndisponibiliteFournisseur } from 'src/common/yousign/signature-provider.error';
+import { CessionCompensationService } from 'src/secondarymarket/applications/cession-compensation.service';
+import { formatEur } from 'src/shared/money/format-eur';
 
 /**
  * Réponse du vendeur à une marque d'intérêt — art. 25 du règlement
@@ -35,6 +37,7 @@ export class RepondreInteretUseCase {
     private readonly ordreRepo: Repository<OrdreMarcheEntity>,
     private readonly initiateBuy: InitiateBuyUseCase,
     private readonly notifications: NotificationService,
+    private readonly compensation: CessionCompensationService,
   ) {}
 
   async accepter(
@@ -54,7 +57,7 @@ export class RepondreInteretUseCase {
     const claim = await this.ordreRepo
       .createQueryBuilder()
       .update(OrdreMarcheEntity)
-      .set({ statut: OrdreMarcheStatus.ACCEPTE })
+      .set({ statut: OrdreMarcheStatus.ACCEPTE, accepteLe: () => 'NOW()' })
       .where('id = :id AND statut = :enAttente', {
         id: ordreId,
         enAttente: OrdreMarcheStatus.INTERET_EXPRIME,
@@ -71,19 +74,44 @@ export class RepondreInteretUseCase {
     // La rencontre des volontés est acquise : le parcours contractuel peut
     // s'exécuter. `InitiateBuyUseCase` n'est jamais appelé en dehors d'ici.
     //
-    // Si l'initiation échoue (génération du contrat, stockage, prestataire de
-    // signature), l'annonce ne doit pas rester coincée en ACCEPTE : ni le
-    // vendeur ni l'acheteur n'auraient alors de porte de sortie. On la ramène à
-    // l'état antérieur, qui laisse au vendeur le choix de réessayer ou de
-    // refuser.
+    // Deux gestes indissociables, dans cet ordre :
+    //  1. RÉSERVER les fonds de l'acheteur. Le vendeur s'engage ici et
+    //     maintenant ; laisser le solde de l'acheteur disponible pendant les
+    //     48 h de signature, c'est accepter qu'il le retire ou le réinvestisse
+    //     et que le règlement échoue après coup, sur un engagement déjà pris.
+    //  2. Ouvrir le parcours de signature.
+    //
+    // Si l'une des deux échoue (solde parti entre-temps, génération du contrat,
+    // stockage, prestataire de signature), l'annonce ne doit pas rester coincée
+    // en ACCEPTE et les fonds ne doivent pas rester bloqués : ni le vendeur ni
+    // l'acheteur n'auraient alors de porte de sortie. On défait tout et on
+    // ramène l'annonce à l'état antérieur, qui laisse au vendeur le choix de
+    // réessayer ou de refuser.
+    const montantCession = CessionCompensationService.montantCession(
+      ordre.prixUnitaire,
+      nbFractions,
+    );
+    let fondsReserves = false;
     let initiation: { signingUrl: string; signatureId: string };
     try {
+      await this.compensation.reserverFonds(acheteurId, montantCession);
+      fondsReserves = true;
       initiation = await this.initiateBuy.execute(
         ordreId,
         acheteurId,
         nbFractions,
       );
     } catch (err) {
+      if (fondsReserves) {
+        await this.compensation
+          .libererFonds(acheteurId, montantCession)
+          .catch((echec: unknown) =>
+            this.logger.error(
+              `Fonds réservés NON libérés pour l'acheteur ${acheteurId} sur l'annonce ${ordreId} ` +
+                `(${formatEur(montantCession)}) : ${echec instanceof Error ? echec.message : String(echec)}`,
+            ),
+          );
+      }
       await this.ordreRepo
         .createQueryBuilder()
         .update(OrdreMarcheEntity)
@@ -105,30 +133,66 @@ export class RepondreInteretUseCase {
       throw err;
     }
 
-    // Prévenir l'acheteur APRÈS coup, et seulement là : une acceptation
-    // compensée n'a RIEN produit, l'annoncer serait un mensonge — l'acheteur
-    // recevrait « le vendeur a accepté » pour un contrat qui n'existe pas, sur
-    // une annonce simplement revenue en attente de réponse.
+    // Prévenir APRÈS coup, et seulement là : une acceptation compensée n'a RIEN
+    // produit, l'annoncer serait un mensonge — l'acheteur recevrait « le
+    // vendeur a accepté » pour un contrat qui n'existe pas, sur une annonce
+    // simplement revenue en attente de réponse.
     //
-    // L'échec d'une notification, lui, ne remet pas en cause une cession déjà
+    // La partie DÉBITÉE est l'ACHETEUR : c'est donc lui, et lui seul, qui reçoit
+    // le lien de signature. Le vendeur, qui a déjà donné son accord ici, n'a
+    // plus rien à signer — le lui présenter revenait à lui faire signer le
+    // contrat de l'autre partie.
+    //
+    // L'échec d'une notification ne remet pas en cause une cession déjà
     // initiée : il est journalisé, pas propagé.
-    try {
-      await this.notifications.push({
+    await this.prevenir(
+      {
         utilisateurId: acheteurId,
         type: NotificationType.MARCHE_SECONDAIRE,
-        titre: "Le vendeur a accepté votre marque d'intérêt",
+        titre: 'Signez votre contrat de cession',
         message:
-          'Le contrat de cession est prêt à être signé. La cession sera effective ' +
-          'une fois la signature recueillie.',
-      });
+          `Le vendeur a accepté votre marque d'intérêt sur ${nbFractions} fraction(s) ` +
+          `(${formatEur(montantCession)}). Ce montant est réservé sur votre portefeuille ` +
+          'jusqu\'à votre signature, à recueillir sous 48 h.',
+        metadata: {
+          ordreId,
+          signatureId: initiation.signatureId,
+          signingUrl: initiation.signingUrl,
+        },
+      },
+      ordreId,
+    );
+
+    await this.prevenir(
+      {
+        utilisateurId: vendeurId,
+        type: NotificationType.MARCHE_SECONDAIRE,
+        titre: "En attente de la signature de l'acheteur",
+        message:
+          `Votre acceptation est enregistrée. L'acheteur doit maintenant signer le contrat ` +
+          `de cession de ${nbFractions} fraction(s) ; la vente sera effective dès sa signature. ` +
+          "Sans signature sous 48 h, l'annonce vous revient.",
+        metadata: { ordreId, nbFractions },
+      },
+      ordreId,
+    );
+
+    return { ordreId, ...initiation };
+  }
+
+  /** Notification best-effort : journalisée si elle échoue, jamais propagée. */
+  private async prevenir(
+    options: Parameters<NotificationService['push']>[0],
+    ordreId: string,
+  ): Promise<void> {
+    try {
+      await this.notifications.push(options);
     } catch (err: unknown) {
       this.logger.warn(
-        `Notification d'acceptation non remise à l'acheteur ${acheteurId} ` +
+        `Notification non remise à l'utilisateur ${options.utilisateurId} ` +
           `sur l'annonce ${ordreId} : ${err instanceof Error ? err.message : String(err)}`,
       );
     }
-
-    return { ordreId, ...initiation };
   }
 
   async refuser(

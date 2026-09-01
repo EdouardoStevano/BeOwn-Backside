@@ -4,9 +4,10 @@ kind: Kustomization
 # Base commune à tous les environnements (dev / staging / test / production).
 # Aucune ressource ne fixe de namespace ici : c'est l'overlay qui l'injecte
 # (voir overlays/<env>/kustomization.yaml → champ `namespace`).
-# NB : le Secret `beown-backend-secrets` n'est PAS géré ici — il est créé
-# hors-Git dans chaque namespace (voir secrets.example.yaml). Ne jamais
-# committer de vraies valeurs de secrets.
+# NB : les Secrets `beown-backend-secrets` et `beown-backup-secrets` ne sont
+# PAS gérés ici — ils sont créés hors-Git dans chaque namespace (voir
+# secrets.example.yaml et backup-secrets.example.yaml). Ne jamais committer de
+# vraies valeurs de secrets.
 resources:
   - configmap.yaml
   - postgres.yaml
@@ -14,3 +15,12 @@ resources:
   - deployment.yaml
   - service.yaml
   - hpa.yaml
+  # Budget d'interruption : protège l'API des drains de nœud (lire l'avertissement
+  # du fichier — minAvailable:1 face à minReplicas:1 bloque un drain).
+  - pdb.yaml
+  # Routage public. ⚠ Lire l'en-tête du fichier AVANT le premier déploiement :
+  # un Ingress créé à la main existe déjà sur le cluster pour ces hôtes.
+  - ingress.yaml
+  # Sauvegarde quotidienne de PostgreSQL. Exige le Secret `beown-backup-secrets`
+  # (backup-secrets.example.yaml) ; sans lui, le Job échoue à chaque exécution.
+  - backup-cronjob.yaml

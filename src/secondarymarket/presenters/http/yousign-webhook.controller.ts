@@ -47,6 +47,7 @@ import type { UserRepository } from 'src/iam/domains/ports/user.repository';
 import { USER_REPOSITORY } from 'src/iam/domains/ports/user.repository';
 import { MetricsPort } from 'src/observability/metrics/metrics.port';
 import { METRIC } from 'src/observability/metrics/metric-names';
+import { ExpirerSignatureCessionUseCase } from 'src/secondarymarket/applications/usecases/expirer-signature-cession.usecase';
 
 /**
  * Résultat de l'exécution atomique d'une signature `signature_request.done`.
@@ -95,6 +96,7 @@ export class YouSignWebhookController {
     private readonly notificationEvents: NotificationEventService,
     private readonly platformFees: PlatformFeesService,
     private readonly metrics: MetricsPort,
+    private readonly expirerSignature: ExpirerSignatureCessionUseCase,
   ) {}
 
   @Public()
@@ -164,180 +166,233 @@ export class YouSignWebhookController {
     const feeRates =
       existing.ordreId === null ? null : await this.platformFees.getRates();
 
-    const result = await this.dataSource.transaction(async (em): Promise<SignatureDoneResult> => {
-      // Verrou pessimiste sur la ligne signature + relecture du statut SOUS
-      // VERROU : sérialise les livraisons concurrentes du webhook.
-      const signature = await em.findOne(SignatureEntity, {
-        where: { youSignRequestId },
-        lock: { mode: 'pessimistic_write' },
-      });
-      if (!signature || signature.statut !== SignatureStatus.PENDING) {
-        return { branch: 'noop' };
-      }
-
-      // Souscription initiale (ordreId = null) → exécution atomique dédiée, puis
-      // SIGNED en dernier dans la même transaction.
-      if (signature.ordreId === null) {
-        const out = await this.executeInvestmentSignature(em, signature);
-        signature.statut = SignatureStatus.SIGNED;
-        signature.signedAt = new Date();
-        await em.save(SignatureEntity, signature);
-        return out;
-      }
-
-      // ── Marché secondaire : rachat de fractions ───────────────────────────
-      const ordre = await em.findOne(OrdreMarcheEntity, {
-        where: { id: signature.ordreId! },
-        relations: ['investissement'],
-      });
-      if (!ordre) throw new Error(`Ordre ${signature.ordreId} introuvable`);
-
-      const nbFractions = signature.nbFractions!;
-      const projetId = ordre.investissement.projetId;
-      const prixUnitaire = Number(ordre.prixUnitaire);
-      const montantTotal = round2(nbFractions * prixUnitaire);
-      // Plus-value vendeur = prix de vente − coût d'acquisition des parts
-      // vendues (coût moyen pondéré — voir domains/cout-acquisition.ts).
-      // Calculée AVANT la réduction de l'investissement vendeur (étape 5).
-      const coutAcquisition = computeCoutAcquisition(
-        ordre.investissement,
-        nbFractions,
-        prixUnitaire,
-      );
-      const plusValueVendeur = round2(montantTotal - coutAcquisition);
-      // Frais vendeur : % du montant de la vente + % de la plus-value.
-      const { transactionFee, gainFee } = await this.platformFees.computeResaleFees(
-        montantTotal,
-        plusValueVendeur,
-        // Non-null dans la branche marché secondaire (ordreId != null).
-        feeRates!,
-      );
-      const totalFrais = round2(transactionFee + gainFee);
-      const montantNetVendeur = round2(montantTotal - totalFrais);
-      const buyerUserId = signature.userId;
-
-      // 1. Vérifier/obtenir wallet acheteur
-      const buyerWallet = await em.findOne(WalletEntity, {
-        where: { proprietaireUserId: buyerUserId, type: WalletType.INVESTISSEUR },
-      });
-      if (!buyerWallet) throw new Error(`Wallet acheteur ${buyerUserId} introuvable`);
-      if (Number(buyerWallet.solde) < montantTotal) {
-        throw new Error(`Solde insuffisant pour acheteur ${buyerUserId}: ${buyerWallet.solde} < ${montantTotal}`);
-      }
-
-      // 2. Wallet vendeur
-      const sellerWallet = await em.findOne(WalletEntity, {
-        where: { proprietaireUserId: ordre.vendeurId, type: WalletType.INVESTISSEUR },
-      });
-
-      // 3. Cas A (investi) ou Cas B (nouvel investissement)
-      let buyerInvest: InvestmentEntity;
-      const existingInvest = signature.investmentId
-        ? await em.findOne(InvestmentEntity, { where: { id: signature.investmentId } })
-        : null;
-
-      if (existingInvest) {
-        existingInvest.nbTitres = (Number(existingInvest.nbTitres) ?? 0) + nbFractions;
-        existingInvest.montant = Number(existingInvest.montant) + montantTotal;
-        existingInvest.signatureId = signature.id;
-        buyerInvest = await em.save(InvestmentEntity, existingInvest);
-      } else {
-        const sellerInvest = ordre.investissement;
-        const newInvest = em.create(InvestmentEntity, {
-          projetId,
-          utilisateurId: buyerUserId,
-          montant: montantTotal,
-          instrument: sellerInvest.instrument,
-          nbTitres: nbFractions,
-          valeurTitre: prixUnitaire,
-          statut: InvestmentStatus.CONFIRME,
-          signatureId: signature.id,
+    // Un règlement qui échoue laisse la signature PENDING (donc rejouable),
+    // mais laisse SURTOUT deux personnes engagées sans rien savoir : le vendeur
+    // a accepté, l'acheteur a signé, et rien ne s'est produit. L'incident est
+    // donc annoncé aux deux parties et aux administrateurs avant d'être
+    // propagé — la journalisation seule ne prévient personne.
+    let result: SignatureDoneResult;
+    try {
+      result = await this.dataSource.transaction(async (em): Promise<SignatureDoneResult> => {
+        // Verrou pessimiste sur la ligne signature + relecture du statut SOUS
+        // VERROU : sérialise les livraisons concurrentes du webhook.
+        const signature = await em.findOne(SignatureEntity, {
+          where: { youSignRequestId },
+          lock: { mode: 'pessimistic_write' },
         });
-        buyerInvest = await em.save(InvestmentEntity, newInvest);
-      }
+        if (!signature || signature.statut !== SignatureStatus.PENDING) {
+          return { branch: 'noop' };
+        }
 
-      // 4. Lier le document au bon investissement
-      if (signature.documentId) {
-        await em.update(DocumentEntity, { id: signature.documentId }, {
-          investmentId: buyerInvest.id,
+        // Souscription initiale (ordreId = null) → exécution atomique dédiée, puis
+        // SIGNED en dernier dans la même transaction.
+        if (signature.ordreId === null) {
+          const out = await this.executeInvestmentSignature(em, signature);
+          signature.statut = SignatureStatus.SIGNED;
+          signature.signedAt = new Date();
+          await em.save(SignatureEntity, signature);
+          return out;
+        }
+
+        // ── Marché secondaire : rachat de fractions ───────────────────────────
+        const ordre = await em.findOne(OrdreMarcheEntity, {
+          where: { id: signature.ordreId! },
+          relations: ['investissement'],
         });
-      }
+        if (!ordre) throw new Error(`Ordre ${signature.ordreId} introuvable`);
 
-      // 5. Réduire les fractions du vendeur
-      const sellerInvest = await em.findOne(InvestmentEntity, {
-        where: { id: ordre.investissementId },
-      });
-      if (sellerInvest && sellerInvest.nbTitres != null) {
-        const remaining = Number(sellerInvest.nbTitres) - nbFractions;
-        sellerInvest.nbTitres = Math.max(0, remaining);
-        sellerInvest.montant = remaining > 0
-          ? Number(sellerInvest.montant) - montantTotal
-          : 0;
-        await em.save(InvestmentEntity, sellerInvest);
-      }
+        const nbFractions = signature.nbFractions!;
+        const projetId = ordre.investissement.projetId;
+        const prixUnitaire = Number(ordre.prixUnitaire);
+        const montantTotal = round2(nbFractions * prixUnitaire);
+        // Plus-value vendeur = prix de vente − coût d'acquisition des parts
+        // vendues (coût moyen pondéré — voir domains/cout-acquisition.ts).
+        // Calculée AVANT la réduction de l'investissement vendeur (étape 5).
+        const coutAcquisition = computeCoutAcquisition(
+          ordre.investissement,
+          nbFractions,
+          prixUnitaire,
+        );
+        const plusValueVendeur = round2(montantTotal - coutAcquisition);
+        // Frais vendeur : % du montant de la vente + % de la plus-value.
+        const { transactionFee, gainFee } = await this.platformFees.computeResaleFees(
+          montantTotal,
+          plusValueVendeur,
+          // Non-null dans la branche marché secondaire (ordreId != null).
+          feeRates!,
+        );
+        const totalFrais = round2(transactionFee + gainFee);
+        const montantNetVendeur = round2(montantTotal - totalFrais);
+        const buyerUserId = signature.userId;
 
-      // 6. Mettre à jour l'ordre
-      if (nbFractions >= ordre.nbFractions) {
-        ordre.acheteurId = buyerUserId;
-        ordre.statut = OrdreMarcheStatus.EXECUTE;
-      } else {
-        ordre.nbFractions = ordre.nbFractions - nbFractions;
-        ordre.montant = Number(ordre.montant) - montantTotal;
-      }
-      await em.save(OrdreMarcheEntity, ordre);
-
-      // 7. Débiter wallet acheteur (montant total)
-      buyerWallet.solde = Number(buyerWallet.solde) - montantTotal;
-      await em.save(WalletEntity, buyerWallet);
-
-      // 8. Créditer wallet vendeur (net des frais vendeur)
-      if (sellerWallet) {
-        sellerWallet.solde = Number(sellerWallet.solde) + montantNetVendeur;
-        await em.save(WalletEntity, sellerWallet);
-      }
-
-      // 9. Créditer wallet plateforme (frais de transaction + frais sur gain)
-      // Wallet system-wide, créé à la volée si absent (parité avec SEQUESTRE_IR/CSG).
-      let platformWallet: WalletEntity | null = null;
-      if (totalFrais > 0) {
-        platformWallet = await em.findOne(WalletEntity, {
-          where: { type: WalletType.FRAIS_PLATEFORME },
+        // 1. Vérifier/obtenir wallet acheteur.
+        //    Les fonds ont normalement été RÉSERVÉS à l'acceptation du vendeur
+        //    (CessionCompensationService) : ils se trouvent en `soldeBloque`.
+        //    C'est donc la somme des deux poches qui doit couvrir la cession.
+        const buyerWallet = await em.findOne(WalletEntity, {
+          where: { proprietaireUserId: buyerUserId, type: WalletType.INVESTISSEUR },
         });
-        if (!platformWallet) {
-          platformWallet = await em.save(
-            WalletEntity,
-            em.create(WalletEntity, {
-              type: WalletType.FRAIS_PLATEFORME,
-              proprietaireUserId: null,
-              fournisseurRef: 'PLAT-FEES-001',
-              devise: buyerWallet.devise,
-              solde: 0,
-            }),
+        if (!buyerWallet) throw new Error(`Wallet acheteur ${buyerUserId} introuvable`);
+        const buyerBloque = Number(buyerWallet.soldeBloque ?? 0);
+        const buyerDisponible = Number(buyerWallet.solde);
+        if (round2(buyerBloque + buyerDisponible) < montantTotal) {
+          throw new Error(
+            `Fonds insuffisants pour acheteur ${buyerUserId}: bloqué ${buyerBloque} + disponible ${buyerDisponible} < ${montantTotal}`,
           );
         }
-        platformWallet.solde = Number(platformWallet.solde) + totalFrais;
-        await em.save(WalletEntity, platformWallet);
-      }
 
-      // 10. Transaction ledger acheteur
-      const txBuyer = em.create(TransactionEntity, {
-        walletSource: buyerWallet.id,
-        walletDestination: sellerWallet?.id ?? null,
-        type: TransactionType.SOUSCRIPTION,
-        montant: montantTotal,
-        devise: buyerWallet.devise,
-        statut: TransactionStatus.REUSSI,
-        fournisseur: TransactionFournisseur.INTERNE,
-        investissementId: buyerInvest.id,
-        projetId,
-        idempotencyKey: `rachat:buyer:${signature.id}`,
-        fraisPsp: 0,
-        fraisPlateforme: totalFrais,
-      });
-      await em.save(TransactionEntity, txBuyer);
+        // 2. Wallet vendeur — EXIGÉ, jamais optionnel.
+        //    Un crédit vendeur conditionnel faisait disparaître l'argent en
+        //    silence : l'acheteur était débité, les frais encaissés, et la
+        //    contrepartie du vendeur n'était simplement pas écrite. Un vendeur
+        //    sans portefeuille est une anomalie de données — elle doit annuler la
+        //    transaction et laisser la signature PENDING (donc rejouable), pas
+        //    produire une cession déséquilibrée.
+        const sellerWallet = await em.findOne(WalletEntity, {
+          where: { proprietaireUserId: ordre.vendeurId, type: WalletType.INVESTISSEUR },
+        });
+        if (!sellerWallet) {
+          throw new Error(
+            `Wallet vendeur ${ordre.vendeurId} introuvable : règlement impossible sans contrepartie créditée`,
+          );
+        }
 
-      // 11. Transaction ledger vendeur (net des frais)
-      if (sellerWallet) {
+        // 3. Cas A (investi) ou Cas B (nouvel investissement)
+        let buyerInvest: InvestmentEntity;
+        const existingInvest = signature.investmentId
+          ? await em.findOne(InvestmentEntity, { where: { id: signature.investmentId } })
+          : null;
+
+        if (existingInvest) {
+          existingInvest.nbTitres = (Number(existingInvest.nbTitres) ?? 0) + nbFractions;
+          existingInvest.montant = Number(existingInvest.montant) + montantTotal;
+          existingInvest.signatureId = signature.id;
+          buyerInvest = await em.save(InvestmentEntity, existingInvest);
+        } else {
+          const sellerInvest = ordre.investissement;
+          const newInvest = em.create(InvestmentEntity, {
+            projetId,
+            utilisateurId: buyerUserId,
+            montant: montantTotal,
+            instrument: sellerInvest.instrument,
+            nbTitres: nbFractions,
+            valeurTitre: prixUnitaire,
+            statut: InvestmentStatus.CONFIRME,
+            signatureId: signature.id,
+          });
+          buyerInvest = await em.save(InvestmentEntity, newInvest);
+        }
+
+        // 4. Lier le document au bon investissement
+        if (signature.documentId) {
+          await em.update(DocumentEntity, { id: signature.documentId }, {
+            investmentId: buyerInvest.id,
+          });
+        }
+
+        // 5. Réduire la position du vendeur.
+        //    Le montant est décrémenté du COÛT D'ACQUISITION des parts cédées,
+        //    jamais de leur prix de vente : `montant / nbTitres` reste ainsi
+        //    égal au coût moyen d'origine, et la plus-value de la cession
+        //    SUIVANTE reste juste. Décrémenter du prix de vente déplaçait le
+        //    coût moyen à chaque cession partielle et faussait durablement
+        //    l'assiette des frais sur gain (voir domains/cout-acquisition.ts).
+        const sellerInvest = await em.findOne(InvestmentEntity, {
+          where: { id: ordre.investissementId },
+        });
+        if (sellerInvest && sellerInvest.nbTitres != null) {
+          const remaining = Number(sellerInvest.nbTitres) - nbFractions;
+          sellerInvest.nbTitres = Math.max(0, remaining);
+          sellerInvest.montant = remaining > 0
+            ? Math.max(0, round2(Number(sellerInvest.montant) - coutAcquisition))
+            : 0;
+          await em.save(InvestmentEntity, sellerInvest);
+        }
+
+        // 6. Mettre à jour l'ordre.
+        //    Fill TOTAL → l'annonce est servie : EXECUTE, acheteur inscrit.
+        //    Fill PARTIEL → le reliquat doit RETOURNER AU CARNET. Le passer en
+        //    EXECUTE gelait les fractions non vendues à vie : elles restaient
+        //    décomptées de la position du vendeur comme « engagées » alors
+        //    qu'aucune annonce vivante ne les portait plus. On republie donc le
+        //    reliquat et on purge la marque d'intérêt déjà servie, faute de quoi
+        //    l'annonce reviendrait au carnet en portant encore son acheteur.
+        if (nbFractions >= ordre.nbFractions) {
+          ordre.acheteurId = buyerUserId;
+          ordre.statut = OrdreMarcheStatus.EXECUTE;
+        } else {
+          ordre.nbFractions = ordre.nbFractions - nbFractions;
+          ordre.montant = round2(Number(ordre.montant) - montantTotal);
+          ordre.statut = OrdreMarcheStatus.EN_CARNET;
+          ordre.acheteurId = null;
+          ordre.interetNbFractions = null;
+          ordre.interetExprimeLe = null;
+        }
+        await em.save(OrdreMarcheEntity, ordre);
+
+        // 7. Consommer les fonds de l'acheteur.
+        //    Priorité à `soldeBloque` : c'est la réservation posée à
+        //    l'acceptation qui est ici consommée. Le repli sur le solde
+        //    disponible ne sert qu'aux signatures ouvertes AVANT l'existence de
+        //    la réservation ; dans les deux cas les fonds détenus par le wallet
+        //    (solde + soldeBloque) diminuent exactement du montant de la cession.
+        const prisSurBloque = Math.min(buyerBloque, montantTotal);
+        const prisSurDisponible = round2(montantTotal - prisSurBloque);
+        if (prisSurDisponible > 0) {
+          this.logger.warn(
+            `Cession ${ordre.id} : ${prisSurDisponible} prélevés hors réservation ` +
+              `(bloqué ${buyerBloque} < ${montantTotal}) — signature antérieure à la réservation des fonds`,
+          );
+        }
+        buyerWallet.soldeBloque = round2(buyerBloque - prisSurBloque);
+        buyerWallet.solde = round2(buyerDisponible - prisSurDisponible);
+        await em.save(WalletEntity, buyerWallet);
+
+        // 8. Créditer wallet vendeur (net des frais vendeur)
+        sellerWallet.solde = round2(Number(sellerWallet.solde) + montantNetVendeur);
+        await em.save(WalletEntity, sellerWallet);
+
+        // 9. Créditer wallet plateforme (frais de transaction + frais sur gain)
+        // Wallet system-wide, créé à la volée si absent (parité avec SEQUESTRE_IR/CSG).
+        let platformWallet: WalletEntity | null = null;
+        if (totalFrais > 0) {
+          platformWallet = await em.findOne(WalletEntity, {
+            where: { type: WalletType.FRAIS_PLATEFORME },
+          });
+          if (!platformWallet) {
+            platformWallet = await em.save(
+              WalletEntity,
+              em.create(WalletEntity, {
+                type: WalletType.FRAIS_PLATEFORME,
+                proprietaireUserId: null,
+                fournisseurRef: 'PLAT-FEES-001',
+                devise: buyerWallet.devise,
+                solde: 0,
+              }),
+            );
+          }
+          platformWallet.solde = Number(platformWallet.solde) + totalFrais;
+          await em.save(WalletEntity, platformWallet);
+        }
+
+        // 10. Transaction ledger acheteur
+        const txBuyer = em.create(TransactionEntity, {
+          walletSource: buyerWallet.id,
+          walletDestination: sellerWallet.id,
+          type: TransactionType.SOUSCRIPTION,
+          montant: montantTotal,
+          devise: buyerWallet.devise,
+          statut: TransactionStatus.REUSSI,
+          fournisseur: TransactionFournisseur.INTERNE,
+          investissementId: buyerInvest.id,
+          projetId,
+          idempotencyKey: `rachat:buyer:${signature.id}`,
+          fraisPsp: 0,
+          fraisPlateforme: totalFrais,
+        });
+        await em.save(TransactionEntity, txBuyer);
+
+        // 11. Transaction ledger vendeur (net des frais)
         const txSeller = em.create(TransactionEntity, {
           walletSource: null,
           walletDestination: sellerWallet.id,
@@ -353,88 +408,91 @@ export class YouSignWebhookController {
           fraisPlateforme: totalFrais,
         });
         await em.save(TransactionEntity, txSeller);
-      }
 
-      // 12. Transactions ledger frais plateforme — une par frais.
-      // Clés scoppées par signature (un ordre peut être exécuté en plusieurs
-      // fills partiels) ; metadata.ordreId permet le lookup au reverse admin.
-      if (platformWallet && transactionFee > 0) {
-        await em.save(
-          TransactionEntity,
-          em.create(TransactionEntity, {
-            walletSource: null,
-            walletDestination: platformWallet.id,
-            type: TransactionType.SOUSCRIPTION,
-            montant: transactionFee,
-            devise: platformWallet.devise,
-            statut: TransactionStatus.REUSSI,
-            fournisseur: TransactionFournisseur.INTERNE,
-            investissementId: ordre.investissementId,
-            projetId,
-            idempotencyKey: `secmarket:fee:revente_transaction:sig:${signature.id}`,
-            fraisPsp: 0,
-            fraisPlateforme: 0,
-            metadata: {
-              source: 'revente_transaction',
-              ordreId: ordre.id,
-              signatureId: signature.id,
-            },
-          }),
-        );
-      }
-      if (platformWallet && gainFee > 0) {
-        await em.save(
-          TransactionEntity,
-          em.create(TransactionEntity, {
-            walletSource: null,
-            walletDestination: platformWallet.id,
-            type: TransactionType.SOUSCRIPTION,
-            montant: gainFee,
-            devise: platformWallet.devise,
-            statut: TransactionStatus.REUSSI,
-            fournisseur: TransactionFournisseur.INTERNE,
-            investissementId: ordre.investissementId,
-            projetId,
-            idempotencyKey: `secmarket:fee:gain_revente_actions:sig:${signature.id}`,
-            fraisPsp: 0,
-            fraisPlateforme: 0,
-            metadata: {
-              source: 'gain_revente_actions',
-              ordreId: ordre.id,
-              signatureId: signature.id,
-              plusValueVendeur,
-              coutAcquisition,
-            },
-          }),
-        );
-      }
+        // 12. Transactions ledger frais plateforme — une par frais.
+        // Clés scoppées par signature (un ordre peut être exécuté en plusieurs
+        // fills partiels) ; metadata.ordreId permet le lookup au reverse admin.
+        if (platformWallet && transactionFee > 0) {
+          await em.save(
+            TransactionEntity,
+            em.create(TransactionEntity, {
+              walletSource: null,
+              walletDestination: platformWallet.id,
+              type: TransactionType.SOUSCRIPTION,
+              montant: transactionFee,
+              devise: platformWallet.devise,
+              statut: TransactionStatus.REUSSI,
+              fournisseur: TransactionFournisseur.INTERNE,
+              investissementId: ordre.investissementId,
+              projetId,
+              idempotencyKey: `secmarket:fee:revente_transaction:sig:${signature.id}`,
+              fraisPsp: 0,
+              fraisPlateforme: 0,
+              metadata: {
+                source: 'revente_transaction',
+                ordreId: ordre.id,
+                signatureId: signature.id,
+              },
+            }),
+          );
+        }
+        if (platformWallet && gainFee > 0) {
+          await em.save(
+            TransactionEntity,
+            em.create(TransactionEntity, {
+              walletSource: null,
+              walletDestination: platformWallet.id,
+              type: TransactionType.SOUSCRIPTION,
+              montant: gainFee,
+              devise: platformWallet.devise,
+              statut: TransactionStatus.REUSSI,
+              fournisseur: TransactionFournisseur.INTERNE,
+              investissementId: ordre.investissementId,
+              projetId,
+              idempotencyKey: `secmarket:fee:gain_revente_actions:sig:${signature.id}`,
+              fraisPsp: 0,
+              fraisPlateforme: 0,
+              metadata: {
+                source: 'gain_revente_actions',
+                ordreId: ordre.id,
+                signatureId: signature.id,
+                plusValueVendeur,
+                coutAcquisition,
+              },
+            }),
+          );
+        }
 
-      // Statut SIGNED posé en DERNIER, dans la même transaction que l'exécution.
-      signature.statut = SignatureStatus.SIGNED;
-      signature.signedAt = new Date();
-      await em.save(SignatureEntity, signature);
+        // Statut SIGNED posé en DERNIER, dans la même transaction que l'exécution.
+        signature.statut = SignatureStatus.SIGNED;
+        signature.signedAt = new Date();
+        await em.save(SignatureEntity, signature);
 
-      // Émission APRÈS le dernier `em.save` de la transaction : si tout ce qui
-      // précède a réussi, le callback va se résoudre et TypeORM va commit — ces
-      // incréments ne peuvent donc pas survivre à un rollback (cf. contrat du
-      // MetricsPort : jamais bloquant, jamais dans le chemin d'erreur).
-      this.metrics.incrementCounter(METRIC.SECONDARY_ORDERS_TOTAL, { action: 'executed' });
-      this.metrics.observeHistogram(METRIC.SECONDARY_ORDER_AMOUNT_EUR, montantTotal, {
-        action: 'executed',
+        // Émission APRÈS le dernier `em.save` de la transaction : si tout ce qui
+        // précède a réussi, le callback va se résoudre et TypeORM va commit — ces
+        // incréments ne peuvent donc pas survivre à un rollback (cf. contrat du
+        // MetricsPort : jamais bloquant, jamais dans le chemin d'erreur).
+        this.metrics.incrementCounter(METRIC.SECONDARY_ORDERS_TOTAL, { action: 'executed' });
+        this.metrics.observeHistogram(METRIC.SECONDARY_ORDER_AMOUNT_EUR, montantTotal, {
+          action: 'executed',
+        });
+        if (transactionFee > 0) {
+          this.metrics.observeHistogram(METRIC.SECONDARY_FEES_EUR, transactionFee, {
+            source: 'revente_transaction',
+          });
+        }
+        if (gainFee > 0) {
+          this.metrics.observeHistogram(METRIC.SECONDARY_FEES_EUR, gainFee, {
+            source: 'gain_revente_actions',
+          });
+        }
+
+        return { branch: 'secondary', buyerInvestId: buyerInvest.id, fusionnee: !!existingInvest };
       });
-      if (transactionFee > 0) {
-        this.metrics.observeHistogram(METRIC.SECONDARY_FEES_EUR, transactionFee, {
-          source: 'revente_transaction',
-        });
-      }
-      if (gainFee > 0) {
-        this.metrics.observeHistogram(METRIC.SECONDARY_FEES_EUR, gainFee, {
-          source: 'gain_revente_actions',
-        });
-      }
-
-      return { branch: 'secondary', buyerInvestId: buyerInvest.id, fusionnee: !!existingInvest };
-    });
+    } catch (err) {
+      await this.notifierEchecReglement(existing, err);
+      throw err;
+    }
 
     // ── Effets de bord best-effort, HORS transaction ──────────────────────────
     if (result.branch === 'investment') {
@@ -701,25 +759,85 @@ export class YouSignWebhookController {
     return echeances;
   }
 
-  // ── Signature expirée → libérer l'ordre ─────────────────────────────────────
+  // ── Règlement impossible → prévenir les personnes engagées ──────────────────
+
+  /**
+   * Un règlement de cession qui échoue est un incident À DEUX PARTIES : le
+   * vendeur a donné son accord, l'acheteur a signé, ses fonds sont réservés, et
+   * pourtant rien ne s'exécute. Les deux doivent l'apprendre autrement qu'en
+   * constatant l'absence de mouvement, et les administrateurs doivent pouvoir
+   * intervenir.
+   *
+   * Best-effort de bout en bout : notifier ne doit jamais masquer l'erreur
+   * d'origine, qui est propagée par l'appelant.
+   */
+  private async notifierEchecReglement(
+    signature: SignatureEntity,
+    erreur: unknown,
+  ): Promise<void> {
+    if (!signature.ordreId) return; // souscription initiale : hors périmètre
+
+    const motif = erreur instanceof Error ? erreur.message : String(erreur);
+    try {
+      const ordre = await this.ordreRepo.findOne({
+        where: { id: signature.ordreId },
+      });
+      if (!ordre) return;
+
+      const message =
+        'Le règlement de la cession n\'a pas pu être finalisé. Aucun mouvement ' +
+        "n'a été enregistré et rien n'est perdu : nos équipes ont été alertées " +
+        'et reprennent le dossier.';
+      const metadata = {
+        ordreId: ordre.id,
+        signatureId: signature.id,
+        nbFractions: signature.nbFractions,
+      };
+
+      await Promise.all([
+        this.notificationService
+          .push({
+            utilisateurId: signature.userId,
+            type: NotificationType.MARCHE_SECONDAIRE,
+            titre: 'Règlement de votre achat interrompu',
+            message,
+            metadata,
+          })
+          .catch(() => {}),
+        this.notificationService
+          .push({
+            utilisateurId: ordre.vendeurId,
+            type: NotificationType.MARCHE_SECONDAIRE,
+            titre: 'Règlement de votre vente interrompu',
+            message,
+            metadata,
+          })
+          .catch(() => {}),
+        this.notificationService
+          .pushToAdmins({
+            type: NotificationType.MARCHE_SECONDAIRE,
+            titre: 'Échec de règlement — marché secondaire',
+            message:
+              `Cession ${ordre.id} non réglée (acheteur #${signature.userId}, vendeur #${ordre.vendeurId}) : ${motif}`,
+            roles: [UserRole.SUPER_ADMIN, UserRole.FINANCIER, UserRole.COMPLIANCE],
+            metadata: { ...metadata, motif },
+          })
+          .catch(() => {}),
+      ]);
+    } catch (err: any) {
+      this.logger.warn(
+        `Notification d'échec de règlement non remise pour la signature ${signature.id}: ${err?.message}`,
+      );
+    }
+  }
+
+  // ── Signature expirée → libérer l'ordre ET les fonds ────────────────────────
+  //
+  // Le contrôleur ne porte plus la séquence : elle est partagée verbatim avec
+  // le cron de sécurité, qui expire les signatures échues même quand aucun
+  // événement prestataire n'arrive.
 
   private async handleSignatureExpired(youSignRequestId: string): Promise<void> {
-    const signature = await this.signatureRepo.findOne({
-      where: { youSignRequestId },
-    });
-    if (!signature || signature.statut !== SignatureStatus.PENDING) return;
-
-    signature.statut = SignatureStatus.EXPIRED;
-    await this.signatureRepo.save(signature);
-
-    this.notificationService.push({
-      utilisateurId: signature.userId,
-      type: NotificationType.MARCHE_SECONDAIRE,
-      titre: 'Signature expirée',
-      message: 'Votre contrat de rachat a expiré (48h dépassées). L\'ordre est toujours disponible si vous souhaitez réessayer.',
-      metadata: { ordreId: signature.ordreId, signatureId: signature.id },
-    }).catch(() => {});
-
-    this.logger.log(`Signature expired: ${signature.id} ordreId=${signature.ordreId}`);
+    await this.expirerSignature.parRequeteFournisseur(youSignRequestId);
   }
 }

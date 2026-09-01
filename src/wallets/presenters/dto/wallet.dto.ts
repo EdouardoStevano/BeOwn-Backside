@@ -1,5 +1,6 @@
 import {
   IsEnum,
+  IsIn,
   IsNotEmpty,
   IsNumber,
   IsOptional,
@@ -23,9 +24,21 @@ export class CreateWalletDto {
   @IsString()
   fournisseurRef: string;
 
-  @ApiPropertyOptional({ example: 'EUR', default: 'EUR' })
+  @ApiPropertyOptional({
+    example: 'EUR',
+    default: 'EUR',
+    enum: ['EUR'],
+    description: "Devise du portefeuille — seul l'EUR est accepté.",
+  })
   @IsOptional()
   @IsString()
+  // Chaîne libre, un portefeuille pouvait naître en « XOF », « usd » ou
+  // n'importe quoi d'autre. Tous les montants du grand livre, les seuils
+  // LCB-FT et les rapprochements sont exprimés en euros SANS conversion :
+  // un portefeuille dans une autre devise ferait comparer des grandeurs
+  // hétérogènes, silencieusement. La devise n'est pas un champ d'affichage,
+  // c'est l'unité de compte du registre.
+  @IsIn(['EUR'], { message: 'Seule la devise EUR est acceptée.' })
   devise?: string;
 }
 

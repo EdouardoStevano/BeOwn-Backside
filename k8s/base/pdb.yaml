@@ -1,0 +1,40 @@
+---
+# ─────────────────────────────────────────────────────────────────────────────
+# PodDisruptionBudget — API BeOwn
+#
+# Ce que ça protège : les interruptions VOLONTAIRES, celles décidées par
+# l'opérateur ou par le cluster — `kubectl drain` d'un nœud avant maintenance,
+# mise à jour de K3s, éviction par le descheduler. Sans PDB, un drain supprime
+# tous les pods de l'API du nœud d'un coup : l'API disparaît le temps qu'ils
+# soient reprogrammés ailleurs, y compris en pleine journée.
+#
+# Il ne protège PAS des interruptions involontaires (crash, OOM, perte de
+# nœud) : ce sont les probes et le RollingUpdate qui s'en chargent.
+#
+# ⚠ POINT D'ATTENTION OPÉRATIONNEL — à lire avant le premier drain.
+# Le HPA (hpa.yaml) a `minReplicas: 1`. Avec `minAvailable: 1`, un pod unique
+# est un pod indispensable : `kubectl drain` va BLOQUER indéfiniment sur ce
+# nœud tant qu'aucun autre réplica n'est disponible ailleurs. Ce n'est pas un
+# bug, c'est le contrat demandé — mais il faut le savoir pour ne pas croire à
+# un drain gelé.
+#
+# Deux façons de s'en sortir le moment venu, par ordre de préférence :
+#   1. passer `minReplicas: 2` sur l'overlay de production (recommandé : un
+#      seul réplica d'API, c'est de toute façon un point de panne unique) ;
+#   2. ponctuellement, `kubectl scale deployment/beown-backend --replicas=2`
+#      avant le drain, puis laisser le HPA reprendre la main.
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: beown-backend-pdb
+  labels:
+    app: beown-backend
+spec:
+  # « Au moins un pod servant du trafic à tout instant. » Exprimé en absolu et
+  # non en pourcentage : avec un nombre de réplicas piloté par le HPA, un
+  # pourcentage donnerait une garantie qui varie avec la charge.
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: beown-backend

@@ -91,9 +91,19 @@ describe('PaymentController — webhook Stripe Identity (KYC auto + fallback rev
       profilRepository,
       walletRepo,
       txRepo,
+      /* projectRepo */ { findOne: jest.fn().mockResolvedValue(null) } as any,
       dataSource,
       requestRetrait,
+      /* crediterApportPorteur */ { execute: jest.fn() } as any,
       metricsPort,
+      /* transactionalEmails */ {
+        depotConfirme: jest.fn().mockResolvedValue(undefined),
+        retraitExecute: jest.fn().mockResolvedValue(undefined),
+        kycValide: jest.fn().mockResolvedValue(undefined),
+        kycRefuse: jest.fn().mockResolvedValue(undefined),
+      } as any,
+      /* amlMonitor */ { check: jest.fn().mockResolvedValue(undefined) } as any,
+      /* retraitSettlement */ {} as any,
     );
   });
 

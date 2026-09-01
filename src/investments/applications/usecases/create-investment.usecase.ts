@@ -60,6 +60,7 @@ import {
   evaluationExpiree,
 } from 'src/profiles/domains/investor-classification';
 import { calculerEcheanceRetractation } from 'src/investments/domains/retractation';
+import { AmlMonitorService } from 'src/common/aml/aml-monitor.service';
 
 @Injectable()
 export class CreateInvestmentUseCase {
@@ -86,6 +87,7 @@ export class CreateInvestmentUseCase {
     private readonly dataSource: DataSource,
     private readonly metrics: MetricsPort,
     private readonly projectWalletResolver: ResolveProjectWalletUseCase,
+    private readonly amlMonitor: AmlMonitorService,
   ) {}
 
   async execute(userId: number, dto: CreateInvestmentDto): Promise<Investment> {
@@ -398,6 +400,19 @@ export class CreateInvestmentUseCase {
 
     this.metrics.incrementCounter(METRIC.INVESTMENT_CREATED_TOTAL, { flow: 'direct' });
     this.metrics.observeHistogram(METRIC.INVESTMENT_AMOUNT_EUR, montant, { flow: 'direct' });
+
+    // ── Vigilance LCB-FT (art. L.561-10 CMF) ─────────────────────────────────
+    // Après commit et SANS attendre : une alerte est une mesure de vigilance,
+    // pas un gel — elle ne conditionne ni ne retarde une souscription déjà
+    // enregistrée. Le service évalue lui-même le cumul du mois glissant.
+    this.amlMonitor
+      .check({
+        userId,
+        amount: montant,
+        context: 'souscription',
+        reference: saved.id,
+      })
+      .catch(() => {});
 
     // ── Generate & upload bulletin de souscription ────────────────────────────
     this.generateAndStoreBulletin(saved, project, userId).catch((err) =>

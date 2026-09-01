@@ -27,10 +27,24 @@ export interface EmailService {
     prenom: string,
     projet: { titre: string; ville: string; triCible?: number; url?: string },
   ): Promise<void>;
+  /**
+   * `unsubscribeUrl` : lien de désinscription EXIGÉ pour toute prospection par
+   * voie électronique (art. L.34-5 CPCE). Il est optionnel dans la signature
+   * parce que le template ne l'affiche que s'il est fourni — un appelant qui
+   * l'oublie n'envoie pas un lien mort, il n'envoie pas de lien du tout, ce
+   * qui se voit à la relecture au lieu de se cacher dans un `href=""`.
+   */
   sendNewSecondaryOrderEmail?(
     email: string,
     prenom: string,
     projet: { titre: string; nbFractions: number; prix: number },
+    unsubscribeUrl?: string,
+  ): Promise<void>;
+  /** Versement du net d'une période de distribution (revenus locatifs). */
+  sendDistributionEmail?(
+    email: string,
+    prenom: string,
+    distribution: { montant: number; projetTitre: string; periode: string },
   ): Promise<void>;
   sendEcheanceEmail?(
     email: string,

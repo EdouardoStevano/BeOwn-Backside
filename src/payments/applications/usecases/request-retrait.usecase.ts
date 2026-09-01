@@ -26,6 +26,7 @@ import {
   PayoutDestinationResolver,
   type ResolvedPayoutDestination,
 } from '../services/payout-destination.resolver';
+import { AmlMonitorService } from 'src/common/aml/aml-monitor.service';
 
 /**
  * Cas d'usage « demande de retrait » (extrait de PaymentController — SRP).
@@ -50,6 +51,7 @@ export class RequestRetraitUseCase {
     private readonly metrics: MetricsPort,
     // Lot 4a — décide et VALIDE la destination du versement avant tout débit.
     private readonly destinationResolver: PayoutDestinationResolver,
+    private readonly amlMonitor: AmlMonitorService,
   ) {}
 
   async execute(dto: CreateRetraitDto, user: ActiveUser) {
@@ -69,6 +71,24 @@ export class RequestRetraitUseCase {
         };
       }
     }
+
+    // ── Vigilance LCB-FT (art. L.561-10 CMF) ─────────────────────────────────
+    // Le retrait est le mouvement le plus sensible du dispositif : c'est par
+    // lui que des fonds quittent la plateforme. Le contrôle est déclenché dès
+    // la DEMANDE — pas au versement — pour que compliance voie l'opération
+    // avant qu'elle ne soit acheminée. Il n'est ni attendu ni bloquant : une
+    // alerte relève de la vigilance, pas du gel des avoirs.
+    this.amlMonitor
+      .check({
+        userId: user.userId,
+        amount: Number(dto.amount),
+        context: 'retrait',
+      })
+      .catch((err) =>
+        this.logger.warn(
+          `Contrôle LCB-FT du retrait impossible pour l'utilisateur #${user.userId}: ${err?.message}`,
+        ),
+      );
 
     // ── Aiguillage E3 : Stripe Connect vs legacy manuel (secours) ────────────
     // Statut du compte connecté (best-effort : un incident Stripe ne doit pas

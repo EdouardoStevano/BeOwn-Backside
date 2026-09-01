@@ -1,7 +1,30 @@
-// ⚠ ORDRE D'IMPORT CRITIQUE — voir observability/tracing/otel.ts : ce module
-// DOIT être importé EN TOUT PREMIER, avant tout import qui charge http/express
-// /pg/ioredis (directement ou via NestFactory/AppModule), sous peine de
-// traces vides (les auto-instrumentations monkey-patchent au `require`).
+// ⚠ ORDRE D'IMPORT CRITIQUE — 2 contraintes, dans cet ordre exact.
+//
+// 1. `dotenv/config` EN TOUT PREMIER. Deux modules lisent `process.env` au
+//    moment de leur ÉVALUATION (import), donc bien avant que le ConfigModule
+//    de Nest n'ait chargé le fichier `.env` :
+//      - `observability/tracing/otel` (OTEL_EXPORTER_OTLP_ENDPOINT) ;
+//      - `notifications/presenters/ws/notification.gateway` — le décorateur
+//        `@WebSocketGateway({ cors: { origin: [process.env.FRONTEND_URL …] } })`
+//        est évalué au chargement d'AppModule. Sans ce chargement préalable,
+//        les origines CORS du WebSocket retombaient sur les valeurs localhost
+//        codées en dur : en déploiement les variables viennent du ConfigMap
+//        (donc déjà dans l'environnement du process, cas nominal), mais tout
+//        lancement s'appuyant sur un fichier `.env` (poste local, conteneur
+//        lancé à la main, script one-shot) partait avec de mauvaises origines
+//        et le temps réel restait muet, sans erreur visible.
+//    `dotenv` n'écrase jamais une variable déjà présente dans l'environnement :
+//    en Kubernetes, où ConfigMap et Secret sont injectés par le kubelet, cet
+//    appel est donc un no-op strict. Il vient de @nestjs/config (dépendance
+//    directe) qui l'embarque ; à promouvoir en dépendance explicite du
+//    package.json au prochain `npm install`.
+//
+// 2. `observability/tracing/otel` juste après, et avant tout import qui charge
+//    http/express/pg/ioredis (directement ou via NestFactory/AppModule), sous
+//    peine de traces vides (les auto-instrumentations monkey-patchent au
+//    `require`). `dotenv` ne charge que `fs`/`path` : le placer devant ne casse
+//    aucune instrumentation.
+import 'dotenv/config';
 import './observability/tracing/otel';
 import { initSentry } from './observability/sentry';
 import { SentryExceptionFilter } from './observability/sentry-exception.filter';
@@ -167,7 +190,20 @@ async function bootstrap() {
     .addTag('Notifications', 'Notifications in-app et email')
     .build();
 
-  if (process.env.NODE_ENV !== 'production') {
+  // Exposition de Swagger pilotée par un interrupteur EXPLICITE, défaut fermé.
+  //
+  // L'ancienne condition `NODE_ENV !== 'production'` ouvrait `/api/docs` en
+  // accès public sur dev, staging ET test — trois environnements exposés sur
+  // Internet (api-dev / api-staging / api-test .beown.fr). La documentation y
+  // publie la cartographie complète des routes, des payloads et des règles de
+  // validation : c'est une aide au repérage offerte gratuitement, sur des
+  // environnements qui portent des données de test réalistes.
+  //
+  // Désormais : rien n'est exposé tant que `SWAGGER_ENABLED=true` n'est pas
+  // posé délibérément (poste local, ou activation temporaire d'un
+  // environnement le temps d'une session d'intégration). Un environnement mal
+  // configuré tombe du côté fermé.
+  if (process.env.SWAGGER_ENABLED === 'true') {
     const document = SwaggerModule.createDocument(app, config);
     SwaggerModule.setup('api/docs', app, document, {
       swaggerOptions: {
@@ -207,6 +243,26 @@ async function bootstrap() {
     // les rend nécessaires, pas un confort.
     allowedHeaders: ['Content-Type', 'Authorization', 'sentry-trace', 'baggage'],
   });
+
+  // Arrêt gracieux — indispensable au rolling update (maxUnavailable: 0).
+  //
+  // Sans ces hooks, le SIGTERM envoyé par le kubelet coupe le process
+  // immédiatement : toute requête HTTP en vol est tuée, les sockets WebSocket
+  // sont fermés brutalement, et les connexions PostgreSQL/Redis ne sont pas
+  // rendues. À chaque déploiement, les utilisateurs en cours d'action prennent
+  // une erreur réseau — un incident silencieux, invisible dans les métriques
+  // serveur puisque le process n'a jamais eu l'occasion de journaliser.
+  //
+  // Avec `enableShutdownHooks`, Nest intercepte SIGTERM, arrête d'accepter de
+  // nouvelles connexions, laisse finir celles en cours et déclenche
+  // `onModuleDestroy`/`onApplicationShutdown` sur tous les providers (dont
+  // `RedisThrottlerStorage.onApplicationShutdown`).
+  //
+  // Le cycle complet côté k8s : `preStop: sleep 10` laisse l'endpoint sortir
+  // des tables de routage AVANT le SIGTERM, puis
+  // `terminationGracePeriodSeconds: 45` borne le drainage
+  // (cf. k8s/base/deployment.yaml).
+  app.enableShutdownHooks();
 
   await app.listen(process.env.PORT ?? 3001);
 }

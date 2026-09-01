@@ -212,6 +212,78 @@ export function verifierEligibiliteMiseEnVente(
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// Durée de validité d'une annonce
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Code métier STABLE d'une annonce dont la date de validité est dépassée.
+ * Le client le branche : il ne change jamais.
+ */
+export const CODE_ANNONCE_EXPIREE = 'SECONDARY_ORDER_EXPIRED';
+
+/** Jour calendaire d'une échéance, indépendamment du fuseau du serveur. */
+interface JourCalendaire {
+  annee: number;
+  mois: number;
+  jour: number;
+}
+
+/**
+ * `valideJusquAu` est une DATE (sans heure) : selon le pilote, elle arrive sous
+ * forme de chaîne `YYYY-MM-DD` ou d'objet `Date`. Les deux sont ramenés au même
+ * triplet lu en UTC — sans quoi le même enregistrement expirerait un jour plus
+ * tôt ou plus tard selon le fuseau du processus.
+ */
+function jourCalendaire(valeur: Date | string): JourCalendaire {
+  if (typeof valeur === 'string') {
+    const [annee, mois, jour] = valeur.slice(0, 10).split('-').map(Number);
+    return { annee, mois: mois - 1, jour };
+  }
+  return {
+    annee: valeur.getUTCFullYear(),
+    mois: valeur.getUTCMonth(),
+    jour: valeur.getUTCDate(),
+  };
+}
+
+/**
+ * Dernier instant couvert par une date de validité.
+ *
+ * Une annonce « valable jusqu'au 31 août » l'est pendant TOUT le 31 août :
+ * l'échéance porte sur un jour entier, pas sur son minuit initial.
+ */
+export function finDeValidite(valideJusquAu: Date | string): Date {
+  const { annee, mois, jour } = jourCalendaire(valideJusquAu);
+  return new Date(Date.UTC(annee, mois, jour, 23, 59, 59, 999));
+}
+
+/**
+ * Une annonce échue n'est plus cessible — RÈGLE MÉTIER CENTRALE de la durée
+ * de validité, appliquée partout où une annonce est présentée, sollicitée ou
+ * balayée par le cron.
+ *
+ * Fonction pure : aucune horloge implicite, l'instant d'évaluation est injecté.
+ * Sans date de validité, l'annonce ne périme pas.
+ */
+export function estAnnonceEchue(
+  valideJusquAu: Date | string | null | undefined,
+  maintenant: Date,
+): boolean {
+  if (valideJusquAu == null) return false;
+  return maintenant.getTime() > finDeValidite(valideJusquAu).getTime();
+}
+
+/**
+ * Jour plancher (`YYYY-MM-DD`) d'une clause SQL `valideJusquAu >= :jour`.
+ *
+ * Colonne `date` comparée à un jour : l'annonce reste servie pendant tout son
+ * dernier jour, exactement comme `estAnnonceEchue` la juge encore valable.
+ */
+export function jourLimiteValidite(maintenant: Date): string {
+  return maintenant.toISOString().slice(0, 10);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // Assiette des frais de cession
 // ═══════════════════════════════════════════════════════════════════════════
 

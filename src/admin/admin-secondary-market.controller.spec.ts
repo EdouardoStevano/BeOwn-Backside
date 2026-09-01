@@ -192,3 +192,193 @@ describe('AdminSecondaryMarketController — cancelOrder Cas B (reverse)', () =>
     expect(platformWallet.solde).toBe(100); // wallet plateforme non touché
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Cas A — la cession n'a JAMAIS été réglée.
+//
+// La reverse financière défait un règlement : elle recrédite l'acheteur, débite
+// le vendeur du net qu'il avait perçu et rend les fractions. Sur un ordre
+// INTERET_EXPRIME ou ACCEPTE, rien de tout cela n'a eu lieu — la jouer quand
+// même créditait l'acheteur d'un montant jamais versé et débitait le vendeur
+// d'un produit jamais perçu : de l'argent créé à chaque annulation.
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe('AdminSecondaryMarketController — cancelOrder Cas A (aucun mouvement)', () => {
+  const admin = { userId: 99 };
+
+  const build = (ordre: any) => {
+    const ecritures: Array<{ entite: any; set: any; where: any }> = [];
+    const walletAcheteur = {
+      id: 'w-buyer',
+      solde: 0,
+      soldeBloque: 300,
+    };
+
+    const em: any = {
+      findOne: jest.fn().mockResolvedValue(null),
+      create: jest.fn((_e: any, o: any) => o),
+      save: jest.fn(async (_e: any, o: any) => o),
+      createQueryBuilder: jest.fn(() => {
+        let entite: any = null;
+        let valeurs: any = null;
+        let cible: any = null;
+        const qb: any = {
+          update: jest.fn((e: any) => {
+            entite = e;
+            return qb;
+          }),
+          set: jest.fn((v: any) => {
+            valeurs = v;
+            return qb;
+          }),
+          setParameter: jest.fn(() => qb),
+          where: jest.fn((_clause: string, params: any) => {
+            cible = params;
+            return qb;
+          }),
+          execute: jest.fn(async () => {
+            ecritures.push({ entite, set: valeurs, where: cible });
+            if (entite === WalletEntity) {
+              // Libération réelle : la poche bloquée redevient disponible.
+              walletAcheteur.solde += 300;
+              walletAcheteur.soldeBloque -= 300;
+            }
+            return { affected: 1 };
+          }),
+        };
+        return qb;
+      }),
+    };
+
+    const ordreRepo = { findOne: jest.fn().mockResolvedValue(ordre), save: jest.fn() };
+    const userRepo = {
+      findOne: jest.fn().mockResolvedValue({ userId: 99, role: UserRole.SUPER_ADMIN }),
+    };
+    const notificationService = {
+      push: jest.fn().mockResolvedValue(undefined),
+      pushToAdmins: jest.fn().mockResolvedValue(undefined),
+    };
+    const dataSource: any = { transaction: jest.fn(async (cb: any) => cb(em)) };
+
+    const controller = new AdminSecondaryMarketController(
+      ordreRepo as any,
+      {} as any,
+      userRepo as any,
+      {} as any,
+      {} as any,
+      { findOne: jest.fn().mockResolvedValue(null) } as any,
+      dataSource,
+      notificationService as any,
+      { secondaryTradeExecuted: jest.fn() } as any,
+      {} as any,
+    );
+
+    return { controller, ecritures, notificationService, walletAcheteur, em };
+  };
+
+  const ordreAccepte = () => ({
+    id: 'ord-2',
+    investissementId: 'inv-seller',
+    investissement: { projetId: 'proj-1' },
+    vendeurId: 1,
+    acheteurId: 2,
+    nbFractions: 10,
+    montant: 1000,
+    prixUnitaire: 100,
+    interetNbFractions: 3,
+    statut: OrdreMarcheStatus.ACCEPTE,
+  });
+
+  it.each([
+    [OrdreMarcheStatus.INTERET_EXPRIME],
+    [OrdreMarcheStatus.ACCEPTE],
+    [OrdreMarcheStatus.EN_CARNET],
+    [OrdreMarcheStatus.MATCH_PROPOSE],
+  ])('statut %s : annulation SANS reverse financière', async (statut) => {
+    const { controller, ecritures } = build({ ...ordreAccepte(), statut });
+
+    const result = await controller.cancelOrder('ord-2', admin as any);
+
+    expect(result.reversed).toBe(false);
+    expect(result.statut).toBe(OrdreMarcheStatus.ANNULE);
+    // Aucune écriture au grand livre : pas une seule transaction créée.
+    expect(
+      ecritures.some((e) => e.entite === TransactionEntity),
+    ).toBe(false);
+  });
+
+  it("purge l'acheteur et sa marque d'intérêt de l'annonce annulée", async () => {
+    const { controller, ecritures } = build(ordreAccepte());
+
+    await controller.cancelOrder('ord-2', admin as any);
+
+    const annulation = ecritures.find((e) => e.entite === OrdreMarcheEntity);
+    expect(annulation?.set).toEqual({
+      statut: OrdreMarcheStatus.ANNULE,
+      acheteurId: null,
+      interetNbFractions: null,
+      interetExprimeLe: null,
+    });
+  });
+
+  it('annule la signature encore PENDING : personne ne signe une annonce retirée', async () => {
+    const { controller, ecritures } = build(ordreAccepte());
+
+    await controller.cancelOrder('ord-2', admin as any);
+
+    const signature = ecritures.find((e) => e.entite === SignatureEntity);
+    expect(signature?.set).toEqual({ statut: SignatureStatus.CANCELLED });
+    expect(signature?.where).toMatchObject({
+      ordreId: 'ord-2',
+      pending: SignatureStatus.PENDING,
+    });
+  });
+
+  it('rend les fonds RÉSERVÉS sans faire varier les fonds détenus', async () => {
+    const { controller, walletAcheteur } = build(ordreAccepte());
+    const detenusAvant = walletAcheteur.solde + walletAcheteur.soldeBloque;
+
+    const result = await controller.cancelOrder('ord-2', admin as any);
+
+    // 3 fractions × 100 € = 300 € rendus disponibles ; l'argent ne quitte pas
+    // le portefeuille, il change seulement de poche.
+    expect(result.montantLibere).toBe(300);
+    expect(walletAcheteur.solde).toBe(300);
+    expect(walletAcheteur.soldeBloque).toBe(0);
+    expect(walletAcheteur.solde + walletAcheteur.soldeBloque).toBe(detenusAvant);
+  });
+
+  it("ne libère rien sur une annonce jamais acceptée (aucun fonds n'y était réservé)", async () => {
+    const { controller, walletAcheteur } = build({
+      ...ordreAccepte(),
+      statut: OrdreMarcheStatus.INTERET_EXPRIME,
+    });
+
+    const result = await controller.cancelOrder('ord-2', admin as any);
+
+    expect(result.montantLibere).toBe(0);
+    expect(walletAcheteur.soldeBloque).toBe(300); // intact
+  });
+
+  it("prévient le vendeur ET l'acheteur pressenti", async () => {
+    const { controller, notificationService } = build(ordreAccepte());
+
+    await controller.cancelOrder('ord-2', admin as any);
+
+    const destinataires = notificationService.push.mock.calls.map(
+      (appel: any[]) => appel[0].utilisateurId,
+    );
+    expect(destinataires).toEqual(expect.arrayContaining([1, 2]));
+  });
+
+  it('refuse une annonce déjà annulée ou expirée', async () => {
+    const { controller } = build({
+      ...ordreAccepte(),
+      statut: OrdreMarcheStatus.ANNULE,
+    });
+
+    await expect(
+      controller.cancelOrder('ord-2', admin as any),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+});

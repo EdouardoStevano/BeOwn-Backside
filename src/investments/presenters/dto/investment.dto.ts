@@ -64,4 +64,14 @@ export class TopUpDto {
   @IsInt()
   @IsPositive()
   nbFractions: number;
+
+  /**
+   * Même garde que `CreateInvestmentDto` : un double-clic ou un retry réseau
+   * sur l'ajout de fractions ne doit pas débiter deux fois.
+   */
+  @ApiPropertyOptional({ description: 'Clé idempotente fournie par le client' })
+  @IsOptional()
+  @IsString()
+  @Length(16, 128)
+  idempotencyKey?: string;
 }

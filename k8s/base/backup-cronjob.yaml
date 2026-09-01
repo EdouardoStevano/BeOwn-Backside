@@ -1,0 +1,263 @@
+---
+# ─────────────────────────────────────────────────────────────────────────────
+# Sauvegarde quotidienne PostgreSQL — dump → chiffrement → stockage objet
+#
+# Situation avant ce fichier : AUCUNE sauvegarde. La base vit sur un PVC
+# `local-path` (postgres.yaml), c'est-à-dire un dossier du disque d'UN nœud.
+# La perte de ce nœud, une suppression de PVC ou un `DROP` malheureux
+# effaçaient définitivement les comptes, les investissements et le grand livre.
+#
+# Chaîne mise en place, en trois temps dans le même pod :
+#   1. initContainer `pg-dump`   — `pg_dump -F c` (format custom : compressé,
+#      restauration sélective possible avec `pg_restore`) vers un emptyDir ;
+#   2. le même initContainer chiffre le dump en AES-256-CBC (openssl), clé
+#      dérivée par PBKDF2. Le dump ne quitte JAMAIS le cluster en clair : il
+#      contient des données personnelles (RGPD) et des données financières ;
+#   3. container `upload` — envoi vers le stockage objet, puis application de
+#      la rétention.
+#
+# ⚠ AVANT DE CONSIDÉRER CE FICHIER COMME UNE SAUVEGARDE :
+#   - créer le Secret `beown-backup-secrets` (modèle :
+#     k8s/base/backup-secrets.example.yaml) — SANS LUI le CronJob échoue à
+#     chaque exécution ;
+#   - EXÉCUTER UNE RESTAURATION DE BOUT EN BOUT sur un environnement jetable.
+#     Une sauvegarde jamais restaurée n'est pas une sauvegarde, c'est une
+#     hypothèse. Procédure de restauration + calendrier des tests :
+#     docs/operations/runbook-lancement.md (section « Sauvegarde /
+#     restauration » — À RÉDIGER, ce fichier ne la contient pas encore).
+#
+# Restauration, en résumé (détail dans le runbook) :
+#   aws s3 cp s3://$BACKUP_BUCKET/postgres/<date>.dump.enc . --endpoint-url …
+#   openssl enc -d -aes-256-cbc -pbkdf2 -in <date>.dump.enc -out restore.dump \
+#           -pass env:BACKUP_ENCRYPTION_KEY
+#   pg_restore -h … -U … -d beown_restore --clean --if-exists restore.dump
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: beown-postgres-backup
+  labels:
+    app: beown-postgres-backup
+spec:
+  # 02h15 UTC : creux de trafic, et décalé de l'heure ronde pour ne pas
+  # concourir avec les autres tâches planifiées du cluster.
+  schedule: '15 2 * * *'
+  timeZone: 'Europe/Paris'
+  # Une sauvegarde à la fois : deux pg_dump concurrents sur la même base
+  # doubleraient la charge disque sans rien apporter.
+  concurrencyPolicy: Forbid
+  # Si le cluster était indisponible à l'heure dite, ne pas rattraper au-delà
+  # d'une heure — une sauvegarde de la veille lancée 12 h en retard n'a plus
+  # d'intérêt, et l'occasion manquée doit se voir.
+  startingDeadlineSeconds: 3600
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      # Deux tentatives supplémentaires en cas d'échec transitoire (réseau).
+      backoffLimit: 2
+      # Garde-fou : un dump qui traîne plus de 2 h est bloqué, pas lent.
+      activeDeadlineSeconds: 7200
+      template:
+        metadata:
+          labels:
+            app: beown-postgres-backup
+        spec:
+          restartPolicy: OnFailure
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            fsGroup: 1000
+            seccompProfile:
+              type: RuntimeDefault
+
+          volumes:
+            # Le dump transite par la mémoire du nœud, jamais par un disque
+            # persistant : rien à nettoyer, rien qui survive au pod.
+            - name: dump
+              emptyDir:
+                medium: Memory
+                sizeLimit: 2Gi
+            # /tmp inscriptible pour aws-cli (racine en lecture seule) : il y
+            # écrit son cache, sa config ($HOME y pointe) et ses temporaires.
+            - name: awstmp
+              emptyDir:
+                sizeLimit: 64Mi
+
+          initContainers:
+            - name: pg-dump
+              # Version épinglée, alignée sur le serveur (postgres.yaml utilise
+              # postgres:16-alpine). pg_dump doit être de version >= au serveur.
+              image: postgres:16.15-alpine
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: [ALL]
+              env:
+                - name: PGHOST
+                  valueFrom:
+                    configMapKeyRef:
+                      name: beown-backend-config
+                      key: DATABASE_HOST
+                - name: PGPORT
+                  valueFrom:
+                    configMapKeyRef:
+                      name: beown-backend-config
+                      key: DATABASE_PORT
+                - name: PGDATABASE
+                  valueFrom:
+                    configMapKeyRef:
+                      name: beown-backend-config
+                      key: DATABASE_DB
+                - name: PGUSER
+                  valueFrom:
+                    secretKeyRef:
+                      name: beown-backend-secrets
+                      key: DATABASE_USERNAME
+                # Lu automatiquement par pg_dump : le mot de passe ne passe
+                # donc jamais par une ligne de commande (visible dans `ps`).
+                - name: PGPASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: beown-backend-secrets
+                      key: DATABASE_PASSWORD
+                - name: BACKUP_ENCRYPTION_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: beown-backup-secrets
+                      key: BACKUP_ENCRYPTION_KEY
+              volumeMounts:
+                - name: dump
+                  mountPath: /backup
+              command: ['/bin/sh', '-c']
+              args:
+                - |
+                  set -eu
+                  STAMP="$(date -u +%Y-%m-%d)"
+                  echo "[backup] pg_dump de $PGDATABASE sur $PGHOST ($STAMP)"
+
+                  # -F c : format custom (compressé, restauration sélective).
+                  # Écrit sur stdout pour que le chiffrement se fasse au fil de
+                  # l'eau : le dump en clair n'est jamais matérialisé.
+                  # `set -o pipefail` n'existe pas en sh POSIX strict : on
+                  # vérifie donc la taille du résultat juste après.
+                  pg_dump --format=custom --no-owner --no-privileges \
+                    | openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt \
+                        -pass env:BACKUP_ENCRYPTION_KEY \
+                        -out "/backup/${STAMP}.dump.enc"
+
+                  SIZE="$(wc -c < "/backup/${STAMP}.dump.enc")"
+                  # Un fichier chiffré vide ou minuscule = pg_dump a échoué en
+                  # amont du tube. Échouer ici évite de publier une sauvegarde
+                  # vide qui donnerait une fausse impression de sécurité.
+                  if [ "$SIZE" -lt 1024 ]; then
+                    echo "[backup] ECHEC : dump chiffré de $SIZE octets, manifestement vide."
+                    exit 1
+                  fi
+                  echo "[backup] dump chiffré : ${STAMP}.dump.enc ($SIZE octets)"
+              resources:
+                requests:
+                  cpu: '100m'
+                  memory: '256Mi'
+                limits:
+                  cpu: '500m'
+                  memory: '1Gi'
+
+          containers:
+            - name: upload
+              # Client S3. Compatible avec tout stockage objet parlant S3 :
+              # AWS S3, Google Cloud Storage (API d'interopérabilité),
+              # Scaleway, OVH, MinIO — d'où le BACKUP_S3_ENDPOINT configurable.
+              image: amazon/aws-cli:2.36.34
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: [ALL]
+              env:
+                - name: AWS_ACCESS_KEY_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: beown-backup-secrets
+                      key: BACKUP_S3_ACCESS_KEY_ID
+                - name: AWS_SECRET_ACCESS_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: beown-backup-secrets
+                      key: BACKUP_S3_SECRET_ACCESS_KEY
+                - name: AWS_DEFAULT_REGION
+                  valueFrom:
+                    secretKeyRef:
+                      name: beown-backup-secrets
+                      key: BACKUP_S3_REGION
+                - name: BACKUP_BUCKET
+                  valueFrom:
+                    secretKeyRef:
+                      name: beown-backup-secrets
+                      key: BACKUP_S3_BUCKET
+                - name: BACKUP_S3_ENDPOINT
+                  valueFrom:
+                    secretKeyRef:
+                      name: beown-backup-secrets
+                      key: BACKUP_S3_ENDPOINT
+                # Le compte à conserver. 14 quotidiennes = deux semaines de
+                # marge pour détecter une corruption avant qu'elle ne sorte de
+                # la fenêtre. À revoir à la hausse dès que l'obligation de
+                # conservation comptable sera arbitrée (une sauvegarde
+                # quotidienne ne remplace pas un archivage légal).
+                - name: RETENTION_DAILY
+                  value: '14'
+              volumeMounts:
+                - name: dump
+                  mountPath: /backup
+                  readOnly: true
+                # aws-cli écrit sa configuration, son cache et ses fichiers
+                # temporaires dans $HOME et dans /tmp. La racine étant en
+                # lecture seule, /tmp doit être un volume — sinon la commande
+                # échoue sur un « Read-only file system » peu explicite.
+                # HOME est positionné sur un sous-dossier de ce même volume.
+                - name: awstmp
+                  mountPath: /tmp
+              command: ['/bin/sh', '-c']
+              args:
+                - |
+                  set -eu
+                  export HOME=/tmp/aws
+                  mkdir -p "$HOME"
+                  PREFIX="postgres"
+                  FILE="$(ls -1 /backup/*.dump.enc | head -n1)"
+                  KEY="${PREFIX}/$(basename "$FILE")"
+
+                  echo "[backup] envoi de $KEY vers s3://$BACKUP_BUCKET"
+                  aws --endpoint-url "$BACKUP_S3_ENDPOINT" \
+                      s3 cp "$FILE" "s3://${BACKUP_BUCKET}/${KEY}"
+
+                  # ── Rétention ──────────────────────────────────────────────
+                  # Les clés sont préfixées par la date ISO (YYYY-MM-DD) : leur
+                  # ordre lexicographique est l'ordre chronologique. On liste,
+                  # on garde les RETENTION_DAILY plus récentes, on supprime le
+                  # reste. Aucune suppression basée sur une date calculée côté
+                  # client : on ne supprime que ce qu'on a effectivement vu.
+                  echo "[backup] rétention : conservation des $RETENTION_DAILY dernières"
+                  aws --endpoint-url "$BACKUP_S3_ENDPOINT" \
+                      s3api list-objects-v2 \
+                      --bucket "$BACKUP_BUCKET" --prefix "${PREFIX}/" \
+                      --query 'Contents[].Key' --output text \
+                    | tr '\t' '\n' | sort | head -n "-${RETENTION_DAILY}" \
+                    | while read -r OLD; do
+                        [ -n "$OLD" ] || continue
+                        echo "[backup] suppression de $OLD"
+                        aws --endpoint-url "$BACKUP_S3_ENDPOINT" \
+                            s3 rm "s3://${BACKUP_BUCKET}/${OLD}"
+                      done
+
+                  echo "[backup] terminé."
+              resources:
+                requests:
+                  cpu: '50m'
+                  memory: '128Mi'
+                limits:
+                  cpu: '500m'
+                  memory: '512Mi'

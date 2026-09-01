@@ -4,6 +4,14 @@ metadata:
   name: beown-backend-config
 data:
   NODE_ENV: 'test'
+
+  # Emails CAPTURÉS, jamais envoyés — même raison qu'en dev : sans cette clé le
+  # driver retombe sur l'envoi réel via le compte Gmail de production, et les
+  # comptes de seed (dont certaines adresses existent) reçoivent chaque email
+  # de test. Le driver mailpit lève une erreur si l'API ne répond pas : cette
+  # clé va donc de pair avec le composant `components/mailpit` de cet overlay.
+  MAIL_DRIVER: 'mailpit'
+  MAILPIT_URL: 'http://mailpit-service:8025'
   FRONTEND_URL: 'https://test.beown.fr'
   ADMIN_URL: 'https://admin-test.beown.fr'
   API_URL: 'https://api-test.beown.fr'

@@ -44,11 +44,13 @@ export class NotificationController {
 
   @ApiOperation({ summary: 'Marquer une notification comme lue' })
   @ApiParam({ name: 'id', description: 'UUID de la notification' })
-  @ApiResponse({ status: 200 })
+  @ApiResponse({ status: 200, description: '{ updated: boolean }' })
   @HttpCode(HttpStatus.OK)
   @Post(':id/read')
-  markAsRead(@Param('id') id: string) {
-    return this.notificationService.markAsRead(id);
+  markAsRead(@Param('id') id: string, @CurrentUser() user: ActiveUser) {
+    // L'identité vient du jeton, jamais de l'URL : la notification d'un autre
+    // utilisateur n'est pas atteignable, même en devinant son identifiant.
+    return this.notificationService.markAsRead(id, user.userId);
   }
 
   @ApiOperation({ summary: 'Tout marquer comme lu' })

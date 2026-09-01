@@ -17,6 +17,7 @@ describe('ProfileController.patchKycStatus — gating revue manuelle', () => {
   let notifications: any;
   let notificationEvents: any;
   let metricsPort: any;
+  let transactionalEmails: any;
 
   const admin = { userId: 99, role: UserRole.COMPLIANCE } as any;
 
@@ -39,6 +40,10 @@ describe('ProfileController.patchKycStatus — gating revue manuelle', () => {
     const profilRepository: any = {
       countKycByStatus: jest.fn().mockResolvedValue(0),
     };
+    transactionalEmails = {
+      kycValide: jest.fn().mockResolvedValue(undefined),
+      kycRefuse: jest.fn().mockResolvedValue(undefined),
+    };
 
     controller = new ProfileController(
       undefined as any, // createProfilPP
@@ -56,6 +61,7 @@ describe('ProfileController.patchKycStatus — gating revue manuelle', () => {
       profilRepository,
       metricsPort,
       undefined as any, // saveTestConnaissancesUseCase
+      transactionalEmails,
     );
   });
 

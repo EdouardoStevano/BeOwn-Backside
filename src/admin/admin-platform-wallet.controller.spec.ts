@@ -51,7 +51,10 @@ describe('AdminPlatformWalletController.getPlatformWallet', () => {
     const userRepo = {
       findOne: jest.fn().mockResolvedValue({ userId: 1, role: UserRole.SUPER_ADMIN }),
     };
-    const walletRepo = { findOne: jest.fn().mockResolvedValue(null) };
+    const walletRepo = {
+      findOne: jest.fn().mockResolvedValue(null),
+      find: jest.fn().mockResolvedValue([]),
+    };
     const txRepo = { createQueryBuilder: jest.fn() };
 
     const controller = build({ userRepo, walletRepo, txRepo });
@@ -65,10 +68,62 @@ describe('AdminPlatformWalletController.getPlatformWallet', () => {
     expect(result.bySource).toEqual(
       CANONICAL_SOURCES.map((source) => ({ source, total: 0 })),
     );
+    // Trésorerie : même sans aucun wallet, les QUATRE poches système sont
+    // rendues à zéro — un séquestre absent serait indistinguable d'un vide.
+    expect(result.walletsPlateforme).toEqual([
+      { type: WalletType.FRAIS_PLATEFORME, solde: 0, soldeBloque: 0, devise: 'EUR' },
+      { type: WalletType.SEQUESTRE_IR, solde: 0, soldeBloque: 0, devise: 'EUR' },
+      { type: WalletType.SEQUESTRE_CSG, solde: 0, soldeBloque: 0, devise: 'EUR' },
+      { type: WalletType.TAXES, solde: 0, soldeBloque: 0, devise: 'EUR' },
+    ]);
+    expect(result.walletsTechniques).toEqual([]);
     expect(walletRepo.findOne).toHaveBeenCalledWith({
       where: { type: WalletType.FRAIS_PLATEFORME },
     });
     expect(txRepo.createQueryBuilder).not.toHaveBeenCalled();
+  });
+
+  it('trésorerie : positions des poches système et des wallets techniques, titres résolus en lot', async () => {
+    const userRepo = {
+      findOne: jest.fn().mockResolvedValue({ userId: 1, role: UserRole.SUPER_ADMIN }),
+    };
+    const walletRepo = {
+      findOne: jest.fn().mockResolvedValue(null),
+      find: jest.fn().mockImplementation(async (opts: any) => {
+        if (opts?.where?.type === WalletType.TECHNIQUE_PROJET) {
+          return [
+            { id: 'w-t1', projetId: 'proj-1', solde: '362913.00', soldeBloque: '0' },
+            { id: 'w-t2', projetId: 'proj-2', solde: '100.50', soldeBloque: '25.00' },
+          ];
+        }
+        // Poches système : seuls FRAIS_PLATEFORME et SEQUESTRE_IR existent.
+        return [
+          { type: WalletType.FRAIS_PLATEFORME, solde: '1000.00', soldeBloque: '0', devise: 'EUR' },
+          { type: WalletType.SEQUESTRE_IR, solde: '76.80', soldeBloque: '0', devise: 'EUR' },
+        ];
+      }),
+    };
+    const txRepo = { createQueryBuilder: jest.fn() };
+    const projetRepo = {
+      find: jest.fn().mockResolvedValue([
+        { id: 'proj-1', titre: 'Résidence Horizon' },
+        { id: 'proj-2', titre: 'Villa Azur' },
+      ]),
+    };
+
+    const controller = build({ userRepo, walletRepo, txRepo, projetRepo });
+    const result = await controller.getPlatformWallet(admin);
+
+    expect(result.walletsPlateforme).toEqual([
+      { type: WalletType.FRAIS_PLATEFORME, solde: 1000, soldeBloque: 0, devise: 'EUR' },
+      { type: WalletType.SEQUESTRE_IR, solde: 76.8, soldeBloque: 0, devise: 'EUR' },
+      { type: WalletType.SEQUESTRE_CSG, solde: 0, soldeBloque: 0, devise: 'EUR' },
+      { type: WalletType.TAXES, solde: 0, soldeBloque: 0, devise: 'EUR' },
+    ]);
+    expect(result.walletsTechniques).toEqual([
+      { projetId: 'proj-1', titreProjet: 'Résidence Horizon', solde: 362913, soldeBloque: 0 },
+      { projetId: 'proj-2', titreProjet: 'Villa Azur', solde: 100.5, soldeBloque: 25 },
+    ]);
   });
 
   it('agrège bySource (canoniques 0-remplies + extras) / monthly et expose activity', async () => {
@@ -111,7 +166,10 @@ describe('AdminPlatformWalletController.getPlatformWallet', () => {
         .fn()
         .mockResolvedValue([{ userId: 7, firstname: 'Alice', lastname: 'Martin' }]),
     };
-    const walletRepo = { findOne: jest.fn().mockResolvedValue(wallet) };
+    const walletRepo = {
+      findOne: jest.fn().mockResolvedValue(wallet),
+      find: jest.fn().mockResolvedValue([]),
+    };
     const txRepo = {
       createQueryBuilder: jest.fn().mockReturnValue(qb),
       find: jest.fn().mockResolvedValue(activityRows),

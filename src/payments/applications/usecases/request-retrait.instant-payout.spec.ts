@@ -116,6 +116,7 @@ describe('RequestRetraitUseCase — versement vers une destination choisie', () 
       dataSource,
       metrics,
       new PayoutDestinationResolver(adapter),
+      /* amlMonitor */ { check: jest.fn().mockResolvedValue(undefined) } as any,
     );
   });
 

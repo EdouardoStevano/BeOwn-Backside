@@ -60,6 +60,17 @@ export class OrdreMarcheEntity {
   @Column({ type: 'timestamptz', nullable: true })
   interetExprimeLe: Date | null;
 
+  /**
+   * Instant du passage en ACCEPTE. C'est le repère qui permet au balayeur des
+   * ordres orphelins de distinguer une acceptation EN VOL (le parcours de
+   * signature s'ouvre dans les secondes qui suivent) d'une acceptation dont le
+   * processus est mort avant d'avoir créé la signature — sans lui, libérer un
+   * ordre ACCEPTE sans signature risquerait de compenser une cession en train
+   * de naître. Remis à NULL quand l'ordre quitte ACCEPTE par compensation.
+   */
+  @Column({ type: 'timestamptz', nullable: true })
+  accepteLe: Date | null;
+
   @Column({ type: 'date', nullable: true })
   valideJusquAu: Date | null;
 

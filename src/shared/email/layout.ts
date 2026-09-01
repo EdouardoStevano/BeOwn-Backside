@@ -63,8 +63,58 @@ function buildLayoutStylesheet(): string {
 export const EMAIL_HEADER_HTML =
   '<div class="header"><div class="logo">BeOwn</div></div>';
 
+/**
+ * Base des liens légaux du pied de page. Lue à l'import comme les autres
+ * constantes d'environnement du repo (cf. aml-monitor.service.ts) : le layout
+ * est un module pur, sans conteneur d'injection.
+ */
+const FRONTEND_URL = (
+  process.env.FRONTEND_URL ?? 'https://beown.fr'
+).replace(/\/+$/, '');
+
+/**
+ * Identité de l'émetteur — OBLIGATOIRE dans toute communication commerciale ou
+ * contractuelle (art. R.123-237 C. com. pour l'immatriculation, art. 6-III LCEN
+ * pour l'identification en ligne, art. 13 RGPD pour l'information du
+ * destinataire sur le responsable de traitement).
+ *
+ * Les valeurs sont volontairement laissées en marqueurs `[À COMPLÉTER : …]` :
+ * inventer une dénomination, un siège ou un numéro d'immatriculation serait
+ * une mention légale FAUSSE — plus grave que son absence. Le marqueur est
+ * visible dans chaque e-mail de test, ce qui rend l'oubli impossible à
+ * manquer avant la mise en production. Ne pas retirer ces marqueurs sans les
+ * remplacer par les données réelles du Kbis.
+ */
+export const EMAIL_LEGAL_IDENTITY_HTML =
+  '[À COMPLÉTER : dénomination sociale] — [À COMPLÉTER : forme juridique et capital social]<br>' +
+  'Siège social : [À COMPLÉTER : adresse complète du siège social]<br>' +
+  'Immatriculation : [À COMPLÉTER : RCS et numéro SIREN] — ' +
+  'TVA : [À COMPLÉTER : numéro de TVA intracommunautaire]';
+
+/**
+ * Pied de page commun à TOUS les e-mails rendus depuis un template éditable en
+ * back-office : identité de l'émetteur + accès aux mentions légales et à la
+ * politique de confidentialité. Un administrateur qui édite le corps d'un
+ * template ne peut donc pas supprimer ces mentions — c'est précisément la
+ * raison d'être du layout fixe.
+ *
+ * Le lien de DÉSINSCRIPTION ne figure pas ici : il ne concerne que les
+ * diffusions (art. L.34-5 CPCE), pas les e-mails transactionnels qu'un
+ * utilisateur ne peut pas refuser sans perdre l'information sur son propre
+ * argent. Il est porté par le corps des templates de diffusion, via la
+ * variable `{{unsubscribeUrl}}` — voir `templates/new-project.hbs`,
+ * `templates/ouverture-reservation.hbs` et `templates/new-secondary.hbs`.
+ */
 export const EMAIL_FOOTER_HTML =
-  '<div class="footer">© BeOwn — Investissement immobilier fractionné</div>';
+  '<div class="footer">' +
+  `<div style="margin-bottom:8px">${EMAIL_LEGAL_IDENTITY_HTML}</div>` +
+  '<div>' +
+  `<a href="${FRONTEND_URL}/legal" style="color:#64748b">Mentions légales</a>` +
+  ' &middot; ' +
+  `<a href="${FRONTEND_URL}/privacy" style="color:#64748b">Politique de confidentialité</a>` +
+  '</div>' +
+  '<div style="margin-top:8px">© BeOwn — Investissement immobilier fractionné</div>' +
+  '</div>';
 
 /**
  * Enveloppe un corps d'email (HTML déjà rendu) dans le layout BeOwn complet :

@@ -1,4 +1,9 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource, EntityManager } from 'typeorm';
 import { EcheanceEntity } from '../../infrastructure/persistences/entities/echeance.entity';
@@ -16,6 +21,7 @@ import { AuditLogService } from 'src/notifications/applications/audit-log.servic
 import { UserRole } from 'src/iam/domains/enums/user.enum';
 import { MetricsPort } from 'src/observability/metrics/metrics.port';
 import { METRIC } from 'src/observability/metrics/metric-names';
+import { ResolveProjectWalletUseCase } from 'src/wallets/applications/usecases/resolve-project-wallet.usecase';
 
 /** Statuts d'échéance depuis lesquels un paiement est légitime. */
 const PAYABLE_STATUSES: EcheanceStatus[] = [
@@ -28,12 +34,21 @@ const PAYABLE_STATUSES: EcheanceStatus[] = [
 
 @Injectable()
 export class PayEcheanceUseCase {
+  private readonly logger = new Logger(PayEcheanceUseCase.name);
+
   constructor(
     @InjectDataSource()
     private readonly dataSource: DataSource,
     private readonly notificationEvents: NotificationEventService,
     private readonly auditLog: AuditLogService,
     private readonly metrics: MetricsPort,
+    /**
+     * Contrepartie DÉBITRICE du règlement. Le portefeuille technique du projet
+     * est le seul endroit d'où l'argent d'une échéance peut légitimement
+     * venir : il est alimenté par le porteur (`APPORT_PORTEUR`), et c'est lui
+     * qui se vide quand la dette est servie.
+     */
+    private readonly projectWalletResolver: ResolveProjectWalletUseCase,
   ) {}
 
   /**
@@ -109,14 +124,31 @@ export class PayEcheanceUseCase {
         throw new BadRequestException('Échéance déjà payée ou non payable');
       }
 
-      // 2. Crédit ATOMIQUE du wallet investisseur (net).
+      // 2. DÉBIT de la contrepartie : le portefeuille technique du projet.
+      //    C'est l'écriture qui manquait — sans elle, les trois crédits
+      //    ci-dessous fabriquaient des euros que la trésorerie ne couvrait pas,
+      //    et l'écart n'apparaissait qu'au rapprochement PSP du lendemain.
+      //    Le débit porte le montant BRUT (net + IR + CSG) : la retenue
+      //    fiscale sort bien de la poche du projet, elle est seulement
+      //    consignée ailleurs que chez l'investisseur.
+      const walletProjet = await this.projectWalletResolver.executeInTransaction(
+        em,
+        projetId,
+      );
+      const montantBrut = Number(echeance.montantTotal);
+      await this.debitAtomic(em, walletProjet.id, montantBrut, {
+        projetId,
+        echeanceId,
+      });
+
+      // 3. Crédit ATOMIQUE du wallet investisseur (net).
       const wallet = await em.findOne(WalletEntity, {
         where: { proprietaireUserId: userId, type: WalletType.INVESTISSEUR },
       });
       if (!wallet) throw new NotFoundException('Wallet investisseur introuvable');
       await this.creditAtomic(em, wallet.id, montantNet);
 
-      // 3. Séquestres fiscaux (créés à la première utilisation) — crédit atomique.
+      // 4. Séquestres fiscaux (créés à la première utilisation) — crédit atomique.
       const walletIR = await this.findOrCreateSequestre(
         em,
         WalletType.SEQUESTRE_IR,
@@ -133,8 +165,12 @@ export class PayEcheanceUseCase {
       );
       await this.creditAtomic(em, walletCSG.id, prelevementCSG);
 
-      // 4. Traces ledger (net investisseur + IR + CSG), idempotency-keyées.
+      // 5. Traces ledger (net investisseur + IR + CSG), idempotency-keyées.
+      //    Les trois portent la MÊME source — le portefeuille du projet — de
+      //    sorte que « Σ crédits − Σ débits » se rapproche exactement du solde
+      //    de chaque portefeuille (contrôle quotidien du grand livre).
       await em.save(TransactionEntity, em.create(TransactionEntity, {
+        walletSource: walletProjet.id,
         walletDestination: wallet.id,
         type: TransactionType.PAIEMENT_INTERETS,
         montant: montantNet,
@@ -150,6 +186,7 @@ export class PayEcheanceUseCase {
       }));
 
       await em.save(TransactionEntity, em.create(TransactionEntity, {
+        walletSource: walletProjet.id,
         walletDestination: walletIR.id,
         type: TransactionType.IMPOTS,
         montant: prelevementIR,
@@ -165,6 +202,7 @@ export class PayEcheanceUseCase {
       }));
 
       await em.save(TransactionEntity, em.create(TransactionEntity, {
+        walletSource: walletProjet.id,
         walletDestination: walletCSG.id,
         type: TransactionType.IMPOTS,
         montant: prelevementCSG,
@@ -247,6 +285,58 @@ export class PayEcheanceUseCase {
       .setParameter('amount', amount)
       .where('id = :id', { id: walletId })
       .execute();
+  }
+
+  /**
+   * Débit atomique du portefeuille du projet, INCONDITIONNEL et assumé comme
+   * tel.
+   *
+   * Pourquoi ne pas refuser quand le solde est insuffisant : le règlement d'une
+   * échéance est une obligation contractuelle envers des investisseurs, pas une
+   * dépense discrétionnaire. Bloquer le paiement transformerait un défaut
+   * d'alimentation du porteur — son problème — en impayé pour l'investisseur —
+   * le problème de la plateforme. On paie, et on rend le découvert VISIBLE :
+   * c'est aussi la règle déjà retenue pour le remboursement de collecte
+   * (`refund-collecte.service.ts`), et pour les mêmes raisons.
+   *
+   * Le découvert n'est donc pas une erreur silencieuse : il est journalisé en
+   * avertissement, compté dans `PROJECT_WALLET_SHORTFALL_EUR` — l'alerte se
+   * déclenche donc à l'instant du règlement, sans attendre le rapprochement
+   * quotidien — et il apparaît dans l'état financier du projet.
+   *
+   * La lecture du solde `avant` est faite sous le verrou du portefeuille (déjà
+   * détenu : le résolveur le verrouille), donc exacte au moment du débit.
+   */
+  private async debitAtomic(
+    em: EntityManager,
+    walletId: string,
+    amount: number,
+    contexte: { projetId: string; echeanceId: string },
+  ): Promise<void> {
+    if (!amount) return;
+
+    const avant = await em.findOne(WalletEntity, { where: { id: walletId } });
+    const soldeApres = Number(avant?.solde ?? 0) - amount;
+
+    await em
+      .createQueryBuilder()
+      .update(WalletEntity)
+      .set({ solde: () => 'solde - :amount' })
+      .setParameter('amount', amount)
+      .where('id = :id', { id: walletId })
+      .execute();
+
+    if (soldeApres < 0) {
+      this.logger.warn(
+        `Portefeuille projet ${walletId} en découvert de ${Math.abs(soldeApres).toFixed(2)} € ` +
+        `après règlement de l'échéance ${contexte.echeanceId} (projet ${contexte.projetId}). ` +
+        'Le projet doit être alimenté par son porteur.',
+      );
+      this.metrics.setGauge(
+        METRIC.PROJECT_WALLET_SHORTFALL_EUR,
+        Math.abs(soldeApres),
+      );
+    }
   }
 
   /** Récupère (ou crée) un wallet séquestre system-wide. */

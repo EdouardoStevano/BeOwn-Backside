@@ -160,6 +160,7 @@ describe('CreateInvestmentUseCase — atomicité', () => {
         setGauge: jest.fn(),
       } as any,
       projectWalletResolver,
+      { check: jest.fn().mockResolvedValue(undefined) } as any,
     );
   });
 
@@ -379,6 +380,7 @@ describe('CreateInvestmentUseCase — invariant comptable (scénario : souscript
         setGauge: jest.fn(),
       } as any,
       projectWalletResolver as any,
+      { check: jest.fn().mockResolvedValue(undefined) } as any,
     );
 
     return {
@@ -451,5 +453,237 @@ describe('CreateInvestmentUseCase — invariant comptable (scénario : souscript
     expect(txSaves()[0][1].type).toBe(TransactionType.ESCROW_LOCK);
     expect(txSaves()[0][1].walletDestination).toBe('w1');
     expect(txSaves()[0][1].walletDestination).not.toBeNull();
+  });
+});
+
+/**
+ * ART. 21(7) DU RÈGLEMENT (UE) 2020/1503 — seuil d'avertissement de
+ * l'investisseur NON AVERTI.
+ *
+ * Ce n'est PAS un plafond : au-delà du plus élevé entre 1 000 € et 5 % du
+ * patrimoine net, l'investisseur doit recevoir un avertissement sur les
+ * risques et donner un consentement EXPLICITE. Le franchissement sans
+ * consentement doit donc être refusé, et refusé AVANT toute écriture — un
+ * investissement persisté puis « annulé » aurait déjà débité le portefeuille.
+ *
+ * Le plancher de 1 000 € s'applique en l'absence de profil exploitable : le
+ * défaut protecteur est le seuil le plus bas, jamais l'absence de seuil.
+ */
+describe('CreateInvestmentUseCase — art. 21(7) : seuil d’avertissement du non averti', () => {
+  const USER_ID = 42;
+  /** Prix d'une fraction : le montant investi vaut nbFractions × 100 €. */
+  const PRIX_FRACTION = 100;
+
+  function buildHarnaisSeuil() {
+    const projectRow: any = { id: 'p1', statut: ProjectStatus.EN_COLLECTE };
+    // Solde volontairement large : le contrôle de solde intervient AVANT le
+    // seuil d'avertissement, il ne doit pas masquer ce qu'on teste ici.
+    const walletRow: any = { id: 'w1', solde: 100_000, soldeBloque: 0, devise: 'EUR' };
+    const projectWalletRow: any = { id: 'wp1', solde: 0, soldeBloque: 0, devise: 'EUR' };
+
+    const manager: any = {
+      findOne: jest.fn(async (entity: any) => {
+        if (entity === ProjectEntity) return projectRow;
+        if (entity === WalletEntity) return walletRow;
+        return null;
+      }),
+      createQueryBuilder: jest.fn(() => ({
+        select: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getRawOne: jest.fn().mockResolvedValue({ total: '0' }),
+      })),
+      save: jest.fn(async (entity: any, obj: any) => {
+        if (entity === InvestmentEntity) return { ...obj, id: 'inv-1' };
+        return obj;
+      }),
+      update: jest.fn().mockResolvedValue({ affected: 1 }),
+      delete: jest.fn().mockResolvedValue({ affected: 1 }),
+      count: jest.fn().mockResolvedValue(0),
+    };
+
+    const profilRepository = {
+      findProfilPPByUserId: jest.fn().mockResolvedValue(null),
+    };
+    const dataSource: any = {
+      transaction: jest.fn(async (cb: any) => cb(manager)),
+    };
+    const metrics = {
+      incrementCounter: jest.fn(),
+      observeHistogram: jest.fn(),
+      setGauge: jest.fn(),
+    };
+
+    const useCase = new CreateInvestmentUseCase(
+      {
+        findInvestmentById: jest.fn().mockResolvedValue(null),
+        countFractionsVendues: jest.fn().mockResolvedValue(0),
+        updateBulletinDocId: jest.fn().mockResolvedValue(undefined),
+      } as any,
+      {
+        findProjectById: jest.fn().mockResolvedValue({
+          id: 'p1',
+          titre: 'Projet Test',
+          ville: 'Paris',
+          pays: 'FR',
+          instrument: 'OBLIGATION',
+          statut: ProjectStatus.EN_COLLECTE,
+          capitalCible: 100_000,
+          ticketMinimum: PRIX_FRACTION,
+          ticketMaximum: null,
+          nbFractions: 1000,
+          triCible: 8,
+          dureeMois: 12,
+        }),
+      } as any,
+      {
+        findTransactionByIdempotencyKey: jest.fn().mockResolvedValue(null),
+        findWalletByUser: jest
+          .fn()
+          .mockResolvedValue({ id: 'w1', solde: 100_000, devise: 'EUR' }),
+      } as any,
+      { save: jest.fn().mockResolvedValue({ id: 'd1' }) } as any,
+      {
+        findById: jest.fn().mockResolvedValue({
+          userId: USER_ID,
+          firstname: 'Jean',
+          lastname: 'Test',
+          userEmail: { email: 'jean@example.com' },
+        }),
+      } as any,
+      profilRepository as any,
+      { generateBulletin: jest.fn().mockResolvedValue(Buffer.from('pdf')) } as any,
+      {
+        upload: jest.fn().mockResolvedValue({ objectName: 'o', publicUrl: 'u' }),
+      } as any,
+      { push: jest.fn(), pushToAdmins: jest.fn() } as any,
+      { investmentCreated: jest.fn() } as any,
+      dataSource,
+      metrics as any,
+      {
+        executeInTransaction: jest.fn(async () => projectWalletRow),
+        findInTransaction: jest.fn(async () => projectWalletRow),
+      } as any,
+      { check: jest.fn().mockResolvedValue(undefined) } as any,
+    );
+
+    return { useCase, manager, profilRepository, metrics, dataSource };
+  }
+
+  let harnais: ReturnType<typeof buildHarnaisSeuil>;
+  beforeEach(() => {
+    harnais = buildHarnaisSeuil();
+  });
+
+  const savedInvestments = () =>
+    harnais.manager.save.mock.calls.filter((c: any) => c[0] === InvestmentEntity);
+  const walletSaves = () =>
+    harnais.manager.save.mock.calls.filter((c: any) => c[0] === WalletEntity);
+
+  /** Profil non averti dont l'évaluation reste valide un an. */
+  const profilNonAverti = (seuil: number, patrimoine = 100_000) => ({
+    categoriePsfp: CategorieInvestisseur.NON_AVERTI,
+    evaluationExpireLe: new Date(Date.now() + 365 * 24 * 3600 * 1000),
+    patrimoineNetCalcule: patrimoine,
+    seuilAvertissementCalcule: seuil,
+  });
+
+  it('non averti SOUS le seuil : la souscription passe sans consentement', async () => {
+    harnais.profilRepository.findProfilPPByUserId.mockResolvedValue(
+      profilNonAverti(5_000),
+    );
+
+    // 2 × 100 € = 200 €, très en deçà du seuil de 5 000 €.
+    const investissement = await harnais.useCase.execute(USER_ID, {
+      projetId: 'p1',
+      nbFractions: 2,
+    } as any);
+
+    expect(investissement.id).toBe('inv-1');
+    expect(savedInvestments()).toHaveLength(1);
+  });
+
+  it('non averti AU-DESSUS du seuil SANS consentement : refus 400 et AUCUNE écriture', async () => {
+    harnais.profilRepository.findProfilPPByUserId.mockResolvedValue(
+      profilNonAverti(5_000),
+    );
+
+    // 60 × 100 € = 6 000 € > 5 000 €.
+    await expect(
+      harnais.useCase.execute(USER_ID, {
+        projetId: 'p1',
+        nbFractions: 60,
+      } as any),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    // Le refus intervient AVANT la section critique : rien n'est persisté,
+    // le portefeuille n'est pas débité, la transaction n'est même pas ouverte.
+    expect(harnais.dataSource.transaction).not.toHaveBeenCalled();
+    expect(savedInvestments()).toHaveLength(0);
+    expect(walletSaves()).toHaveLength(0);
+  });
+
+  it('non averti AU-DESSUS du seuil AVEC consentementDepassementLimite : la souscription passe', async () => {
+    harnais.profilRepository.findProfilPPByUserId.mockResolvedValue(
+      profilNonAverti(5_000),
+    );
+
+    const investissement = await harnais.useCase.execute(USER_ID, {
+      projetId: 'p1',
+      nbFractions: 60,
+      consentementDepassementLimite: true,
+    } as any);
+
+    expect(investissement.id).toBe('inv-1');
+    expect(savedInvestments()).toHaveLength(1);
+  });
+
+  it('profil absent : le seuil retombe sur le plancher légal de 1 000 € — 1 000 € passe', async () => {
+    // Aucun profil PP → non averti par défaut protecteur, patrimoine inconnu
+    // (0) → seuil = max(1 000 ; 5 % × 0) = 1 000 €.
+    harnais.profilRepository.findProfilPPByUserId.mockResolvedValue(null);
+
+    const investissement = await harnais.useCase.execute(USER_ID, {
+      projetId: 'p1',
+      nbFractions: 10, // exactement 1 000 € : le seuil n'est pas DÉPASSÉ
+    } as any);
+
+    expect(investissement.id).toBe('inv-1');
+    expect(savedInvestments()).toHaveLength(1);
+  });
+
+  it('profil absent : au-delà du plancher de 1 000 €, refus sans consentement', async () => {
+    harnais.profilRepository.findProfilPPByUserId.mockResolvedValue(null);
+
+    await expect(
+      harnais.useCase.execute(USER_ID, {
+        projetId: 'p1',
+        nbFractions: 11, // 1 100 € > 1 000 €
+      } as any),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(savedInvestments()).toHaveLength(0);
+    expect(walletSaves()).toHaveLength(0);
+  });
+
+  it('évaluation EXPIRÉE : le seuil stocké est ignoré, on recalcule depuis le patrimoine', async () => {
+    // Seuil stocké généreux (50 000 €) mais évaluation périmée (art. 21(2),
+    // réexamen tous les deux ans) → il ne fait plus foi : le seuil est
+    // recalculé, soit max(1 000 ; 5 % × 20 000) = 1 000 €.
+    harnais.profilRepository.findProfilPPByUserId.mockResolvedValue({
+      categoriePsfp: CategorieInvestisseur.AVERTI,
+      evaluationExpireLe: new Date(Date.now() - 24 * 3600 * 1000),
+      patrimoineNetCalcule: 20_000,
+      seuilAvertissementCalcule: 50_000,
+    });
+
+    await expect(
+      harnais.useCase.execute(USER_ID, {
+        projetId: 'p1',
+        nbFractions: 20, // 2 000 € > 1 000 €
+      } as any),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(savedInvestments()).toHaveLength(0);
   });
 });

@@ -36,6 +36,11 @@ export class DistributionPartEntity {
   @Column({ type: 'decimal', precision: 18, scale: 2 })
   montantNet: number;
 
+  // Le suivi fiscal et les relances filtrent les parts payées (ou non) par
+  // date de règlement : sans index, chaque lecture balaie toutes les parts de
+  // toutes les périodes. Pose en base : hors déploiement, cf.
+  // docs/adr/ADR-migrations-hors-deploiement.md.
+  @Index()
   @Column({ type: 'timestamptz', nullable: true })
   payeLe: Date | null;
 

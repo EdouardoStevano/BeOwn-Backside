@@ -1,9 +1,19 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsIn, IsInt, IsNotEmpty, IsOptional, IsPositive, IsString, Matches, Max, Min } from 'class-validator';
+import { IsEnum, IsIn, IsInt, IsNotEmpty, IsOptional, IsPositive, IsString, IsUUID, Matches, Max, MaxLength, Min } from 'class-validator';
 
 export class CreatePaymentIntentDto {
-  @ApiProperty({ example: 500, description: 'Montant en EUR (plafond de sécurité : 1 000 000 €)' })
+  @ApiProperty({
+    example: 500,
+    description:
+      'Montant en EUR (minimum 1 €, plafond de sécurité : 1 000 000 €)',
+    minimum: 1,
+  })
   @IsPositive()
+  // Plancher explicite : `@IsPositive()` accepte 0,004 €, qui s'arrondit à
+  // 0 centime chez le prestataire. On créerait alors des intentions de
+  // paiement à montant nul — refusées côté Stripe, mais consommant un appel
+  // et une écriture à chaque tentative. Un dépôt réel commence à 1 €.
+  @Min(1, { message: 'Le montant minimum de dépôt est de 1 €.' })
   @Max(1_000_000, { message: 'Le montant du dépôt dépasse le plafond autorisé.' })
   amount: number;
 
@@ -21,6 +31,53 @@ export class CreatePaymentIntentDto {
   @IsOptional()
   @IsString()
   projetId?: string;
+}
+
+/**
+ * Alimentation par le porteur du portefeuille technique de SON projet.
+ *
+ * `projetId` est obligatoire ici — contrairement au dépôt investisseur, où il
+ * n'est qu'une annotation : c'est lui qui désigne le portefeuille bénéficiaire
+ * ET la ressource dont l'appartenance est vérifiée avant toute création
+ * d'intention. Format UUID verrouillé à la frontière : la route refuse ainsi
+ * une valeur fantaisiste sans avoir consulté la base.
+ */
+export class CreateApportPorteurDto {
+  @ApiProperty({
+    example: 25_000,
+    description:
+      'Montant en EUR à porter au crédit du projet (minimum 1 €, plafond 1 000 000 €)',
+    minimum: 1,
+  })
+  @IsPositive()
+  @Min(1, { message: "Le montant minimum d'un apport est de 1 €." })
+  @Max(1_000_000, { message: "Le montant de l'apport dépasse le plafond autorisé." })
+  amount: number;
+
+  @ApiProperty({
+    example: 'EUR',
+    description: "Code devise ISO 4217 (seule la devise EUR est acceptée)",
+  })
+  @IsString()
+  @IsIn(['EUR'], { message: 'Seule la devise EUR est acceptée.' })
+  currency: string;
+
+  @ApiProperty({
+    example: 'c1f0b6e2-3f1a-4a8e-9d3c-2b6f0a1d4e77',
+    description: 'UUID du projet à alimenter — doit être porté par l’appelant',
+  })
+  @IsUUID('4', { message: 'Identifiant de projet invalide.' })
+  projetId: string;
+
+  @ApiPropertyOptional({
+    example: 'Échéance #4 — trimestre 2026-T3',
+    description:
+      "Libellé libre rappelant l'objet de l'alimentation (échéance visée, période).",
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(200, { message: 'Le motif est limité à 200 caractères.' })
+  motif?: string;
 }
 
 export class ConfirmDepotDto {
@@ -121,7 +178,7 @@ export class AttachPayoutMethodDto {
 export class ConnectOnboardingDto {
   @ApiPropertyOptional({
     description:
-      "URL de retour après onboarding Stripe (défaut: FRONTEND_URL/dashboard/wallet?connect=done).",
+      "URL de retour après onboarding Stripe (défaut: FRONTEND_URL/dashboard/portfolio?connect=done).",
   })
   @IsOptional()
   @IsString()
@@ -130,7 +187,7 @@ export class ConnectOnboardingDto {
 
   @ApiPropertyOptional({
     description:
-      "URL de rafraîchissement si le lien d'onboarding expire (défaut: FRONTEND_URL/dashboard/wallet?connect=refresh).",
+      "URL de rafraîchissement si le lien d'onboarding expire (défaut: FRONTEND_URL/dashboard/portfolio?connect=refresh).",
   })
   @IsOptional()
   @IsString()

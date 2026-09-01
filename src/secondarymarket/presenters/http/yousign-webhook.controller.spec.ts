@@ -8,6 +8,15 @@ import { ModeleEconomique } from 'src/projects/domains/enums/modele-economique.e
 import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/wallet.entity';
 import { InvestmentStatus } from 'src/investments/domains/enums/investment-status.enum';
 import { WalletType } from 'src/wallets/domains/enums/wallet.enum';
+import { OrdreMarcheEntity } from 'src/secondarymarket/infrastructure/persistences/entities/ordre-marche.entity';
+import { OrdreMarcheStatus } from 'src/secondarymarket/domains/ordre-marche';
+import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entities/transaction.entity';
+import {
+  grandLivreEquilibre,
+  mouvementsDepuisInstantanes,
+  variationTotale,
+} from 'src/wallets/domains/grand-livre';
+import type { PositionWallet } from 'src/wallets/domains/grand-livre';
 
 /**
  * Régression sécurité (fix paiements) : la signature n'est marquée SIGNED
@@ -122,6 +131,10 @@ describe('YouSignWebhookController.handleSignatureDone (atomicité SIGNED)', () 
       observeHistogram: jest.fn(),
       setGauge: jest.fn(),
     };
+    const expirerSignature: any = {
+      parRequeteFournisseur: jest.fn().mockResolvedValue('noop'),
+      execute: jest.fn().mockResolvedValue('noop'),
+    };
 
     const controller = new YouSignWebhookController(
       signatureRepo,
@@ -140,9 +153,10 @@ describe('YouSignWebhookController.handleSignatureDone (atomicité SIGNED)', () 
       notificationEvents,
       platformFees,
       metrics,
+      expirerSignature,
     );
 
-    return { controller, signature, lockedSignature, investment, wallet, project, dataSource, manager, notificationEvents };
+    return { controller, signature, lockedSignature, investment, wallet, project, dataSource, manager, notificationEvents, expirerSignature };
   }
 
   it('laisse la signature PENDING quand l\'exécution échoue (rejouable), puis réussit au rejeu', async () => {
@@ -263,5 +277,395 @@ describe('YouSignWebhookController.handleSignatureDone (atomicité SIGNED)', () 
 
       expect(echeancesSauvegardees(ctx.manager)).toHaveLength(12);
     });
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Marché secondaire — règlement d'une cession signée.
+//
+// C'est le seul endroit où l'argent, les fractions et l'état de l'annonce
+// changent ensemble. Quatre défauts y étaient invisibles depuis l'interface :
+// un crédit vendeur silencieusement omis, un reliquat de cession partielle gelé
+// à vie, une position vendeur décrémentée du prix de vente au lieu du coût
+// d'acquisition, et des fonds consommés hors de la réservation.
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe('YouSignWebhookController — règlement marché secondaire', () => {
+  const REQ_ID = 'ys-req-secondaire';
+  const VENDEUR_ID = 7;
+  const ACHETEUR_ID = 42;
+
+  const arrondi = (n: number) => Math.round(n * 100) / 100;
+
+  /**
+   * Contexte de règlement complet : une annonce de 10 fractions à 150 €,
+   * acquises 100 € pièce, dont l'acheteur en prend `nbFractionsSignees`.
+   * Ses fonds sont déjà RÉSERVÉS (soldeBloque) — état posé à l'acceptation.
+   */
+  function setupCession(opts: {
+    nbFractionsSignees: number;
+    /** Absence volontaire du portefeuille vendeur (anomalie de données). */
+    sansWalletVendeur?: boolean;
+    /** Réservation absente : signature ouverte avant la réservation des fonds. */
+    fondsNonReserves?: boolean;
+  }) {
+    const nbFractions = opts.nbFractionsSignees;
+
+    const signature: any = {
+      id: 'sig-sec-1',
+      youSignRequestId: REQ_ID,
+      statut: SignatureStatus.PENDING,
+      ordreId: 'ordre-1',
+      investmentId: null,
+      documentId: null,
+      nbFractions,
+      userId: ACHETEUR_ID,
+      signedAt: null,
+    };
+
+    const sellerInvest: any = {
+      id: 'inv-vendeur',
+      projetId: 'proj-1',
+      utilisateurId: VENDEUR_ID,
+      montant: 1000,
+      nbTitres: 10,
+      valeurTitre: 100,
+      instrument: 'action',
+      statut: InvestmentStatus.CONFIRME,
+    };
+
+    const ordre: any = {
+      id: 'ordre-1',
+      investissementId: 'inv-vendeur',
+      investissement: sellerInvest,
+      vendeurId: VENDEUR_ID,
+      acheteurId: ACHETEUR_ID,
+      sens: 'vente',
+      nbFractions: 10,
+      montant: 1500,
+      prixUnitaire: 150,
+      statut: OrdreMarcheStatus.ACCEPTE,
+      interetNbFractions: nbFractions,
+      interetExprimeLe: new Date('2026-08-01T10:00:00Z'),
+    };
+
+    const montantCession = arrondi(nbFractions * 150);
+    const buyerWallet: any = {
+      id: 'w-acheteur',
+      type: WalletType.INVESTISSEUR,
+      proprietaireUserId: ACHETEUR_ID,
+      devise: 'EUR',
+      solde: opts.fondsNonReserves ? montantCession : 0,
+      soldeBloque: opts.fondsNonReserves ? 0 : montantCession,
+    };
+    const sellerWallet: any = {
+      id: 'w-vendeur',
+      type: WalletType.INVESTISSEUR,
+      proprietaireUserId: VENDEUR_ID,
+      devise: 'EUR',
+      solde: 0,
+      soldeBloque: 0,
+    };
+    const platformWallet: any = {
+      id: 'w-plateforme',
+      type: WalletType.FRAIS_PLATEFORME,
+      proprietaireUserId: null,
+      devise: 'EUR',
+      solde: 0,
+      soldeBloque: 0,
+    };
+
+    const wallets: any[] = opts.sansWalletVendeur
+      ? [buyerWallet, platformWallet]
+      : [buyerWallet, sellerWallet, platformWallet];
+    const investissements: any[] = [sellerInvest];
+    const project: any = { id: 'proj-1', titre: 'Résidence Test' };
+    const transactions: any[] = [];
+
+    const trouverWallet = (where: any) =>
+      wallets.find((w) =>
+        where.proprietaireUserId !== undefined
+          ? w.proprietaireUserId === where.proprietaireUserId && w.type === where.type
+          : w.type === where.type,
+      ) ?? null;
+
+    const manager: any = {
+      findOne: jest.fn(async (Entity: any, options: any) => {
+        const where = options?.where ?? {};
+        if (Entity === SignatureEntity) return signature;
+        if (Entity === OrdreMarcheEntity) return ordre;
+        if (Entity === InvestmentEntity)
+          return investissements.find((i) => i.id === where.id) ?? null;
+        if (Entity === WalletEntity) return trouverWallet(where);
+        if (Entity === ProjectEntity) return project;
+        return null;
+      }),
+      create: jest.fn((_Entity: any, obj: any) => ({ ...obj })),
+      save: jest.fn(async (Entity: any, obj: any) => {
+        if (Entity === TransactionEntity) transactions.push(obj);
+        if (Entity === InvestmentEntity && !investissements.includes(obj)) {
+          investissements.push(Object.assign(obj, { id: obj.id ?? 'inv-acheteur' }));
+        }
+        if (Entity === WalletEntity && !wallets.includes(obj)) wallets.push(obj);
+        return obj;
+      }),
+      update: jest.fn(async () => ({ affected: 1 })),
+      createQueryBuilder: jest.fn(() => {
+        const qb: any = {};
+        qb.select = () => qb;
+        qb.where = () => qb;
+        qb.andWhere = () => qb;
+        qb.getRawOne = async () => ({ total: '0' });
+        return qb;
+      }),
+    };
+
+    const dataSource: any = { transaction: jest.fn(async (cb: any) => cb(manager)) };
+    const signatureRepo: any = {
+      findOne: jest.fn(async () => signature),
+      save: jest.fn(),
+      createQueryBuilder: jest.fn(),
+    };
+    const ordreRepo: any = { findOne: jest.fn(async () => ordre) };
+    const projectRepo: any = { findOne: jest.fn(async () => project) };
+    const documentRepo: any = { update: jest.fn() };
+    const noopRepo: any = { findOne: jest.fn(), save: jest.fn(), update: jest.fn() };
+
+    const notificationService: any = {
+      push: jest.fn().mockResolvedValue(undefined),
+      pushToAdmins: jest.fn().mockResolvedValue(undefined),
+    };
+    const notificationEvents: any = {
+      secondaryTradeExecuted: jest.fn().mockResolvedValue(undefined),
+    };
+    const userRepository: any = {
+      findById: jest.fn(async (id: number) => ({ userId: id })),
+    };
+    // Grille par défaut : 1 % du montant + 15 % de la plus-value.
+    const platformFees: any = {
+      getRates: jest.fn(async () => ({
+        resaleTransactionFeePct: 1,
+        shareSaleGainFeePct: 15,
+      })),
+      computeResaleFees: jest.fn(async (montant: number, plusValue: number) => ({
+        transactionFee: arrondi(montant * 0.01),
+        gainFee: arrondi(Math.max(0, plusValue) * 0.15),
+      })),
+    };
+    const metrics: any = {
+      incrementCounter: jest.fn(),
+      observeHistogram: jest.fn(),
+      setGauge: jest.fn(),
+    };
+    const expirerSignature: any = {
+      parRequeteFournisseur: jest.fn().mockResolvedValue('noop'),
+      execute: jest.fn().mockResolvedValue('noop'),
+    };
+
+    const controller = new YouSignWebhookController(
+      signatureRepo,
+      noopRepo,
+      noopRepo,
+      projectRepo,
+      ordreRepo,
+      documentRepo,
+      noopRepo,
+      noopRepo,
+      dataSource,
+      { downloadSignedDocument: jest.fn(), verifyWebhookSignature: () => true } as any,
+      notificationService,
+      { upload: jest.fn() } as any,
+      userRepository,
+      notificationEvents,
+      platformFees,
+      metrics,
+      expirerSignature,
+    );
+
+    /** Position (solde + soldeBloque) de chaque portefeuille, à un instant t. */
+    const instantane = (): Map<string, PositionWallet> =>
+      new Map(
+        wallets.map((w) => [
+          w.id,
+          { solde: Number(w.solde), soldeBloque: Number(w.soldeBloque ?? 0) },
+        ]),
+      );
+
+    return {
+      controller,
+      signature,
+      ordre,
+      sellerInvest,
+      buyerWallet,
+      sellerWallet,
+      platformWallet,
+      wallets,
+      investissements,
+      transactions,
+      montantCession,
+      notificationService,
+      expirerSignature,
+      instantane,
+      manager,
+    };
+  }
+
+  // ── Équilibre comptable ────────────────────────────────────────────────────
+
+  it('le règlement est ÉQUILIBRÉ : la somme des variations de fonds détenus vaut zéro', async () => {
+    const ctx = setupCession({ nbFractionsSignees: 4 });
+    const avant = ctx.instantane();
+
+    await ctx.controller.handleSignatureDone(REQ_ID);
+
+    const mouvements = mouvementsDepuisInstantanes(avant, ctx.instantane());
+    expect(grandLivreEquilibre(mouvements)).toBe(true);
+    expect(variationTotale(mouvements)).toBeCloseTo(0, 6);
+
+    // Détail : 600 € quittent l'acheteur, 564 € vont au vendeur, 36 € de frais
+    // à la plateforme (1 % de 600 + 15 % de 200 de plus-value).
+    expect(ctx.buyerWallet.soldeBloque).toBe(0);
+    expect(ctx.buyerWallet.solde).toBe(0);
+    expect(ctx.sellerWallet.solde).toBe(564);
+    expect(ctx.platformWallet.solde).toBe(36);
+  });
+
+  it('les fonds consommés sont ceux qui avaient été RÉSERVÉS, pas le solde disponible', async () => {
+    const ctx = setupCession({ nbFractionsSignees: 4 });
+    // L'acheteur dispose en plus de 5 000 € libres : ils ne doivent pas bouger.
+    ctx.buyerWallet.solde = 5000;
+
+    await ctx.controller.handleSignatureDone(REQ_ID);
+
+    expect(ctx.buyerWallet.soldeBloque).toBe(0);
+    expect(ctx.buyerWallet.solde).toBe(5000);
+  });
+
+  it('repli documenté : une signature ouverte AVANT la réservation se règle sur le solde disponible, sans déséquilibre', async () => {
+    const ctx = setupCession({ nbFractionsSignees: 4, fondsNonReserves: true });
+    const avant = ctx.instantane();
+
+    await ctx.controller.handleSignatureDone(REQ_ID);
+
+    expect(ctx.buyerWallet.solde).toBe(0);
+    expect(ctx.buyerWallet.soldeBloque).toBe(0);
+    expect(
+      grandLivreEquilibre(mouvementsDepuisInstantanes(avant, ctx.instantane())),
+    ).toBe(true);
+  });
+
+  // ── Crédit vendeur : échec explicite, jamais d'omission silencieuse ────────
+
+  it('un vendeur SANS portefeuille fait échouer le règlement au lieu de perdre son crédit', async () => {
+    const ctx = setupCession({ nbFractionsSignees: 4, sansWalletVendeur: true });
+    const avant = ctx.instantane();
+
+    await expect(ctx.controller.handleSignatureDone(REQ_ID)).rejects.toThrow(
+      /Wallet vendeur .* introuvable/,
+    );
+
+    // La signature reste PENDING : le webhook est rejouable une fois le
+    // portefeuille créé. Rien n'a bougé côté acheteur ni côté annonce.
+    expect(ctx.signature.statut).toBe(SignatureStatus.PENDING);
+    expect(ctx.ordre.statut).toBe(OrdreMarcheStatus.ACCEPTE);
+    expect(
+      variationTotale(mouvementsDepuisInstantanes(avant, ctx.instantane())),
+    ).toBe(0);
+  });
+
+  it('un règlement en échec prévient les DEUX parties et les administrateurs', async () => {
+    const ctx = setupCession({ nbFractionsSignees: 4, sansWalletVendeur: true });
+
+    await expect(ctx.controller.handleSignatureDone(REQ_ID)).rejects.toThrow();
+
+    const destinataires = ctx.notificationService.push.mock.calls.map(
+      (appel: any[]) => appel[0].utilisateurId,
+    );
+    expect(destinataires).toContain(ACHETEUR_ID);
+    expect(destinataires).toContain(VENDEUR_ID);
+    expect(ctx.notificationService.pushToAdmins).toHaveBeenCalledTimes(1);
+  });
+
+  // ── Fill partiel : le reliquat retourne au carnet ──────────────────────────
+
+  it('fill PARTIEL : le reliquat revient EN_CARNET, purgé de tout acheteur', async () => {
+    const ctx = setupCession({ nbFractionsSignees: 4 });
+
+    await ctx.controller.handleSignatureDone(REQ_ID);
+
+    expect(ctx.ordre.statut).toBe(OrdreMarcheStatus.EN_CARNET);
+    expect(ctx.ordre.nbFractions).toBe(6); // 10 − 4
+    expect(ctx.ordre.montant).toBe(900); // 1500 − 600
+    // Purge : sans elle, l'annonce republiée porterait encore l'acheteur servi.
+    expect(ctx.ordre.acheteurId).toBeNull();
+    expect(ctx.ordre.interetNbFractions).toBeNull();
+    expect(ctx.ordre.interetExprimeLe).toBeNull();
+  });
+
+  it("fill TOTAL : l'annonce est servie — EXECUTE, acheteur inscrit", async () => {
+    const ctx = setupCession({ nbFractionsSignees: 10 });
+
+    await ctx.controller.handleSignatureDone(REQ_ID);
+
+    expect(ctx.ordre.statut).toBe(OrdreMarcheStatus.EXECUTE);
+    expect(ctx.ordre.acheteurId).toBe(ACHETEUR_ID);
+  });
+
+  // ── Coût d'acquisition : pas de dérive du coût moyen ───────────────────────
+
+  it("la position du vendeur est décrémentée du COÛT D'ACQUISITION, pas du prix de vente", async () => {
+    const ctx = setupCession({ nbFractionsSignees: 4 });
+
+    await ctx.controller.handleSignatureDone(REQ_ID);
+
+    // 4 fractions cédées 150 € mais acquises 100 € : la position perd 400 € de
+    // coût, pas 600 € de produit. Le coût moyen résiduel reste 600/6 = 100 €.
+    expect(ctx.sellerInvest.nbTitres).toBe(6);
+    expect(ctx.sellerInvest.montant).toBe(600);
+    expect(ctx.sellerInvest.montant / ctx.sellerInvest.nbTitres).toBe(100);
+  });
+
+  it('la plus-value facturée est celle du coût réel (frais sur gain non nuls)', async () => {
+    const ctx = setupCession({ nbFractionsSignees: 4 });
+
+    await ctx.controller.handleSignatureDone(REQ_ID);
+
+    const fraisGain = ctx.transactions.find(
+      (tx: any) => tx.metadata?.source === 'gain_revente_actions',
+    );
+    expect(fraisGain).toBeDefined();
+    expect(fraisGain.metadata.coutAcquisition).toBe(400);
+    expect(fraisGain.metadata.plusValueVendeur).toBe(200);
+    expect(fraisGain.montant).toBe(30); // 15 % de 200
+  });
+
+  it('le grand livre porte bien un crédit vendeur — écriture jamais conditionnelle', async () => {
+    const ctx = setupCession({ nbFractionsSignees: 4 });
+
+    await ctx.controller.handleSignatureDone(REQ_ID);
+
+    const creditVendeur = ctx.transactions.find(
+      (tx: any) => tx.idempotencyKey === `rachat:seller:${ctx.signature.id}`,
+    );
+    expect(creditVendeur).toBeDefined();
+    expect(creditVendeur.walletDestination).toBe('w-vendeur');
+    expect(creditVendeur.montant).toBe(564);
+  });
+
+  // ── Expiration : l'annonce et les fonds sont libérés ───────────────────────
+
+  it("expiration : le webhook délègue la libération de l'ordre et des fonds", async () => {
+    const ctx = setupCession({ nbFractionsSignees: 4 });
+
+    await ctx.controller.handleWebhook(
+      { rawBody: Buffer.from('{}') } as any,
+      {
+        event_name: 'signature_request.expired',
+        data: { signature_request: { id: REQ_ID } },
+      },
+      'sig-header',
+    );
+
+    expect(ctx.expirerSignature.parRequeteFournisseur).toHaveBeenCalledWith(REQ_ID);
   });
 });

@@ -44,6 +44,7 @@ export const EMAIL_TEMPLATE_SAMPLES: Record<string, Record<string, unknown>> = {
     nbFractions: 12,
     prix: formatEur(150),
     appUrl: 'https://app.beown.fr',
+    unsubscribeUrl: 'https://beown.fr/desinscription?token=exemple',
   },
   echeance: {
     prenom: 'Awa',
@@ -53,6 +54,13 @@ export const EMAIL_TEMPLATE_SAMPLES: Record<string, Record<string, unknown>> = {
   },
   'depot-confirmed': { prenom: 'Awa', montant: formatEur(5000) },
   'retrait-processed': { prenom: 'Awa', montant: formatEur(2000) },
+  'distribution-recue': {
+    prenom: 'Awa',
+    projetTitre: 'Résidence Horizon',
+    periode: '2026-07',
+    montant: formatEur(142.35),
+    appUrl: 'https://app.beown.fr',
+  },
   'compte-supprime': { prenom: 'Awa' },
 };
 
@@ -73,6 +81,8 @@ export const TRIGGER_EVENTS: Record<string, string> = {
   echeance: 'Échéance de paiement à venir sur un investissement',
   'depot-confirmed': 'Dépôt crédité sur le portefeuille',
   'retrait-processed': 'Demande de retrait prise en charge',
+  'distribution-recue':
+    "Exécution d'une période de distribution : versement du net à l'investisseur",
   'compte-supprime':
     "Suppression du compte (self-service ou back-office) une fois tous les bloqueurs levés",
 };

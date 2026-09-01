@@ -20,6 +20,7 @@ import { ProjectsModule } from './projects/applications/projects.module';
 import { ReservationsModule } from './reservations/applications/reservations.module';
 import { InvestmentsModule } from './investments/applications/investments.module';
 import { WalletsModule } from './wallets/applications/wallets.module';
+import { ReconciliationModule } from './wallets/reconciliation.module';
 import { PaymentsModule } from './payments/payments.module';
 import { SecondaryMarketModule } from './secondarymarket/applications/secondary-market.module';
 import { NotificationsModule } from './notifications/notifications.module';
@@ -80,7 +81,15 @@ function requireEnv(name: string): string {
         throttlers: [
           { name: 'short', ttl: 1000, limit: 500 },
           { name: 'medium', ttl: 60_000, limit: 2000 },
-          { name: 'auth', ttl: 900_000, limit: 500 },
+          // La limite vient du storage (source unique) : c'est elle qui sépare
+          // le filet global (fail-open sur panne Redis) des routes resserrées
+          // par @Throttle({ auth: … }) (fail-closed). Une valeur écrite en dur
+          // ici pourrait diverger et rouvrir — ou refermer — la mauvaise porte.
+          {
+            name: 'auth',
+            ttl: 900_000,
+            limit: RedisThrottlerStorage.AUTH_GLOBAL_LIMIT,
+          },
         ],
         storage,
       }),
@@ -123,6 +132,8 @@ function requireEnv(name: string): string {
     ReservationsModule,
     InvestmentsModule,
     WalletsModule,
+    // Rapprochement quotidien du grand livre et du solde du prestataire.
+    ReconciliationModule,
     PaymentsModule,
     SecondaryMarketModule,
     NotificationsModule,

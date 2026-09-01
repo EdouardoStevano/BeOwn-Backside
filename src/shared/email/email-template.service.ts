@@ -91,6 +91,12 @@ export const DEFAULT_TEMPLATE_META: Record<string, TemplateMeta> = {
     description: "Confirmation de la prise en charge d'un retrait.",
     sujet: 'Votre retrait est en cours de traitement',
   },
+  'distribution-recue': {
+    nom: 'Revenus locatifs versés',
+    description:
+      "Versement du montant net d'une période de distribution sur le portefeuille de l'investisseur.",
+    sujet: 'Vos revenus locatifs de {{periode}} ont été versés',
+  },
   'compte-supprime': {
     nom: 'Compte supprimé',
     description: 'Confirmation de la suppression du compte utilisateur.',

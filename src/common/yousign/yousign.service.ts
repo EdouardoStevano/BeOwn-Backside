@@ -168,7 +168,7 @@ export class YouSignService {
         name: `BeOwn — ${params.documentName.replace('.pdf', '')}`,
         delivery_mode: 'none',
         expiration_date: expiresAt.toISOString().split('T')[0],
-        timezone: 'Africa/Dakar',
+        timezone: 'Indian/Reunion',
       },
     );
     this.logger.debug(`YouSign request created: ${signatureRequest.id}`);

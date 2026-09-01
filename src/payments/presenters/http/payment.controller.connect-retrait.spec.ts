@@ -2,6 +2,7 @@ import { PaymentController } from './payment.controller';
 import { RequestRetraitUseCase } from '../../applications/usecases/request-retrait.usecase';
 import { PayoutDestinationResolver } from '../../applications/services/payout-destination.resolver';
 import { InMemoryPayoutMethodsAdapter } from '../../infrastructure/in-memory-payout-methods.adapter';
+import { RetraitSettlementService } from '../../applications/services/retrait-settlement.service';
 import {
   TransactionStatus,
   TransactionType,
@@ -87,6 +88,7 @@ describe('PaymentController — retrait Stripe Connect (E3, sécurité argent)',
       dataSource,
       metricsPort,
       new PayoutDestinationResolver(new InMemoryPayoutMethodsAdapter()),
+      /* amlMonitor */ { check: jest.fn().mockResolvedValue(undefined) } as any,
     );
 
     controller = new PaymentController(
@@ -100,9 +102,32 @@ describe('PaymentController — retrait Stripe Connect (E3, sécurité argent)',
       /* profilRepository */ {} as any,
       walletRepo,
       txRepo,
+      /* projectRepo */ { findOne: jest.fn().mockResolvedValue(null) } as any,
       dataSource,
       requestRetrait,
+      /* crediterApportPorteur */ { execute: jest.fn() } as any,
       metricsPort,
+      /* transactionalEmails */ {
+        depotConfirme: jest.fn().mockResolvedValue(undefined),
+        retraitExecute: jest.fn().mockResolvedValue(undefined),
+        kycValide: jest.fn().mockResolvedValue(undefined),
+        kycRefuse: jest.fn().mockResolvedValue(undefined),
+      } as any,
+      /* amlMonitor */ { check: jest.fn().mockResolvedValue(undefined) } as any,
+      // La clôture des retraits vit désormais dans un service partagé avec le
+      // balayage de rattrapage. Il est instancié avec EXACTEMENT les mêmes
+      // mocks : les assertions de ces tests portent donc sur les mêmes objets
+      // qu'avant l'extraction.
+      new RetraitSettlementService(
+        txRepo,
+        stripeConnect,
+        notificationService,
+        metricsPort,
+        requestRetrait,
+        /* transactionalEmails */ {
+          retraitExecute: jest.fn().mockResolvedValue(undefined),
+        } as any,
+      ),
     );
   });
 

@@ -60,6 +60,7 @@ import { KycStatus } from 'src/profiles/domains/enums/kyc-status.enum';
 import { PROFIL_REPOSITORY, type ProfilRepository } from 'src/profiles/applications/ports/repositories/profil.repository';
 import { MetricsPort } from 'src/observability/metrics/metrics.port';
 import { METRIC } from 'src/observability/metrics/metric-names';
+import { TransactionalEmailNotifier } from 'src/shared/email/transactional-email.notifier';
 
 /** Rôles détenant `kyc:validate` — Compliance (+ super_admin via wildcard). */
 const KYC_REVIEWER_ROLES: string[] = rolesWithPermission('kyc:validate');
@@ -102,6 +103,9 @@ export class ProfileController {
     // Ajouté en DERNIÈRE position : les specs existantes instancient le
     // contrôleur positionnellement, un insert en milieu de liste les casserait.
     private readonly saveTestConnaissancesUseCase: SaveTestConnaissancesUseCase,
+    // Idem : ajouté en dernière position pour ne pas décaler les specs
+    // existantes qui instancient positionnellement.
+    private readonly transactionalEmails: TransactionalEmailNotifier,
   ) {}
 
   /**
@@ -247,6 +251,10 @@ export class ProfileController {
         })
         .catch(() => {});
       this.notificationEvents.kycValidatedByAdmin(userId, currentUser.userId);
+      // Une décision de conformité conditionne l'accès à l'investissement :
+      // l'utilisateur doit l'apprendre sans avoir à se reconnecter pour la
+      // découvrir.
+      this.transactionalEmails.kycValide(userId).catch(() => {});
     } else if (dto.status === KycStatus.REFUSE) {
       this.notifications
         .push({
@@ -260,6 +268,9 @@ export class ProfileController {
         })
         .catch(() => {});
       this.notificationEvents.kycRejectedByAdmin(userId, dto.motifRefus ?? '—', currentUser.userId);
+      this.transactionalEmails
+        .kycRefuse(userId, dto.motifRefus ?? undefined)
+        .catch(() => {});
     }
 
     return updated;

@@ -1,0 +1,8 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Brique optionnelle, référencée uniquement par les overlays qui ne doivent
+# envoyer AUCUN email réel (dev, test). Pas de namespace ici : il est injecté
+# par l'overlay qui l'inclut.
+resources:
+  - mailpit.yaml

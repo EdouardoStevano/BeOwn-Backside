@@ -1,10 +1,12 @@
 import {
   BadRequestException,
+  ConflictException,
   Controller,
   ForbiddenException,
   Get,
   HttpCode,
   HttpStatus,
+  Logger,
   NotFoundException,
   Param,
   Post,
@@ -16,6 +18,7 @@ import {
   ApiOperation,
   ApiParam,
   ApiQuery,
+  ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -45,6 +48,31 @@ const STATUTS: TransactionStatus[] = Object.values(TransactionStatus);
 @UseGuards(JwtAuthGuard)
 @RequirePermission('retraits:manage')
 export class AdminRetraitsController {
+  private readonly logger = new Logger(AdminRetraitsController.name);
+
+  /**
+   * Seuls statuts depuis lesquels un retrait peut encore être marqué « traité ».
+   *
+   * Un retrait ECHOUE / REMBOURSE / ANNULE a déjà rendu ses fonds à
+   * l'investisseur : `recreditRetrait` a recrédité le wallet et posé
+   * `metadata.recredited`. Le repasser en REUSSI le paierait DEUX fois — une
+   * fois par ce recrédit, une seconde par le virement manuel que ce marquage
+   * atteste. Le blocage est donc au niveau du statut d'origine, pas seulement
+   * de l'idempotence sur REUSSI.
+   */
+  private static readonly MARK_PROCESSED_ALLOWED_FROM =
+    new Set<TransactionStatus>([
+      TransactionStatus.EN_ATTENTE_PAIEMENT,
+      TransactionStatus.EN_COURS,
+    ]);
+
+  /** Statuts terminaux traduisant des fonds déjà restitués à l'investisseur. */
+  private static readonly MARK_PROCESSED_REFUNDED = new Set<TransactionStatus>([
+    TransactionStatus.ECHOUE,
+    TransactionStatus.REMBOURSE,
+    TransactionStatus.ANNULE,
+  ]);
+
   constructor(
     @InjectRepository(UserEntity)
     private readonly userRepo: Repository<UserEntity>,
@@ -204,6 +232,12 @@ export class AdminRetraitsController {
 
   @ApiOperation({ summary: 'Marquer un retrait comme traité (statut: REUSSI)' })
   @ApiParam({ name: 'txId', description: 'UUID de la transaction de retrait' })
+  @ApiResponse({
+    status: 409,
+    description:
+      'Retrait déjà clos ou déjà recrédité — le marquer traité paierait ' +
+      "l'investisseur une seconde fois.",
+  })
   @HttpCode(HttpStatus.OK)
   @Post(':txId/mark-processed')
   async markProcessed(@Param('txId') txId: string, @CurrentUser() admin: ActiveUser) {
@@ -215,8 +249,52 @@ export class AdminRetraitsController {
     }
     if (tx.statut === TransactionStatus.REUSSI) return { alreadyProcessed: true, txId };
 
+    // ── Garde anti double-paiement ───────────────────────────────────────────
+    // Le marquage manuel atteste d'un virement fait à la main : il ne doit
+    // porter QUE sur un retrait encore ouvert. Deux signaux le disqualifient,
+    // vérifiés dans cet ordre parce qu'ils n'ont pas la même cause :
+    //  1. `metadata.recredited` — les fonds sont déjà revenus sur le wallet
+    //     (rollback d'un transfer/payout, cf. recreditRetrait) ;
+    //  2. un statut terminal — le dossier est clos.
+    const statutOrigine = tx.statut;
+    const meta = (tx.metadata ?? {}) as Record<string, unknown>;
+    if (meta.recredited === true) {
+      this.logger.warn(
+        `mark-processed refusé (déjà recrédité): tx=${tx.id} statut=${statutOrigine} ` +
+        `admin=${admin.userId}`,
+      );
+      throw new ConflictException(
+        'Ce retrait a déjà été recrédité sur le portefeuille de l\'investisseur : ' +
+        'le marquer traité le paierait une seconde fois.',
+      );
+    }
+    if (AdminRetraitsController.MARK_PROCESSED_REFUNDED.has(statutOrigine)) {
+      this.logger.warn(
+        `mark-processed refusé (statut terminal): tx=${tx.id} statut=${statutOrigine} ` +
+        `admin=${admin.userId}`,
+      );
+      throw new ConflictException(
+        `Ce retrait est clos (statut "${statutOrigine}") — les fonds ont été restitués. ` +
+        'Le marquer traité paierait l\'investisseur deux fois.',
+      );
+    }
+    if (!AdminRetraitsController.MARK_PROCESSED_ALLOWED_FROM.has(statutOrigine)) {
+      this.logger.warn(
+        `mark-processed refusé (transition interdite): tx=${tx.id} statut=${statutOrigine} ` +
+        `admin=${admin.userId}`,
+      );
+      throw new ConflictException(
+        `Un retrait au statut "${statutOrigine}" ne peut pas être marqué traité — ` +
+        'seuls les retraits en attente de paiement ou en cours le peuvent.',
+      );
+    }
+
     tx.statut = TransactionStatus.REUSSI;
     await this.txRepo.save(tx);
+    this.logger.log(
+      `Retrait marqué traité: tx=${tx.id} statutOrigine=${statutOrigine} ` +
+      `montant=${Number(tx.montant)} admin=${admin.userId}`,
+    );
 
     const wallet = tx.walletSource
       ? await this.walletRepo.findOne({ where: { id: tx.walletSource } })
@@ -236,7 +314,7 @@ export class AdminRetraitsController {
       tx.id,
       undefined,
       undefined,
-      { montant: Number(tx.montant), devise: tx.devise },
+      { montant: Number(tx.montant), devise: tx.devise, statutOrigine },
     );
     return { success: true, txId };
   }

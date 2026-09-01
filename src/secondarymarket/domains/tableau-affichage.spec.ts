@@ -6,6 +6,9 @@ import {
   DUREE_DETENTION_MINIMALE_MOIS,
   calculerAssietteCession,
   dateCessibiliteMinimale,
+  estAnnonceEchue,
+  finDeValidite,
+  jourLimiteValidite,
   verifierEligibiliteMiseEnVente,
   verifierInteret,
 } from './tableau-affichage';
@@ -204,5 +207,68 @@ describe('calculerAssietteCession — assiette des frais', () => {
         prixRevientUnitaire: 33.331,
       }),
     ).toEqual({ montantBrut: 100, plusValueVendeur: 0.01 });
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Durée de validité d'une annonce
+//
+// L'échéance était portée par la colonne `valideJusquAu` sans qu'aucun chemin
+// ne la lise : une annonce périmée restait affichée, sollicitable et cessible.
+// La règle vit désormais ici, en fonction pure, et c'est elle que la liste
+// publique, l'expression d'intérêt et le cron d'expiration appliquent.
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe('estAnnonceEchue — une annonce périmée n\'est plus cessible', () => {
+  it("sans date de validité, l'annonce ne périme jamais", () => {
+    expect(estAnnonceEchue(null, new Date('2099-01-01T00:00:00Z'))).toBe(false);
+    expect(estAnnonceEchue(undefined, new Date('2099-01-01T00:00:00Z'))).toBe(
+      false,
+    );
+  });
+
+  it("l'annonce reste valable pendant TOUT son dernier jour", () => {
+    // Valable jusqu'au 31 août : encore cessible à 23:59:59 ce jour-là.
+    expect(
+      estAnnonceEchue('2026-08-31', new Date('2026-08-31T23:59:59.000Z')),
+    ).toBe(false);
+    expect(
+      estAnnonceEchue('2026-08-31', new Date('2026-08-31T00:00:00.000Z')),
+    ).toBe(false);
+  });
+
+  it('elle est échue dès le jour suivant', () => {
+    expect(
+      estAnnonceEchue('2026-08-31', new Date('2026-09-01T00:00:00.000Z')),
+    ).toBe(true);
+  });
+
+  it('accepte indifféremment une chaîne `YYYY-MM-DD` ou un objet Date', () => {
+    const maintenant = new Date('2026-09-01T08:00:00.000Z');
+    expect(estAnnonceEchue('2026-08-31', maintenant)).toBe(true);
+    expect(estAnnonceEchue(new Date('2026-08-31T00:00:00Z'), maintenant)).toBe(
+      true,
+    );
+  });
+
+  it('finDeValidite borne au dernier millième de seconde du jour', () => {
+    expect(finDeValidite('2026-08-31').toISOString()).toBe(
+      '2026-08-31T23:59:59.999Z',
+    );
+  });
+
+  it('jourLimiteValidite donne le plancher de la clause SQL', () => {
+    expect(jourLimiteValidite(new Date('2026-08-31T22:00:00.000Z'))).toBe(
+      '2026-08-31',
+    );
+  });
+
+  it("le plancher SQL et la règle métier s'accordent sur la même annonce", () => {
+    // Une annonce dont `valideJusquAu` vaut exactement le plancher SQL est
+    // servie par la requête ET jugée non échue : aucun écart entre ce que la
+    // liste publie et ce que l'expression d'intérêt accepte.
+    const maintenant = new Date('2026-08-31T22:00:00.000Z');
+    const plancher = jourLimiteValidite(maintenant);
+    expect(estAnnonceEchue(plancher, maintenant)).toBe(false);
   });
 });

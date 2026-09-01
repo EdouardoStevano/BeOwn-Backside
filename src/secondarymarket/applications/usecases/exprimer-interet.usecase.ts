@@ -12,7 +12,10 @@ import { OrdreMarcheStatus } from 'src/secondarymarket/domains/ordre-marche';
 import { WalletType } from 'src/wallets/domains/enums/wallet.enum';
 import { formatEur } from 'src/shared/money/format-eur';
 import {
+  CODE_ANNONCE_EXPIREE,
   MENTION_NON_SYSTEME_DE_NEGOCIATION,
+  estAnnonceEchue,
+  finDeValidite,
   verifierInteret,
 } from 'src/secondarymarket/domains/tableau-affichage';
 import { NotificationService } from 'src/notifications/applications/notification.service';
@@ -73,6 +76,21 @@ export class ExprimerInteretUseCase {
       throw new BadRequestException(
         "Cette annonce n'est plus ouverte aux marques d'intérêt.",
       );
+    }
+
+    // Une annonce échue n'est plus cessible — la règle vit dans le domaine et
+    // s'applique ici même si l'ordre n'a pas encore été balayé par le cron
+    // d'expiration : le statut EN_CARNET ne suffit pas à rendre une annonce
+    // périmée sollicitable, sans quoi le vendeur pourrait être engagé sur une
+    // offre qu'il a lui-même bornée dans le temps.
+    if (estAnnonceEchue(ordre.valideJusquAu, new Date())) {
+      throw new BadRequestException({
+        code: CODE_ANNONCE_EXPIREE,
+        message:
+          'Cette annonce a dépassé sa date de validité et ne peut plus faire ' +
+          "l'objet d'une marque d'intérêt.",
+        expireeLe: finDeValidite(ordre.valideJusquAu!).toISOString(),
+      });
     }
 
     const verdict = verifierInteret({

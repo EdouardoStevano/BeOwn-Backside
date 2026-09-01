@@ -22,6 +22,30 @@ spec:
       labels:
         app: beown-backend
     spec:
+      # Fenêtre d'arrêt gracieux. Le compte à rebours démarre au SIGTERM et
+      # englobe le preStop ci-dessous : 10 s de retrait des endpoints + le
+      # temps de finir les requêtes en vol. 45 s couvre le cas le plus lent
+      # observé (génération de PDF, appel Stripe synchrone) avec de la marge.
+      # Passé ce délai, SIGKILL. Doit rester cohérent avec
+      # `app.enableShutdownHooks()` dans src/main.ts : sans les hooks, cette
+      # valeur ne sert à rien, le process mourait au premier SIGTERM.
+      terminationGracePeriodSeconds: 45
+
+      # Durcissement au niveau du pod. Le conteneur applicatif n'a besoin
+      # d'aucun privilège : il écoute sur 8080 (> 1024) et n'écrit pas dans
+      # l'arborescence système.
+      securityContext:
+        runAsNonRoot: true
+        # uid/gid de l'utilisateur `node` de l'image officielle (voir
+        # dockerfiles/prod.dockerfile → USER node). Explicité ici pour que
+        # `runAsNonRoot` puisse être vérifié par le kubelet AVANT le démarrage,
+        # même si l'image venait à changer d'utilisateur par défaut.
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+
       # Attendre que postgres et redis soient prêts avant le premier pod
       initContainers:
         - name: wait-for-postgres
@@ -44,11 +68,63 @@ spec:
               done
       containers:
         - name: beown-backend
-          # Le tag est surchargé par overlay (images:) et/ou par `kubectl set image` dans le pipeline
+          # ⚠ Ce tag n'est JAMAIS celui qui est déployé. Le pipeline épingle
+          # l'image au SHA de commit dans l'overlay (`kustomize edit set image`)
+          # AVANT le `kubectl apply -k` : voir Jenkinsfile → deployToEnv.
+          # `:latest` n'est plus poussé sur Docker Hub ; il ne reste ici que
+          # comme ancre de correspondance pour Kustomize (qui apparie sur le
+          # nom d'image, pas sur le tag). Un `kubectl apply -f` direct sur ce
+          # fichier, sans overlay, échouerait donc au pull — c'est voulu.
           image: ravikazaha/beown-backside:latest
           imagePullPolicy: Always
+
+          # Durcissement au niveau conteneur.
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            # readOnlyRootFilesystem : VOLONTAIREMENT ABSENT (donc false).
+            #
+            # Vérifié dans le code avant de trancher — l'application écrit bien
+            # sur disque à un endroit :
+            # src/locative-management/presenters/http/porteur.controller.ts:293
+            # utilise `FileInterceptor('file', { limits: … })` SANS option
+            # `storage`, et ce module ne déclare pas de MulterModule. Multer
+            # retombe alors sur son stockage disque par défaut, dans
+            # `os.tmpdir()`. Avec un système de fichiers racine en lecture
+            # seule, cet upload échouerait en 500 — une régression fonctionnelle
+            # au bénéfice d'un durcissement partiel.
+            #
+            # Les autres points d'entrée sont propres (memoryStorage explicite
+            # dans documents.module.ts et news.controller.ts) et la génération
+            # de PDF écrit dans la réponse HTTP, pas sur disque.
+            #
+            # Pour l'activer : passer porteur.controller.ts en
+            # `storage: memoryStorage()` comme les deux autres, PUIS ajouter ici
+            # `readOnlyRootFilesystem: true` + un volume emptyDir monté sur /tmp.
+            # Le correctif applicatif relève d'un autre lot.
+
           ports:
             - containerPort: 8080
+
+          # Retrait du trafic AVANT le SIGTERM.
+          #
+          # Le retrait d'un pod des endpoints de Service et l'envoi du SIGTERM
+          # sont deux opérations CONCURRENTES dans Kubernetes, pas séquentielles :
+          # sans cette pause, kube-proxy et l'ingress continuent de router vers
+          # un pod déjà en train de s'arrêter pendant quelques centaines de
+          # millisecondes à quelques secondes. Résultat côté utilisateur : des
+          # 502 sporadiques à chaque déploiement, jamais reproductibles.
+          #
+          # `sleep 10` laisse la propagation se faire ; le process, lui, ne
+          # reçoit son SIGTERM qu'après. `sleep` est fourni par busybox, présent
+          # dans l'image alpine.
+          lifecycle:
+            preStop:
+              exec:
+                command: ['/bin/sh', '-c', 'sleep 10']
+
           envFrom:
             - configMapRef:
                 name: beown-backend-config
