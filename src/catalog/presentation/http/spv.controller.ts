@@ -48,8 +48,13 @@ export class SpvController {
     return this.createSpv.execute(dto);
   }
 
-  @ApiOperation({ summary: 'Lister les SPV' })
+  @ApiOperation({
+    summary: 'Lister les SPV',
+    description:
+      "Réservé au back-office. La route n'exigeait aucune permission : la seule garde JWT globale la protégeait, et tout compte connecté — investisseur compris — pouvait donc lister les sociétés de projet, leur SIREN et leur capital social.",
+  })
   @ApiResponse({ status: 200, description: 'Liste des sociétés de projet' })
+  @RequirePermission('projects:read')
   @Get('list')
   list() {
     return this.listSpv.execute();
