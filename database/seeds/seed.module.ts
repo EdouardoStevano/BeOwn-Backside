@@ -1,4 +1,4 @@
-﻿import { Module } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule } from '@nestjs/config';
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
@@ -6,6 +6,7 @@ import { UserEmailEntity } from 'src/iam/infrastructure/persistence/entities/use
 import { MfaMethodEntity } from 'src/iam/infrastructure/persistence/entities/mfa-method.entity';
 import { SpvEntity } from 'src/projects/infrastructure/persistences/entities/spv.entity';
 import { ProjectEntity } from 'src/projects/infrastructure/persistences/entities/project.entity';
+import { SortieProjetEntity } from 'src/projects/infrastructure/persistences/entities/sortie-projet.entity';
 import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/wallet.entity';
 import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entities/transaction.entity';
 import { InvestmentEntity } from 'src/investments/infrastructure/persistences/entities/investment.entity';
@@ -14,6 +15,7 @@ import { ReservationEntity } from 'src/reservations/infrastructure/persistences/
 import { ProfilPPEntity } from 'src/profiles/infrastructure/persistences/entities/profil-pp.entity';
 import { ProfilPMEntity } from 'src/profiles/infrastructure/persistences/entities/profil-pm.entity';
 import { KycEntity } from 'src/profiles/infrastructure/persistences/entities/kyc.entity';
+import { QuestionnaireAdequationEntity } from 'src/profiles/infrastructure/persistences/entities/questionnaire-adequation.entity';
 import { NotificationEntity } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
 import { AuditLogEntity } from 'src/notifications/infrastructure/persistences/entities/audit-log.entity';
 import { DocumentEntity } from 'src/documents/infrastructure/persistences/entities/document.entity';
@@ -24,8 +26,11 @@ import { UniteLouableEntity } from 'src/locative-management/infrastructure/persi
 import { LocataireEntity } from 'src/locative-management/infrastructure/persistences/entities/locataire.entity';
 import { BailEntity } from 'src/locative-management/infrastructure/persistences/entities/bail.entity';
 import { LoyerEncaisseEntity } from 'src/locative-management/infrastructure/persistences/entities/loyer-encaisse.entity';
+import { ChargeEntity } from 'src/locative-management/infrastructure/persistences/entities/charge.entity';
 import { PeriodeDistributionEntity } from 'src/distributions/infrastructure/persistences/entities/periode-distribution.entity';
 import { DistributionPartEntity } from 'src/distributions/infrastructure/persistences/entities/distribution-part.entity';
+import { ReclamationEntity } from 'src/reclamations/infrastructure/persistences/entities/reclamation.entity';
+import { NewsEntity } from 'src/news/news.entity';
 import { SeedService } from './seed.service';
 
 const SEED_ENTITIES = [
@@ -34,6 +39,7 @@ const SEED_ENTITIES = [
   MfaMethodEntity,
   SpvEntity,
   ProjectEntity,
+  SortieProjetEntity,
   WalletEntity,
   TransactionEntity,
   InvestmentEntity,
@@ -42,6 +48,7 @@ const SEED_ENTITIES = [
   ProfilPPEntity,
   ProfilPMEntity,
   KycEntity,
+  QuestionnaireAdequationEntity,
   NotificationEntity,
   AuditLogEntity,
   DocumentEntity,
@@ -52,8 +59,11 @@ const SEED_ENTITIES = [
   LocataireEntity,
   BailEntity,
   LoyerEncaisseEntity,
+  ChargeEntity,
   PeriodeDistributionEntity,
   DistributionPartEntity,
+  ReclamationEntity,
+  NewsEntity,
 ];
 
 @Module({

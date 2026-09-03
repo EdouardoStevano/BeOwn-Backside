@@ -5,6 +5,8 @@ import { InvestmentEntity } from 'src/investments/infrastructure/persistences/en
 import { EcheanceEntity } from 'src/investments/infrastructure/persistences/entities/echeance.entity';
 import { TauxDefautPublicationService } from './applications/taux-defaut-publication.service';
 import { TauxDefautController } from './presenters/http/taux-defaut.controller';
+import { PublicStatisticsController } from './presenters/http/public-statistics.controller';
+import { PublicStatisticsService } from './applications/public-statistics.service';
 
 /**
  * KpiCalculator reste un module pur, importé directement par les services.
@@ -15,8 +17,8 @@ import { TauxDefautController } from './presenters/http/taux-defaut.controller';
   imports: [
     TypeOrmModule.forFeature([ProjectEntity, InvestmentEntity, EcheanceEntity]),
   ],
-  controllers: [TauxDefautController],
-  providers: [TauxDefautPublicationService],
+  controllers: [TauxDefautController, PublicStatisticsController],
+  providers: [TauxDefautPublicationService, PublicStatisticsService],
   exports: [TauxDefautPublicationService],
 })
 export class KpiModule {}

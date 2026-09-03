@@ -220,6 +220,8 @@ describe('ExecuteDistributionUseCase — invariant comptable (3 investisseurs)',
       {
         executeInTransaction: jest.fn(async () => wallets.projet),
       } as any,
+      // Réinvestissement (vague C) : stub inerte — logique couverte par ses specs.
+      { surPartPayee: jest.fn().mockResolvedValue(undefined) } as any,
     );
   });
 

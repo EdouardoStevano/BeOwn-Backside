@@ -392,22 +392,15 @@ export class YouSignWebhookController {
         });
         await em.save(TransactionEntity, txBuyer);
 
-        // 11. Transaction ledger vendeur (net des frais)
-        const txSeller = em.create(TransactionEntity, {
-          walletSource: null,
-          walletDestination: sellerWallet.id,
-          type: TransactionType.SOUSCRIPTION,
-          montant: montantNetVendeur,
-          devise: sellerWallet.devise,
-          statut: TransactionStatus.REUSSI,
-          fournisseur: TransactionFournisseur.INTERNE,
-          investissementId: ordre.investissementId,
-          projetId,
-          idempotencyKey: `rachat:seller:${signature.id}`,
-          fraisPsp: 0,
-          fraisPlateforme: totalFrais,
-        });
-        await em.save(TransactionEntity, txSeller);
+        // 11. (SUPPRIMÉ) — il existait ici une seconde écriture ∅ → vendeur du
+        // montant NET, EN PLUS du paiement acheteur → vendeur ci-dessus : le
+        // vendeur était compté deux fois au grand livre (écart = montant total
+        // à chaque cession réglée) et de l'argent entrait au registre depuis
+        // l'extérieur sans mouvement réel. La comptabilité juste tient en deux
+        // temps : l'acheteur paie le BRUT au vendeur (écriture 10), puis les
+        // frais quittent le vendeur vers la plateforme (écritures 12) — le net
+        // vendeur est la RÉSULTANTE, pas une écriture. Repéré par le garde-fou
+        // de rapprochement du seed, confirmé contre `rapprocherGrandLivre`.
 
         // 12. Transactions ledger frais plateforme — une par frais.
         // Clés scoppées par signature (un ordre peut être exécuté en plusieurs
@@ -416,7 +409,10 @@ export class YouSignWebhookController {
           await em.save(
             TransactionEntity,
             em.create(TransactionEntity, {
-              walletSource: null,
+              // Source = VENDEUR : les frais sont retenus sur son brut (il a
+              // reçu le total à l'écriture 10). Une source ∅ créerait l'argent
+              // des frais depuis l'extérieur et fausserait son rapprochement.
+              walletSource: sellerWallet.id,
               walletDestination: platformWallet.id,
               type: TransactionType.SOUSCRIPTION,
               montant: transactionFee,
@@ -440,7 +436,9 @@ export class YouSignWebhookController {
           await em.save(
             TransactionEntity,
             em.create(TransactionEntity, {
-              walletSource: null,
+              // Même raison que le frais de transaction : retenu sur le brut
+              // du vendeur, jamais créé depuis l'extérieur.
+              walletSource: sellerWallet.id,
               walletDestination: platformWallet.id,
               type: TransactionType.SOUSCRIPTION,
               montant: gainFee,
@@ -621,7 +619,15 @@ export class YouSignWebhookController {
     wallet.solde = Number(wallet.solde) - montant;
     await em.save(WalletEntity, wallet);
 
-    // Transaction ledger principale (souscription)
+    // Transaction ledger principale (souscription).
+    //
+    // DIVERGENCE CONNUE avec le parcours réel (create-investment.usecase) :
+    // ici le wallet PROJET n'est jamais crédité — l'argent sort de
+    // l'investisseur vers l'extérieur (destination ∅), la collecte du projet
+    // ne voit rien passer. Chemin aujourd'hui MORT (POST /investments/initiate
+    // répond 410) : avant toute réactivation, cette branche doit adopter
+    // ResolveProjectWalletUseCase et créditer le wallet technique du projet,
+    // exactement comme le parcours réel. Ne pas réactiver en l'état.
     const tx = em.create(TransactionEntity, {
       walletSource: wallet.id,
       walletDestination: null,

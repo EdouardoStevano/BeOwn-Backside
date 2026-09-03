@@ -639,17 +639,36 @@ describe('YouSignWebhookController — règlement marché secondaire', () => {
     expect(fraisGain.montant).toBe(30); // 15 % de 200
   });
 
-  it('le grand livre porte bien un crédit vendeur — écriture jamais conditionnelle', async () => {
+  it('le grand livre crédite le vendeur de son NET, sans double compte ni source externe', async () => {
     const ctx = setupCession({ nbFractionsSignees: 4 });
 
     await ctx.controller.handleSignatureDone(REQ_ID);
 
-    const creditVendeur = ctx.transactions.find(
-      (tx: any) => tx.idempotencyKey === `rachat:seller:${ctx.signature.id}`,
+    // Le paiement brut acheteur → vendeur est la SEULE écriture créditrice du
+    // vendeur ; les frais repartent de lui vers la plateforme. Son net au
+    // grand livre (crédits − débits) doit valoir exactement 564 — l'ancienne
+    // écriture ∅ → vendeur du net, en plus du brut, le comptait deux fois.
+    const paiementBrut = ctx.transactions.find(
+      (tx: any) => tx.idempotencyKey === `rachat:buyer:${ctx.signature.id}`,
     );
-    expect(creditVendeur).toBeDefined();
-    expect(creditVendeur.walletDestination).toBe('w-vendeur');
-    expect(creditVendeur.montant).toBe(564);
+    expect(paiementBrut).toBeDefined();
+    expect(paiementBrut.walletDestination).toBe('w-vendeur');
+
+    const netVendeurAuLivre = ctx.transactions.reduce(
+      (somme: number, tx: any) =>
+        somme +
+        (tx.walletDestination === 'w-vendeur' ? Number(tx.montant) : 0) -
+        (tx.walletSource === 'w-vendeur' ? Number(tx.montant) : 0),
+      0,
+    );
+    expect(netVendeurAuLivre).toBe(564);
+
+    // Plus AUCUNE écriture de règlement à source externe : tout euro crédité
+    // quelque part est débité ailleurs — condition du rapprochement à zéro.
+    const sourcesExternes = ctx.transactions.filter(
+      (tx: any) => tx.walletSource == null,
+    );
+    expect(sourcesExternes).toEqual([]);
   });
 
   // ── Expiration : l'annonce et les fonds sont libérés ───────────────────────

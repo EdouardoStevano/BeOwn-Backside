@@ -21,6 +21,7 @@ import { ReservationsModule } from './reservations/applications/reservations.mod
 import { InvestmentsModule } from './investments/applications/investments.module';
 import { WalletsModule } from './wallets/applications/wallets.module';
 import { ReconciliationModule } from './wallets/reconciliation.module';
+import { ParrainageModule } from './parrainage/parrainage.module';
 import { PaymentsModule } from './payments/payments.module';
 import { SecondaryMarketModule } from './secondarymarket/applications/secondary-market.module';
 import { NotificationsModule } from './notifications/notifications.module';
@@ -134,6 +135,7 @@ function requireEnv(name: string): string {
     WalletsModule,
     // Rapprochement quotidien du grand livre et du solde du prestataire.
     ReconciliationModule,
+    ParrainageModule,
     PaymentsModule,
     SecondaryMarketModule,
     NotificationsModule,

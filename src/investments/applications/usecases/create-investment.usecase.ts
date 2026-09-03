@@ -50,6 +50,7 @@ import { ProjectEntity } from 'src/projects/infrastructure/persistences/entities
 import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/wallet.entity';
 import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entities/transaction.entity';
 import { WalletMapper } from 'src/wallets/infrastructure/persistences/mappers/wallet.mapper';
+import { AttribuerBonusParrainageService } from 'src/parrainage/applications/attribuer-bonus-parrainage.service';
 import { MetricsPort } from 'src/observability/metrics/metrics.port';
 import { METRIC } from 'src/observability/metrics/metric-names';
 import { ResolveProjectWalletUseCase } from 'src/wallets/applications/usecases/resolve-project-wallet.usecase';
@@ -88,6 +89,9 @@ export class CreateInvestmentUseCase {
     private readonly metrics: MetricsPort,
     private readonly projectWalletResolver: ResolveProjectWalletUseCase,
     private readonly amlMonitor: AmlMonitorService,
+    // Dernière position à dessein : trois specs construisent ce usecase à la
+    // main, un ajout en queue ne décale aucun argument existant.
+    private readonly bonusParrainage: AttribuerBonusParrainageService,
   ) {}
 
   async execute(userId: number, dto: CreateInvestmentDto): Promise<Investment> {
@@ -423,6 +427,18 @@ export class CreateInvestmentUseCase {
     const user = await this.userRepository.findById(userId);
     if (user) {
       this.notificationEvents.investmentCreated(saved, project, user);
+    }
+
+    // Parrainage : un investisseur AVERTI est confirmé immédiatement — son
+    // premier investissement est définitif dès maintenant. Le non-averti,
+    // lui, sera traité par ConfirmRetractationCronService à la fin du délai.
+    // Best-effort APRÈS commit : le service n'échoue jamais chez l'appelant.
+    if (saved.statut === InvestmentStatus.CONFIRME) {
+      await this.bonusParrainage.surInvestissementDefinitif({
+        id: saved.id,
+        utilisateurId: userId,
+        montant: Number(saved.montant),
+      });
     }
 
     return saved;

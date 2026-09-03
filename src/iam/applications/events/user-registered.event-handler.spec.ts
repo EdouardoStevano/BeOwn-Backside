@@ -28,11 +28,22 @@ const build = (user = buildUser({ userId: USER_ID })) => {
   const sendEmailVerificationUseCase = {
     execute: jest.fn().mockResolvedValue(undefined),
   };
+  // Parrainage (3e réaction) : doublures minimales — les specs dédiées du
+  // module parrainage couvrent leur logique, ici on ne vérifie que le contrat
+  // « appelé sans jamais faire échouer l'inscription ».
+  const codesParrainage = {
+    assurer: jest.fn().mockResolvedValue('BEOWN-TEST01'),
+  };
+  const rattacherFilleul = {
+    rattacher: jest.fn().mockResolvedValue(undefined),
+  };
 
   const handler = new UserRegisteredEventHandler(
     userRepository as unknown as UserRepository,
     notificationEvents as unknown as NotificationEventService,
     sendEmailVerificationUseCase as unknown as SendEmailVerificationUseCase,
+    codesParrainage as never,
+    rattacherFilleul as never,
   );
 
   return {
@@ -40,6 +51,8 @@ const build = (user = buildUser({ userId: USER_ID })) => {
     userRepository,
     notificationEvents,
     sendEmailVerificationUseCase,
+    codesParrainage,
+    rattacherFilleul,
     user,
   };
 };

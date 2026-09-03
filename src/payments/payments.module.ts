@@ -25,7 +25,9 @@ import { KycValidatedGuard } from 'src/common/auth/kyc-validated.guard';
 import { RequestRetraitUseCase } from './applications/usecases/request-retrait.usecase';
 import { CrediterApportPorteurUseCase } from './applications/usecases/crediter-apport-porteur.usecase';
 import { VerserPorteurUseCase } from './applications/usecases/verser-porteur.usecase';
+import { GetPorteurTresorerieUseCase } from './applications/usecases/get-porteur-tresorerie.usecase';
 import { AdminVersementPorteurController } from './presenters/http/admin-versement-porteur.controller';
+import { PorteurTresorerieController } from './presenters/http/porteur-tresorerie.controller';
 import { WalletsModule } from 'src/wallets/applications/wallets.module';
 import { ProjectEntity } from 'src/projects/infrastructure/persistences/entities/project.entity';
 import { PayoutMethodsController } from './presenters/http/payout-methods.controller';
@@ -72,6 +74,8 @@ import {
     PaymentController,
     PayoutMethodsController,
     AdminVersementPorteurController,
+    // Trésorerie d'un projet lue par SON porteur (versements reçus, apports).
+    PorteurTresorerieController,
     // Déclenchement manuel du rattrapage des retraits (`POST /admin/retraits/reap`).
     AdminRetraitsReapController,
   ],
@@ -88,6 +92,7 @@ import {
     RetraitsReaperService,
     CrediterApportPorteurUseCase,
     VerserPorteurUseCase,
+    GetPorteurTresorerieUseCase,
     KycValidatedGuard,
     // ─── Lot 4a — destinations de retrait (DIP) ──────────────────────────
     // Un seul adaptateur Stripe branché derrière DEUX ports séparés (ISP) :

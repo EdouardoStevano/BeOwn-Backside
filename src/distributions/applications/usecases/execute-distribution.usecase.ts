@@ -41,6 +41,7 @@ import {
   type ProjectRepository,
 } from 'src/projects/applications/ports/repositories/project.repository';
 import { TransactionalEmailNotifier } from 'src/shared/email/transactional-email.notifier';
+import { ReinvestirLoyersService } from 'src/investments/applications/services/reinvestir-loyers.service';
 import { formatEur } from 'src/shared/money/format-eur';
 import { ResolveProjectWalletUseCase } from 'src/wallets/applications/usecases/resolve-project-wallet.usecase';
 
@@ -121,6 +122,8 @@ export class ExecuteDistributionUseCase {
      * est servie.
      */
     private readonly projectWalletResolver: ResolveProjectWalletUseCase,
+    // Dernière position à dessein (3 specs construisent ce usecase à la main).
+    private readonly reinvestirLoyers: ReinvestirLoyersService,
   ) {}
 
   /**
@@ -561,6 +564,17 @@ export class ExecuteDistributionUseCase {
     // une distribution silencieuse : l'investisseur ne peut pas rapprocher son
     // solde d'un événement.
     await this.annoncerVersements(periode, versements);
+
+    // Réinvestissement automatique (opt-in) — APRÈS commit et APRÈS
+    // l'annonce : chaque part passe par le service dédié, best-effort
+    // intégral (la distribution est déjà acquise, un refus se notifie).
+    for (const versement of versements) {
+      await this.reinvestirLoyers.surPartPayee({
+        partId: versement.partId,
+        utilisateurId: versement.utilisateurId,
+        montantNetEur: versement.montantNet,
+      });
+    }
 
     // Audit log — Phase 10 (traçabilité réglementaire pour mouvements de fonds)
     if (adminUserId != null) {

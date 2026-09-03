@@ -7,6 +7,8 @@ export class UserPreferences {
   notifMarketing: boolean;
   twoFactorEnabled: boolean;
   preferredCurrency: string;
+  reinvestLoyers: boolean;
+  reinvestProjetId: string | null;
   createdAt: Date;
   updatedAt: Date;
 }

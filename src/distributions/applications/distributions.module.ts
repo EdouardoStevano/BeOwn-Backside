@@ -13,6 +13,7 @@ import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructu
 // Sans cet import, l'application ne démarre pas — UnknownDependenciesException
 // au bootstrap, invisible des tests unitaires qui mockent le constructeur.
 import { WalletsModule } from 'src/wallets/applications/wallets.module';
+import { InvestmentsModule } from 'src/investments/applications/investments.module';
 import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/wallet.entity';
 import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entities/transaction.entity';
 import { CalculateDistributionPeriodeUseCase } from './usecases/calculate-distribution-periode.usecase';
@@ -27,6 +28,8 @@ import { InvestisseurDistributionsController } from '../presenters/http/investis
   imports: [
     DistributionsInfrastructureModule,
     WalletsModule,
+    // ReinvestirLoyersService — réinvestissement opt-in des parts payées.
+    InvestmentsModule,
     LocativeManagementInfrastructureModule,
     ProjectsInfrastructureModule,
     InvestmentsInfrastructureModule,

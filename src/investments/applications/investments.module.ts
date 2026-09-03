@@ -1,4 +1,7 @@
 import { Module } from '@nestjs/common';
+import { ParrainageModule } from 'src/parrainage/parrainage.module';
+import { UserPreferencesEntity } from 'src/iam/infrastructure/persistence/entities/user-preferences.entity';
+import { ReinvestirLoyersService } from './services/reinvestir-loyers.service';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { InvestmentsInfrastructureModule } from '../infrastructure/investments-infrastructure.module';
 import { ProjectsInfrastructureModule } from 'src/projects/infrastructure/projects-infrastructure.module';
@@ -39,7 +42,11 @@ import { WalletsModule } from 'src/wallets/applications/wallets.module';
 
 @Module({
   imports: [
+    // Bonus de parrainage au premier investissement définitif (cron + averti).
+    ParrainageModule,
     TypeOrmModule.forFeature([
+      // Réinvestissement des loyers : lecture de l'opt-in.
+      UserPreferencesEntity,
       ProjectEntity,
       InvestmentEntity,
       DocumentEntity,
@@ -70,6 +77,7 @@ import { WalletsModule } from 'src/wallets/applications/wallets.module';
     AmlModule,
   ],
   providers: [
+    ReinvestirLoyersService,
     CreateInvestmentUseCase,
     ContractGeneratorService,
     TopUpInvestmentUseCase,
@@ -86,6 +94,8 @@ import { WalletsModule } from 'src/wallets/applications/wallets.module';
   ],
   controllers: [InvestmentController],
   exports: [
+    // Consommé par ExecuteDistributionUseCase (DistributionsModule).
+    ReinvestirLoyersService,
     PayEcheanceUseCase,
     IfuGenerationService,
     ProjectScheduleGeneratorService,

@@ -67,6 +67,8 @@ describe('ExecuteDistributionUseCase — audit role', () => {
           .fn()
           .mockResolvedValue({ id: 'w-projet', solde: 0, devise: 'EUR' }),
       } as any,
+      // Réinvestissement (vague C) : stub inerte — logique couverte par ses specs.
+      { surPartPayee: jest.fn().mockResolvedValue(undefined) } as any,
     );
   });
 
@@ -214,6 +216,8 @@ describe('ExecuteDistributionUseCase — encaissement des frais plateforme', () 
           .fn()
           .mockResolvedValue({ id: 'w-projet', solde: 1_000_000, devise: 'EUR' }),
       } as any,
+      // Réinvestissement (vague C) : stub inerte — logique couverte par ses specs.
+      { surPartPayee: jest.fn().mockResolvedValue(undefined) } as any,
     );
   });
 

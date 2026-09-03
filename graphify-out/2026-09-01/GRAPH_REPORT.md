@@ -1,11 +1,11 @@
 # Graph Report - BeOwn-Backside  (2026-09-01)
 
 ## Corpus Check
-- 763 files · ~418,218 words
+- 763 files · ~418,311 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 6046 nodes · 16835 edges · 320 communities (213 shown, 107 thin omitted)
+- 6046 nodes · 16837 edges · 319 communities (212 shown, 107 thin omitted)
 - Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS · INFERRED: 13 edges (avg confidence: 0.66)
 - Token cost: 0 input · 0 output
 
@@ -16,17 +16,17 @@
 
 ## Community Hubs (Navigation)
 - authentication.module.ts
-- index.ts
-- UserEntity
-- ProjectEntity
-- investments.module.ts
+- UserRepository
+- user.enum.ts
+- InvestmentEntity
+- signature-provider.error.ts
 - TransactionEntity
 - mfa.usecases.spec.ts
 - User
 - register.usecase.ts
 - NotificationEventService
 - porteur.controller.ts
-- investor-classification.ts
+- ProfilPPEntity
 - app.module.ts
 - fici.ts
 - Wallet
@@ -35,24 +35,24 @@
 - ProjectStatus
 - reclamations.controller.ts
 - authentication.controller.ts
-- ProfilPP
+- .constructor
 - Bail
-- formatEur
+- delete-account.usecase.ts
 - StatutDeclaration
 - projects.module.ts
 - calculate-distribution-periode.usecase.ts
-- CreateBeneficiaireEffectifDto
-- hasPermission
+- profiles.module.ts
+- ActiveUser
 - UniteLouableEntity
-- payout-methods.port.ts
+- payments.module.ts
 - NotificationService
 - ProjectController
-- HashingService
+- UserPreferencesEntity
 - LoyerEncaisse
 - ExecuteDistributionUseCase
 - email-driver.provider.ts
 - investment.controller.ts
-- PaymentController
+- MetricsPort
 - contact.controller.ts
 - safe-html.ts
 - Document
@@ -66,16 +66,16 @@
 - InvestmentController
 - DocumentFiscal
 - SecondaryMarketController
-- .pushToAdmins
+- StripeConnectService
 - PorteurController
 - .create
 - SmsService
-- InvestmentRepository
-- .constructor
+- formatEur
+- connect-prefill.ts
 - .ensureAdmin
-- QuestionnaireAdequationEntity
+- payout-destination.resolver.ts
 - locative-management-infrastructure.module.ts
-- EmailModule
+- kyc-validated.guard.ts
 - devDependencies
 - PrometheusMetricsAdapter
 - .ecrire
@@ -86,13 +86,13 @@
 - AdminDistributionsController
 - NotificationController
 - CreateProjectDto
-- NotificationEntity
+- UserEntity
 - Reservation
 - taux-defaut-publication.ts
 - notification-unsubscribe.service.spec.ts
-- kyc-validated.guard.ts
+- CreateRetraitDto
 - update-admin-settings.dto.ts
-- profiles.module.ts
+- stripe-identity-kyc-document.adapter.ts
 - profile.controller.ts
 - compilerOptions
 - .generateIfus
@@ -123,7 +123,7 @@
 - .testEmail
 - EmailService
 - AdminInvestorsController
-- payments.module.ts
+- StripePaymentService
 - ProjectLedgerService
 - HealthController
 - Checklist de mise en service — BeOwn
@@ -135,23 +135,23 @@
 - AuditLogController
 - fiscalite.module.ts
 - NotificationGateway
-- MetricsPort
+- MetricsThrottlerGuard
 - Runbook de lancement — BeOwn
 - exclude
 - CreateOrdreMarcheDto
 - .closeCollecte
-- ActiveUser
-- account-status.guard.ts
+- CgpController
+- MfaMethodEntity
 - YouSignWebhookController
 - EmailTemplateService
 - EmailTemplateEntity
-- ProfilPPEntity
+- conflits-interets.service.ts
 - TemplatedEmailService
 - Lot 2 — Investor + Project KPIs Implementation Plan
 - Design — Indicateurs financiers crowdlending obligataire (KPIs BeOwn)
 - probe-cache-redis.ts
 - InvestisseurDistributionsController
-- CloudStorageService
+- RetraitsReaperService
 - CreateBailDto
 - DeclareChargeDto
 - dependencies
@@ -167,11 +167,11 @@
 - project-timeline-cron.service.ts
 - ReservationEntity
 - Suivis sécurité & config prod — 2026-07-21
-- RedisThrottlerStorage
+- logger.config.ts
 - admin-email-templates.controller.ts
 - DeclareLoyerDto
 - UpdateBailDto
-- .execute
+- test-endpoints.policy.ts
 - AdminPlatformWalletController
 - audit.interceptor.ts
 - AdminRetraitsReapController
@@ -182,7 +182,7 @@
 - CreateNewsDto
 - 4. Stripe
 - UpdateEcheanceDto
-- IamError
+- index.ts
 - AdminTransactionsLitigesController
 - package.json
 - CreateReservationDto
@@ -192,7 +192,7 @@
 - 15. Contenu marketing à remplacer
 - 4. Domain — `KpiCalculator` (cœur testable)
 - 8. Statuts & crons
-- user.enum.ts
+- RefundCollecteService
 - nest-cli.json
 - public.decorator.ts
 - ConfirmRetractationCronService
@@ -233,7 +233,7 @@
 - UpdateReservationAdminDto
 - PeriodeDistributionEntity
 - ADR — Migrations TypeORM retirées du pipeline de déploiement
-- save-questionnaire.usecase.ts
+- save-test-connaissances.usecase.ts
 - InitSchema1780895612145
 - InitSchema1780898979269
 - InitSchema1780899617108
@@ -252,8 +252,8 @@
 - ADR — Limitation de débit : fail-open par défaut, fail-closed ciblé
 - AddUniteLouableDto
 - NewsEntity
-- PlateformeBalanceReader
-- TopUpInvestmentUseCase
+- PlatformFeesModule
+- MetricsModule
 - cache-manager
 - class-transformer
 - cloudinary
@@ -324,7 +324,6 @@
 - verify-test-user.js
 - data-source.ts
 - redirect-url.ts
-- .sendLoginOtp
 - UpdateUserStatusDto
 - .upload
 - payment.controller.apport-porteur.spec.ts
@@ -361,59 +360,55 @@
 ## Import Cycles
 - None detected.
 
-## Communities (320 total, 107 thin omitted)
+## Communities (319 total, 107 thin omitted)
 
 ### Community 0 - "authentication.module.ts"
 Cohesion: 0.03
-Nodes (85): AuthenticationModule, Module, OTP_RECORD_STORE, SECRET_CIPHER, SecretCipher, TOTP_GENERATOR, TotpGenerator, TotpUriParams (+77 more)
+Nodes (80): AuthenticationModule, Module, SECRET_CIPHER, SecretCipher, TOTP_GENERATOR, TotpGenerator, TotpUriParams, RFC-6238 (+72 more)
 
-### Community 1 - "index.ts"
+### Community 1 - "UserRepository"
 Cohesion: 0.04
-Nodes (53): AuthSession, AuthTokens, EmailTokenPayload, EmailTokenPurpose, NOTIF_UNSUBSCRIBE_TYPE, TokenPayload, UNSUBSCRIBE_TOKEN_AUDIENCE, UnsubscribeTokenPayload (+45 more)
+Nodes (49): AuthSession, AuthTokens, EmailTokenPayload, EmailTokenPurpose, NOTIF_UNSUBSCRIBE_TYPE, TokenPayload, UNSUBSCRIBE_TOKEN_AUDIENCE, UnsubscribeTokenPayload (+41 more)
 
-### Community 2 - "UserEntity"
+### Community 2 - "user.enum.ts"
+Cohesion: 0.07
+Nodes (39): ADMIN_ROLES, MONTH_LABELS, ADMIN_ROLES, ADMIN_ROLES, ADMIN_ROLES, CancelCollecteDto, ADMIN_ROLES, REPORT_LABEL (+31 more)
+
+### Community 3 - "InvestmentEntity"
 Cohesion: 0.05
-Nodes (60): ADMIN_ROLES, MONTH_LABELS, InjectRepository, ADMIN_ROLES, ADMIN_ROLES, ADMIN_ROLES, PLATFORM_FEE_SOURCES, ADMIN_ROLES (+52 more)
+Nodes (50): OneToMany, ADMIN_ROLES, MANAGE_ROLES, InjectRepository, InjectRepository, GetAggregatedScheduleUseCase, round2(), Injectable (+42 more)
 
-### Community 3 - "ProjectEntity"
-Cohesion: 0.05
-Nodes (70): SEED_ENTITIES, SeedConfig, OneToMany, ADMIN_ROLES, MANAGE_ROLES, InjectRepository, InjectRepository, InjectRepository (+62 more)
-
-### Community 4 - "investments.module.ts"
-Cohesion: 0.13
-Nodes (20): Module, YouSignModule, DocumentsInfrastructureModule, Module, Module, UsersModule, IamInfrastructureModule, Module (+12 more)
+### Community 4 - "signature-provider.error.ts"
+Cohesion: 0.19
+Nodes (10): motifIndisponibilite, SIGNATURE_PROVIDER_UNAVAILABLE, SignatureProviderUnavailableError, DELAI_AVANT_NOUVELLE_TENTATIVE_S, MESSAGE_SIGNATURE_INDISPONIBLE, SignatureProviderExceptionFilter, Catch, Module (+2 more)
 
 ### Community 5 - "TransactionEntity"
 Cohesion: 0.05
-Nodes (54): CANONICAL_SOURCES, InjectRepository, Inject, InjectRepository, BLOCKING_INVESTMENT_STATUSES, DeletionBlocker, DeletionInitiator, OPEN_ORDER_STATUSES (+46 more)
+Nodes (67): ADMIN_ROLES, PLATFORM_FEE_SOURCES, CANONICAL_SOURCES, InjectRepository, AML_THRESHOLD_MONTHLY, AML_THRESHOLD_SINGLE, AmlContext, AmlMonitorService (+59 more)
 
 ### Community 6 - "mfa.usecases.spec.ts"
-Cohesion: 0.05
-Nodes (46): MFA_CHALLENGE_MAX_ATTEMPTS, MfaChallenge, MfaChallengeDraft, MfaChallengePurpose, key(), MFAChallengeCacheService, build(), draft (+38 more)
+Cohesion: 0.07
+Nodes (35): MFA_CHALLENGE_MAX_ATTEMPTS, MfaChallenge, MfaChallengeDraft, MfaChallengePurpose, key(), MFAChallengeCacheService, build(), draft (+27 more)
 
 ### Community 7 - "User"
 Cohesion: 0.04
-Nodes (20): RFC-5321, RFC-5322, InvalidEmailError, InvalidPersonNameError, NO_MFA, PublicUserMfa, UserMapper, PasswordComparator (+12 more)
+Nodes (28): RFC-5321, RFC-5322, build(), makeUserRepository(), buildUser(), buildMfaSignIn(), makeChallengeStore(), makeChallengeStrategy() (+20 more)
 
 ### Community 8 - "register.usecase.ts"
-Cohesion: 0.08
-Nodes (26): EventsHandler, asUniqueViolation(), isEmailUniqueViolation(), POSTGRES_UNIQUE_VIOLATION, readCode(), UniqueViolation, build(), event (+18 more)
-
-### Community 9 - "NotificationEventService"
-Cohesion: 0.11
-Nodes (6): EcheancesCronService, Cron, Injectable, PAYABLE_STATUSES, NotificationEventService, Injectable
+Cohesion: 0.05
+Nodes (27): EventsHandler, BcryptService, Injectable, HASHING_SERVICE, HashingService, asUniqueViolation(), isEmailUniqueViolation(), POSTGRES_UNIQUE_VIOLATION (+19 more)
 
 ### Community 10 - "porteur.controller.ts"
 Cohesion: 0.09
 Nodes (29): BAIL_REPOSITORY, BailRepository, UNITE_LOUABLE_REPOSITORY, CreateBailInput, CreateBailUseCase, Inject, Injectable, DeclareChargeUseCase (+21 more)
 
-### Community 11 - "investor-classification.ts"
-Cohesion: 0.11
-Nodes (24): arrondir(), BasePatrimoniale, calculerExpirationEvaluation(), calculerSeuilAvertissement(), CategorieInvestisseur, CriteresAvertiPersonneMorale, CriteresAvertiPersonnePhysique, DemandeStatutAverti (+16 more)
+### Community 11 - "ProfilPPEntity"
+Cohesion: 0.06
+Nodes (46): InjectRepository, RiskScoringService, Cron, Injectable, InjectRepository, SaveQuestionnaireUseCase, Injectable, InjectRepository (+38 more)
 
 ### Community 12 - "app.module.ts"
 Cohesion: 0.04
-Nodes (46): AdminModule, Module, AppModule, Module, AvisModule, Module, CgpModule, Module (+38 more)
+Nodes (47): Optional, AdminModule, Module, AvisModule, Module, CgpModule, Module, AmlModule (+39 more)
 
 ### Community 13 - "fici.ts"
 Cohesion: 0.07
@@ -436,24 +431,24 @@ Cohesion: 0.15
 Nodes (17): ProjectData, PROJECT_REPOSITORY, InMemoryProjectRepository, InMemoryProjectRepository, ModeleEconomique, DocumentProjetType, ProjectInstrument, ProjectStatus (+9 more)
 
 ### Community 18 - "reclamations.controller.ts"
-Cohesion: 0.06
-Nodes (48): ReclamationsService, Injectable, InjectRepository, ajouterJoursOuvrables(), CategorieReclamation, DELAI_ACCUSE_RECEPTION_JOURS_OUVRABLES, DELAI_REPONSE_MOIS, echeanceAccuseReception() (+40 more)
+Cohesion: 0.07
+Nodes (46): ReclamationsService, Injectable, InjectRepository, ajouterJoursOuvrables(), CategorieReclamation, DELAI_ACCUSE_RECEPTION_JOURS_OUVRABLES, DELAI_REPONSE_MOIS, echeanceAccuseReception() (+38 more)
 
 ### Community 19 - "authentication.controller.ts"
 Cohesion: 0.05
 Nodes (33): RecaptchaResponse, RecaptchaService, Injectable, SocialProfile, Social, IssuedOAuthCode, IssueOAuthCodeUseCase, Injectable (+25 more)
 
-### Community 20 - "ProfilPP"
-Cohesion: 0.18
-Nodes (4): Inject, Injectable, UpdateProfilPPUseCase, ProfilPP
+### Community 20 - ".constructor"
+Cohesion: 0.09
+Nodes (14): CreateKycUseCase, Inject, Injectable, GetProfilPPUseCase, Inject, Injectable, Inject, Injectable (+6 more)
 
 ### Community 21 - "Bail"
 Cohesion: 0.12
 Nodes (13): Bail, StatutBail, BailEntity, Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn (+5 more)
 
-### Community 22 - "formatEur"
-Cohesion: 0.07
-Nodes (19): InjectRepository, DeleteAccountUseCase, isUniqueViolation(), Inject, Injectable, InjectDataSource, InjectRepository, CollecteCloseCronService (+11 more)
+### Community 22 - "delete-account.usecase.ts"
+Cohesion: 0.14
+Nodes (12): BLOCKING_INVESTMENT_STATUSES, DeleteAccountUseCase, DeletionBlocker, DeletionInitiator, isUniqueViolation(), OPEN_ORDER_STATUSES, PENDING_RETRAIT_STATUSES, Inject (+4 more)
 
 ### Community 23 - "StatutDeclaration"
 Cohesion: 0.10
@@ -467,33 +462,33 @@ Nodes (29): SORTIE_PROJET_REPOSITORY, SortieProjetRepository, DeclareSortieInput
 Cohesion: 0.10
 Nodes (20): DISTRIBUTION_PART_REPOSITORY, PERIODE_DISTRIBUTION_REPOSITORY, PeriodeDistributionRepository, CalculateDistributionPeriodeUseCase, CalculateDistributionResult, Inject, Injectable, ExecuteDistributionResult (+12 more)
 
-### Community 26 - "CreateBeneficiaireEffectifDto"
-Cohesion: 0.10
-Nodes (23): CreateBeneficiaireEffectifDto, ApiProperty, ApiPropertyOptional, IsDateString, IsNotEmpty, IsNumber, IsOptional, IsString (+15 more)
+### Community 26 - "profiles.module.ts"
+Cohesion: 0.06
+Nodes (42): BeneficiaireEffectifEntity, Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn (+34 more)
 
-### Community 27 - "hasPermission"
-Cohesion: 0.14
-Nodes (21): Redirect, hasPermission(), DocumentController, ApiBearerAuth, ApiBody, ApiConsumes, ApiOperation, ApiParam (+13 more)
+### Community 27 - "ActiveUser"
+Cohesion: 0.15
+Nodes (22): Redirect, ActiveUser, hasPermission(), DocumentController, ApiBearerAuth, ApiBody, ApiConsumes, ApiOperation (+14 more)
 
 ### Community 28 - "UniteLouableEntity"
 Cohesion: 0.11
 Nodes (17): UniteLouableRepository, AddUniteLouableInput, AddUniteLouableUseCase, Inject, Injectable, UniteLouable, Column, CreateDateColumn (+9 more)
 
-### Community 29 - "payout-methods.port.ts"
+### Community 29 - "payments.module.ts"
 Cohesion: 0.06
-Nodes (25): ADR-0003, InstantBalanceView, PayoutMethodError, PayoutMethodErrorCode, PayoutMethodKind, PayoutMethodType, PayoutMethodView, ADR-0002 (+17 more)
+Nodes (30): ADR-0003, KycValidatedGuard, Injectable, ConnectAccountReader, ConnectAccountStatus, InstantBalanceView, PayoutMethodError, PayoutMethodErrorCode (+22 more)
 
 ### Community 30 - "NotificationService"
 Cohesion: 0.04
-Nodes (73): ADMIN_ROLES, round2(), estIndisponibiliteFournisseur(), NotificationService, Injectable, AnnoncesExpiryCronService, Injectable, InjectRepository (+65 more)
+Nodes (77): ADMIN_ROLES, round2(), estIndisponibiliteFournisseur(), NotificationService, PushAdminNotificationOptions, PushNotificationOptions, Injectable, NotificationCanal (+69 more)
 
 ### Community 31 - "ProjectController"
 Cohesion: 0.17
 Nodes (16): ProjectController, ApiBearerAuth, ApiBody, ApiOperation, ApiParam, ApiQuery, ApiResponse, ApiTags (+8 more)
 
-### Community 32 - "HashingService"
+### Community 32 - "UserPreferencesEntity"
 Cohesion: 0.10
-Nodes (11): BcryptService, Injectable, HASHING_SERVICE, HashingService, Inject, WeakPasswordError, CreateUserProps, Inject (+3 more)
+Nodes (12): UserPreferences, Column, CreateDateColumn, Entity, JoinColumn, OneToOne, PrimaryColumn, UpdateDateColumn (+4 more)
 
 ### Community 33 - "LoyerEncaisse"
 Cohesion: 0.12
@@ -508,12 +503,12 @@ Cohesion: 0.15
 Nodes (10): PlatformSettingsService, Injectable, BrevoEmailService, Injectable, MAIL_DRIVERS, MailDriver, REAL_SEND_ENVIRONMENTS, resolveMailDriver() (+2 more)
 
 ### Community 36 - "investment.controller.ts"
-Cohesion: 0.10
-Nodes (28): motifIndisponibilite, SIGNATURE_PROVIDER_UNAVAILABLE, SignatureProviderUnavailableError, DELAI_AVANT_NOUVELLE_TENTATIVE_S, MESSAGE_SIGNATURE_INDISPONIBLE, SignatureProviderExceptionFilter, Catch, EmbeddedSignatureResult (+20 more)
+Cohesion: 0.16
+Nodes (20): CancelInvestmentUseCase, Injectable, InjectDataSource, calculerEcheanceRetractation(), CODE_RETRACTATION_DEJA_EFFECTUEE, CODE_RETRACTATION_DELAI_EXPIRE, CODE_RETRACTATION_INTROUVABLE, CODE_RETRACTATION_NON_APPLICABLE (+12 more)
 
-### Community 37 - "PaymentController"
-Cohesion: 0.11
-Nodes (18): ApiHeader, PaymentController, ApiBearerAuth, ApiOperation, ApiParam, ApiResponse, ApiTags, Body (+10 more)
+### Community 37 - "MetricsPort"
+Cohesion: 0.07
+Nodes (23): ApiHeader, Cron, EcheancesCronService, Cron, Injectable, MetricsPort, PaymentController, ApiBearerAuth (+15 more)
 
 ### Community 38 - "contact.controller.ts"
 Cohesion: 0.10
@@ -525,7 +520,7 @@ Nodes (10): ALLOWED_TAGS, analyzeHtml(), decodeEntities(), GLOBAL_ATTRS, IsSafeH
 
 ### Community 40 - "Document"
 Cohesion: 0.06
-Nodes (31): DOCUMENT_REPOSITORY, DocumentRepository, Document, DocumentRelatedTo, DocumentType, DocumentEntity, Column, CreateDateColumn (+23 more)
+Nodes (33): DOCUMENT_REPOSITORY, DocumentRepository, Document, DocumentRelatedTo, DocumentType, DocumentEntity, Column, CreateDateColumn (+25 more)
 
 ### Community 41 - "DistributionPart"
 Cohesion: 0.09
@@ -536,15 +531,15 @@ Cohesion: 0.14
 Nodes (19): ACTIVE_INVESTMENT_STATUSES, AdminController, ApiBearerAuth, ApiBody, ApiOperation, ApiParam, ApiQuery, ApiResponse (+11 more)
 
 ### Community 44 - "ProfileController"
-Cohesion: 0.14
-Nodes (16): KYC_REVIEWER_ROLES, ProfileController, ApiBearerAuth, ApiBody, ApiOperation, ApiResponse, ApiTags, Body (+8 more)
+Cohesion: 0.12
+Nodes (19): GetKycUseCase, Inject, Injectable, KYC_REVIEWER_ROLES, ProfileController, ApiBearerAuth, ApiBody, ApiOperation (+11 more)
 
 ### Community 45 - "email-template.service.ts"
 Cohesion: 0.12
 Nodes (19): DEFAULT_TEMPLATE_META, extractCorps(), extractVariables(), INLINE_EXEMPT_CLASSES, inlineVariantStyles(), parseStyleMap(), RenderedEmail, RESERVED_TOKENS (+11 more)
 
 ### Community 46 - "RequirePermission"
-Cohesion: 0.18
+Cohesion: 0.17
 Nodes (20): AdminEcheancesController, AdminEcheancesItemController, PAY_ROLES, ApiBearerAuth, ApiOperation, ApiParam, ApiResponse, ApiTags (+12 more)
 
 ### Community 47 - "CurrentUser"
@@ -563,9 +558,9 @@ Nodes (16): InvestorInfo, DocumentFiscalRepository, DocumentFiscal, FiscaliteInf
 Cohesion: 0.18
 Nodes (16): SecondaryMarketController, ApiBearerAuth, ApiOperation, ApiParam, ApiResponse, ApiTags, Body, Controller (+8 more)
 
-### Community 51 - ".pushToAdmins"
-Cohesion: 0.06
-Nodes (19): Cron, RetraitsReaperService, Cron, Injectable, InjectRepository, RetraitSettlementService, Injectable, InjectRepository (+11 more)
+### Community 51 - "StripeConnectService"
+Cohesion: 0.09
+Nodes (11): InjectRepository, RequestRetraitUseCase, Injectable, InjectDataSource, InjectRepository, Injectable, InjectDataSource, InjectRepository (+3 more)
 
 ### Community 52 - "PorteurController"
 Cohesion: 0.14
@@ -579,29 +574,29 @@ Nodes (18): Inject, Injectable, ValidateLoyerEncaisseUseCase, RejectDeclarationD
 Cohesion: 0.11
 Nodes (15): LogSmsService, Injectable, hasTwilioCredentials(), resolveSmsDriver(), SmsDriver, SmsModule, smsServiceFactory(), TWILIO_ENV (+7 more)
 
-### Community 55 - "InvestmentRepository"
-Cohesion: 0.10
-Nodes (5): InvestmentRepository, ContractData, Investment, InvestmentTypeOrmRepository, Injectable
+### Community 55 - "formatEur"
+Cohesion: 0.04
+Nodes (31): InvestmentRepository, ContractData, ContractGeneratorService, ContratRachatData, Injectable, CreateInvestmentUseCase, Inject, Injectable (+23 more)
 
-### Community 56 - ".constructor"
-Cohesion: 0.12
-Nodes (11): CreateProfilPMUseCase, Inject, Injectable, GetKycUseCase, Inject, Injectable, GetProfilPPUseCase, Inject (+3 more)
+### Community 56 - "connect-prefill.ts"
+Cohesion: 0.20
+Nodes (11): InvestorIdentity, InvestorIdentityReader, buildIndividualPrefill(), clean(), cleanCountry(), cleanDob(), cleanPhone(), IndividualPrefill (+3 more)
 
 ### Community 57 - ".ensureAdmin"
 Cohesion: 0.19
 Nodes (10): slugify(), ApiOperation, ApiQuery, Body, Delete, Get, Param, Patch (+2 more)
 
-### Community 58 - "QuestionnaireAdequationEntity"
-Cohesion: 0.11
-Nodes (14): InjectRepository, RiskScoringService, Cron, Injectable, InjectRepository, InjectRepository, InjectRepository, QuestionnaireAdequationEntity (+6 more)
+### Community 58 - "payout-destination.resolver.ts"
+Cohesion: 0.19
+Nodes (11): PayoutMethodKind, PayoutDestinationResolver, ResolvedPayoutDestination, ResolvePayoutDestinationInput, Injectable, RetraitSettlementService, Injectable, INSTANT_PAYOUT_MAX_EUR (+3 more)
 
 ### Community 59 - "locative-management-infrastructure.module.ts"
 Cohesion: 0.13
 Nodes (16): LOCATAIRE_REPOSITORY, LocataireRepository, Locataire, LocativeManagementInfrastructureModule, Module, LocataireEntity, Column, CreateDateColumn (+8 more)
 
-### Community 60 - "EmailModule"
-Cohesion: 0.67
-Nodes (3): EmailModule, Global, Module
+### Community 60 - "kyc-validated.guard.ts"
+Cohesion: 0.22
+Nodes (8): ControllerClass, guardsOf(), hasKycGuard(), KYC_NOT_VALIDATED_CODE, KYC_NOT_VALIDATED_MESSAGE, kycNotValidatedException(), ctx(), expectKycRejection()
 
 ### Community 61 - "devDependencies"
 Cohesion: 0.07
@@ -643,9 +638,9 @@ Nodes (13): NotificationController, ApiBearerAuth, ApiOperation, ApiParam, ApiRe
 Cohesion: 0.13
 Nodes (26): IsLatitude, IsLongitude, IsUrl, CreateProjectDto, CreateSpvDto, EtapeChronologieDto, GarantieDto, toNumber() (+18 more)
 
-### Community 71 - "NotificationEntity"
-Cohesion: 0.07
-Nodes (22): InjectRepository, InjectRepository, InvestorInactivityCronService, Injectable, InjectRepository, InjectRepository, Inject, InjectRepository (+14 more)
+### Community 71 - "UserEntity"
+Cohesion: 0.03
+Nodes (85): SEED_ENTITIES, SeedConfig, InjectRepository, UserData, InjectRepository, InjectRepository, InjectRepository, InjectRepository (+77 more)
 
 ### Community 72 - "Reservation"
 Cohesion: 0.15
@@ -659,21 +654,21 @@ Nodes (18): agreger(), arrondir(), CohorteAnnuelle, construirePublication(), deb
 Cohesion: 0.07
 Nodes (27): NotificationUnsubscribeService, buildSignerConfig(), buildTokenService(), buildTtlConfig(), Injectable, PublicUnsubscribeController, ApiOperation, ApiProperty (+19 more)
 
-### Community 75 - "kyc-validated.guard.ts"
-Cohesion: 0.09
-Nodes (32): ControllerClass, guardsOf(), hasKycGuard(), KYC_NOT_VALIDATED_CODE, KYC_NOT_VALIDATED_MESSAGE, kycNotValidatedException(), KycValidatedGuard, ctx() (+24 more)
+### Community 75 - "CreateRetraitDto"
+Cohesion: 0.23
+Nodes (20): AttachPayoutMethodDto, ConfirmDepotDto, ConnectOnboardingDto, CreateApportPorteurDto, CreatePaymentIntentDto, CreateRetraitDto, StartKycVerificationDto, ApiProperty (+12 more)
 
 ### Community 76 - "update-admin-settings.dto.ts"
 Cohesion: 0.18
 Nodes (20): BroadcastChannelTogglesDto, BroadcastSettingsDto, CommissionsSettingsDto, FeatureFlagsSettingsDto, NotificationsSettingsDto, PlatformSettingsDto, ApiPropertyOptional, IsBoolean (+12 more)
 
-### Community 77 - "profiles.module.ts"
-Cohesion: 0.12
-Nodes (19): BeneficiaireEffectifEntity, Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn (+11 more)
+### Community 77 - "stripe-identity-kyc-document.adapter.ts"
+Cohesion: 0.26
+Nodes (6): KycDocumentFace, KycDocumentSource, KycIdentityDocument, InjectRepository, StripeIdentityKycDocumentAdapter, Injectable
 
 ### Community 78 - "profile.controller.ts"
-Cohesion: 0.11
-Nodes (16): Inject, PROFIL_REPOSITORY, ProfilRepository, CreateKycUseCase, Inject, Injectable, Inject, Injectable (+8 more)
+Cohesion: 0.09
+Nodes (15): Inject, PROFIL_REPOSITORY, ProfilRepository, UpdateProfilPPInput, DocumentKycType, KycNiveau, KycStatus, Kyc (+7 more)
 
 ### Community 79 - "compilerOptions"
 Cohesion: 0.09
@@ -700,8 +695,8 @@ Cohesion: 0.14
 Nodes (16): PayoutMethodsController, ApiBearerAuth, ApiOperation, ApiParam, ApiResponse, ApiTags, Body, Controller (+8 more)
 
 ### Community 85 - "OtpRecordStore"
-Cohesion: 0.12
-Nodes (10): OtpRecord, OtpRecordStore, readPositiveInt(), build(), makeStore(), Inject, TooManyOtpAttemptsError, CacheOtpRecordStoreAdapter (+2 more)
+Cohesion: 0.13
+Nodes (10): OTP_RECORD_STORE, OtpRecord, OtpRecordStore, readPositiveInt(), build(), makeStore(), Inject, CacheOtpRecordStoreAdapter (+2 more)
 
 ### Community 86 - "Seed Service Amélioré"
 Cohesion: 0.10
@@ -716,8 +711,8 @@ Cohesion: 0.16
 Nodes (10): Inject, Injectable, UserEmailRecipientAdapter, EmailRecipient, EmailRecipientReader, TransactionalEmailModule, Module, TransactionalEmailNotifier (+2 more)
 
 ### Community 89 - "MfaMethod"
-Cohesion: 0.06
-Nodes (20): MfaCredentialMismatchError, DELIVERING_CHANNELS, maskEmail(), maskPhone(), MfaMethod, email(), factor(), sms() (+12 more)
+Cohesion: 0.13
+Nodes (8): DELIVERING_CHANNELS, maskEmail(), maskPhone(), MfaMethod, email(), factor(), sms(), totp()
 
 ### Community 90 - "UpdatePreferencesDto"
 Cohesion: 0.30
@@ -728,8 +723,8 @@ Cohesion: 0.19
 Nodes (10): RegimeFiscal, Spv, SpvEntity, Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn (+2 more)
 
 ### Community 92 - "CreateProfilPPDto"
-Cohesion: 0.13
-Nodes (17): CreateProfilPPUseCase, Inject, Injectable, InjectRepository, CreateProfilPMDto, CreateProfilPPDto, ApiProperty, ApiPropertyOptional (+9 more)
+Cohesion: 0.10
+Nodes (20): CreateProfilPMUseCase, Inject, Injectable, CreateProfilPPUseCase, Inject, Injectable, InjectRepository, CreateProfilPMDto (+12 more)
 
 ### Community 93 - "AdminReservationsController"
 Cohesion: 0.21
@@ -760,8 +755,8 @@ Cohesion: 0.22
 Nodes (14): AvisController, ApiBearerAuth, ApiOperation, ApiParam, ApiResponse, ApiTags, Body, Controller (+6 more)
 
 ### Community 100 - "main.ts"
-Cohesion: 0.19
-Nodes (9): bootstrap(), SentryExceptionFilter, Catch, initSentry(), scrub(), SENSITIVE_KEYS, initTracing(), redactSpanUrl() (+1 more)
+Cohesion: 0.15
+Nodes (11): AppModule, Module, bootstrap(), SentryExceptionFilter, Catch, initSentry(), scrub(), SENSITIVE_KEYS (+3 more)
 
 ### Community 101 - "mfa.dto.ts"
 Cohesion: 0.20
@@ -791,9 +786,9 @@ Nodes (5): Inject, Inject, Inject, InjectRepository, EmailService
 Cohesion: 0.16
 Nodes (11): AdminInvestorsController, ROLE_ASSIGN_ROLES, ApiBearerAuth, ApiOperation, ApiTags, Body, Controller, Get (+3 more)
 
-### Community 108 - "payments.module.ts"
-Cohesion: 0.07
-Nodes (29): ConnectAccountReader, ConnectAccountStatus, InvestorIdentity, InvestorIdentityReader, KycDocumentFace, KycDocumentSource, KycIdentityDocument, CreatePaymentIntentParams (+21 more)
+### Community 108 - "StripePaymentService"
+Cohesion: 0.11
+Nodes (10): CreatePaymentIntentParams, PAYMENT_SERVICE, PaymentIntentResult, PaymentService, StripePaymentService, Injectable, PlateformeBalanceReader, SoldePlateforme (+2 more)
 
 ### Community 109 - "ProjectLedgerService"
 Cohesion: 0.06
@@ -839,9 +834,9 @@ Nodes (30): IfuCronService, Cron, Inject, Injectable, IfuPdfService, Injectable,
 Cohesion: 0.12
 Nodes (9): ConnectedSocket, MessageBody, NotificationGateway, originesAutorisees(), jwt, verifierOrigine(), SubscribeMessage, WebSocketGateway (+1 more)
 
-### Community 120 - "MetricsPort"
-Cohesion: 0.15
-Nodes (8): InjectThrottlerOptions, InjectThrottlerStorage, MetricsThrottlerGuard, Injectable, MetricsPort, PayoutMethodsWriter, ManagePayoutMethodsUseCase, Injectable
+### Community 120 - "MetricsThrottlerGuard"
+Cohesion: 0.33
+Nodes (4): InjectThrottlerOptions, InjectThrottlerStorage, MetricsThrottlerGuard, Injectable
 
 ### Community 121 - "Runbook de lancement — BeOwn"
 Cohesion: 0.13
@@ -859,16 +854,16 @@ Nodes (16): AcheteurMinimalDto, CreateOrdreMarcheDto, DevisFraisCessionDto, Expr
 Cohesion: 0.25
 Nodes (11): AdminProjectActionsController, ApiBearerAuth, ApiOperation, ApiResponse, ApiTags, Body, Controller, HttpCode (+3 more)
 
-### Community 125 - "ActiveUser"
+### Community 125 - "CgpController"
 Cohesion: 0.24
-Nodes (10): CgpController, ApiBearerAuth, ApiOperation, ApiTags, Controller, Get, Param, Patch (+2 more)
+Nodes (9): CgpController, ApiBearerAuth, ApiOperation, ApiTags, Controller, Get, Param, Patch (+1 more)
 
-### Community 126 - "account-status.guard.ts"
-Cohesion: 0.21
-Nodes (8): AccountStatusGuard, expectRejection(), Injectable, InjectRepository, ACCOUNT_CLOSED_CODE, ACCOUNT_CLOSED_MESSAGE, ACCOUNT_SUSPENDED_CODE, ACCOUNT_SUSPENDED_MESSAGE
+### Community 126 - "MfaMethodEntity"
+Cohesion: 0.20
+Nodes (9): MfaMethodEntity, Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn (+1 more)
 
 ### Community 127 - "YouSignWebhookController"
-Cohesion: 0.15
+Cohesion: 0.14
 Nodes (9): ApiExcludeController, Body, Controller, Headers, HttpCode, Post, Req, SkipThrottle (+1 more)
 
 ### Community 128 - "EmailTemplateService"
@@ -879,9 +874,9 @@ Nodes (5): handlebars, handlebars, EmailTemplateService, extractTitle(), Injecta
 Cohesion: 0.17
 Nodes (9): Inject, InjectRepository, emailServiceProvider, InjectRepository, EmailTemplateEntity, Column, Entity, PrimaryColumn (+1 more)
 
-### Community 130 - "ProfilPPEntity"
-Cohesion: 0.13
-Nodes (18): ProfilPPEntity, Column, CreateDateColumn, Entity, JoinColumn, OneToOne, PrimaryColumn, UpdateDateColumn (+10 more)
+### Community 130 - "conflits-interets.service.ts"
+Cohesion: 0.19
+Nodes (10): ConflitsInteretsService, Injectable, InjectRepository, AUTORISE, LienAvecPrestataire, ProfilPorteurCandidat, SEUIL_PARTICIPATION_ACTIONNAIRE, VerdictConflitInterets (+2 more)
 
 ### Community 131 - "TemplatedEmailService"
 Cohesion: 0.15
@@ -903,9 +898,9 @@ Nodes (10): CacheProbeModule, main(), scanAll(), Module, VALUE, buildCacheModule
 Cohesion: 0.15
 Nodes (10): GetInvestisseurDistributionHistoryUseCase, Inject, Injectable, InvestisseurDistributionsController, ApiBearerAuth, ApiOperation, ApiTags, Controller (+2 more)
 
-### Community 136 - "CloudStorageService"
-Cohesion: 0.15
-Nodes (6): Inject, InjectRepository, Inject, InjectDataSource, CloudStorageService, Injectable
+### Community 136 - "RetraitsReaperService"
+Cohesion: 0.27
+Nodes (4): RetraitsReaperService, Cron, Injectable, InjectRepository
 
 ### Community 137 - "CreateBailDto"
 Cohesion: 0.18
@@ -967,9 +962,9 @@ Nodes (10): ReservationEntity, Column, CreateDateColumn, Entity, Index, JoinColu
 Cohesion: 0.18
 Nodes (10): 1.1 Rotation du mot de passe Gmail (hygiène — NON urgent), 1.2 Abonnement du webhook Stripe Identity, 1.3 Migration Redis / @keyv/redis, 1. Actions de configuration production (EXTERNES — à faire par l'équipe), 2. Suivis sécurité (corrections livrées + reste), 3. Verdict de la vérification d'audit (pour mémoire), 4. État build / repos, Corrigé (branche `fix/security-hardening`, revues APPROVED) (+2 more)
 
-### Community 152 - "RedisThrottlerStorage"
-Cohesion: 0.18
-Nodes (7): Optional, RedisThrottlerStorage, FakeRedis, Injectable, ThrottlerStorageModule, Global, Module
+### Community 152 - "logger.config.ts"
+Cohesion: 0.40
+Nodes (3): IGNORED_PREFIXES, loggerConfig, REDACT_PATHS
 
 ### Community 153 - "admin-email-templates.controller.ts"
 Cohesion: 0.15
@@ -982,10 +977,6 @@ Nodes (10): DeclareLoyerDto, ApiProperty, ArrayMinSize, IsArray, IsDateString, I
 ### Community 155 - "UpdateBailDto"
 Cohesion: 0.24
 Nodes (10): ResilierBailDto, ApiProperty, IsDateString, IsIn, IsNotEmpty, IsNumber, IsOptional, IsString (+2 more)
-
-### Community 156 - ".execute"
-Cohesion: 0.20
-Nodes (7): CreateInvestmentUseCase, Inject, Injectable, InjectDataSource, Inject, InjectRepository, evaluationExpiree()
 
 ### Community 157 - "AdminPlatformWalletController"
 Cohesion: 0.23
@@ -1004,8 +995,8 @@ Cohesion: 0.07
 Nodes (20): ProjectRepository, Inject, CreateProjectUseCase, Inject, Injectable, Inject, Inject, Inject (+12 more)
 
 ### Community 161 - "yousign-webhook.controller.spec.ts"
-Cohesion: 0.10
-Nodes (20): makeChainableQb(), setup(), ReconciliationCronService, Cron, Injectable, ReconciliationService, Injectable, EcritureGrandLivre (+12 more)
+Cohesion: 0.08
+Nodes (21): makeChainableQb(), setup(), ReconciliationCronService, Cron, Injectable, ReconciliationService, Injectable, InjectRepository (+13 more)
 
 ### Community 162 - "ADR — Le grand livre n'a que deux colonnes de portefeuille (suppression du doublon `wallet_source`)"
 Cohesion: 0.22
@@ -1027,9 +1018,9 @@ Nodes (8): 4.1 Faire valider l'activité par Stripe — avant tout le reste, 4.2
 Cohesion: 0.36
 Nodes (8): InitializeScheduleDto, IsDateString, IsEnum, IsNumber, IsOptional, Min, UpdateAggregatedEcheanceDto, UpdateEcheanceDto
 
-### Community 167 - "IamError"
-Cohesion: 0.08
-Nodes (24): ACCOUNT_DELETION_BLOCKED_CODE, AccountClosedError, AccountDeletionBlockedError, AccountDeletionNotAllowedError, AccountSuspendedError, EmailNotVerifiedError, OTP_REQUIRED_CODE, OTP_REQUIRED_MESSAGE (+16 more)
+### Community 167 - "index.ts"
+Cohesion: 0.03
+Nodes (56): AccountStatusGuard, expectRejection(), Injectable, InjectRepository, ACCOUNT_CLOSED_CODE, ACCOUNT_CLOSED_MESSAGE, ACCOUNT_DELETION_BLOCKED_CODE, ACCOUNT_SUSPENDED_CODE (+48 more)
 
 ### Community 168 - "AdminTransactionsLitigesController"
 Cohesion: 0.22
@@ -1067,9 +1058,9 @@ Nodes (6): 4.1 — `computeIrr` (Newton-Raphson), 4.2 — `computeWal` (Weighted
 Cohesion: 0.33
 Nodes (6): 8.1 — Évolution de `EcheanceStatus`, 8.2 — `EcheanceStatusJob`, 8.3 — `AdminKpiSnapshotJob`, 8.4 — Events émis, 8.5 — Perte définitive (action manuelle admin), 8. Statuts & crons
 
-### Community 177 - "user.enum.ts"
-Cohesion: 0.07
-Nodes (44): UserData, ADMIN_ROLES, CancelCollecteDto, ADMIN, BroadcastSettings, AML_THRESHOLD_MONTHLY, AML_THRESHOLD_SINGLE, AmlContext (+36 more)
+### Community 177 - "RefundCollecteService"
+Cohesion: 0.21
+Nodes (6): CollecteCloseCronService, Cron, Injectable, InjectRepository, RefundCollecteService, Injectable
 
 ### Community 178 - "nest-cli.json"
 Cohesion: 0.33
@@ -1112,7 +1103,7 @@ Cohesion: 0.40
 Nodes (5): SetPepFlagDto, ApiProperty, IsBoolean, IsOptional, IsString
 
 ### Community 190 - "IfuGenerationService"
-Cohesion: 0.31
+Cohesion: 0.27
 Nodes (4): IfuGenerationService, Cron, Injectable, InjectRepository
 
 ### Community 191 - "news.controller.ts"
@@ -1128,8 +1119,8 @@ Cohesion: 0.12
 Nodes (15): DEFAULT_FEE_RATES, PlatformFeeRates, PlatformFeesService, Injectable, PublicFeesController, ApiOperation, ApiTags, Controller (+7 more)
 
 ### Community 194 - "KycEntity"
-Cohesion: 0.09
-Nodes (15): InjectRepository, ProfilPM, KycEntity, Column, CreateDateColumn, Entity, Index, JoinColumn (+7 more)
+Cohesion: 0.15
+Nodes (11): InjectRepository, KycEntity, Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne (+3 more)
 
 ### Community 210 - "Comment se servir de ce document"
 Cohesion: 0.50
@@ -1163,9 +1154,9 @@ Nodes (8): PeriodeDistributionEntity, Column, CreateDateColumn, Entity, Index, P
 Cohesion: 0.29
 Nodes (6): ADR — Migrations TypeORM retirées du pipeline de déploiement, Conséquences / dette assumée, Contexte, Décision, Sortie de dette (préalable à tout lancement), Évolutions de schéma en attente de la sortie de dette
 
-### Community 219 - "save-questionnaire.usecase.ts"
+### Community 219 - "save-test-connaissances.usecase.ts"
 Cohesion: 0.12
-Nodes (24): SaveQuestionnaireUseCase, Injectable, appliquerTestConnaissances(), SaveTestConnaissancesUseCase, TestConnaissancesResponse, Injectable, versReponseTestConnaissances(), AVERTISSEMENT_INADEQUATION (+16 more)
+Nodes (24): appliquerTestConnaissances(), SaveTestConnaissancesUseCase, TestConnaissancesResponse, Injectable, InjectRepository, versReponseTestConnaissances(), DUREE_VALIDITE_EVALUATION_MOIS, AVERTISSEMENT_INADEQUATION (+16 more)
 
 ### Community 235 - "ADR — Limitation de débit : fail-open par défaut, fail-closed ciblé"
 Cohesion: 0.40
@@ -1179,9 +1170,13 @@ Nodes (7): AddUniteLouableDto, ApiProperty, IsNumber, IsOptional, IsString, IsUU
 Cohesion: 0.22
 Nodes (8): InjectRepository, NewsEntity, Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn, UpdateDateColumn
 
-### Community 238 - "PlateformeBalanceReader"
-Cohesion: 0.39
-Nodes (4): PlateformeBalanceReader, SoldePlateforme, StripePlateformeBalanceAdapter, Injectable
+### Community 238 - "PlatformFeesModule"
+Cohesion: 0.67
+Nodes (3): PlatformFeesModule, Global, Module
+
+### Community 239 - "MetricsModule"
+Cohesion: 0.67
+Nodes (3): MetricsModule, Global, Module
 
 ### Community 243 - "DepotCleanupCronService"
 Cohesion: 0.33
@@ -1215,17 +1210,17 @@ Nodes (3): DeleteAccountDto, IsNotEmpty, IsString
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `ActiveUser` connect `ActiveUser` to `UserEntity`, `ProjectEntity`, `TransactionEntity`, `InvestisseurDistributionsController`, `NotificationEventService`, `porteur.controller.ts`, `Wallet`, `project.controller.ts`, `AdminComplianceController`, `authentication.controller.ts`, `reclamations.controller.ts`, `StatutDeclaration`, `projects.module.ts`, `admin-email-templates.controller.ts`, `calculate-distribution-periode.usecase.ts`, `hasPermission`, `CreateBeneficiaireEffectifDto`, `AdminPlatformWalletController`, `NotificationService`, `AdminRetraitsReapController`, `ProjectController`, `investment.controller.ts`, `PaymentController`, `AdminTransactionsLitigesController`, `Document`, `AdminController`, `ProfileController`, `RequirePermission`, `CurrentUser`, `InvestmentController`, `user.enum.ts`, `SecondaryMarketController`, `.pushToAdmins`, `PorteurController`, `.create`, `AdminReconciliationController`, `.ensureAdmin`, `.upload`, `news.controller.ts`, `AdminExportsController`, `AdminSortiesController`, `AdminDistributionsController`, `NotificationController`, `kyc-validated.guard.ts`, `profiles.module.ts`, `profile.controller.ts`, `.generateIfus`, `reservation.controller.ts`, `AdminSettingsController`, `ApiResponse`, `PayoutMethodsController`, `AdminEmailTemplatesController`, `AdminReservationsController`, `.verser`, `.adminCancel`, `AvisController`, `mfa.dto.ts`, `.generate`, `AdminRetraitsController`, `Public`, `AdminInvestorsController`, `ProjectLedgerService`, `AdminSecondaryMarketController`, `admin-settings.controller.ts`, `fiscalite.module.ts`, `.closeCollecte`, `account-status.guard.ts`?**
+- **Why does `ActiveUser` connect `ActiveUser` to `user.enum.ts`, `InvestmentEntity`, `TransactionEntity`, `InvestisseurDistributionsController`, `porteur.controller.ts`, `Wallet`, `project.controller.ts`, `AdminComplianceController`, `authentication.controller.ts`, `reclamations.controller.ts`, `StatutDeclaration`, `projects.module.ts`, `admin-email-templates.controller.ts`, `calculate-distribution-periode.usecase.ts`, `profiles.module.ts`, `AdminPlatformWalletController`, `NotificationService`, `AdminRetraitsReapController`, `payments.module.ts`, `ProjectController`, `investment.controller.ts`, `MetricsPort`, `index.ts`, `AdminTransactionsLitigesController`, `Document`, `AdminController`, `ProfileController`, `RequirePermission`, `CurrentUser`, `InvestmentController`, `SecondaryMarketController`, `StripeConnectService`, `PorteurController`, `.create`, `AdminReconciliationController`, `.ensureAdmin`, `.upload`, `kyc-validated.guard.ts`, `news.controller.ts`, `AdminExportsController`, `AdminSortiesController`, `AdminDistributionsController`, `NotificationController`, `profile.controller.ts`, `.generateIfus`, `reservation.controller.ts`, `AdminSettingsController`, `ApiResponse`, `PayoutMethodsController`, `AdminEmailTemplatesController`, `AdminReservationsController`, `.verser`, `.adminCancel`, `AvisController`, `mfa.dto.ts`, `.generate`, `AdminRetraitsController`, `Public`, `AdminInvestorsController`, `ProjectLedgerService`, `AdminSecondaryMarketController`, `admin-settings.controller.ts`, `fiscalite.module.ts`, `.closeCollecte`, `CgpController`?**
   _High betweenness centrality (0.093) - this node is a cross-community bridge._
-- **Why does `CurrentUser` connect `CurrentUser` to `UserEntity`, `ProjectEntity`, `TransactionEntity`, `InvestisseurDistributionsController`, `porteur.controller.ts`, `Wallet`, `project.controller.ts`, `AdminComplianceController`, `authentication.controller.ts`, `reclamations.controller.ts`, `StatutDeclaration`, `projects.module.ts`, `admin-email-templates.controller.ts`, `calculate-distribution-periode.usecase.ts`, `hasPermission`, `CreateBeneficiaireEffectifDto`, `AdminPlatformWalletController`, `NotificationService`, `AdminRetraitsReapController`, `ProjectController`, `investment.controller.ts`, `PaymentController`, `AdminTransactionsLitigesController`, `Document`, `AdminController`, `ProfileController`, `RequirePermission`, `InvestmentController`, `user.enum.ts`, `SecondaryMarketController`, `PorteurController`, `.create`, `AdminReconciliationController`, `.ensureAdmin`, `.upload`, `news.controller.ts`, `AdminExportsController`, `AdminSortiesController`, `AdminDistributionsController`, `NotificationController`, `kyc-validated.guard.ts`, `profiles.module.ts`, `profile.controller.ts`, `.generateIfus`, `reservation.controller.ts`, `AdminSettingsController`, `ApiResponse`, `PayoutMethodsController`, `AdminEmailTemplatesController`, `AdminReservationsController`, `.verser`, `.adminCancel`, `AvisController`, `mfa.dto.ts`, `.generate`, `AdminRetraitsController`, `Public`, `AdminInvestorsController`, `ProjectLedgerService`, `AdminSecondaryMarketController`, `admin-settings.controller.ts`, `fiscalite.module.ts`, `.closeCollecte`, `ActiveUser`?**
+- **Why does `CurrentUser` connect `CurrentUser` to `user.enum.ts`, `InvestmentEntity`, `TransactionEntity`, `InvestisseurDistributionsController`, `porteur.controller.ts`, `Wallet`, `project.controller.ts`, `AdminComplianceController`, `authentication.controller.ts`, `reclamations.controller.ts`, `StatutDeclaration`, `projects.module.ts`, `admin-email-templates.controller.ts`, `calculate-distribution-periode.usecase.ts`, `ActiveUser`, `profiles.module.ts`, `AdminPlatformWalletController`, `NotificationService`, `AdminRetraitsReapController`, `payments.module.ts`, `ProjectController`, `investment.controller.ts`, `MetricsPort`, `AdminTransactionsLitigesController`, `Document`, `AdminController`, `ProfileController`, `RequirePermission`, `InvestmentController`, `SecondaryMarketController`, `PorteurController`, `.create`, `AdminReconciliationController`, `.ensureAdmin`, `.upload`, `news.controller.ts`, `AdminExportsController`, `AdminSortiesController`, `AdminDistributionsController`, `NotificationController`, `profile.controller.ts`, `.generateIfus`, `reservation.controller.ts`, `AdminSettingsController`, `ApiResponse`, `PayoutMethodsController`, `AdminEmailTemplatesController`, `AdminReservationsController`, `.verser`, `.adminCancel`, `AvisController`, `mfa.dto.ts`, `.generate`, `AdminRetraitsController`, `Public`, `AdminInvestorsController`, `ProjectLedgerService`, `AdminSecondaryMarketController`, `admin-settings.controller.ts`, `fiscalite.module.ts`, `.closeCollecte`, `CgpController`?**
   _High betweenness centrality (0.077) - this node is a cross-community bridge._
 - **Why does `dependencies` connect `dependencies` to `EmailTemplateService`, `@nestjs/platform-express`, `@nestjs/platform-socket.io`, `@nestjs/schedule`, `@nestjs/terminus`, `@nestjs/throttler`, `@nestjs/typeorm`, `@nestjs/websockets`, `nodemailer`, `@opentelemetry/api`, `@opentelemetry/auto-instrumentations-node`, `@opentelemetry/exporter-trace-otlp-http`, `@opentelemetry/resources`, `@opentelemetry/sdk-node`, `@opentelemetry/semantic-conventions`, `otplib`, `passport`, `passport-facebook`, `passport-google-oauth20`, `pdfkit`, `pg`, `pino`, `pino-http`, `prom-client`, `qrcode`, `reflect-metadata`, `rxjs`, `@sentry/node`, `socket.io`, `stripe`, `swagger-ui-express`, `twilio`, `typeorm`, `@types/pdfkit`, `package.json`, `class-validator`, `@nestjs/passport`, `cache-manager`, `class-transformer`, `cloudinary`, `helmet`, `ioredis`, `@keyv/redis`, `@nestjs/common`, `@nestjs/config`, `@nestjs/core`, `@nestjs/cqrs`, `@nestjs/jwt`, `@getbrevo/brevo`, `nestjs-pino`?**
   _High betweenness centrality (0.058) - this node is a cross-community bridge._
 - **What connects `SEED_ENTITIES`, `SeedConfig`, `$schema` to the rest of the system?**
   _658 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `authentication.module.ts` be split into smaller, more focused modules?**
-  _Cohesion score 0.026499695136250646 - nodes in this community are weakly interconnected._
-- **Should `index.ts` be split into smaller, more focused modules?**
-  _Cohesion score 0.04010296707763176 - nodes in this community are weakly interconnected._
-- **Should `UserEntity` be split into smaller, more focused modules?**
-  _Cohesion score 0.045171339563862926 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.027114427860696518 - nodes in this community are weakly interconnected._
+- **Should `UserRepository` be split into smaller, more focused modules?**
+  _Cohesion score 0.044563843236409606 - nodes in this community are weakly interconnected._
+- **Should `user.enum.ts` be split into smaller, more focused modules?**
+  _Cohesion score 0.06511627906976744 - nodes in this community are weakly interconnected._

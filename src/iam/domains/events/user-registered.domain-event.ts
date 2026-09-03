@@ -21,6 +21,12 @@ export class UserRegisteredDomainEvent implements IEvent {
     public readonly userId: number,
     public readonly email: string,
     public readonly firstname: string,
+    /**
+     * Code de parrainage saisi à l'inscription, tel quel (non validé, non
+     * normalisé) : c'est l'abonné parrainage qui décide ce qu'un code vaut —
+     * l'événement rapporte le fait, il ne l'interprète pas.
+     */
+    public readonly codeParrainage: string | null = null,
     public readonly occurredAt: Date = new Date(),
   ) {}
 }

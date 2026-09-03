@@ -28,6 +28,8 @@ export interface RegisterInput {
   lastname?: string;
   email: string;
   password: string;
+  /** Code de parrainage saisi (optionnel) — relayé tel quel dans l'événement. */
+  codeParrainage?: string;
 }
 
 /**
@@ -82,6 +84,7 @@ export class RegisterUseCase {
         savedUser.userId,
         savedUser.email,
         savedUser.firstname,
+        registerDto.codeParrainage ?? null,
       ),
     );
 

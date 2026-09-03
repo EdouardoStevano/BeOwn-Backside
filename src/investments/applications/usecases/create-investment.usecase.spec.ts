@@ -161,6 +161,7 @@ describe('CreateInvestmentUseCase — atomicité', () => {
       } as any,
       projectWalletResolver,
       { check: jest.fn().mockResolvedValue(undefined) } as any,
+      { surInvestissementDefinitif: jest.fn().mockResolvedValue(undefined) } as any,
     );
   });
 
@@ -381,6 +382,7 @@ describe('CreateInvestmentUseCase — invariant comptable (scénario : souscript
       } as any,
       projectWalletResolver as any,
       { check: jest.fn().mockResolvedValue(undefined) } as any,
+      { surInvestissementDefinitif: jest.fn().mockResolvedValue(undefined) } as any,
     );
 
     return {
@@ -565,6 +567,7 @@ describe('CreateInvestmentUseCase — art. 21(7) : seuil d’avertissement du no
         findInTransaction: jest.fn(async () => projectWalletRow),
       } as any,
       { check: jest.fn().mockResolvedValue(undefined) } as any,
+      { surInvestissementDefinitif: jest.fn().mockResolvedValue(undefined) } as any,
     );
 
     return { useCase, manager, profilRepository, metrics, dataSource };
