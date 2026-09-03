@@ -1,4 +1,7 @@
-import { SortieProjet, SortieProjetSnapshot } from '../aggregates/sortie-projet';
+import {
+  SortieProjet,
+  SortieProjetSnapshot,
+} from '../aggregates/sortie-projet';
 
 /**
  * Traduit la sortie entre sa forme d'agrégat et sa forme à plat.

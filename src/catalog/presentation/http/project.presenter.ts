@@ -43,6 +43,7 @@ export function versPropsDeCreation(dto: CreateProjectDto): CreerProjetProps {
     datePublication: dto.datePublication,
     dateOuvertureCollecte: dto.dateOuvertureCollecte,
     dateCloturePrevue: dto.dateCloturePrevue,
+    descriptionCourte: dto.descriptionCourte,
     descriptionMd: dto.descriptionMd,
     avertissementMd: dto.avertissementMd,
     youtubeUrl: dto.youtubeUrl,

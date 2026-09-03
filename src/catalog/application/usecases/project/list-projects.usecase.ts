@@ -57,7 +57,7 @@ export class ListProjectsUseCase {
     });
 
     return {
-      data: await this.readModel.enrichImages(
+      data: this.readModel.enrichImages(
         await this.readModel.enrichFractions(data),
       ),
       total,

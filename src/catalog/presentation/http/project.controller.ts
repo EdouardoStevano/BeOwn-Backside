@@ -11,22 +11,18 @@ import {
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
-  ApiBody,
   ApiOperation,
   ApiParam,
   ApiQuery,
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import { CreateAvisDto } from 'src/catalog/presentation/http/dto/avis.dto';
 import { CurrentUser } from 'src/iam/presentation/decorators/current-user.decorator';
 import type { ActiveUser } from 'src/iam/presentation/decorators/current-user.decorator';
 import { Public } from 'src/iam/presentation/decorators/public.decorator';
 import { RequirePermission } from 'src/iam/presentation/decorators/require-permission.decorator';
 import { Roles } from 'src/iam/presentation/decorators/roles.decorator';
 import { UserRole } from 'src/iam/domain/enums/user.enum';
-import { ConsultAvisProjetUseCase } from 'src/catalog/application/usecases/avis/consult-avis-projet.usecase';
-import { DeposerAvisProjetUseCase } from '../../application/usecases/avis/deposer-avis-projet.usecase';
 import { ConsultProjectUseCase } from 'src/catalog/application/usecases/project/consult-project.usecase';
 import { CreateProjectUseCase } from 'src/catalog/application/usecases/project/create-project.usecase';
 import { GetProjectShareLinkUseCase } from 'src/catalog/application/usecases/project/get-project-share-link.usecase';
@@ -34,15 +30,12 @@ import { ListProjectsUseCase } from 'src/catalog/application/usecases/project/li
 import { SubmitProjectUseCase } from 'src/catalog/application/usecases/project/submit-project.usecase';
 import { UpdateProjectStatusUseCase } from 'src/catalog/application/usecases/project/update-project-status.usecase';
 import { UpdateProjectUseCase } from 'src/catalog/application/usecases/project/update-project.usecase';
-import { CreateSpvUseCase } from 'src/catalog/application/usecases/spv/create-spv.usecase';
-import { ListSpvUseCase } from 'src/catalog/application/usecases/spv/list-spv.usecase';
 import {
   ProjectStatus,
   ProjectType,
 } from 'src/catalog/domain/enums/project-status.enum';
 import {
   CreateProjectDto,
-  CreateSpvDto,
   UpdateProjectDto,
   UpdateProjectStatusDto,
 } from './dto/project.dto';
@@ -63,6 +56,31 @@ import {
  * notifications, la construction d'un agrégat `Spv`, celle d'un agrégat `Avis`
  * d'un autre contexte, et deux implémentations du jeton de partage.
  *
+ * Le **contenu éditorial** de la fiche a ses propres contrôleurs :
+ * `ProjectBlocsController` pour les pavés de texte enrichi,
+ * `ProjectPhotosController` pour la galerie. Ni les uns ni l'autre ne passent
+ * par `PATCH /projects/:id` — remplacer un tableau n'est pas une intention
+ * métier, et laisserait poser deux blocs au même rang. Ce qu'ils écrivent
+ * ressort en revanche ici, dans les clés `blocsDeContenu` et `photos` du projet.
+ *
+ * La **société de projet** a le sien aussi : `SpvController`. `Spv` est un
+ * agrégat distinct, que le projet référence sans le contenir (§3.2, §6.2) —
+ * ses deux routes n'avaient ici que le préfixe d'URL en commun, et forçaient à
+ * déclarer `spv/list` avant `:id` pour que Nest ne prenne pas « spv » pour un
+ * identifiant de projet.
+ *
+ * Les **avis** sont partis pour la même raison, chez `AvisController`, sous
+ * `/avis/projet/:projetId`. `GET` et `POST /projects/:id/avis` n'existent plus :
+ * ils doublonnaient trait pour trait deux routes de ce contrôleur, et une
+ * ressource ne se sert pas sous deux contrats d'API. Le seul écart de rendu à
+ * connaître pour la migration : la liste répondait ici
+ * `{ noteMoyenne, nbAvis, avis }`, quand `GET /avis/projet/:projetId` ne rend
+ * que le tableau — la note moyenne et le compte se lisent sur
+ * `GET /avis/projet/:projetId/stats`, et la fiche projet les porte déjà.
+ *
+ * Ce qui reste ici est donc le projet lui-même : son catalogue, sa fiche, son
+ * lien de partage, son cycle de vie.
+ *
  * Les erreurs métier remontent telles quelles : `CatalogErrorFilter` les
  * traduit en statuts HTTP.
  */
@@ -78,10 +96,6 @@ export class ProjectController {
     private readonly listProjects: ListProjectsUseCase,
     private readonly consultProject: ConsultProjectUseCase,
     private readonly shareLink: GetProjectShareLinkUseCase,
-    private readonly createSpv: CreateSpvUseCase,
-    private readonly listSpv: ListSpvUseCase,
-    private readonly avis: ConsultAvisProjetUseCase,
-    private readonly deposerAvis: DeposerAvisProjetUseCase,
   ) {}
 
   // ─── Catalogue ─────────────────────────────────────────────────────────────
@@ -128,25 +142,6 @@ export class ProjectController {
       type,
       ...pagination(page, limit),
     });
-  }
-
-  // ─── SPV ───────────────────────────────────────────────────────────────────
-  //
-  // Déclarées avant les routes paramétrées : `spv/list` doit être appariée
-  // avant `:id`, sinon Nest la résout comme un projet d'identifiant « spv ».
-
-  @ApiOperation({ summary: 'Créer une SPV' })
-  @ApiResponse({ status: 201, description: 'SPV créée' })
-  @RequirePermission('projects:manage', 'spv:manage')
-  @Post('spv')
-  createSpvEndpoint(@Body() dto: CreateSpvDto) {
-    return this.createSpv.execute(dto);
-  }
-
-  @ApiOperation({ summary: 'Lister les SPV' })
-  @Get('spv/list')
-  listSpvEndpoint() {
-    return this.listSpv.execute();
   }
 
   // ─── Partage ───────────────────────────────────────────────────────────────
@@ -264,42 +259,6 @@ export class ProjectController {
     // `user.userId` sert de déclencheur audité de la diffusion quand la
     // transition ouvre l'annonce ou la collecte.
     return this.updateStatus.execute(id, dto.statut, user.userId);
-  }
-
-  // ─── Avis ──────────────────────────────────────────────────────────────────
-
-  @ApiOperation({ summary: "Lister les avis d'un projet" })
-  @ApiParam({ name: 'id', description: 'UUID du projet' })
-  @ApiResponse({ status: 200, description: 'Liste des avis' })
-  @Public()
-  @Get(':id/avis')
-  listAvis(@Param('id') id: string) {
-    return this.avis.lister(id);
-  }
-
-  @ApiOperation({
-    summary: 'Donner un avis sur un projet (un seul par utilisateur)',
-  })
-  @ApiParam({ name: 'id', description: 'UUID du projet' })
-  @ApiBody({ type: CreateAvisDto })
-  @ApiResponse({ status: 201, description: 'Avis enregistré' })
-  @ApiResponse({
-    status: 400,
-    description: 'Avis déjà soumis ou projet non éligible',
-  })
-  @ApiResponse({ status: 404, description: 'Projet introuvable' })
-  @Post(':id/avis')
-  createAvis(
-    @Param('id') id: string,
-    @Body() dto: CreateAvisDto,
-    @CurrentUser() user: ActiveUser,
-  ) {
-    return this.deposerAvis.deposer({
-      projetId: id,
-      utilisateurId: user.userId,
-      note: dto.note,
-      commentaire: dto.commentaire,
-    });
   }
 }
 

@@ -19,10 +19,13 @@ import { TypeOrmSortieProjetRepository } from './repositories/typeorm-sortie-pro
 import { TypeOrmSpvRepository } from './repositories/typeorm-spv.repository';
 import { TypeOrmSortieSettlementAdapter } from './settlement/typeorm-sortie-settlement.adapter';
 import { Sha256ProjectShareTokenizer } from './sharing/sha256-project-share.tokenizer';
+import { PROJECT_PHOTO_STORAGE } from '../application/ports/project-photo-storage.port';
+import { CloudinaryProjectPhotoAdapter } from './storage/cloudinary-project-photo.adapter';
+import { CloudStorageModule } from 'src/shared/cloud-storage/cloud-storage.module';
 
 /**
- * Adapters de sortie du contexte Catalog : les six implémentations de ses
- * ports, et rien d'autre.
+ * Adapters de sortie du contexte Catalog : les implémentations de ses ports, et
+ * rien d'autre.
  *
  * Le module est importé par les contextes qui lisent des projets — Investments,
  * Reservations, Distributions, Locative Management, Secondary Market — d'où le
@@ -38,6 +41,9 @@ import { Sha256ProjectShareTokenizer } from './sharing/sha256-project-share.toke
       ProjectViewEntity,
       AvisEntity,
     ]),
+    // Le fournisseur derrière `PROJECT_PHOTO_STORAGE` : les photos de fiche
+    // sont entrées dans ce contexte avec la galerie (§20).
+    CloudStorageModule,
   ],
   providers: [
     { provide: PROJECT_REPOSITORY, useClass: TypeOrmProjectRepository },
@@ -56,6 +62,10 @@ import { Sha256ProjectShareTokenizer } from './sharing/sha256-project-share.toke
       provide: SORTIE_SETTLEMENT_PORT,
       useClass: TypeOrmSortieSettlementAdapter,
     },
+    {
+      provide: PROJECT_PHOTO_STORAGE,
+      useClass: CloudinaryProjectPhotoAdapter,
+    },
   ],
   exports: [
     PROJECT_REPOSITORY,
@@ -65,6 +75,7 @@ import { Sha256ProjectShareTokenizer } from './sharing/sha256-project-share.toke
     AVIS_REPOSITORY,
     PROJECT_SHARE_TOKENIZER,
     SORTIE_SETTLEMENT_PORT,
+    PROJECT_PHOTO_STORAGE,
   ],
 })
 export class CatalogInfrastructureModule {}

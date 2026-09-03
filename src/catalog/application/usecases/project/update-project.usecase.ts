@@ -3,7 +3,10 @@ import {
   ProjetIntrouvableError,
   SlugProjetDejaPrisError,
 } from 'src/catalog/domain/errors';
-import { ModificationProjet, Project } from 'src/catalog/domain/aggregates/project';
+import {
+  ModificationProjet,
+  Project,
+} from 'src/catalog/domain/aggregates/project';
 import {
   PROJECT_REPOSITORY,
   type ProjectRepository,

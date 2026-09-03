@@ -5,12 +5,15 @@ import { DOCUMENT_REPOSITORY } from 'src/documents/domain/repositories/document.
 import type { DocumentRepository } from 'src/documents/domain/repositories/document.repository';
 // Un read model expose l'état des documents, pas leurs agrégats (§11).
 import type { SignableDocumentSnapshot } from 'src/documents/domain/aggregates/signable-document';
-import { DocumentType } from 'src/documents/domain/enums/document-type.enum';
+import type { PhotoProjetSnapshot } from 'src/catalog/domain/entities/photo-projet';
 import { INVESTMENT_REPOSITORY } from 'src/subscription/domain/repositories/investment.repository';
 import type { InvestmentRepository } from 'src/subscription/domain/repositories/investment.repository';
 import { InvestmentStatus } from 'src/subscription/domain/enums/investment-status.enum';
 import { ProjetIntrouvableError } from 'src/catalog/domain/errors';
-import { Project, ProjectSnapshot } from 'src/catalog/domain/aggregates/project';
+import {
+  Project,
+  ProjectSnapshot,
+} from 'src/catalog/domain/aggregates/project';
 import { LocalisationSnapshot } from 'src/catalog/domain/value-objects/localisation.vo';
 import {
   PROJECT_REPOSITORY,
@@ -39,7 +42,14 @@ export type ProjetEnListe = ProjectSnapshot & {
 };
 
 export type ProjetEnListeAvecImages = ProjetEnListe & {
-  images: SignableDocumentSnapshot[];
+  /**
+   * Alias de `photos`, que le snapshot du projet porte déjà.
+   *
+   * Conservé parce que le front lit cette clé depuis que les images étaient des
+   * documents. Il ne coûte plus rien : la valeur vient de l'agrégat, là où elle
+   * coûtait une requête par projet.
+   */
+  images: PhotoProjetSnapshot[];
 };
 
 export type ProjetDetaille = ProjectSnapshot & {
@@ -52,7 +62,8 @@ export type ProjetDetaille = ProjectSnapshot & {
   prixFraction: number;
   /** Doublon assumé des champs à plat, que le front consomme groupés. */
   localisation: LocalisationSnapshot;
-  images: SignableDocumentSnapshot[];
+  /** @see ProjetEnListeAvecImages.images */
+  images: PhotoProjetSnapshot[];
   documents: SignableDocumentSnapshot[];
   avis: { noteMoyenne: number; nbAvis: number };
   fractions: FractionsProjet;
@@ -124,29 +135,29 @@ export class ProjectReadModelService {
     });
   }
 
-  /** Ajoute les photos publiques, triées : principale d'abord, puis par ordre. */
-  async enrichImages(
-    projets: ProjetEnListe[],
-  ): Promise<ProjetEnListeAvecImages[]> {
-    if (projets.length === 0) return [];
-
-    const documentsParProjet = await Promise.all(
-      projets.map((projet) =>
-        this.documentRepository.findByProjectId(projet.id),
-      ),
-    );
-
-    return projets.map((projet, i) => ({
-      ...projet,
-      images: photosPubliques(etatsDe(documentsParProjet[i]), true),
-    }));
+  /**
+   * Expose la galerie sous la clé `images` que le front attend.
+   *
+   * Elle faisait, elle, **une requête `document` par projet** — un N+1 en pleine
+   * page de catalogue, que le commentaire de classe ci-dessus revendiquait
+   * pourtant d'éviter — puis retriait et refiltrait le résultat à chaque appel.
+   * Depuis que la galerie est dans l'agrégat, elle est déjà chargée, déjà
+   * ordonnée (vignette d'abord) et déjà publique par construction : il ne reste
+   * qu'à la nommer. La méthode n'est plus asynchrone que pour ses appelants.
+   */
+  enrichImages(projets: ProjetEnListe[]): ProjetEnListeAvecImages[] {
+    return projets.map((projet) => ({ ...projet, images: projet.photos }));
   }
 
   /**
    * Vue détaillée d'un projet : collecte, investisseurs, images, documents,
    * avis.
    *
-   * @param vuePublique restreint images et documents à ceux marqués publics.
+   * @param vuePublique restreint les **documents** à ceux marqués publics. Les
+   *   images ne s'y trouvent plus : une photo de fiche est publique par nature
+   *   (§ `ProjectPhotoStorage`), et le drapeau `isPublic` qu'elles portaient en
+   *   tant que documents pouvait valoir `false` — auquel cas la galerie
+   *   disparaissait du site public sans que rien ne le signale.
    */
   async buildProjectDetail(
     id: string,
@@ -173,11 +184,11 @@ export class ProjectReadModelService {
       ...projet.toSnapshot(),
       prixFraction: prix,
       localisation: projet.localisation.toSnapshot(),
-      images: photosPubliques(etatsDe(documents), vuePublique),
+      images: projet.photos,
+      // L'exclusion des `PHOTO_PROJET` a disparu avec le type : le contexte
+      // `documents` ne range plus que des pièces qui se signent.
       documents: etatsDe(documents).filter(
-        (d) =>
-          d.type !== DocumentType.PHOTO_PROJET &&
-          (!vuePublique || d.isPublic === true),
+        (d) => !vuePublique || d.isPublic === true,
       ),
       avis,
       fractions: {
@@ -212,22 +223,11 @@ const STATUTS_INVESTISSEMENT_ACTIFS: readonly InvestmentStatus[] = [
 const etatsDe = (documents: { snapshot(): SignableDocumentSnapshot }[]) =>
   documents.map((d) => d.snapshot());
 
-/** Photo principale d'abord, puis par `ordre` croissant, non ordonnées en fin. */
-function photosPubliques(
-  documents: SignableDocumentSnapshot[],
-  vuePublique: boolean,
-): SignableDocumentSnapshot[] {
-  return documents
-    .filter(
-      (d) =>
-        d.type === DocumentType.PHOTO_PROJET &&
-        (!vuePublique || d.isPublic === true),
-    )
-    .sort((a, b) => {
-      if (a.estPrincipale !== b.estPrincipale) return a.estPrincipale ? -1 : 1;
-      return (a.ordre ?? 999) - (b.ordre ?? 999);
-    });
-}
+// `photosPubliques` a disparu : le tri « vignette d'abord, puis par rang » est
+// remonté dans `GalerieProjet.toSnapshot()`, où il appartient. C'est la galerie
+// qui sait dans quel ordre ses photos se présentent — un read model refaisait ce
+// classement à chaque lecture, sur des lignes que rien n'empêchait de compter
+// deux vignettes.
 
 /** Pourcentage à une décimale, plafonné à 100. `null` si aucune fraction. */
 function tauxRemplissage(vendues: number, total: number): number | null {

@@ -10,6 +10,9 @@ import { CatalogInfrastructureModule } from './infrastructure/catalog-infrastruc
 import { AdminSortiesController } from './presentation/http/admin-sorties.controller';
 import { CatalogErrorFilter } from './presentation/http/filters/catalog-error.filter';
 import { ProjectController } from './presentation/http/project.controller';
+import { ProjectBlocsController } from './presentation/http/project-blocs.controller';
+import { ProjectPhotosController } from './presentation/http/project-photos.controller';
+import { SpvController } from './presentation/http/spv.controller';
 import { AvisController } from './presentation/http/avis.controller';
 import {
   CollecteOuverteEventHandler,
@@ -31,6 +34,8 @@ import { RecordProjectViewUseCase } from './application/usecases/project/record-
 import { SubmitProjectUseCase } from './application/usecases/project/submit-project.usecase';
 import { UpdateProjectStatusUseCase } from './application/usecases/project/update-project-status.usecase';
 import { UpdateProjectUseCase } from './application/usecases/project/update-project.usecase';
+import { GererBlocsDeContenuUseCase } from './application/usecases/project/gerer-blocs-de-contenu.usecase';
+import { GererPhotosDuProjetUseCase } from './application/usecases/project/gerer-photos-du-projet.usecase';
 import { DeclareSortieUseCase } from './application/usecases/sortie/declare-sortie.usecase';
 import { ExecuteSortieUseCase } from './application/usecases/sortie/execute-sortie.usecase';
 import { ManageSortieUseCase } from './application/usecases/sortie/manage-sortie.usecase';
@@ -76,6 +81,9 @@ import { ListSpvUseCase } from './application/usecases/spv/list-spv.usecase';
     SubmitProjectUseCase,
     UpdateProjectUseCase,
     UpdateProjectStatusUseCase,
+    // Contenu éditorial de la fiche : blocs de texte enrichi et galerie.
+    GererBlocsDeContenuUseCase,
+    GererPhotosDuProjetUseCase,
     GetProjectsUseCase,
     ListProjectsUseCase,
     ConsultProjectUseCase,
@@ -99,7 +107,17 @@ import { ListSpvUseCase } from './application/usecases/spv/list-spv.usecase';
     // connaît aucun statut (§12.1), la présentation s'en charge.
     { provide: APP_FILTER, useClass: CatalogErrorFilter },
   ],
-  controllers: [ProjectController, AvisController, AdminSortiesController],
+  controllers: [
+    // `SpvController` avant `ProjectController` : les deux servent sous
+    // `/projects`, et Nest apparie dans l'ordre de déclaration — `spv/list`
+    // doit rester hors de portée d'une route paramétrée du projet.
+    SpvController,
+    ProjectController,
+    ProjectBlocsController,
+    ProjectPhotosController,
+    AvisController,
+    AdminSortiesController,
+  ],
   exports: [
     // Distributions et Locative Management composent avec la lecture des projets.
     GetProjectsUseCase,

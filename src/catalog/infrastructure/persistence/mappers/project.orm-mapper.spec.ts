@@ -38,12 +38,42 @@ function ligne(): ProjectEntity {
     datePublication: new Date('2026-01-10T00:00:00Z'),
     dateOuvertureCollecte: new Date('2026-02-01T00:00:00Z'),
     dateCloturePrevue: null,
+    descriptionCourte: 'Douze logements neufs à dix minutes du centre.',
     descriptionMd: null,
     avertissementMd: null,
     youtubeUrl: null,
     previsionnel: null,
     chronologie: [],
     garanties: [],
+    blocsDeContenu: [
+      {
+        id: 'b1',
+        titre: 'Le quartier',
+        corps: '<p>À dix minutes</p>',
+        position: 0,
+      },
+      {
+        id: 'b2',
+        titre: 'Le montage',
+        corps: '<p>SPV dédiée</p>',
+        position: 1,
+      },
+    ],
+    photos: [
+      {
+        id: 'ph1',
+        url: 'https://cdn.test/facade.jpg',
+        cleStockage: 'beown/projets/facade',
+        nomOriginal: 'facade.jpg',
+        mimeType: 'image/jpeg',
+        tailleOctets: 240_000,
+        texteAlternatif: null,
+        estPrincipale: true,
+        position: 0,
+        deposeePar: 7,
+        deposeeLe: new Date('2026-01-05T00:00:00Z'),
+      },
+    ],
     echeancierEmprunteur: [],
     modeleEconomique: ModeleEconomique.OBLIGATAIRE,
     nbUnitesLouables: null,
@@ -118,6 +148,37 @@ describe('ProjectOrmMapper', () => {
       expect(entity.echeancierEmprunteur).toBeUndefined();
       expect(entity.motifAnnulation).toBeUndefined();
       expect(entity.annuleLe).toBeUndefined();
+    });
+
+    it('écrit le contenu éditorial, lui — c’est ce qui rend la vignette atomique', () => {
+      const entity = ProjectOrmMapper.toEntity(
+        ProjectOrmMapper.toDomain(ligne()),
+      );
+
+      expect(entity.descriptionCourte).toBe(
+        'Douze logements neufs à dix minutes du centre.',
+      );
+      expect(entity.blocsDeContenu.map((b) => b.titre)).toEqual([
+        'Le quartier',
+        'Le montage',
+      ]);
+      expect(entity.photos).toHaveLength(1);
+      expect(entity.photos[0].estPrincipale).toBe(true);
+    });
+
+    it('relit une ligne antérieure à la migration du contenu éditorial', () => {
+      const ancienne = Object.assign(ligne(), {
+        descriptionCourte: null,
+        blocsDeContenu: null as never,
+        photos: null as never,
+      });
+
+      const projet = ProjectOrmMapper.toDomain(ancienne);
+
+      expect(projet.descriptionCourte).toBeNull();
+      expect(projet.blocsDeContenu).toEqual([]);
+      expect(projet.photos).toEqual([]);
+      expect(projet.photoPrincipale).toBeNull();
     });
 
     it('publie les horodatages de diffusion en lecture, eux', () => {

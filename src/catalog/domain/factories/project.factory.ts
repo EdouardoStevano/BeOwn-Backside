@@ -2,12 +2,14 @@ import { ModeleEconomique } from '../enums/modele-economique.enum';
 import { ProjectStatus, ProjectType } from '../enums/project-status.enum';
 import { ChampProjetInvalideError } from '../errors/project.errors';
 import { Project } from '../aggregates/project';
+import { BlocsDeContenu } from '../value-objects/blocs-de-contenu.vo';
 import { CalendrierProjet } from '../value-objects/calendrier-projet.vo';
 import { Chronologie, EtapeChronologie } from '../value-objects/chronologie.vo';
 import {
   ConditionsFinancieres,
   ConditionsFinancieresProps,
 } from '../value-objects/conditions-financieres.vo';
+import { GalerieProjet } from '../value-objects/galerie-projet.vo';
 import { Garantie } from '../value-objects/garantie.vo';
 import {
   Localisation,
@@ -29,6 +31,7 @@ export type CreerProjetProps = LocalisationProps &
     datePublication?: Date | string | null;
     dateOuvertureCollecte?: Date | string | null;
     dateCloturePrevue?: Date | string | null;
+    descriptionCourte?: string | null;
     descriptionMd?: string | null;
     avertissementMd?: string | null;
     youtubeUrl?: string | null;
@@ -126,12 +129,19 @@ export class ProjectFactory {
       conditions: ConditionsFinancieres.of(props),
       calendrier: CalendrierProjet.of(props),
       contenu: {
+        descriptionCourte: props.descriptionCourte?.trim() || null,
         descriptionMd: props.descriptionMd ?? null,
         avertissementMd: props.avertissementMd ?? null,
         youtubeUrl: props.youtubeUrl ?? null,
         previsionnel: props.previsionnel ?? null,
         garanties: props.garanties ?? [],
       },
+      // Un projet naît sans contenu éditorial : les blocs se rédigent et les
+      // photos se déposent ensuite, un par un, par les routes dédiées. Les
+      // accepter ici demanderait de tirer des identifiants pour un contenu que
+      // personne n'a encore écrit.
+      blocs: BlocsDeContenu.vide(),
+      galerie: GalerieProjet.vide(),
       chronologie: Chronologie.restore(props.chronologie),
       modeleEconomique: props.modeleEconomique ?? ModeleEconomique.OBLIGATAIRE,
       nbUnitesLouables: props.nbUnitesLouables ?? null,

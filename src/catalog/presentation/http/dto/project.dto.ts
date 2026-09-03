@@ -15,6 +15,7 @@ import {
   ValidateNested,
   Min,
   Max,
+  MaxLength,
   IsInt,
   IsIn,
   IsObject,
@@ -31,7 +32,6 @@ import {
   ProjectStatus,
   ProjectType,
 } from 'src/catalog/domain/enums/project-status.enum';
-import { RegimeFiscal } from 'src/catalog/domain/enums/regime-fiscal.enum';
 import { ProjectFactory } from 'src/catalog/domain/factories/project.factory';
 import type { PrevisionnelFinancier } from 'src/catalog/domain/value-objects/previsionnel-financier.vo';
 
@@ -216,6 +216,17 @@ export class CreateProjectDto {
   @IsDateString()
   dateCloturePrevue?: string;
 
+  @ApiPropertyOptional({
+    description:
+      "Accroche de la fiche (liste, partage). Le corps long reste dans descriptionMd ; les pavés éditoriaux s'ajoutent par POST /projects/{id}/blocs.",
+    example: 'Douze logements neufs à dix minutes du centre de Lyon.',
+    maxLength: 500,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  descriptionCourte?: string;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
@@ -308,55 +319,4 @@ export class UpdateProjectStatusDto {
   @ApiProperty({ enum: ProjectStatus })
   @IsEnum(ProjectStatus)
   statut: ProjectStatus;
-}
-
-export class CreateSpvDto {
-  @ApiProperty({ example: 'SPV Lyon Résidence SAS' })
-  @IsNotEmpty()
-  @IsString()
-  raisonSociale: string;
-
-  @ApiPropertyOptional({ example: '987654321' })
-  @IsOptional()
-  @IsString()
-  siren?: string;
-
-  @ApiPropertyOptional({ example: 'SAS' })
-  @IsOptional()
-  @IsString()
-  forme?: string;
-
-  @ApiPropertyOptional({ example: 10000 })
-  @IsOptional()
-  @IsNumber()
-  capitalSocial?: number;
-
-  @ApiPropertyOptional({ example: '10 avenue du Projet, 69001 Lyon' })
-  @IsOptional()
-  @IsString()
-  siegeAdresse?: string;
-
-  @ApiProperty({ required: false, example: '2026-01-15' })
-  @IsOptional()
-  @IsDateString()
-  dateConstitution?: string;
-
-  @ApiProperty({ required: false, example: 'https://storage/statuts.pdf' })
-  @IsOptional()
-  @IsString()
-  statutsPdfUrl?: string;
-
-  @ApiProperty({
-    required: false,
-    enum: RegimeFiscal,
-    example: RegimeFiscal.IS,
-  })
-  @IsOptional()
-  @IsEnum(RegimeFiscal)
-  regimeFiscal?: RegimeFiscal;
-
-  @ApiProperty({ required: false, example: 42 })
-  @IsOptional()
-  @IsInt()
-  gestionnaireUserId?: number;
 }

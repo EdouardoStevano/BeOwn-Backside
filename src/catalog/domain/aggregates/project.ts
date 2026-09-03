@@ -1,3 +1,8 @@
+import {
+  ChampsDeBloc,
+  BlocDeContenuSnapshot,
+} from '../entities/bloc-de-contenu';
+import { DepotDePhoto, PhotoProjetSnapshot } from '../entities/photo-projet';
 import { ModeleEconomique } from '../enums/modele-economique.enum';
 import {
   ProjectInstrument,
@@ -5,12 +10,14 @@ import {
   ProjectType,
 } from '../enums/project-status.enum';
 import { ProjectMapper } from '../mappers/project.mapper';
+import { BlocsDeContenu } from '../value-objects/blocs-de-contenu.vo';
 import {
   CalendrierProjet,
   CalendrierProjetProps,
   CalendrierProjetSnapshot,
 } from '../value-objects/calendrier-projet.vo';
 import { Chronologie, EtapeChronologie } from '../value-objects/chronologie.vo';
+import { GalerieProjet } from '../value-objects/galerie-projet.vo';
 import {
   ConditionsFinancieres,
   ConditionsFinancieresProps,
@@ -53,6 +60,14 @@ export interface DiffusionsProjet {
 
 /** Contenu éditorial publié sur la fiche projet. */
 export interface ContenuProjet {
+  /**
+   * L'accroche de la fiche — quelques lignes, affichées en liste et en partage.
+   *
+   * Distincte de `descriptionMd`, qui est le corps long : le catalogue et les
+   * cartes de partage n'ont jamais eu de quoi présenter un projet en une phrase,
+   * et tronquaient donc le markdown de la description au caractère près.
+   */
+  descriptionCourte: string | null;
   descriptionMd: string | null;
   avertissementMd: string | null;
   youtubeUrl: string | null;
@@ -83,6 +98,10 @@ export interface ProjectSnapshot
   chronologie: EtapeChronologie[];
   modeleEconomique: ModeleEconomique;
   nbUnitesLouables: number | null;
+  /** Les pavés éditoriaux de la fiche, dans l'ordre. @see BlocsDeContenu */
+  blocsDeContenu: BlocDeContenuSnapshot[];
+  /** La galerie : vignette d'abord, puis les vues. @see GalerieProjet */
+  photos: PhotoProjetSnapshot[];
 }
 
 /**
@@ -98,6 +117,9 @@ export interface ProjectSnapshotBrut extends Omit<
   | 'nbUnitesLouables'
   | 'broadcastAnnonceAt'
   | 'broadcastCollecteAt'
+  | 'descriptionCourte'
+  | 'blocsDeContenu'
+  | 'photos'
 > {
   chronologie?: EtapeChronologie[] | null;
   garanties?: Garantie[] | null;
@@ -105,6 +127,9 @@ export interface ProjectSnapshotBrut extends Omit<
   nbUnitesLouables?: number | null;
   broadcastAnnonceAt?: Date | null;
   broadcastCollecteAt?: Date | null;
+  descriptionCourte?: string | null;
+  blocsDeContenu?: BlocDeContenuSnapshot[] | null;
+  photos?: PhotoProjetSnapshot[] | null;
 }
 
 /**
@@ -115,6 +140,13 @@ export interface ProjectSnapshotBrut extends Omit<
  * n'empêchait donc un `PATCH /projects/:id` de poser `finance` sans passer par
  * la table des transitions. Un changement d'état se demande à
  * {@link Project.changerStatut}, par la route dédiée.
+ *
+ * **Les blocs et les photos n'y figurent pas non plus**, et pour la même
+ * raison : « remplacer le tableau des blocs » n'est pas une intention métier
+ * (§4). L'administrateur en ajoute un, en réécrit un, en déplace un, en retire
+ * un — quatre gestes, quatre méthodes, chacune passant par l'invariant de
+ * position. Accepter ici un `blocsDeContenu?: []` rouvrirait à un `PATCH` la
+ * possibilité d'en poser deux au même rang, ou d'en effacer douze par omission.
  */
 export type ModificationProjet = LocalisationProps &
   Partial<ConditionsFinancieresProps> &
@@ -123,6 +155,7 @@ export type ModificationProjet = LocalisationProps &
     slug?: string;
     spvId?: string | null;
     type?: ProjectType;
+    descriptionCourte?: string | null;
     descriptionMd?: string | null;
     avertissementMd?: string | null;
     youtubeUrl?: string | null;
@@ -159,6 +192,16 @@ export type ModificationProjet = LocalisationProps &
  * revalide les blocs touchés. Le statut ne se pose plus « à la main » depuis un
  * DTO, et les dates de publication ne sont plus décidées par le repository
  * TypeORM.
+ *
+ * **Deux suites ordonnées**, enfin, qui sont le contenu de la fiche : ses
+ * {@link BlocsDeContenu} — « autant de blocs que l'administrateur le
+ * souhaite », chacun avec son titre, son rang et son texte enrichi — et sa
+ * {@link GalerieProjet}. Cette dernière vient du contexte `documents`, où elle
+ * n'avait pas sa place : une photo de façade ne se signe pas, et l'invariant
+ * « une seule vignette par projet » n'y avait aucun propriétaire — il était
+ * rattrapé par deux `UPDATE` d'un repository. Les deux suites ne sont
+ * modifiables que par les neuf gestes de la section « Contenu éditorial », qui
+ * les recomposent entières.
  */
 export class Project {
   private _entete: EnteteProjet;
@@ -167,6 +210,8 @@ export class Project {
   private _conditions: ConditionsFinancieres;
   private _calendrier: CalendrierProjet;
   private _contenu: ContenuProjet;
+  private _blocs: BlocsDeContenu;
+  private _galerie: GalerieProjet;
   private _chronologie: Chronologie;
   private readonly _modeleEconomique: ModeleEconomique;
   private readonly _nbUnitesLouables: number | null;
@@ -188,6 +233,8 @@ export class Project {
     conditions: ConditionsFinancieres;
     calendrier: CalendrierProjet;
     contenu: ContenuProjet;
+    blocs: BlocsDeContenu;
+    galerie: GalerieProjet;
     chronologie: Chronologie;
     modeleEconomique: ModeleEconomique;
     nbUnitesLouables: number | null;
@@ -199,6 +246,8 @@ export class Project {
     this._conditions = etat.conditions;
     this._calendrier = etat.calendrier;
     this._contenu = etat.contenu;
+    this._blocs = etat.blocs;
+    this._galerie = etat.galerie;
     this._chronologie = etat.chronologie;
     this._modeleEconomique = etat.modeleEconomique;
     this._nbUnitesLouables = etat.nbUnitesLouables;
@@ -247,6 +296,7 @@ export class Project {
       slug,
       spvId,
       type,
+      descriptionCourte,
       descriptionMd,
       avertissementMd,
       youtubeUrl,
@@ -266,6 +316,10 @@ export class Project {
     this._calendrier = this._calendrier.avec(blocs);
 
     this._contenu = {
+      descriptionCourte:
+        descriptionCourte !== undefined
+          ? descriptionCourte?.trim() || null
+          : this._contenu.descriptionCourte,
       descriptionMd:
         descriptionMd !== undefined
           ? descriptionMd
@@ -285,6 +339,110 @@ export class Project {
     if (chronologie !== undefined) {
       this._chronologie = Chronologie.restore(chronologie);
     }
+  }
+
+  // ── Contenu éditorial ─────────────────────────────────────────────────────
+  //
+  // Neuf gestes, et non un `set` sur deux tableaux. Chacun nomme ce que
+  // l'administrateur fait réellement (§4), et chacun repasse par l'invariant de
+  // position de la suite concernée — c'est le seul chemin par lequel un bloc ou
+  // une photo entre, bouge ou sort. L'agrégat remplace sa suite **après** que la
+  // nouvelle a été construite : une opération refusée ne laisse rien derrière
+  // elle (§6.1, point 1).
+
+  /**
+   * Ajoute un pavé éditorial à la fiche.
+   *
+   * @param position rang visé ; à défaut, le bloc se pose en dernier.
+   * @throws TitreDeBlocRequisError, CorpsDeBlocRequisError,
+   *   PositionDeBlocInvalideError
+   */
+  ajouterBloc(champs: ChampsDeBloc, position?: number): void {
+    this._blocs = this._blocs.ajoutant(champs, position);
+  }
+
+  /**
+   * Réécrit le titre et/ou le texte enrichi d'un bloc.
+   *
+   * @throws BlocDeContenuIntrouvableError, TitreDeBlocRequisError,
+   *   CorpsDeBlocRequisError
+   */
+  modifierBloc(blocId: string, champs: Partial<ChampsDeBloc>): void {
+    this._blocs = this._blocs.modifiant(blocId, champs);
+  }
+
+  /** @throws BlocDeContenuIntrouvableError, PositionDeBlocInvalideError */
+  deplacerBloc(blocId: string, position: number): void {
+    this._blocs = this._blocs.deplacant(blocId, position);
+  }
+
+  /**
+   * Réordonne la fiche entière — un glisser-déposer du back-office.
+   *
+   * @throws ReordonnancementIncompletError si la liste n'est pas exactement
+   *   celle des blocs de la fiche.
+   */
+  reordonnerBlocs(idsDansLOrdre: readonly string[]): void {
+    this._blocs = this._blocs.reordonnee(idsDansLOrdre);
+  }
+
+  /** @throws BlocDeContenuIntrouvableError */
+  retirerBloc(blocId: string): void {
+    this._blocs = this._blocs.sans(blocId);
+  }
+
+  /**
+   * Ajoute une photo à la galerie. La première déposée devient la vignette.
+   *
+   * Le fichier est déjà dans le stockage quand on arrive ici : le domaine ne
+   * connaît ni `Buffer`, ni fournisseur (§20, §32).
+   *
+   * @throws ImageDeProjetInvalideError si le format n'est pas une image
+   */
+  ajouterPhoto(depot: DepotDePhoto): void {
+    this._galerie = this._galerie.ajoutant(depot);
+  }
+
+  /**
+   * Désigne la vignette du projet : la photo passe en tête de galerie, et
+   * l'ancienne cesse d'en être une du seul fait d'avoir reculé.
+   *
+   * @see GalerieProjet — pourquoi cet invariant ne pouvait pas être tenu tant
+   *   que les photos étaient des `SignableDocument`, et pourquoi il n'a plus
+   *   besoin d'être « tenu » du tout.
+   * @throws PhotoDeProjetIntrouvableError
+   */
+  designerPhotoPrincipale(photoId: string): void {
+    this._galerie = this._galerie.designantCouverture(photoId);
+  }
+
+  /**
+   * Déplace une photo dans la galerie. Vers le rang 0, c'est en faire la
+   * vignette — {@link designerPhotoPrincipale} est le même geste, nommé.
+   *
+   * @throws PhotoDeProjetIntrouvableError, PositionDePhotoInvalideError
+   */
+  deplacerPhoto(photoId: string, position: number): void {
+    this._galerie = this._galerie.deplacant(photoId, position);
+  }
+
+  /** @throws PhotoDeProjetIntrouvableError */
+  decrirePhoto(photoId: string, texteAlternatif: string | null): void {
+    this._galerie = this._galerie.decrivant(photoId, texteAlternatif);
+  }
+
+  /**
+   * Retire une photo de la galerie, en promouvant la suivante si c'était la
+   * vignette.
+   *
+   * @returns la clé de stockage qui n'est plus référencée — l'appelant efface
+   *   le fichier, l'agrégat ne connaît pas le stockage.
+   * @throws PhotoDeProjetIntrouvableError
+   */
+  retirerPhoto(photoId: string): string {
+    const { galerie, cleLiberee } = this._galerie.sans(photoId);
+    this._galerie = galerie;
+    return cleLiberee;
   }
 
   /**
@@ -358,6 +516,21 @@ export class Project {
   }
   get contenu(): ContenuProjet {
     return this._contenu;
+  }
+  /**
+   * Les suites elles-mêmes ne sortent pas : elles sont immuables, mais les
+   * rendre inviterait un appelant à composer sa propre version et à la
+   * réinjecter, ce qu'aucune méthode ne permet. Seul l'état sort.
+   */
+  get blocsDeContenu(): BlocDeContenuSnapshot[] {
+    return this._blocs.toSnapshot();
+  }
+  get photos(): PhotoProjetSnapshot[] {
+    return this._galerie.toSnapshot();
+  }
+  /** La vignette de la fiche — la photo de rang 0 —, ou `null` si la galerie est vide. */
+  get photoPrincipale(): PhotoProjetSnapshot | null {
+    return this._galerie.toSnapshot()[0] ?? null;
   }
   get chronologieVo(): Chronologie {
     return this._chronologie;
@@ -450,6 +623,9 @@ export class Project {
   }
   get dateCloturePrevue(): Date | null {
     return this._calendrier.dateCloturePrevue;
+  }
+  get descriptionCourte(): string | null {
+    return this._contenu.descriptionCourte;
   }
   get descriptionMd(): string | null {
     return this._contenu.descriptionMd;

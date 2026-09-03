@@ -51,11 +51,14 @@ export class ProjectOrmMapper {
       datePublication: entity.datePublication,
       dateOuvertureCollecte: entity.dateOuvertureCollecte,
       dateCloturePrevue: entity.dateCloturePrevue,
+      descriptionCourte: entity.descriptionCourte,
       descriptionMd: entity.descriptionMd,
       avertissementMd: entity.avertissementMd,
       youtubeUrl: entity.youtubeUrl,
       previsionnel: entity.previsionnel ?? null,
       garanties: entity.garanties,
+      blocsDeContenu: entity.blocsDeContenu,
+      photos: entity.photos,
       chronologie: entity.chronologie,
       modeleEconomique: entity.modeleEconomique,
       nbUnitesLouables: entity.nbUnitesLouables,
@@ -97,12 +100,18 @@ export class ProjectOrmMapper {
     entity.datePublication = snapshot.datePublication;
     entity.dateOuvertureCollecte = snapshot.dateOuvertureCollecte;
     entity.dateCloturePrevue = snapshot.dateCloturePrevue;
+    entity.descriptionCourte = snapshot.descriptionCourte;
     entity.descriptionMd = snapshot.descriptionMd;
     entity.avertissementMd = snapshot.avertissementMd;
     entity.youtubeUrl = snapshot.youtubeUrl;
     entity.previsionnel = snapshot.previsionnel;
     entity.chronologie = snapshot.chronologie;
     entity.garanties = snapshot.garanties;
+    // Écrites à chaque `save()`, comme les garanties et la chronologie :
+    // l'agrégat les porte entières, et c'est cette écriture-là qui rend
+    // atomique l'unicité de la vignette (§17).
+    entity.blocsDeContenu = snapshot.blocsDeContenu;
+    entity.photos = snapshot.photos;
     entity.modeleEconomique = snapshot.modeleEconomique;
     entity.nbUnitesLouables = snapshot.nbUnitesLouables;
     // Volontairement absents de l'écriture, et TypeORM ignore les propriétés

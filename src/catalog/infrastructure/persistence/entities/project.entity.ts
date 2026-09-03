@@ -19,6 +19,8 @@ import { ModeleEconomique } from 'src/catalog/domain/enums/modele-economique.enu
 // importait depuis cette entité — la flèche de dépendance allait à l'envers
 // (§1). Elles vivent maintenant sous `domains/value-objects/`, et c'est
 // l'infrastructure qui les emprunte pour typer ses colonnes.
+import type { BlocDeContenuSnapshot } from 'src/catalog/domain/entities/bloc-de-contenu';
+import type { PhotoProjetSnapshot } from 'src/catalog/domain/entities/photo-projet';
 import type { EcheanceEmprunteur } from 'src/catalog/domain/value-objects/echeance-emprunteur.vo';
 import type { EtapeChronologie } from 'src/catalog/domain/value-objects/chronologie.vo';
 import type { Garantie } from 'src/catalog/domain/value-objects/garantie.vo';
@@ -121,6 +123,10 @@ export class ProjectEntity {
   @Column({ type: 'timestamptz', nullable: true })
   dateCloturePrevue: Date | null;
 
+  /** Accroche de la fiche, affichée en liste et en partage. */
+  @Column({ type: 'varchar', length: 500, nullable: true })
+  descriptionCourte: string | null;
+
   @Column({ type: 'text', nullable: true })
   descriptionMd: string | null;
 
@@ -138,6 +144,23 @@ export class ProjectEntity {
 
   @Column({ type: 'jsonb', nullable: true, default: [] })
   echeancierEmprunteur: EcheanceEmprunteur[];
+
+  /**
+   * Les pavés éditoriaux de la fiche, dans l'ordre.
+   *
+   * En `jsonb` et non dans une table fille : ce sont des entités *internes* à
+   * l'agrégat projet (§6.1), qui ne se chargent ni ne se cherchent jamais
+   * seules, et dont l'invariant de position porte sur la suite entière. Les
+   * garder dans la ligne du projet fait de leur écriture la **même**
+   * transaction que celle de l'agrégat (§17) — c'est exactement ce que la table
+   * `document` ne permettait pas pour les photos.
+   */
+  @Column({ type: 'jsonb', nullable: true, default: [] })
+  blocsDeContenu: BlocDeContenuSnapshot[];
+
+  /** La galerie du projet. Même raisonnement que `blocsDeContenu`. */
+  @Column({ type: 'jsonb', nullable: true, default: [] })
+  photos: PhotoProjetSnapshot[];
 
   // Equity-locatif extension (Phase 1) — default OBLIGATAIRE pour rétrocompat
   @Column({ type: 'varchar', default: ModeleEconomique.OBLIGATAIRE })

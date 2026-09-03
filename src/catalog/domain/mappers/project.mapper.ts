@@ -1,8 +1,14 @@
 import { ModeleEconomique } from '../enums/modele-economique.enum';
-import { Project, ProjectSnapshot, ProjectSnapshotBrut } from '../aggregates/project';
+import {
+  Project,
+  ProjectSnapshot,
+  ProjectSnapshotBrut,
+} from '../aggregates/project';
+import { BlocsDeContenu } from '../value-objects/blocs-de-contenu.vo';
 import { CalendrierProjet } from '../value-objects/calendrier-projet.vo';
 import { Chronologie } from '../value-objects/chronologie.vo';
 import { ConditionsFinancieres } from '../value-objects/conditions-financieres.vo';
+import { GalerieProjet } from '../value-objects/galerie-projet.vo';
 import { Localisation } from '../value-objects/localisation.vo';
 import { StatutProjet } from '../value-objects/statut-projet.vo';
 
@@ -66,12 +72,19 @@ export class ProjectMapper {
         dateCloturePrevue: snapshot.dateCloturePrevue,
       }),
       contenu: {
+        descriptionCourte: snapshot.descriptionCourte ?? null,
         descriptionMd: snapshot.descriptionMd,
         avertissementMd: snapshot.avertissementMd,
         youtubeUrl: snapshot.youtubeUrl,
         previsionnel: snapshot.previsionnel ?? null,
         garanties: snapshot.garanties ?? [],
       },
+      // Les deux suites ordonnées se reconstituent depuis leur `jsonb`, et
+      // normalisent au passage ce que la colonne peut contenir de travers —
+      // `null` sur les lignes antérieures, positions en doublon, plusieurs
+      // vignettes pour les photos reprises de la table `document`.
+      blocs: BlocsDeContenu.restore(snapshot.blocsDeContenu),
+      galerie: GalerieProjet.restore(snapshot.photos),
       chronologie: Chronologie.restore(snapshot.chronologie),
       // Le défaut vaut pour les lignes antérieures à l'extension equity-locatif.
       modeleEconomique:
@@ -96,11 +109,14 @@ export class ProjectMapper {
       ...project.localisation.toSnapshot(),
       ...project.conditions.toSnapshot(),
       ...project.calendrier.toSnapshot(),
+      descriptionCourte: project.descriptionCourte,
       descriptionMd: project.descriptionMd,
       avertissementMd: project.avertissementMd,
       youtubeUrl: project.youtubeUrl,
       previsionnel: project.previsionnel,
       garanties: project.garanties,
+      blocsDeContenu: project.blocsDeContenu,
+      photos: project.photos,
       chronologie: project.chronologie,
       modeleEconomique: project.modeleEconomique,
       nbUnitesLouables: project.nbUnitesLouables,
