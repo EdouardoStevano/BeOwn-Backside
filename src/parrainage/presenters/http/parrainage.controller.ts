@@ -6,6 +6,7 @@ import { Repository } from 'typeorm';
 import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
 import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
+import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 import { AssurerCodeParrainageService } from '../../applications/assurer-code-parrainage.service';
 import { lireParrainageConfig } from '../../applications/parrainage-config';
 import { ParrainageAttributionEntity } from '../../infrastructure/persistences/entities/parrainage-attribution.entity';
@@ -38,6 +39,8 @@ export class ParrainageController {
     private readonly config: ConfigService,
     @InjectRepository(ParrainageAttributionEntity)
     private readonly attributions: Repository<ParrainageAttributionEntity>,
+    @InjectRepository(UserEntity)
+    private readonly users: Repository<UserEntity>,
   ) {}
 
   @ApiOperation({ summary: 'Mon relevé de parrainage (code, filleuls, gains, plafond)' })
@@ -51,7 +54,6 @@ export class ParrainageController {
     const brut = await this.attributions
       .createQueryBuilder('a')
       .select([
-        `COUNT(*) FILTER (WHERE a."parrainId" = :userId) AS "nbFilleuls"`,
         `COALESCE(SUM(CASE WHEN a."parrainId" = :userId THEN a."bonusParrainEur" ELSE 0 END), 0)
          + COALESCE(SUM(CASE WHEN a."filleulId" = :userId THEN a."bonusFilleulEur" ELSE 0 END), 0) AS "gainsEur"`,
         `COALESCE(SUM(CASE WHEN a."creeLe" >= :debutAnnee AND a."parrainId" = :userId THEN a."bonusParrainEur" ELSE 0 END), 0)
@@ -59,7 +61,17 @@ export class ParrainageController {
       ])
       .where('a."parrainId" = :userId OR a."filleulId" = :userId')
       .setParameters({ userId: user.userId, debutAnnee })
-      .getRawOne<{ nbFilleuls: string; gainsEur: string; percuAnnee: string }>();
+      .getRawOne<{ gainsEur: string; percuAnnee: string }>();
+
+    // `nbFilleuls` = comptes INSCRITS avec ce code (c'est la promesse du
+    // libellé à l'écran, et la motivation immédiate du parrain : son filleul
+    // apparaît dès l'inscription) — PAS le nombre d'attributions, qui
+    // n'existe qu'au premier investissement définitif. Constaté en e2e :
+    // compter les attributions affichait 0 filleul après une inscription
+    // réussie, contredisant l'écran.
+    const nbFilleuls = await this.users.count({
+      where: { parrainePar: user.userId },
+    });
 
     const gainsEur = Number(brut?.gainsEur ?? 0);
     const percuAnnee = Number(brut?.percuAnnee ?? 0);
@@ -68,8 +80,8 @@ export class ParrainageController {
 
     return {
       code,
-      lien: `${frontend.replace(/\/$/, '')}/register?ref=${code}`,
-      nbFilleuls: Number(brut?.nbFilleuls ?? 0),
+      lien: `${frontend.replace(/\/$/, '')}/auth/register?ref=${code}`,
+      nbFilleuls,
       gainsEur,
       tauxPct,
       plafondAnnuelEur,

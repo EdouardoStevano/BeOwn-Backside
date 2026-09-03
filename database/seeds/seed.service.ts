@@ -1965,12 +1965,13 @@ Deux appartements (T3 et T2) dans une résidence récente du Tampon, tous deux l
       }),
     );
 
-    // Écritures du règlement. NOTE DE FORME — le règlement de production écrit
-    // aussi une ligne « net vendeur » à source NULL en plus du paiement
-    // acheteur→vendeur, ce qui sur-crédite le REGISTRE du vendeur au
-    // rapprochement. Le seed écrit la version ÉQUILIBRÉE (paiement complet
-    // acheteur→vendeur, puis frais vendeur→plateforme) : mêmes clés, mêmes
-    // metadata, et `rapprocherGrandLivre` sort à zéro.
+    // Écritures du règlement, alignées sur le règlement de production
+    // (settle-cession) : paiement complet acheteur→vendeur, puis frais
+    // vendeur→plateforme — mêmes clés, mêmes metadata, `rapprocherGrandLivre`
+    // sort à zéro. (Le règlement de production a historiquement écrit une
+    // ligne « net vendeur » à source NULL qui sur-créditait le registre du
+    // vendeur ; corrigé au lot 1 — le seed et la prod écrivent désormais la
+    // même version équilibrée.)
     await this.tx({
       source: wInv1, destination: wInv3, montant: cessionMontant,
       type: TransactionType.SOUSCRIPTION,
