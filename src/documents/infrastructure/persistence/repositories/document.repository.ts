@@ -8,8 +8,6 @@ import type {
   SignableDocument,
   SignableDocumentNaissant,
 } from 'src/documents/domain/aggregates/signable-document';
-import { DocumentIntrouvableError } from 'src/documents/domain/errors';
-import { DocumentType } from 'src/documents/domain/enums/document-type.enum';
 
 /** L'adapter TypeORM du port `DocumentRepository` (§33). */
 @Injectable()
@@ -46,33 +44,6 @@ export class DocumentTypeOrmRepository implements DocumentRepository {
 
   async findByInvestmentId(investmentId: string): Promise<SignableDocument[]> {
     return this.lire({ investmentId });
-  }
-
-  async findProjectImages(projectId: string): Promise<SignableDocument[]> {
-    const entities = await this.repo.find({
-      where: { projectId, type: DocumentType.PHOTO_PROJET },
-      order: { estPrincipale: 'DESC', ordre: 'ASC', createdAt: 'ASC' },
-    });
-    return entities.map(DocumentOrmMapper.toDomain);
-  }
-
-  /**
-   * Deux écritures, une intention : l'unicité de la couverture porte sur
-   * toutes les photos du projet, pas sur le document seul (voir le port).
-   */
-  async designerImagePrincipale(
-    document: SignableDocument,
-  ): Promise<SignableDocument> {
-    const { id, projectId } = document.snapshot();
-    await this.repo.update(
-      { projectId: projectId!, type: DocumentType.PHOTO_PROJET },
-      { estPrincipale: false },
-    );
-    await this.repo.update(id, { estPrincipale: true });
-
-    const entity = await this.repo.findOne({ where: { id } });
-    if (!entity) throw new DocumentIntrouvableError(id);
-    return DocumentOrmMapper.toDomain(entity);
   }
 
   async delete(id: string): Promise<void> {

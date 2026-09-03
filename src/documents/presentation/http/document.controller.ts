@@ -11,7 +11,6 @@ import {
   NotFoundException,
   Param,
   ParseIntPipe,
-  Patch,
   Post,
   Redirect,
   UploadedFile,
@@ -45,7 +44,7 @@ import {
 } from 'src/documents/domain/enums/document-type.enum';
 import { InvestmentEntity } from 'src/subscription/infrastructure/persistence/entities/investment.entity';
 import { ProjectEntity } from 'src/catalog/infrastructure/persistence/entities/project.entity';
-import { SetOrdreDto, UploadDocumentDto } from '../dto/document.dto';
+import { UploadDocumentDto } from '../dto/document.dto';
 import { CloudStorageService } from 'src/shared/cloud-storage/cloud-storage.service';
 
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
@@ -314,8 +313,6 @@ export class DocumentController {
         path: publicUrl,
         isPublic,
         uploadedBy: user.userId,
-        ordre: dto.ordre ?? null,
-        estPrincipale: this.isTrue(dto.estPrincipale),
       }),
     );
     return depose.snapshot();
@@ -352,15 +349,10 @@ export class DocumentController {
     return snapshots(docs.filter((d) => d.estPublic));
   }
 
-  @ApiOperation({ summary: 'Images publiques d un projet' })
-  @ApiParam({ name: 'projectId', description: 'UUID du projet' })
-  @ApiResponse({ status: 200, description: 'Liste des images du projet' })
-  @Public()
-  @Get('public/project/:projectId/images')
-  async getProjectImages(@Param('projectId') projectId: string) {
-    const docs = await this.documentRepository.findProjectImages(projectId);
-    return snapshots(docs.filter((d) => d.estPublic));
-  }
+  // `GET public/project/:projectId/images` a disparu : la galerie est dans le
+  // projet, et `GET /projects/public`, `/projects/:id`, `/projects/slug/:slug`
+  // ainsi que le lien de partage la rendent déjà sous les clés `photos` et
+  // `images`. La lire ici coûtait une requête de plus par projet.
 
   @ApiOperation({ summary: 'Documents lies a un projet' })
   @ApiParam({ name: 'projectId', description: 'UUID du projet' })
@@ -449,48 +441,10 @@ export class DocumentController {
     await this.documentRepository.delete(id);
   }
 
-  @ApiOperation({ summary: 'Definir une image comme principale d un projet' })
-  @ApiParam({ name: 'id', description: 'UUID du document PHOTO_PROJET' })
-  @ApiResponse({ status: 200, description: 'Image definie comme principale' })
-  @Patch(':id/set-main')
-  async setMainImage(@Param('id') id: string, @CurrentUser() user: ActiveUser) {
-    const doc = await this.documentRepository.findById(id);
-    if (!doc) throw new NotFoundException('Document introuvable.');
-    // L'agrégat dit si CETTE photo peut être couverture ; qu'elle soit la
-    // seule à l'être porte sur toutes les photos du projet, d'où le repository.
-    doc.definirCommeImagePrincipale();
-
-    const project = await this.findProjectOrFail(doc.projectId!);
-    if (!this.canManageProject(user, project)) {
-      throw new ForbiddenException('Acces refuse.');
-    }
-    const designe = await this.documentRepository.designerImagePrincipale(doc);
-    return designe.snapshot();
-  }
-
-  @ApiOperation({
-    summary: "Modifier l'ordre d'affichage d'une image de projet",
-  })
-  @ApiParam({ name: 'id', description: 'UUID du document PHOTO_PROJET' })
-  @ApiBody({ type: SetOrdreDto })
-  @ApiResponse({ status: 200, description: 'Ordre mis a jour' })
-  @Patch(':id/ordre')
-  async setOrdre(
-    @Param('id') id: string,
-    @Body() dto: SetOrdreDto,
-    @CurrentUser() user: ActiveUser,
-  ) {
-    const doc = await this.documentRepository.findById(id);
-    if (!doc) throw new NotFoundException('Document introuvable.');
-    doc.placerEnPosition(dto.ordre);
-
-    const project = await this.findProjectOrFail(doc.projectId!);
-    if (!this.canManageProject(user, project)) {
-      throw new ForbiddenException('Acces refuse.');
-    }
-    const range = await this.documentRepository.save(doc);
-    return range.snapshot();
-  }
+  // `PATCH :id/set-main` et `PATCH :id/ordre` ont disparu avec les photos de
+  // projet, remplacées par `PATCH /projects/{id}/photos/{photoId}/principale`
+  // et `PATCH /projects/{id}/photos/{photoId}/position` — voir
+  // `ProjectPhotosController`.
 }
 
 /**

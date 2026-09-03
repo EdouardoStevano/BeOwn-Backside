@@ -12,15 +12,14 @@ export const DOCUMENT_REPOSITORY = Symbol('DOCUMENT_REPOSITORY');
  * naissent en base : un `SignableDocumentNaissant` entre, un agrégat complet
  * ressort.
  *
- * `setMainImage(id, projectId)` et `updateOrdre(id, ordre)` ont disparu :
- * c'étaient deux façons d'écrire des colonnes sans passer par l'agrégat (§6),
- * et « mettre à jour l'ordre » n'est pas une intention métier (§4). Leurs
- * appelants jouent désormais la transition sur l'agrégat, puis le sauvent.
- *
- * `designerImagePrincipale` reste, parce qu'elle porte une intention qu'aucun
- * `save` ne peut porter : une couverture désignée en décoiffe une autre. Cette
- * unicité s'étend à toutes les photos d'un projet, pas au document seul —
- * l'agrégat ne peut pas la garantir, le repository le fait en une opération.
+ * `findProjectImages` et `designerImagePrincipale` ont disparu à leur tour. La
+ * seconde était la dernière trace d'un aveu : elle existait « parce qu'aucun
+ * `save` ne pouvait porter cette intention — une couverture désignée en décoiffe
+ * une autre, et l'agrégat ne peut pas garantir cette unicité ». C'était exact,
+ * et c'était le symptôme : un invariant qu'aucun agrégat ne peut tenir signale
+ * que l'agrégat est mal découpé, pas qu'il faut le confier au repository (§6,
+ * §17). La galerie est passée dans `Project`, où elle est une seule suite en
+ * mémoire — l'unicité s'y tient sans écriture, et un `save()` l'enregistre.
  */
 export interface DocumentRepository {
   /** Insère un document qui vient d'être déposé et rend l'agrégat complet. */
@@ -36,17 +35,6 @@ export interface DocumentRepository {
   findByProjectId(projectId: string): Promise<SignableDocument[]>;
 
   findByInvestmentId(investmentId: string): Promise<SignableDocument[]>;
-
-  /** La galerie d'un projet : couverture d'abord, puis par rang d'affichage. */
-  findProjectImages(projectId: string): Promise<SignableDocument[]>;
-
-  /**
-   * Désigne l'unique image de couverture d'un projet : celle-ci la devient,
-   * toutes les autres cessent de l'être.
-   */
-  designerImagePrincipale(
-    document: SignableDocument,
-  ): Promise<SignableDocument>;
 
   delete(id: string): Promise<void>;
 }

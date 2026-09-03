@@ -1,11 +1,8 @@
 import { DocumentRelatedTo, DocumentType } from '../enums/document-type.enum';
 import {
   CibleDeDocumentInvalideError,
-  DocumentSansProjetError,
   InvestissementCibleManquantError,
   ProjetCibleManquantError,
-  SeulesLesPhotosOntUnOrdreError,
-  SeulesLesPhotosSontPrincipalesError,
 } from '../errors';
 
 /** État complet d'un document, tel qu'il transite depuis/vers la persistance. */
@@ -24,10 +21,6 @@ export interface SignableDocumentSnapshot {
   path: string;
   isPublic: boolean;
   uploadedBy: number;
-  /** Position d'affichage — seulement pour une photo de projet. */
-  ordre: number | null;
-  /** Image de couverture du projet — seulement pour une photo de projet. */
-  estPrincipale: boolean;
   createdAt: Date;
 }
 
@@ -39,14 +32,13 @@ export type SignableDocumentNaissant = Omit<
 
 /**
  * **Document signable** — une pièce déposée sur la plateforme : bulletin de
- * souscription, contrat de rachat, KIIS, IFU, pièce KYC, photo de projet.
+ * souscription, contrat de rachat, KIIS, IFU, pièce KYC.
  *
  * C'est l'agrégat racine du contexte (§6, §3.2). Il remplace une classe
  * `Document` de dix-sept champs publics sans un comportement (§7), dont
- * `DocumentController` était le gardien par défaut : c'est lui qui savait
- * qu'une image de couverture doit être une `PHOTO_PROJET`, qu'un document de
- * projet doit nommer son projet, qu'une cible autre que compte/projet/
- * investissement n'existe pas.
+ * `DocumentController` était le gardien par défaut : c'est lui qui savait qu'un
+ * document de projet doit nommer son projet, et qu'une cible autre que compte/
+ * projet/investissement n'existe pas.
  *
  * **Signable, et pas seulement stockable.** Le nom vient de §3.2, et il dit
  * l'essentiel : ce contexte n'existe pas pour ranger des fichiers — il existe
@@ -55,6 +47,17 @@ export type SignableDocumentNaissant = Omit<
  * ({@link Signature}), et non d'un contexte voisin comme le laissait croire
  * l'ancien dossier `src/signatures/`.
  *
+ * **C'est aussi ce qui en a fait sortir les photos de projet.** Le type
+ * `PHOTO_PROJET` faisait de cet agrégat le porteur de deux choses sans rapport,
+ * et cela se voyait : deux champs (`ordre`, `estPrincipale`) qui n'avaient de
+ * sens que pour l'une d'elles, deux méthodes qui commençaient par vérifier
+ * qu'on était bien dans ce cas, trois erreurs dont le seul rôle était de dire
+ * « ceci n'est pas une photo », et un invariant — une seule vignette par projet
+ * — qu'aucun document ne pouvait tenir seul. Une photo de façade ne se signe
+ * pas : elle est du contenu éditorial, et vit maintenant comme `PhotoProjet`
+ * dans l'agrégat `Project` du contexte Catalog. Tout ce qui précède a disparu
+ * avec elle.
+ *
  * Il ne connaît de ce à quoi il se rattache que des identifiants (§6.2) : ni
  * le projet, ni l'investissement, ni le compte propriétaire ne sont chargés
  * ici. Les règles d'accès qui en dépendent — qui peut lire quoi — restent dans
@@ -62,19 +65,12 @@ export type SignableDocumentNaissant = Omit<
  * domaine.
  */
 export class SignableDocument {
-  private _ordre: number | null;
-  private _estPrincipale: boolean;
-  private _isPublic: boolean;
-  private readonly _entete: Omit<
-    SignableDocumentSnapshot,
-    'ordre' | 'estPrincipale' | 'isPublic'
-  >;
+  private readonly _isPublic: boolean;
+  private readonly _entete: Omit<SignableDocumentSnapshot, 'isPublic'>;
 
   /** @internal Réservé à `televerser` et à `DocumentOrmMapper`. */
   constructor(etat: SignableDocumentSnapshot) {
-    const { ordre, estPrincipale, isPublic, ...entete } = etat;
-    this._ordre = ordre;
-    this._estPrincipale = estPrincipale;
+    const { isPublic, ...entete } = etat;
     this._isPublic = isPublic;
     this._entete = entete;
   }
@@ -98,8 +94,6 @@ export class SignableDocument {
     path: string;
     isPublic: boolean;
     uploadedBy: number;
-    ordre: number | null;
-    estPrincipale: boolean;
   }): SignableDocumentNaissant {
     switch (depot.relatedTo) {
       case DocumentRelatedTo.USER:
@@ -117,48 +111,11 @@ export class SignableDocument {
     return { ...depot };
   }
 
-  // ── Transitions ───────────────────────────────────────────────────────────
-
-  /**
-   * Désigne cette photo comme couverture de son projet.
-   *
-   * L'agrégat dit que *cette* photo peut l'être ; qu'elle soit la **seule** à
-   * l'être porte sur toutes les photos du projet, et revient donc au
-   * repository, qui décoiffe l'ancienne dans la même opération.
-   */
-  definirCommeImagePrincipale(): void {
-    this.assertPhotoDeProjet(new SeulesLesPhotosSontPrincipalesError());
-    this._estPrincipale = true;
-  }
-
-  /** Place cette photo à un rang donné dans la galerie de son projet. */
-  placerEnPosition(ordre: number): void {
-    this.assertPhotoDeProjet(new SeulesLesPhotosOntUnOrdreError());
-    this._ordre = ordre;
-  }
-
-  private assertPhotoDeProjet(siMauvaisType: Error): void {
-    if (this._entete.type !== DocumentType.PHOTO_PROJET) {
-      throw siMauvaisType;
-    }
-    if (!this._entete.projectId) {
-      throw new DocumentSansProjetError();
-    }
-  }
-
   // ── Interrogations ────────────────────────────────────────────────────────
 
   /** La pièce est consultable sans authentification. */
   get estPublic(): boolean {
     return this._isPublic;
-  }
-
-  /** La pièce fait partie de la galerie d'un projet. */
-  get estPhotoDeProjet(): boolean {
-    return (
-      this._entete.type === DocumentType.PHOTO_PROJET &&
-      this._entete.projectId !== null
-    );
   }
 
   get id(): string {
@@ -210,25 +167,12 @@ export class SignableDocument {
     return this._entete.uploadedBy;
   }
 
-  get ordre(): number | null {
-    return this._ordre;
-  }
-
-  get estPrincipale(): boolean {
-    return this._estPrincipale;
-  }
-
   get createdAt(): Date {
     return this._entete.createdAt;
   }
 
   /** L'état complet, pour la persistance et la présentation. */
   snapshot(): SignableDocumentSnapshot {
-    return {
-      ...this._entete,
-      ordre: this._ordre,
-      estPrincipale: this._estPrincipale,
-      isPublic: this._isPublic,
-    };
+    return { ...this._entete, isPublic: this._isPublic };
   }
 }

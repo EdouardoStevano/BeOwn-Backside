@@ -5,7 +5,10 @@ import {
   Index,
   PrimaryGeneratedColumn,
 } from 'typeorm';
-import { DocumentRelatedTo, DocumentType } from 'src/documents/domain/enums/document-type.enum';
+import {
+  DocumentRelatedTo,
+  DocumentType,
+} from 'src/documents/domain/enums/document-type.enum';
 
 @Entity('document')
 export class DocumentEntity {
@@ -51,13 +54,9 @@ export class DocumentEntity {
   @Column({ type: 'int' })
   uploadedBy: number;
 
-  /** Position d'affichage (uniquement pour PHOTO_PROJET) */
-  @Column({ type: 'int', nullable: true, default: null })
-  ordre: number | null;
-
-  /** Image de couverture principale du projet */
-  @Column({ type: 'boolean', default: false })
-  estPrincipale: boolean;
+  // `ordre` et `estPrincipale` ont quitté cette table avec les `PHOTO_PROJET`
+  // qu'elles décrivaient : elles valaient `null` et `false` sur toutes les
+  // autres lignes. La galerie d'un projet vit dans `projet.photos`.
 
   @CreateDateColumn()
   createdAt: Date;

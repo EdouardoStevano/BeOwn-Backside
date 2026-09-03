@@ -52,43 +52,15 @@ export class CibleDeDocumentInvalideError extends DocumentsError {
   }
 }
 
-// ── La galerie d'un projet ──────────────────────────────────────────────────
-
-/**
- * Seule une photo de projet fait une couverture. Un KBIS ou un bulletin de
- * souscription n'a pas d'image principale.
+/*
+ * Les trois erreurs de galerie qui vivaient ici — `SeulesLesPhotosSontPrincipales`,
+ * `SeulesLesPhotosOntUnOrdre`, `DocumentSansProjet` — ont disparu avec le type
+ * `PHOTO_PROJET`. Elles n'existaient que pour rattraper le fait qu'un agrégat
+ * servait à deux métiers : leur message ne disait pas une règle, il disait « ce
+ * document n'est pas celui auquel cette méthode s'adresse ». Le contexte Catalog
+ * n'en a pas d'équivalent, parce qu'une `PhotoProjet` est toujours une image, et
+ * toujours celle d'un projet — il n'y a plus rien à vérifier.
  */
-export class SeulesLesPhotosSontPrincipalesError extends DocumentsError {
-  readonly kind = DocumentsErrorKind.INVALID_INPUT;
-
-  constructor() {
-    super('Seules les PHOTO_PROJET peuvent etre definies comme principale.', {
-      code: 'NOT_A_PROJECT_PHOTO',
-    });
-  }
-}
-
-/** Seule une photo de projet occupe une position dans une galerie. */
-export class SeulesLesPhotosOntUnOrdreError extends DocumentsError {
-  readonly kind = DocumentsErrorKind.INVALID_INPUT;
-
-  constructor() {
-    super("Seules les PHOTO_PROJET ont un ordre d'affichage.", {
-      code: 'NOT_A_PROJECT_PHOTO',
-    });
-  }
-}
-
-/** Une photo sans projet ne peut ni être couverture, ni être ordonnée. */
-export class DocumentSansProjetError extends DocumentsError {
-  readonly kind = DocumentsErrorKind.INVALID_INPUT;
-
-  constructor() {
-    super("Ce document n'est pas lie a un projet.", {
-      code: 'DOCUMENT_NOT_LINKED_TO_PROJECT',
-    });
-  }
-}
 
 // ── La signature ────────────────────────────────────────────────────────────
 

@@ -30,8 +30,6 @@ export class DocumentOrmMapper {
       path: entity.path,
       isPublic: entity.isPublic,
       uploadedBy: entity.uploadedBy,
-      ordre: entity.ordre,
-      estPrincipale: entity.estPrincipale ?? false,
       createdAt: entity.createdAt,
     });
   }
@@ -51,8 +49,6 @@ export class DocumentOrmMapper {
     entity.path = naissant.path;
     entity.isPublic = naissant.isPublic;
     entity.uploadedBy = naissant.uploadedBy;
-    entity.ordre = naissant.ordre;
-    entity.estPrincipale = naissant.estPrincipale;
     return entity;
   }
 

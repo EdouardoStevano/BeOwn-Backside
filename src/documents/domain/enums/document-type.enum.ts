@@ -10,7 +10,9 @@ export enum DocumentType {
   STATUTS_SPV = 'STATUTS_SPV',
   KBIS = 'KBIS',
   PERMIS_CONSTRUIRE = 'PERMIS_CONSTRUIRE',
-  PHOTO_PROJET = 'PHOTO_PROJET',
+  // `PHOTO_PROJET` a quitté cette énumération : une photo de fiche est du
+  // contenu éditorial, pas une pièce qui se signe. Elle est devenue
+  // `PhotoProjet`, entité de l'agrégat `Project` du contexte Catalog (§3.2).
   AUTRE = 'AUTRE',
   FICI = 'FICI',
   DIS = 'DIS',

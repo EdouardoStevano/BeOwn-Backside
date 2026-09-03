@@ -5,28 +5,35 @@ import {
 import { DocumentRelatedTo, DocumentType } from '../enums/document-type.enum';
 import {
   CibleDeDocumentInvalideError,
-  DocumentSansProjetError,
   InvestissementCibleManquantError,
   ProjetCibleManquantError,
-  SeulesLesPhotosOntUnOrdreError,
-  SeulesLesPhotosSontPrincipalesError,
 } from '../errors';
 
+/*
+ * Les six tests de « galerie de projet » ont disparu avec le type
+ * `PHOTO_PROJET` : ils vérifiaient qu'une couverture doit être une photo, qu'un
+ * rang ne se pose pas sur un KBIS, qu'une photo sans projet ne peut être ni
+ * l'une ni l'autre — trois règles qui n'existaient que parce qu'un agrégat
+ * servait à deux métiers. Ce qu'elles protégeaient est devenu sans objet, et ce
+ * qu'elles ne protégeaient pas — l'unicité de la vignette, qu'aucun document ne
+ * pouvait tenir — est désormais couvert dans `catalog`, sur `GalerieProjet`.
+ *
+ * Le dépôt de référence est maintenant un bulletin de souscription : le contexte
+ * ne range plus que des pièces qui se signent.
+ */
 const depot = {
-  type: DocumentType.PHOTO_PROJET,
+  type: DocumentType.PROSPECTUS,
   relatedTo: DocumentRelatedTo.PROJECT,
   userId: null,
   projectId: 'proj-1',
   investmentId: null,
-  originalName: 'facade.jpg',
-  filename: 'projets/facade-abc.jpg',
-  mimeType: 'image/jpeg',
+  originalName: 'prospectus.pdf',
+  filename: 'projets/prospectus-abc.pdf',
+  mimeType: 'application/pdf',
   sizeBytes: 240_000,
-  path: 'https://stockage.test/projets/facade-abc.jpg',
+  path: 'https://stockage.test/projets/prospectus-abc.pdf',
   isPublic: true,
   uploadedBy: 7,
-  ordre: null,
-  estPrincipale: false,
 };
 
 const document = (etat: Partial<SignableDocumentSnapshot> = {}) =>
@@ -78,82 +85,25 @@ describe('SignableDocument — dépôt', () => {
   });
 });
 
-describe('SignableDocument — galerie de projet', () => {
-  it('accepte une photo de projet comme couverture', () => {
-    const doc = document();
-
-    doc.definirCommeImagePrincipale();
-
-    expect(doc.estPrincipale).toBe(true);
-  });
-
-  it('refuse la couverture à ce qui n’est pas une photo de projet', () => {
-    const doc = document({ type: DocumentType.KBIS });
-
-    expect(() => doc.definirCommeImagePrincipale()).toThrow(
-      SeulesLesPhotosSontPrincipalesError,
-    );
-  });
-
-  it('refuse la couverture à une photo qui n’est rattachée à aucun projet', () => {
-    const doc = document({ projectId: null });
-
-    expect(() => doc.definirCommeImagePrincipale()).toThrow(
-      DocumentSansProjetError,
-    );
-  });
-
-  it('place une photo de projet à un rang donné', () => {
-    const doc = document();
-
-    doc.placerEnPosition(3);
-
-    expect(doc.ordre).toBe(3);
-  });
-
-  it('refuse un rang à ce qui n’est pas une photo de projet', () => {
-    const doc = document({ type: DocumentType.PROSPECTUS });
-
-    expect(() => doc.placerEnPosition(1)).toThrow(
-      SeulesLesPhotosOntUnOrdreError,
-    );
-  });
-
-  it('ne change rien quand elle refuse', () => {
-    const doc = document({ type: DocumentType.KBIS, ordre: 5 });
-
-    expect(() => doc.placerEnPosition(1)).toThrow();
-    expect(() => doc.definirCommeImagePrincipale()).toThrow();
-
-    expect(doc.ordre).toBe(5);
-    expect(doc.estPrincipale).toBe(false);
-  });
-});
-
 describe('SignableDocument — interrogations', () => {
   it('dit si la pièce est consultable sans authentification', () => {
     expect(document({ isPublic: true }).estPublic).toBe(true);
     expect(document({ isPublic: false }).estPublic).toBe(false);
   });
 
-  it('reconnaît une photo de la galerie d’un projet', () => {
-    expect(document().estPhotoDeProjet).toBe(true);
-    expect(document({ projectId: null }).estPhotoDeProjet).toBe(false);
-    expect(document({ type: DocumentType.KBIS }).estPhotoDeProjet).toBe(false);
-  });
-
   it('rend un état sérialisable, sans champ privé', () => {
     const etat = document().snapshot();
 
     expect(Object.keys(etat)).toEqual(
-      expect.arrayContaining([
-        'id',
-        'type',
-        'isPublic',
-        'ordre',
-        'estPrincipale',
-      ]),
+      expect.arrayContaining(['id', 'type', 'isPublic']),
     );
     expect(JSON.parse(JSON.stringify(etat)).isPublic).toBe(true);
+  });
+
+  it('ne porte plus ni rang d’affichage ni couverture', () => {
+    const etat = document().snapshot();
+
+    expect(etat).not.toHaveProperty('ordre');
+    expect(etat).not.toHaveProperty('estPrincipale');
   });
 });
