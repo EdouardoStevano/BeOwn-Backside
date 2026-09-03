@@ -145,8 +145,6 @@ export class InitiateBuyUseCase {
       path: publicUrl,
       isPublic: false,
       uploadedBy: userId,
-      ordre: null,
-      estPrincipale: false,
     });
     const savedDoc = await this.documentRepo.save(docEntity);
 

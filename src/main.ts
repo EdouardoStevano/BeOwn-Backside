@@ -105,7 +105,18 @@ async function bootstrap() {
     )
     .addTag('Users', 'Gestion des comptes utilisateurs')
     .addTag('Profiles & KYC', 'Profil investisseur (PP/PM) et dossier KYC')
-    .addTag('Projects', 'Projets immobiliers — CRUD, statuts, SPV')
+    .addTag(
+      'Projects',
+      'Projets immobiliers — fiche, statuts, SPV, et **contenu éditorial** : ' +
+        'les pavés de texte enrichi (`/projects/{id}/blocs/*`) et la galerie ' +
+        '(`/projects/{id}/photos/*`). Ces deux suites ne passent pas par ' +
+        '`PATCH /projects/{id}` — remplacer un tableau laisserait poser deux ' +
+        'éléments au même rang, ou en effacer par omission — mais elles ' +
+        'ressortent dans le projet, sous les clés `blocsDeContenu` et `photos`. ' +
+        'Les photos venaient du tag *Documents* ; elles ont changé de place en ' +
+        'même temps que de modèle, la vignette étant désormais la photo de ' +
+        'rang 0 de la galerie.',
+    )
     .addTag(
       'Reservations (Pré-investissement)',
       'Réservations de parts avant ouverture de collecte',
@@ -119,7 +130,15 @@ async function bootstrap() {
     .addTag('Marché Secondaire', "Carnet d'ordres, vente/achat de parts")
     .addTag(
       'Documents',
-      'Upload et gestion des documents (KYC, projet, investissement)',
+      'Upload et gestion des pièces qui **se signent** ou font foi : bulletins ' +
+        'de souscription, actes de cession, KIIS, IFU, pièces KYC, prospectus ' +
+        'et rapports de projet. ' +
+        '⚠️ Les **photos de projet** ne sont plus ici : le type ' +
+        '`PHOTO_PROJET` a disparu, avec les champs `ordre` et `estPrincipale` ' +
+        'du dépôt et les routes `PATCH /documents/{id}/set-main`, ' +
+        '`PATCH /documents/{id}/ordre` et ' +
+        '`GET /documents/public/project/{projectId}/images`. Elles sont ' +
+        'devenues la galerie du projet — voir le tag *Projects*.',
     )
     .addTag('Notifications', 'Notifications in-app et email')
     .build();

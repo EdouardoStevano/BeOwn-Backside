@@ -147,7 +147,6 @@ export class IfuGenerationService {
       path: publicUrl,
       isPublic: false,
       uploadedBy: agg.userId,
-      estPrincipale: false,
     });
     await this.documentRepo.save(doc);
 

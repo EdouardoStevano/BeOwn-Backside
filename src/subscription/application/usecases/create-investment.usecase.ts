@@ -396,8 +396,6 @@ export class CreateInvestmentUseCase {
         path: publicUrl,
         isPublic: false,
         uploadedBy: userId,
-        ordre: null,
-        estPrincipale: false,
       }),
     );
 

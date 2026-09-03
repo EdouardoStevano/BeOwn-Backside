@@ -164,8 +164,6 @@ export class InitiateInvestmentUseCase {
         path: publicUrl,
         isPublic: false,
         uploadedBy: userId,
-        ordre: null,
-        estPrincipale: false,
       }),
     );
 

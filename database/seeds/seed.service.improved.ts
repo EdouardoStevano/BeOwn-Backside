@@ -927,8 +927,10 @@ Cet immeuble de bureaux R+6 est idéalement positionné sur le **Boulevard de la
     const { staffUsers } = this.getStoredUsers();
 
     for (const project of projects) {
+      // `PHOTO_PROJET` a quitté cette liste avec le type : les photos d'une
+      // fiche sont désormais dans `projet.photos` (contexte Catalog), pas dans
+      // la table des documents.
       const documentTypes = [
-        DocumentType.PHOTO_PROJET,
         DocumentType.PERMIS_CONSTRUIRE,
         DocumentType.PROSPECTUS,
         DocumentType.RAPPORT_FINANCIER,
@@ -1085,7 +1087,6 @@ Cet immeuble de bureaux R+6 est idéalement positionné sur le **Boulevard de la
 
   private getDocumentTypeName(type: DocumentType): string {
     const names = {
-      [DocumentType.PHOTO_PROJET]: 'Photos',
       [DocumentType.PERMIS_CONSTRUIRE]: 'Permis',
       [DocumentType.PROSPECTUS]: 'Prospectus',
       [DocumentType.RAPPORT_FINANCIER]: 'Rapport financier',

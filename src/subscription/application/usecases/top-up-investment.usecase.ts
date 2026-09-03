@@ -319,8 +319,6 @@ export class TopUpInvestmentUseCase {
         path: publicUrl,
         isPublic: false,
         uploadedBy: userId,
-        ordre: null,
-        estPrincipale: false,
       }),
     );
 
