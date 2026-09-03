@@ -5,10 +5,6 @@ import {
   DISTRIBUTION_PART_REPOSITORY,
   type DistributionPartRepository,
 } from 'src/distributions/applications/ports/repositories/distribution-part.repository';
-import {
-  INVESTMENT_REPOSITORY,
-  type InvestmentRepository,
-} from 'src/investments/applications/ports/repositories/investment.repository';
 
 /**
  * Cron annuel : génère les IFU N-1 pour tous les investisseurs ayant eu
@@ -24,8 +20,6 @@ export class IfuCronService {
     private readonly generateUseCase: GenerateInvestisseurIfuUseCase,
     @Inject(DISTRIBUTION_PART_REPOSITORY)
     private readonly partRepo: DistributionPartRepository,
-    @Inject(INVESTMENT_REPOSITORY)
-    private readonly investmentRepo: InvestmentRepository,
   ) {}
 
   // 0 0 6 15 1 * — 15 janvier à 6h00
@@ -39,6 +33,14 @@ export class IfuCronService {
   /**
    * Méthode utilisable directement (sans cron) — utilisée par l'endpoint
    * admin `POST /admin/fiscalite/ifu/generate-all/:annee`.
+   *
+   * POURQUOI la collecte passe par une requête dédiée : la donnée cherchée est
+   * « quels investisseurs ont été PAYÉS sur l'exercice ». C'est une question de
+   * base de données — jointure part → investissement, filtre sur payeLe dans
+   * l'année, DISTINCT — pas une agrégation en mémoire. L'implémentation
+   * précédente chargeait les parts NON payées (`findUnpaid`) puis les filtrait
+   * sur `payeLe` : l'ensemble était vide par construction, aucun IFU n'était
+   * jamais généré. Elle résolvait en plus un investissement par requête (N+1).
    */
   async run(annee: number): Promise<{
     nbInvestisseurs: number;
@@ -46,45 +48,14 @@ export class IfuCronService {
     nbErreurs: number;
     erreurs: Array<{ userId: number; raison: string }>;
   }> {
-    // Identifier tous les userIds ayant une part versée dans l'année
-    const allUnpaid = await this.partRepo.findUnpaid(); // pas idéal, on prendra tous
-    // Stratégie simple : on parcourt tous les investments et déduplique
-    // les userIds. À optimiser en Phase 10 avec un repo dédié.
-    const investments = await this.investmentRepo.findByUserId(0).catch(() => []);
-    // Fallback brutal — itération sur les parts payées
-    // (en MVP on accepte la simplification ; l'admin peut aussi
-    // déclencher la génération individuellement)
-    const userIds = new Set<number>();
-
-    // Récupérer les userIds via les investissements liés aux parts
-    // On parcourt les parts, on récupère l'investissement, on extrait
-    // l'utilisateur. Pour limiter le nombre de requêtes, on agrège.
-    const allParts = [...allUnpaid, ...(await this.partRepo.findByInvestissementIds(
-      investments.map((i) => i.id),
-    ))];
-
-    // Pour cron : on fait simple — on parcourt les parts payées qui
-    // tombent dans l'année et on collecte les userIds via investmentId.
-    const yearStart = new Date(Date.UTC(annee, 0, 1));
-    const yearEnd = new Date(Date.UTC(annee + 1, 0, 1));
-
-    const paidInYearInvestmentIds = new Set<string>();
-    for (const part of allParts) {
-      if (!part.payeLe) continue;
-      const d = part.payeLe instanceof Date ? part.payeLe : new Date(part.payeLe);
-      if (d >= yearStart && d < yearEnd) {
-        paidInYearInvestmentIds.add(part.investissementId);
-      }
-    }
-
-    for (const invId of paidInYearInvestmentIds) {
-      const inv = await this.investmentRepo.findInvestmentById(invId);
-      if (inv) userIds.add(inv.utilisateurId);
-    }
+    const userIds =
+      await this.partRepo.findUtilisateurIdsAvecPartPayeeSurAnnee(annee);
 
     let nbSucces = 0;
     const erreurs: Array<{ userId: number; raison: string }> = [];
 
+    // Un échec de génération est isolé à l'investisseur concerné : le lot
+    // annuel doit aller au bout et remonter le détail des cas à rejouer.
     for (const userId of userIds) {
       try {
         await this.generateUseCase.execute(userId, annee);
@@ -97,10 +68,10 @@ export class IfuCronService {
     }
 
     this.logger.log(
-      `Cron IFU terminé : ${nbSucces}/${userIds.size} succès, ${erreurs.length} erreurs.`,
+      `Cron IFU terminé : ${nbSucces}/${userIds.length} succès, ${erreurs.length} erreurs.`,
     );
     return {
-      nbInvestisseurs: userIds.size,
+      nbInvestisseurs: userIds.length,
       nbSucces,
       nbErreurs: erreurs.length,
       erreurs,

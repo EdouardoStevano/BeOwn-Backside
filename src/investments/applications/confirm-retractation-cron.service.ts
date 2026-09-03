@@ -19,6 +19,7 @@ import { EcheanceStatus } from 'src/investments/domains/enums/investment-status.
 import { InvestmentMapper } from 'src/investments/infrastructure/persistences/mappers/investment.mapper';
 import { Echeance } from 'src/investments/domains/echeance';
 import { ResolveProjectWalletUseCase } from 'src/wallets/applications/usecases/resolve-project-wallet.usecase';
+import { AttribuerBonusParrainageService } from 'src/parrainage/applications/attribuer-bonus-parrainage.service';
 
 /**
  * Confirme les souscriptions dont le délai de réflexion accordé par BeOwn a
@@ -46,6 +47,7 @@ export class ConfirmRetractationCronService {
   constructor(
     @InjectDataSource() private readonly dataSource: DataSource,
     private readonly projectWalletResolver: ResolveProjectWalletUseCase,
+    private readonly bonusParrainage: AttribuerBonusParrainageService,
   ) {}
 
   @Cron(CronExpression.EVERY_HOUR)
@@ -68,7 +70,14 @@ export class ConfirmRetractationCronService {
     let confirmes = 0;
     for (const { id } of echus) {
       try {
-        if (await this.confirmerUnInvestissement(id)) confirmes += 1;
+        const confirme = await this.confirmerUnInvestissement(id);
+        if (confirme) {
+          confirmes += 1;
+          // Parrainage : le premier investissement DEFINITIF du filleul
+          // declenche le bonus. Best-effort APRES le commit de la
+          // confirmation — le service n'echoue jamais chez l'appelant.
+          await this.bonusParrainage.surInvestissementDefinitif(confirme);
+        }
       } catch (err) {
         this.logger.error(
           `CRON confirm-retractation: échec sur l'investissement ${id} — ${(err as Error)?.message}`,
@@ -81,8 +90,10 @@ export class ConfirmRetractationCronService {
     );
   }
 
-  /** @returns vrai si cet appel a effectivement confirmé l'investissement. */
-  private async confirmerUnInvestissement(investmentId: string): Promise<boolean> {
+  /** @returns les données de l'investissement confirmé par CET appel, sinon null. */
+  private async confirmerUnInvestissement(
+    investmentId: string,
+  ): Promise<{ id: string; utilisateurId: number; montant: number } | null> {
     return this.dataSource.transaction(async (manager) => {
       // Transition conditionnelle : si un autre passage (ou une rétractation)
       // a déjà changé le statut, on n'a rien à faire et rien à libérer.
@@ -95,7 +106,7 @@ export class ConfirmRetractationCronService {
           enAttente: InvestmentStatus.EN_DELAI_RETRACTATION,
         })
         .execute();
-      if (!claim.affected) return false;
+      if (!claim.affected) return null;
 
       const inv = await manager.findOneOrFail(InvestmentEntity, {
         where: { id: investmentId },
@@ -179,7 +190,11 @@ export class ConfirmRetractationCronService {
         await this.basculerEnFinanceSiComplet(manager, project);
       }
 
-      return true;
+      return {
+        id: inv.id,
+        utilisateurId: inv.utilisateurId,
+        montant,
+      };
     });
   }
 

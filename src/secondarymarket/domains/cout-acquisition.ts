@@ -10,11 +10,14 @@ import { round2 } from 'src/common/platform-fees/platform-fees.constants';
  * - Achat primaire pur : montant/nbTitres = prix de souscription → exact.
  * - Achats secondaires fusionnés : les fusions cumulent montant et nbTitres
  *   au prix d'achat → moyenne pondérée des coûts → exact.
- * - LIMITE CONNUE : une vente partielle antérieure décrémente `montant` du
- *   PRIX DE VENTE (et non du coût d'acquisition) — voir yousign-webhook
- *   étape 5. Après une telle vente, montant/nbTitres dérive du vrai coût
- *   moyen (dérive bornée par l'écart prix de vente/coût). Corriger cette
- *   dérive exigerait un historique d'acquisition par lot (non modélisé).
+ * - Vente partielle antérieure : le règlement décrémente `montant` du COÛT
+ *   D'ACQUISITION des parts cédées (et non de leur prix de vente — voir
+ *   yousign-webhook étape 5). Le rapport montant/nbTitres reste donc
+ *   rigoureusement égal au coût moyen d'origine après une cession partielle :
+ *   c'est ce qui rend la plus-value de la vente SUIVANTE juste.
+ *   Décrémenter du prix de vente déplaçait le coût moyen à chaque cession —
+ *   à la hausse sur une moins-value, à la baisse sur une plus-value — et
+ *   faussait durablement l'assiette des frais sur gain.
  *
  * Fallbacks :
  * - nbTitres absent/0 → valeurTitre (prix unitaire d'origine) si présent ;

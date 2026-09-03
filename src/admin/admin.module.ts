@@ -11,6 +11,8 @@ import { AdminRetraitsController } from './admin-retraits.controller';
 import { AdminInvestorsController } from './admin-investors.controller';
 import { AdminPlatformWalletController } from './admin-platform-wallet.controller';
 import { AdminEmailTemplatesController } from './admin-email-templates.controller';
+import { AdminExportsController } from './admin-exports.controller';
+import { AdminTransactionsLitigesController } from './admin-transactions-litiges.controller';
 import { EmailTemplateEntity } from 'src/shared/email/entities/email-template.entity';
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 import { ProjectEntity } from 'src/projects/infrastructure/persistences/entities/project.entity';
@@ -65,6 +67,8 @@ import { PatchAggregatedEcheanceUseCase } from './usecases/patch-aggregated-eche
     AdminInvestorsController,
     AdminPlatformWalletController,
     AdminEmailTemplatesController,
+    AdminExportsController,
+    AdminTransactionsLitigesController,
   ],
   providers: [
     TriggerEcheancePaymentUseCase,

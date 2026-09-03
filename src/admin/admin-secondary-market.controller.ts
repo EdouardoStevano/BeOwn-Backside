@@ -125,7 +125,10 @@ export class AdminSecondaryMarketController {
 
   @Post('orders/:id/cancel')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Annuler un ordre (admin) — reverse complète si déjà exécuté' })
+  @ApiOperation({
+    summary:
+      'Annuler un ordre (admin) — reverse financière UNIQUEMENT si le statut est EXECUTE',
+  })
   async cancelOrder(
     @Param('id') id: string,
     @CurrentUser() user: ActiveUser,
@@ -142,13 +145,20 @@ export class AdminSecondaryMarketController {
       throw new BadRequestException(`Ordre déjà au statut "${ordre.statut}"`);
     }
 
-    // Cas A — ordre sans acheteur (EN_CARNET / MATCH_PROPOSE) : annulation simple
-    if (
-      ordre.statut === OrdreMarcheStatus.EN_CARNET ||
-      (ordre.statut === OrdreMarcheStatus.MATCH_PROPOSE && !ordre.acheteurId)
-    ) {
-      ordre.statut = OrdreMarcheStatus.ANNULE;
-      await this.ordreRepo.save(ordre);
+    // ── Cas A — la cession n'a JAMAIS été réglée : annulation simple ─────────
+    //
+    // La reverse financière défait un règlement : elle recrédite l'acheteur,
+    // débite le vendeur du net qu'il avait reçu et rend les fractions. Sur un
+    // ordre INTERET_EXPRIME ou ACCEPTE, RIEN de tout cela n'a eu lieu — aucun
+    // wallet n'a bougé, aucune fraction n'a changé de main. La jouer quand même
+    // (ancien comportement, qui traitait tout ce qui n'était pas « sans
+    // acheteur » comme un règlement à défaire) créditait l'acheteur d'un
+    // montant qu'il n'avait jamais versé et débitait le vendeur d'un produit
+    // qu'il n'avait jamais perçu : de l'argent créé à chaque annulation.
+    //
+    // Seul EXECUTE ouvre donc la reverse. Tout le reste est annulé « à sec ».
+    if (ordre.statut !== OrdreMarcheStatus.EXECUTE) {
+      const liberation = await this.annulerSansMouvement(ordre);
 
       this.notificationService.push({
         utilisateurId: ordre.vendeurId,
@@ -158,10 +168,32 @@ export class AdminSecondaryMarketController {
         metadata: { ordreId: id, reverse: false },
       }).catch(() => {});
 
-      return { success: true, statut: OrdreMarcheStatus.ANNULE, reversed: false };
+      // L'acheteur pressenti doit savoir que son engagement tombe — et surtout
+      // que les fonds réservés lui sont rendus.
+      if (ordre.acheteurId) {
+        this.notificationService.push({
+          utilisateurId: ordre.acheteurId,
+          type: NotificationType.MARCHE_SECONDAIRE,
+          titre: 'Cession annulée par la plateforme',
+          message:
+            liberation.montantLibere > 0
+              ? `La cession en cours a été annulée par l'équipe BeOwn. Les ${formatEur(liberation.montantLibere)} ` +
+                'réservés sont de nouveau disponibles sur votre portefeuille.'
+              : "La cession en cours a été annulée par l'équipe BeOwn. Aucun montant n'a été débité.",
+          metadata: { ordreId: id, reverse: false },
+        }).catch(() => {});
+      }
+
+      return {
+        success: true,
+        statut: OrdreMarcheStatus.ANNULE,
+        reversed: false,
+        montantLibere: liberation.montantLibere,
+        signaturesAnnulees: liberation.signaturesAnnulees,
+      };
     }
 
-    // Cas B — ordre EXECUTE (ou MATCH_PROPOSE avec acheteur) : reverse complète
+    // ── Cas B — ordre EXECUTE : reverse financière complète ──────────────────
     const nbFractions = ordre.nbFractions;
     const prixUnitaire = Number(ordre.prixUnitaire);
     const montantTotal = nbFractions * prixUnitaire;
@@ -350,6 +382,93 @@ export class AdminSecondaryMarketController {
     }).catch(() => {});
 
     return { success: true, statut: OrdreMarcheStatus.ANNULE, reversed: true, montantRembourse: montantTotal };
+  }
+
+  /**
+   * Annulation « à sec » d'un ordre jamais réglé.
+   *
+   * Aucun mouvement d'argent entre les parties et aucun mouvement de fractions :
+   * il n'y a rien à défaire. Trois gestes seulement, dans une même transaction :
+   *
+   *  1. l'ordre passe ANNULE et perd toute trace d'acheteur — le laisser porter
+   *     l'intérêt d'un tiers sur une annonce morte n'a aucun sens ;
+   *  2. la signature encore PENDING est annulée — sans quoi l'acheteur pourrait
+   *     signer un contrat sur une annonce que l'administration vient de retirer,
+   *     et le webhook réglerait la cession ;
+   *  3. les fonds RÉSERVÉS à l'acceptation sont rendus disponibles. Ce n'est pas
+   *     un mouvement entre parties : l'argent ne quitte pas le portefeuille de
+   *     l'acheteur, il repasse simplement de la poche bloquée à la poche
+   *     disponible. Les fonds détenus sont inchangés — l'invariant du grand
+   *     livre est intact. Ne pas le faire gèlerait cet argent sans terme.
+   */
+  private async annulerSansMouvement(ordre: OrdreMarcheEntity): Promise<{
+    montantLibere: number;
+    signaturesAnnulees: number;
+  }> {
+    const statutInitial = ordre.statut;
+    const acheteurId = ordre.acheteurId;
+    const montantReserve =
+      statutInitial === OrdreMarcheStatus.ACCEPTE && ordre.interetNbFractions
+        ? round2(Number(ordre.prixUnitaire) * Number(ordre.interetNbFractions))
+        : 0;
+
+    return this.dataSource.transaction(async (em) => {
+      const annulation = await em
+        .createQueryBuilder()
+        .update(OrdreMarcheEntity)
+        .set({
+          statut: OrdreMarcheStatus.ANNULE,
+          acheteurId: null,
+          interetNbFractions: null,
+          interetExprimeLe: null,
+        })
+        .where('id = :id AND statut = :statutInitial', {
+          id: ordre.id,
+          statutInitial,
+        })
+        .execute();
+      if (!annulation.affected) {
+        throw new BadRequestException(
+          "L'ordre a changé d'état entre-temps : rechargez la fiche avant de réessayer.",
+        );
+      }
+
+      const signatures = await em
+        .createQueryBuilder()
+        .update(SignatureEntity)
+        .set({ statut: SignatureStatus.CANCELLED })
+        .where('"ordreId" = :ordreId AND statut = :pending', {
+          ordreId: ordre.id,
+          pending: SignatureStatus.PENDING,
+        })
+        .execute();
+
+      let montantLibere = 0;
+      if (acheteurId && montantReserve > 0) {
+        // Condition `soldeBloque >= :montant` : jamais de double libération,
+        // jamais de solde bloqué négatif.
+        const liberation = await em
+          .createQueryBuilder()
+          .update(WalletEntity)
+          .set({
+            solde: () => 'solde + :montant',
+            soldeBloque: () => '"soldeBloque" - :montant',
+          })
+          .setParameter('montant', montantReserve)
+          .where(
+            '"proprietaireUserId" = :acheteurId AND type = :type AND "soldeBloque" >= :montant',
+            {
+              acheteurId,
+              type: WalletType.INVESTISSEUR,
+              montant: montantReserve,
+            },
+          )
+          .execute();
+        if (liberation.affected) montantLibere = montantReserve;
+      }
+
+      return { montantLibere, signaturesAnnulees: signatures.affected ?? 0 };
+    });
   }
 
   // ── Forcer l'exécution d'un ordre MATCH_PROPOSE ──────────────────────────────

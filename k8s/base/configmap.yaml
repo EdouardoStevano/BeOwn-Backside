@@ -49,6 +49,29 @@ data:
   # App
   TFA_APP_NAME: 'BeOwn'
 
+  # Documentation d'API (Swagger, /api/docs) — FERMÉE par défaut.
+  # Le code ne l'expose que si cette valeur vaut exactement 'true'
+  # (src/main.ts). L'ancienne condition `NODE_ENV !== 'production'` la publiait
+  # en accès libre sur dev, staging ET test, c'est-à-dire trois domaines
+  # ouverts sur Internet : cartographie complète des routes et des payloads
+  # offerte à qui la demande. Ne passer à 'true' que temporairement, sur un
+  # environnement précis, et le remettre à 'false' ensuite.
+  SWAGGER_ENABLED: 'false'
+
+  # ─── Surveillance LCB-FT (AML) ────────────────────────────────
+  # Seuils de déclenchement d'une alerte, en EUR. Repris des valeurs codées en
+  # dur dans src/common/aml/aml-monitor.service.ts (10 000 / 50 000) : elles
+  # étaient les défauts du code, invisibles depuis la configuration, donc
+  # impossibles à ajuster sans redéployer une image.
+  #
+  # ⚠ SEUILS À ARBITRER — ces valeurs sont des défauts techniques, PAS une
+  # position de conformité. Le seuil pertinent dépend du régime applicable au
+  # véhicule et du marché cible, deux points encore en suspens (voir
+  # docs/conformite/). À trancher avec le responsable conformité avant
+  # l'ouverture au public, et à documenter dans le registre LCB-FT.
+  AML_THRESHOLD_SINGLE: '10000'
+  AML_THRESHOLD_MONTHLY: '50000'
+
   # Inject the real value from the Kubernetes Secret, never from this ConfigMap.
 
   # KYC

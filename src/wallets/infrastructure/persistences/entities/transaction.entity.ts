@@ -27,6 +27,13 @@ import {
  * La colonne a été supprimée ; ne pas la réintroduire. Rattrapage des données
  * existantes : docs/adr/ADR-grand-livre-deux-colonnes.md.
  */
+// Index de service des chemins chauds : la file des retraits et le balayage de
+// rattrapage filtrent (type, statut) puis trient par ancienneté ; les exports
+// et le nettoyage des dépôts abandonnés balaient (statut, createdAt). Sans eux,
+// chaque passage est un scan complet d'une table qui ne fait que grossir.
+// Pose en base : hors déploiement, cf. docs/adr/ADR-migrations-hors-deploiement.md.
+@Index(['statut', 'createdAt'])
+@Index(['type', 'statut'])
 @Entity('transaction_paiement')
 export class TransactionEntity {
   @PrimaryGeneratedColumn('uuid')

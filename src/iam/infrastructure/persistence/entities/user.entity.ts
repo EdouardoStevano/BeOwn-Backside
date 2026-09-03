@@ -94,6 +94,20 @@ export class UserEntity {
   @Column({ type: 'boolean', default: false })
   stripeConnectDetailsSubmitted: boolean;
 
+  // ─── Parrainage (vague C) ────────────────────────────────────────────────
+  // Code personnel à partager (`BEOWN-XXXXXX`, cf. domains/code-parrainage).
+  // Nullable : posé par AssurerCodeParrainageService à l'inscription (et en
+  // filet à la première lecture), backfillé en SQL manuel pour le stock
+  // existant (docs/adr/ADR-migrations-hors-deploiement.md).
+  @Column({ type: 'varchar', length: 12, nullable: true, unique: true })
+  codeParrainage: string | null;
+
+  // Compte du parrain, figé À L'INSCRIPTION (jamais modifiable ensuite : le
+  // lien de parrainage est un fait d'acquisition, pas une préférence).
+  // Colonne de référence sans FK dure, comme le reste du schéma.
+  @Column({ type: 'integer', nullable: true })
+  parrainePar: number | null;
+
   @CreateDateColumn()
   createdAt: Date;
 

@@ -1,0 +1,117 @@
+---
+# ─────────────────────────────────────────────────────────────────────────────
+# Mailpit — boîte mail de capture, pour les environnements NON destinés à
+# écrire à de vraies personnes (dev, test).
+#
+# Pourquoi ce composant existe : `MAIL_DRIVER: 'mailpit'` seul ne suffit pas.
+# Le driver poste sur l'API HTTP de Mailpit et LÈVE une erreur si personne ne
+# répond (src/shared/email/mailpit.service.ts) — poser la variable sans
+# déployer le service échangerait un défaut (de vrais emails partant vers les
+# comptes de seed) contre un autre (l'inscription qui échoue). Les deux vont
+# donc ensemble.
+#
+# Consulter les messages capturés :
+#   kubectl -n beown-dev port-forward svc/mailpit-service 8025:8025
+#   puis http://localhost:8025
+#
+# Volontairement SANS Ingress : cette interface expose le contenu de tous les
+# emails, jetons de vérification et codes OTP compris. Elle ne doit être
+# joignable que par port-forward, jamais depuis Internet.
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mailpit
+  labels:
+    app: mailpit
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mailpit
+  template:
+    metadata:
+      labels:
+        app: mailpit
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: mailpit
+          # Version épinglée — le docker-compose local utilise `:latest`, ce qui
+          # est acceptable sur un poste mais pas dans un cluster partagé.
+          image: axllent/mailpit:v1.31.0
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          ports:
+            - name: http
+              containerPort: 8025
+            - name: smtp
+              containerPort: 1025
+          env:
+            # Plafond de rétention : au-delà, les plus anciens sont écartés.
+            # Une boîte de capture n'a pas vocation à archiver.
+            - name: MP_MAX_MESSAGES
+              value: '500'
+            # Stockage en mémoire (emptyDir) : les messages disparaissent au
+            # redémarrage du pod, et c'est très bien — ils contiennent des
+            # jetons à usage unique et des codes OTP.
+            - name: MP_DATABASE
+              value: /data/mailpit.db
+            - name: MP_SMTP_AUTH_ACCEPT_ANY
+              value: '1'
+            - name: MP_SMTP_AUTH_ALLOW_INSECURE
+              value: '1'
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          livenessProbe:
+            httpGet:
+              path: /livez
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: '10m'
+              memory: '64Mi'
+            limits:
+              cpu: '200m'
+              memory: '256Mi'
+      volumes:
+        - name: data
+          emptyDir:
+            sizeLimit: 256Mi
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mailpit-service
+  labels:
+    app: mailpit
+spec:
+  type: ClusterIP
+  selector:
+    app: mailpit
+  ports:
+    # API HTTP — c'est ce port que MAILPIT_URL doit viser.
+    - name: http
+      port: 8025
+      targetPort: 8025
+    - name: smtp
+      port: 1025
+      targetPort: 1025

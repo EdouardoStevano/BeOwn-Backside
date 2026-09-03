@@ -73,11 +73,34 @@ export class TopUpInvestmentUseCase {
     private readonly projectWalletResolver: ResolveProjectWalletUseCase,
   ) {}
 
+  /** Clé d'idempotence d'un top-up, liée à l'appelant et à l'investissement. */
+  static cleIdempotence(
+    userId: number,
+    investmentId: string,
+    clientKey: string,
+  ): string {
+    return `topup:${userId}:${investmentId}:${clientKey}`;
+  }
+
   async execute(
     investmentId: string,
     userId: number,
     nbFractions: number,
+    idempotencyKey?: string,
   ): Promise<Investment> {
+    // Même garde que `CreateInvestmentUseCase` : la clé fournie par le client
+    // est retrouvée sur l'écriture du grand livre. Un retry (double-clic,
+    // réseau) rend l'investissement DÉJÀ complété, sans second débit.
+    if (idempotencyKey) {
+      const previous = await this.walletRepository.findTransactionByIdempotencyKey(
+        TopUpInvestmentUseCase.cleIdempotence(userId, investmentId, idempotencyKey),
+      );
+      if (previous) {
+        const existing = await this.investmentRepository.findInvestmentById(investmentId);
+        if (existing) return existing;
+      }
+    }
+
     const investment = await this.investmentRepository.findInvestmentById(investmentId);
     if (!investment) throw new NotFoundException('Investissement introuvable');
     if (investment.utilisateurId !== userId) throw new ForbiddenException('Accès refusé');
@@ -127,7 +150,64 @@ export class TopUpInvestmentUseCase {
     // sous verrou avant débit). Mise à jour de l'investissement, débit, ledger
     // et régénération de l'échéancier vivent dans UNE transaction : tout throw
     // annule l'ensemble.
-    const updated = await this.dataSource.transaction(async (manager) => {
+    let updated: Investment;
+    try {
+      updated = await this.executerTopUp(
+        investment,
+        investmentId,
+        userId,
+        nbFractions,
+        montantDelta,
+        newNbTitres,
+        newMontant,
+        nbFractionsTotal,
+        wallet,
+        project,
+        idempotencyKey,
+      );
+    } catch (err: any) {
+      // COURSE sur la même clé d'idempotence : deux retries simultanés passent
+      // tous deux le pré-check, la contrainte d'unicité en base tranche — le
+      // perdant est intégralement annulé (débit compris) avec sa transaction.
+      // On lui rend l'investissement complété par le gagnant, pas une 500.
+      const estDoublon =
+        err?.code === '23505' || err?.driverError?.code === '23505';
+      if (estDoublon && idempotencyKey) {
+        const existing = await this.investmentRepository.findInvestmentById(investmentId);
+        if (existing) return existing;
+      }
+      throw err;
+    }
+
+    // Async bulletin regeneration (non-blocking)
+    this.regenerateBulletin(updated, project, userId).catch((err) =>
+      this.logger.error(`Top-up bulletin regen failed for ${investmentId}: ${err?.message}`),
+    );
+
+    // Notify via facade (handles both user + admin)
+    const user = await this.userRepository.findById(userId);
+    if (user) {
+      this.notificationEvents.fractionsToppedUp(updated, project, user, nbFractions, montantDelta);
+    }
+
+    return updated;
+  }
+
+  /** Section critique du top-up : tout ou rien, sous les verrous décrits ci-dessus. */
+  private async executerTopUp(
+    investment: Investment,
+    investmentId: string,
+    userId: number,
+    nbFractions: number,
+    montantDelta: number,
+    newNbTitres: number,
+    newMontant: number,
+    nbFractionsTotal: number,
+    wallet: { id: string; devise: string },
+    project: any,
+    idempotencyKey?: string,
+  ): Promise<Investment> {
+    return this.dataSource.transaction(async (manager) => {
       // 1. Verrou sur la ligne projet.
       const projectRow = await manager.findOne(ProjectEntity, {
         where: { id: investment.projetId },
@@ -212,7 +292,11 @@ export class TopUpInvestmentUseCase {
       tx.echeanceId = null;
       tx.reservationId = null;
       tx.projetId = investment.projetId;
-      tx.idempotencyKey = `topup:${userId}:${investmentId}:${Date.now()}`;
+      // Clé du client si fournie (idempotence adossée à la contrainte d'unicité
+      // en base) ; sinon clé horodatée, qui trace sans jamais entrer en collision.
+      tx.idempotencyKey = idempotencyKey
+        ? TopUpInvestmentUseCase.cleIdempotence(userId, investmentId, idempotencyKey)
+        : `topup:${userId}:${investmentId}:${Date.now()}`;
       tx.fraisPsp = 0;
       tx.fraisPlateforme = 0;
       tx.metadata = null;
@@ -241,19 +325,6 @@ export class TopUpInvestmentUseCase {
       });
       return updatedDomain;
     });
-
-    // Async bulletin regeneration (non-blocking)
-    this.regenerateBulletin(updated, project, userId).catch((err) =>
-      this.logger.error(`Top-up bulletin regen failed for ${investmentId}: ${err?.message}`),
-    );
-
-    // Notify via facade (handles both user + admin)
-    const user = await this.userRepository.findById(userId);
-    if (user) {
-      this.notificationEvents.fractionsToppedUp(updated, project, user, nbFractions, montantDelta);
-    }
-
-    return updated;
   }
 
   private async regenerateBulletin(investment: Investment, project: any, userId: number): Promise<void> {

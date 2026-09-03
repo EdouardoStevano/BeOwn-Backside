@@ -98,8 +98,12 @@ export class AdminReportsController {
   @ApiOperation({ summary: 'Générer et télécharger un rapport PDF' })
   @ApiResponse({ status: 200, description: 'PDF binary stream' })
   @RequirePermission('reports:read')
+  // POST uniquement. Un @Get était empilé ici : Nest ne cumule PAS deux verbes
+  // sur une même méthode — le second décorateur écrase le premier, la route GET
+  // répondait 404 en silence (constaté), et l'écran Rapports qui appelait en
+  // GET semblait « ne pas marcher ». Générer est une action : POST est le bon
+  // verbe, le front a été aligné.
   @Post(':type/generate')
-  @Get(':type/generate')
   async generate(
     @Param('type') type: string,
     @CurrentUser() user: ActiveUser,

@@ -100,15 +100,44 @@ export abstract class TemplatedEmailService implements EmailService {
     await this.sendTemplated('new-project', email, { prenom, ...projet });
   }
 
+  /**
+   * `unsubscribeUrl` est transmis TEL QUEL au rendu : le lien de
+   * désinscription est obligatoire sur une annonce de marché (art. L.34-5
+   * CPCE) et ne peut pas être fabriqué ici — il porte un jeton propre au
+   * destinataire, émis par `TokenService.generateUnsubscribeToken` (voir
+   * `BroadcastService.unsubscribeUrl`), donc à partir d'un `userId` que ce
+   * socle de transport ne connaît pas. `templates/new-secondary.hbs` n'affiche
+   * la ligne que si la variable est renseignée.
+   */
   async sendNewSecondaryOrderEmail(
     email: string,
     prenom: string,
     projet: { titre: string; nbFractions: number; prix: number },
+    unsubscribeUrl?: string,
   ): Promise<void> {
     await this.sendTemplated('new-secondary', email, {
       prenom,
       ...projet,
       prix: formatEur(projet.prix),
+      ...(unsubscribeUrl ? { unsubscribeUrl } : {}),
+    });
+  }
+
+  /**
+   * Versement des revenus locatifs d'une période. Le montant transmis est le
+   * NET effectivement crédité (prélèvements IR/CSG déjà déduits) — c'est le
+   * seul chiffre que l'investisseur retrouve sur son portefeuille.
+   */
+  async sendDistributionEmail(
+    email: string,
+    prenom: string,
+    distribution: { montant: number; projetTitre: string; periode: string },
+  ): Promise<void> {
+    await this.sendTemplated('distribution-recue', email, {
+      prenom,
+      projetTitre: distribution.projetTitre,
+      periode: distribution.periode,
+      montant: formatEur(distribution.montant),
     });
   }
 

@@ -406,3 +406,119 @@ describe('POST orders — éligibilité appliquée côté serveur', () => {
     });
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Durée de validité et double-listing.
+//
+// Deux trous que l'interface ne pouvait pas montrer : une annonce périmée
+// restait publiée et sollicitable, et les fractions d'une annonce déjà
+// sollicitée ou acceptée redevenaient « disponibles » — le vendeur pouvait
+// promettre deux fois les mêmes parts.
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe('GET orders — les annonces échues ne sont pas publiées', () => {
+  it('filtre sur la date de validité, sans exclure les annonces sans échéance', async () => {
+    const qb = fakeQueryBuilder([]);
+    const { controller } = buildController({
+      ordreRepo: { createQueryBuilder: jest.fn(() => qb), findOne: jest.fn(), save: jest.fn() },
+    });
+
+    await controller.listOrders();
+
+    const clause = qb.calls.andWhere.find(([sql]: any[]) =>
+      String(sql).includes('valideJusquAu'),
+    );
+    expect(clause).toBeDefined();
+    // Une annonce sans date de validité ne périme jamais : elle reste servie.
+    expect(String(clause[0])).toContain('IS NULL');
+    expect(clause[1].jourLimite).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+});
+
+describe('POST orders — les fractions déjà engagées ne sont plus disponibles', () => {
+  const emAvecAnnonces = (investment: any, projet: any, annonces: any[]) => {
+    const capture: { where?: any } = {};
+    const em: any = {
+      createQueryBuilder: jest.fn(() => ({
+        setLock: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        getOne: jest.fn().mockResolvedValue(investment),
+      })),
+      findOne: jest.fn().mockResolvedValue(projet),
+      find: jest.fn((_entity: any, options: any) => {
+        capture.where = options.where;
+        return Promise.resolve(annonces);
+      }),
+      create: jest.fn((_entity: any, data: any) => data),
+      save: jest.fn((_entity: any, data: any) =>
+        Promise.resolve({ id: 'ordre-neuf', ...data }),
+      ),
+    };
+    return { em, capture };
+  };
+
+  const investissementCessible = {
+    id: 'inv-1',
+    utilisateurId: 1,
+    projetId: 'proj-1',
+    nbTitres: 10,
+    createdAt: new Date(new Date().setFullYear(new Date().getFullYear() - 2)),
+  };
+  const projetEnExploitation = { id: 'proj-1', statut: 'en_exploitation' };
+
+  const controllerAvec = (em: any) =>
+    buildController({
+      dataSource: { transaction: jest.fn((cb: (em: any) => Promise<any>) => cb(em)) },
+      investRepo: { findOne: jest.fn().mockResolvedValue(null) },
+      userRepo: { findOne: jest.fn().mockResolvedValue(null) },
+    }).controller;
+
+  it("compte les annonces EN_CARNET, INTERET_EXPRIME et ACCEPTE comme engageantes", async () => {
+    const { em, capture } = emAvecAnnonces(
+      investissementCessible,
+      projetEnExploitation,
+      [],
+    );
+    const controller = controllerAvec(em);
+
+    await controller.createOrder(
+      { investissementId: 'inv-1', sens: 'vente', nbFractions: 1, prixUnitaire: 100, montant: 100 } as any,
+      vendeur as any,
+    );
+
+    const statuts = capture.where?.statut?._value ?? capture.where?.statut;
+    expect(statuts).toEqual(
+      expect.arrayContaining([
+        OrdreMarcheStatus.EN_CARNET,
+        OrdreMarcheStatus.INTERET_EXPRIME,
+        OrdreMarcheStatus.ACCEPTE,
+      ]),
+    );
+    // Un ordre EXECUTE, ANNULE ou EXPIRE n'immobilise plus rien.
+    expect(statuts).not.toContain(OrdreMarcheStatus.EXECUTE);
+    expect(statuts).not.toContain(OrdreMarcheStatus.ANNULE);
+  });
+
+  it("refuse de republier des fractions déjà sollicitées par un acheteur", async () => {
+    // 10 fractions détenues, 8 déjà portées par une annonce INTERET_EXPRIME :
+    // il n'en reste que 2 à annoncer.
+    const { em } = emAvecAnnonces(investissementCessible, projetEnExploitation, [
+      { nbFractions: 8, statut: OrdreMarcheStatus.INTERET_EXPRIME },
+    ]);
+    const controller = controllerAvec(em);
+
+    let caught: any;
+    try {
+      await controller.createOrder(
+        { investissementId: 'inv-1', sens: 'vente', nbFractions: 5, prixUnitaire: 100, montant: 500 } as any,
+        vendeur as any,
+      );
+    } catch (e) {
+      caught = e;
+    }
+
+    expect(caught).toBeInstanceOf(BadRequestException);
+    expect(String(caught.message)).toContain('2 fraction');
+    expect(em.save).not.toHaveBeenCalled();
+  });
+});

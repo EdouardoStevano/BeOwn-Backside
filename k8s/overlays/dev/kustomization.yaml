@@ -6,9 +6,16 @@ namespace: beown-dev
 
 resources:
   - ../../base
+  # Boîte mail de capture : aucun email réel ne part de cet environnement.
+  # Va de pair avec MAIL_DRIVER/MAILPIT_URL du configmap-patch.
+  - ../../components/mailpit
 
 patches:
   - path: configmap-patch.yaml
     target:
       kind: ConfigMap
       name: beown-backend-config
+  - path: ingress-patch.yaml
+    target:
+      kind: Ingress
+      name: beown-backend-ingress

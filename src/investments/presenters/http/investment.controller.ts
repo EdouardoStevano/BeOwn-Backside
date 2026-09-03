@@ -5,9 +5,11 @@ import {
   Get,
   Param,
   ParseIntPipe,
+  ParseUUIDPipe,
   Patch,
   Post,
   Query,
+  GoneException,
   HttpCode,
   HttpStatus,
   Inject,
@@ -45,7 +47,7 @@ import { Roles } from 'src/common/auth/roles.decorator';
 import { RequirePermission } from 'src/common/auth/require-permission.decorator';
 import { hasPermission } from 'src/common/auth/permissions.constants';
 import { UserRole } from 'src/iam/domains/enums/user.enum';
-import { SkipThrottle } from '@nestjs/throttler';
+import { SkipThrottle, Throttle } from '@nestjs/throttler';
 import { EcheanceEntity } from 'src/investments/infrastructure/persistences/entities/echeance.entity';
 import { EcheanceStatus } from 'src/investments/domains/enums/investment-status.enum';
 import {
@@ -115,6 +117,24 @@ export class InvestmentController {
     description: 'Investissement créé avec échéancier',
   })
   @ApiResponse({ status: 403, description: 'KYC non validé' })
+  @ApiResponse({ status: 429, description: 'Trop de demandes — 10 par minute' })
+  // La souscription engage de l'argent : elle mérite un palier propre, alors
+  // que la classe porte un `@SkipThrottle()` destiné à ses routes de lecture.
+  //
+  // VÉRIFIÉ dans @nestjs/throttler 6.5.0 : un `@SkipThrottle()` SANS argument
+  // n'inscrit que la clé `default`, tandis que le guard ne lit que les clés
+  // des throttlers déclarés (`short`, `medium`, `auth` — cf. app.module.ts).
+  // Le skip de classe est donc aujourd'hui SANS EFFET, et cette levée
+  // explicite est redondante. Elle est conservée à dessein : elle rend
+  // l'intention lisible et protège cette route le jour où un throttler
+  // nommé `default` apparaîtrait, ce qui activerait rétroactivement le skip
+  // de classe sur une route qui débite un portefeuille.
+  @SkipThrottle({ short: false, medium: false, auth: false })
+  @Throttle({
+    short: { ttl: 60_000, limit: 10 },
+    medium: { ttl: 60_000, limit: 10 },
+    auth: { ttl: 60_000, limit: 10 },
+  })
   @UseGuards(KycValidatedGuard)
   @Roles(UserRole.INVESTISSEUR)
   @Post()
@@ -122,14 +142,42 @@ export class InvestmentController {
     return this.createInvestment.execute(user.userId, dto);
   }
 
-  @ApiOperation({ summary: 'Initier un investissement avec signature YouSign (sans débit immédiat)' })
-  @ApiResponse({ status: 201, description: '{ signingUrl, signatureId }' })
-  @ApiResponse({ status: 403, description: 'KYC non validé' })
-  @UseGuards(KycValidatedGuard)
-  @Roles(UserRole.INVESTISSEUR)
+  /**
+   * Ancienne initiation de souscription — DÉBRANCHÉE.
+   *
+   * Doublon de `POST /investments` (le parcours réel), qu'aucun client
+   * n'appelle. Chaque
+   * appel créait pourtant un investissement au statut INITIE et une demande de
+   * signature : le prestataire étant hors service, la signature n'aboutissait
+   * jamais et l'investissement fantôme restait en base — comptabilisé dans les
+   * fractions engagées d'un projet sans qu'un centime ait été débité.
+   *
+   * La route est conservée pour répondre explicitement aux clients qui
+   * l'appelleraient encore (un 404 les laisserait croire à une panne), sur le
+   * précédent de `POST secondary-market/orders/:id/execute`. Elle ne lit ni
+   * n'écrit plus rien. Le use case, lui, N'EST PAS supprimé : il reste la
+   * brique d'initiation de signature, réutilisable dès que le parcours sera
+   * réunifié.
+   */
+  @ApiOperation({
+    summary: 'DÉBRANCHÉE — la souscription passe par POST /investments.',
+    deprecated: true,
+  })
+  @ApiResponse({
+    status: 410,
+    description:
+      'INVESTMENT_INITIATE_DISABLED — endpoint doublon retiré ; il laissait des ' +
+      'investissements INITIE fantômes en base.',
+  })
   @Post('initiate')
-  initiateWithYouSign(@Body() dto: InitiateInvestmentDto, @CurrentUser() user: ActiveUser) {
-    return this.initiateInvestment.execute(user.userId, dto.projetId, dto.nbFractions);
+  initiateWithYouSign(): never {
+    throw new GoneException({
+      code: 'INVESTMENT_INITIATE_DISABLED',
+      message:
+        "Cet endpoint n'est plus servi. La souscription passe par " +
+        'POST /investments.',
+      remplacePar: 'POST /investments',
+    });
   }
 
   @ApiOperation({ summary: 'Mes investissements' })
@@ -156,7 +204,10 @@ export class InvestmentController {
   @ApiResponse({ status: 200, description: 'Liste des investissements du projet' })
   @Get('project/:projetId')
   @RequirePermission('projects:read')
-  listByProject(@Param('projetId') projetId: string) {
+  // ParseUUIDPipe : sans lui, un id non-UUID traverse jusqu'à PostgreSQL et
+  // ressort en 500 (QueryFailedError) — même défaut que celui corrigé sur les
+  // routes publiques d'avis. 400 est la réponse due à une entrée invalide.
+  listByProject(@Param('projetId', ParseUUIDPipe) projetId: string) {
     return this.investmentRepository.findByProjetId(projetId);
   }
 
@@ -283,7 +334,12 @@ export class InvestmentController {
     @Body() dto: TopUpDto,
     @CurrentUser() user: ActiveUser,
   ) {
-    return this.topUpInvestment.execute(id, user.userId, dto.nbFractions);
+    return this.topUpInvestment.execute(
+      id,
+      user.userId,
+      dto.nbFractions,
+      dto.idempotencyKey,
+    );
   }
 
   @ApiOperation({

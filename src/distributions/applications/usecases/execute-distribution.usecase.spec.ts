@@ -57,6 +57,18 @@ describe('ExecuteDistributionUseCase — audit role', () => {
       auditLog,
       amlMonitor,
       metrics,
+      { push: jest.fn().mockResolvedValue(undefined) } as any,
+      { findProjectById: jest.fn().mockResolvedValue(null) } as any,
+      { distributionRecue: jest.fn().mockResolvedValue(undefined) } as any,
+      // Contrepartie débitrice : aucune part ni frais ici, le wallet projet
+      // n'est résolu que pour amorcer le suivi de solde.
+      {
+        executeInTransaction: jest
+          .fn()
+          .mockResolvedValue({ id: 'w-projet', solde: 0, devise: 'EUR' }),
+      } as any,
+      // Réinvestissement (vague C) : stub inerte — logique couverte par ses specs.
+      { surPartPayee: jest.fn().mockResolvedValue(undefined) } as any,
     );
   });
 
@@ -97,6 +109,39 @@ describe('ExecuteDistributionUseCase — encaissement des frais plateforme', () 
   /** Toutes les entités sauvegardées via em.save (wallets ET transactions) */
   let saved: any[];
   let walletPlat: any;
+  /**
+   * Crédits appliqués par `UPDATE wallet SET solde = solde + :montant`.
+   * Le crédit du wallet de frais n'est plus une réécriture de la ligne lue
+   * (lost update) mais un incrément calculé par la base — on observe donc les
+   * incréments émis, cumulés par portefeuille.
+   */
+  let incrementsParWallet: Map<string, number>;
+
+  /** Query builder simulé : applique l'incrément atomique sur incrementsParWallet. */
+  const fakeUpdateBuilder = () => {
+    let montant = 0;
+    let walletId = '';
+    const builder: any = {
+      update: jest.fn().mockReturnThis(),
+      set: jest.fn().mockReturnThis(),
+      setParameter: jest.fn((_nom: string, valeur: number) => {
+        montant = Number(valeur);
+        return builder;
+      }),
+      where: jest.fn((_clause: string, params: { id: string }) => {
+        walletId = params.id;
+        return builder;
+      }),
+      execute: jest.fn(async () => {
+        incrementsParWallet.set(
+          walletId,
+          (incrementsParWallet.get(walletId) ?? 0) + montant,
+        );
+        return { affected: 1 };
+      }),
+    };
+    return builder;
+  };
 
   const periodeAvecFrais = (overrides: Record<string, unknown> = {}) => ({
     id: 'per1',
@@ -124,6 +169,7 @@ describe('ExecuteDistributionUseCase — encaissement des frais plateforme', () 
 
     walletPlat = null;
     saved = [];
+    incrementsParWallet = new Map();
     const dataSource: any = {
       transaction: jest.fn(async (cb: any) => {
         const em: any = {
@@ -140,6 +186,7 @@ describe('ExecuteDistributionUseCase — encaissement des frais plateforme', () 
             if (obj?.type === WalletType.FRAIS_PLATEFORME) walletPlat = savedObj;
             return Promise.resolve(savedObj);
           }),
+          createQueryBuilder: jest.fn(fakeUpdateBuilder),
         };
         return cb(em);
       }),
@@ -159,6 +206,18 @@ describe('ExecuteDistributionUseCase — encaissement des frais plateforme', () 
         observeHistogram: jest.fn(),
         setGauge: jest.fn(),
       } as any,
+      { push: jest.fn().mockResolvedValue(undefined) } as any,
+      { findProjectById: jest.fn().mockResolvedValue(null) } as any,
+      { distributionRecue: jest.fn().mockResolvedValue(undefined) } as any,
+      // Contrepartie débitrice des frais : un wallet projet largement
+      // alimenté pour que la détection de découvert reste silencieuse.
+      {
+        executeInTransaction: jest
+          .fn()
+          .mockResolvedValue({ id: 'w-projet', solde: 1_000_000, devise: 'EUR' }),
+      } as any,
+      // Réinvestissement (vague C) : stub inerte — logique couverte par ses specs.
+      { surPartPayee: jest.fn().mockResolvedValue(undefined) } as any,
     );
   });
 
@@ -180,8 +239,9 @@ describe('ExecuteDistributionUseCase — encaissement des frais plateforme', () 
     expect(gestion.montant).toBeCloseTo(70_000, 2);
     expect(gestion.idempotencyKey).toBe('distribution:fee:gestion_locative:per1');
 
-    // Wallet FRAIS_PLATEFORME crédité du total des deux frais
-    expect(walletPlat.solde).toBeCloseTo(70_833.33, 2);
+    // Wallet FRAIS_PLATEFORME crédité du total des deux frais — par un
+    // incrément atomique côté base, plus par une réécriture du solde lu.
+    expect(incrementsParWallet.get('wallet-plat-1')).toBeCloseTo(70_833.33, 2);
   });
 
   it('propage fraisPlafonnes en metadata.capped sur les deux transactions', async () => {

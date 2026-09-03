@@ -116,4 +116,49 @@ describe('ExprimerInteretUseCase', () => {
       BadRequestException,
     );
   });
+
+  // ── Durée de validité ─────────────────────────────────────────────────────
+  //
+  // Le statut EN_CARNET ne suffit pas : entre deux passages du cron, une
+  // annonce échue reste au carnet. Sans ce contrôle, le vendeur pouvait être
+  // sollicité — et engagé — sur une offre qu'il avait lui-même bornée.
+
+  it("refuse une marque d'intérêt sur une annonce échue, code métier stable", async () => {
+    const { usecase, ordreRepo } = build();
+    ordreRepo.findOne.mockResolvedValue({
+      ...ordreOuvert,
+      valideJusquAu: '2020-01-01',
+    });
+
+    const erreur = await usecase.execute('ordre-1', 2, 5).catch((e) => e);
+
+    expect(erreur).toBeInstanceOf(BadRequestException);
+    expect(erreur.getResponse()).toMatchObject({
+      code: 'SECONDARY_ORDER_EXPIRED',
+      expireeLe: '2020-01-01T23:59:59.999Z',
+    });
+  });
+
+  it("accepte une annonce dont l'échéance n'est pas atteinte", async () => {
+    const { usecase, ordreRepo } = build();
+    const dansUnAn = new Date();
+    dansUnAn.setFullYear(dansUnAn.getFullYear() + 1);
+    ordreRepo.findOne.mockResolvedValue({
+      ...ordreOuvert,
+      valideJusquAu: dansUnAn.toISOString().slice(0, 10),
+    });
+
+    await expect(usecase.execute('ordre-1', 2, 5)).resolves.toMatchObject({
+      statut: OrdreMarcheStatus.INTERET_EXPRIME,
+    });
+  });
+
+  it('une annonce sans échéance reste indéfiniment sollicitable', async () => {
+    const { usecase, ordreRepo } = build();
+    ordreRepo.findOne.mockResolvedValue({ ...ordreOuvert, valideJusquAu: null });
+
+    await expect(usecase.execute('ordre-1', 2, 5)).resolves.toMatchObject({
+      statut: OrdreMarcheStatus.INTERET_EXPRIME,
+    });
+  });
 });

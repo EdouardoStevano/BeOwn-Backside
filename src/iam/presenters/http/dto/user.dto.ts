@@ -4,6 +4,7 @@ import {
   IsOptional,
   IsString,
   MinLength,
+  IsUUID,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
@@ -61,6 +62,23 @@ export class UpdatePreferencesDto {
   @IsOptional()
   @IsString()
   preferredCurrency?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Réinvestir automatiquement les loyers nets en fractions entières du projet cible (toutes les gardes de souscription s’appliquent).',
+  })
+  @IsOptional()
+  @IsBoolean()
+  reinvestLoyers?: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      'Projet cible du réinvestissement — null pour laisser les loyers au wallet.',
+    format: 'uuid',
+  })
+  @IsOptional()
+  @IsUUID()
+  reinvestProjetId?: string | null;
 }
 
 /**

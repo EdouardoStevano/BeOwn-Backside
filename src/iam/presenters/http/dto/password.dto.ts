@@ -4,6 +4,7 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
+  MaxLength,
   MinLength,
   Matches,
 } from 'class-validator';
@@ -60,4 +61,15 @@ export class SignUpDto {
   @IsString()
   @IsOptional()
   captchaToken?: string;
+
+  @ApiPropertyOptional({
+    example: 'BEOWN-7KM2QX',
+    description:
+      "Code de parrainage (optionnel). Un code inconnu ou mal formé est IGNORÉ — il ne fait jamais échouer l'inscription.",
+    maxLength: 20,
+  })
+  @IsString()
+  @IsOptional()
+  @MaxLength(20)
+  codeParrainage?: string;
 }

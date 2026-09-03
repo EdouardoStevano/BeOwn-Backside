@@ -22,7 +22,7 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource } from 'typeorm';
+import { Repository, DataSource, In } from 'typeorm';
 import { SkipThrottle } from '@nestjs/throttler';
 import { OrdreMarcheEntity } from 'src/secondarymarket/infrastructure/persistences/entities/ordre-marche.entity';
 import { InvestmentEntity } from 'src/investments/infrastructure/persistences/entities/investment.entity';
@@ -35,6 +35,7 @@ import {
 import {
   OrdreMarcheStatus,
   OrdreMarcheSens,
+  STATUTS_ANNONCE_ENGAGEANTE,
 } from 'src/secondarymarket/domains/ordre-marche';
 import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
@@ -51,6 +52,7 @@ import {
   MENTION_NON_SYSTEME_DE_NEGOCIATION,
   METHODE_PRIX_REFERENCE,
   PRIX_REFERENCE_CONTRAIGNANT,
+  jourLimiteValidite,
   verifierEligibiliteMiseEnVente,
 } from 'src/secondarymarket/domains/tableau-affichage';
 import {
@@ -103,8 +105,17 @@ export class SecondaryMarketController {
   })
   @Get('orders')
   async listOrders() {
+    // Une annonce échue n'est plus cessible : elle ne doit pas figurer au
+    // tableau d'affichage, même tant que le cron d'expiration ne l'a pas
+    // balayée. Sans ce filtre, la date de validité saisie par le vendeur
+    // n'avait aucun effet observable et un acheteur pouvait se manifester sur
+    // une offre périmée.
     const ordres = await this.ordresWithRelations()
       .where('ord.statut = :statut', { statut: OrdreMarcheStatus.EN_CARNET })
+      .andWhere(
+        '(ord."valideJusquAu" IS NULL OR ord."valideJusquAu" >= :jourLimite)',
+        { jourLimite: jourLimiteValidite(new Date()) },
+      )
       .orderBy('ord.createdAt', 'DESC')
       .getMany();
     return this.avecDevis(ordres);
@@ -311,12 +322,20 @@ export class SecondaryMarketController {
         });
       }
 
-      // Compter les fractions déjà en carnet — la lecture est sérialisée par
+      // Compter les fractions déjà ENGAGÉES — la lecture est sérialisée par
       // le lock acquis ci-dessus sur l'investment row.
+      //
+      // Ne compter que `EN_CARNET` laissait un trou de double-listing : dès
+      // qu'un acheteur se manifestait (INTERET_EXPRIME) ou que le vendeur
+      // acceptait (ACCEPTE), les fractions concernées disparaissaient du
+      // décompte et le vendeur pouvait republier les MÊMES fractions dans une
+      // seconde annonce. Deux cessions pouvaient alors se régler sur un stock
+      // qui n'existait qu'une fois. Toute annonce encore susceptible d'aboutir
+      // immobilise donc ses fractions.
       const activeOrders = await em.find(OrdreMarcheEntity, {
         where: {
           investissementId: dto.investissementId,
-          statut: OrdreMarcheStatus.EN_CARNET,
+          statut: In(STATUTS_ANNONCE_ENGAGEANTE),
         },
       });
       const alreadyListed = activeOrders.reduce(
@@ -327,7 +346,7 @@ export class SecondaryMarketController {
 
       if (dto.nbFractions > available) {
         throw new BadRequestException(
-          `Seulement ${available} fraction(s) disponible(s) pour la vente (${alreadyListed} déjà en carnet)`,
+          `Seulement ${available} fraction(s) disponible(s) pour la vente (${alreadyListed} déjà engagée(s) dans une annonce)`,
         );
       }
 

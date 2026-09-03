@@ -26,7 +26,12 @@ export class PublicUnsubscribeController {
   @ApiOperation({ summary: 'Se désinscrire des communications marketing (public)' })
   @ApiResponse({ status: 200, description: 'Désinscription enregistrée (idempotent)' })
   @ApiResponse({ status: 401, description: 'Token invalide, expiré ou de mauvais type' })
-  @Throttle({ short: { ttl: 60_000, limit: 20 }, medium: { ttl: 60_000, limit: 20 }, auth: { ttl: 60_000, limit: 20 } })
+  // Pas de surcharge `auth` : la resserrer bascule la route en fail-closed
+  // sur panne Redis (cf. RedisThrottlerStorage), or la désinscription est
+  // l'exercice d'un droit (art. L. 34-5 CPCE, art. 21 RGPD) — un 429 pendant
+  // une panne d'infrastructure serait indéfendable. Les paliers de trafic
+  // suffisent : le jeton signé fait le vrai contrôle d'accès.
+  @Throttle({ short: { ttl: 60_000, limit: 20 }, medium: { ttl: 60_000, limit: 20 } })
   @Public()
   @HttpCode(HttpStatus.OK)
   @Post('unsubscribe')

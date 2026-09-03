@@ -244,4 +244,64 @@ describe('TopUpInvestmentUseCase — atomicité', () => {
     expect(investmentUpdates()).toHaveLength(0);
     expect(walletSaves()).toHaveLength(0);
   });
+
+  describe('idempotence sur la clé du client', () => {
+    const CLE = 'cle-client-suffisamment-longue';
+
+    beforeEach(() => {
+      walletRepository.findTransactionByIdempotencyKey = jest
+        .fn()
+        .mockResolvedValue(null);
+    });
+
+    it('deux appels avec la MÊME clé : un seul top-up, le second rend l’investissement déjà complété', async () => {
+      // Premier appel : aucun antécédent, le top-up s'exécute.
+      await useCase.execute(INVEST_ID, USER_ID, 2, CLE);
+      expect(dataSource.transaction).toHaveBeenCalledTimes(1);
+
+      // L'écriture porte la clé du client, adossée à la contrainte d'unicité.
+      const txSaves = manager.save.mock.calls.filter(
+        (c: any) => c[0] === TransactionEntity,
+      );
+      expect(txSaves[0][1].idempotencyKey).toBe(
+        `topup:${USER_ID}:${INVEST_ID}:${CLE}`,
+      );
+
+      // Second appel : l'écriture existe, AUCUNE nouvelle transaction ouverte,
+      // aucun nouveau débit — l'appelant reçoit l'état courant.
+      walletRepository.findTransactionByIdempotencyKey.mockResolvedValue({
+        id: 'tx-topup-1',
+      });
+      const rejoue = await useCase.execute(INVEST_ID, USER_ID, 2, CLE);
+
+      expect(dataSource.transaction).toHaveBeenCalledTimes(1);
+      expect(rejoue.id).toBe(INVEST_ID);
+    });
+
+    it('course sur la même clé : le perdant du 23505 rend l’investissement du gagnant, pas une 500', async () => {
+      // Les deux retries passent le pré-check ; la contrainte d'unicité en base
+      // rejette le second INSERT et sa transaction est annulée en bloc.
+      manager.save.mockImplementation(async (entity: any, obj: any) => {
+        if (entity === TransactionEntity) {
+          throw Object.assign(new Error('duplicate key'), { code: '23505' });
+        }
+        return obj;
+      });
+
+      const resultat = await useCase.execute(INVEST_ID, USER_ID, 2, CLE);
+
+      expect(resultat.id).toBe(INVEST_ID);
+    });
+
+    it('sans clé du client : clé horodatée, jamais de collision entre deux top-ups légitimes', async () => {
+      await useCase.execute(INVEST_ID, USER_ID, 2);
+
+      const txSaves = manager.save.mock.calls.filter(
+        (c: any) => c[0] === TransactionEntity,
+      );
+      expect(txSaves[0][1].idempotencyKey).toMatch(
+        new RegExp(`^topup:${USER_ID}:${INVEST_ID}:\\d+$`),
+      );
+    });
+  });
 });

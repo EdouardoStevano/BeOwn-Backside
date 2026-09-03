@@ -1,0 +1,24 @@
+# Hôte propre à l'environnement staging. La liste `rules` n'a pas de clé de fusion
+# côté Ingress : un patch de fusion stratégique REMPLACE la liste entière, elle
+# est donc réécrite en totalité ici (ce n'est pas une duplication accidentelle).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: beown-backend-ingress
+spec:
+  tls:
+    - hosts:
+        - api-staging.beown.fr
+      # ⚠ À COMPLÉTER — nom réel du Secret TLS de cet environnement.
+      secretName: beown-api-staging-tls
+  rules:
+    - host: api-staging.beown.fr
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: beown-backend-service
+                port:
+                  number: 8080

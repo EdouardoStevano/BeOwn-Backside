@@ -33,6 +33,23 @@ export const METRIC = {
   WITHDRAWAL_RECREDITED_TOTAL: 'beown_withdrawal_recredited_total',
   CONNECT_ONBOARDING_TOTAL: 'beown_connect_onboarding_total',
 
+  // ─── Service de la dette : argent du porteur ─────────────────────────────
+  // Les deux sens du flux porteur, mesurés séparément parce qu'ils ne se
+  // surveillent pas de la même façon : l'APPORT doit précéder les règlements
+  // (son absence annonce un défaut d'alimentation), le VERSEMENT sort de la
+  // trésorerie (son échec immobilise des fonds dus).
+  PORTEUR_APPORT_TOTAL: 'beown_porteur_apport_total',
+  PORTEUR_APPORT_AMOUNT_EUR: 'beown_porteur_apport_amount_eur',
+  PORTEUR_VERSEMENT_TOTAL: 'beown_porteur_versement_total',
+  PORTEUR_VERSEMENT_AMOUNT_EUR: 'beown_porteur_versement_amount_eur',
+  /**
+   * Découvert cumulé des portefeuilles de projet : Σ des soldes négatifs.
+   * Un règlement d'échéance servi par un projet non alimenté le fait monter —
+   * c'est le signal avancé du trou de trésorerie, disponible AVANT le
+   * rapprochement PSP quotidien.
+   */
+  PROJECT_WALLET_SHORTFALL_EUR: 'beown_project_wallet_shortfall_eur',
+
   // ─── Marché secondaire ───────────────────────────────────────────────────
   SECONDARY_ORDERS_TOTAL: 'beown_secondary_orders_total',
   SECONDARY_ORDER_AMOUNT_EUR: 'beown_secondary_order_amount_eur',
@@ -93,6 +110,9 @@ export const HISTOGRAM_BUCKETS = {
   ECHEANCE_EUR: [50, 100, 500, 1000, 3700, 10000, 25000],
   DISTRIBUTION_EUR: [50, 100, 500, 1000, 5000, 25000, 100000],
   REFUND_EUR: [1000, 5000, 25000, 100000, 500000],
+  // Alimentation et versement portent sur des montants de PROJET, d'un ordre
+  // de grandeur au-dessus des mouvements individuels d'investisseurs.
+  PORTEUR_EUR: [1000, 5000, 25000, 50000, 100000, 250000, 500000, 1000000],
   // 1h, 4h, 12h, 24h, 48h, 7j — backe le SLO réglementaire de revue KYC.
   KYC_REVIEW_SECONDS: [3600, 14400, 43200, 86400, 172800, 604800],
   HTTP_SECONDS: [0.05, 0.1, 0.25, 0.5, 0.8, 1, 2, 5],

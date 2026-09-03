@@ -55,7 +55,6 @@ describe('KycValidatedGuard — application aux actions financières', () => {
   describe('InvestmentController', () => {
     it.each([
       ['create', 'POST /investments'],
-      ['initiateWithYouSign', 'POST /investments/initiate'],
       ['topUp', 'PATCH /investments/:id/top-up'],
     ])('gate %s (%s)', (method) => {
       expect(hasKycGuard(InvestmentController, method)).toBe(true);
@@ -73,6 +72,10 @@ describe('KycValidatedGuard — application aux actions financières', () => {
       ['retract'],
       // Route admin : gérée par @RequirePermission, pas par le KYC investisseur
       ['patchStatus'],
+      // Débranché en 410 INVESTMENT_INITIATE_DISABLED : le stub ne lit aucune
+      // donnée et ne déclenche rien — gater un tombeau n'aurait pas de sens,
+      // et le garde masquerait le 410 (le client verrait un 403 trompeur).
+      ['initiateWithYouSign'],
     ])('ne gate pas %s (consultation/admin)', (method) => {
       expect(hasKycGuard(InvestmentController, method)).toBe(false);
     });

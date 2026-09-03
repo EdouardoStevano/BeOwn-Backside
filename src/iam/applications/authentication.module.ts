@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { ParrainageModule } from 'src/parrainage/parrainage.module';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule } from '@nestjs/config';
 import { CqrsModule } from '@nestjs/cqrs';
@@ -92,6 +93,8 @@ import { TotpSecretService } from './services/totp/totp-secret.service';
  */
 @Module({
   imports: [
+    // Handler d'inscription : pose du code + rattachement au parrain (§8).
+    ParrainageModule,
     IamInfrastructureModule,
     UsersInfrastructureModule,
     UsersModule,

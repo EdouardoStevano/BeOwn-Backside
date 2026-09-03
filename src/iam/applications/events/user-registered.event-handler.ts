@@ -7,6 +7,8 @@ import {
 } from 'src/iam/domains/ports/user.repository';
 import { NotificationEventService } from 'src/notifications/applications/notification-event.service';
 import { SendEmailVerificationUseCase } from '../usecases/email/send-email-verification.usecase';
+import { AssurerCodeParrainageService } from 'src/parrainage/applications/assurer-code-parrainage.service';
+import { RattacherFilleulService } from 'src/parrainage/applications/rattacher-filleul.service';
 
 /**
  * Tout ce qui suit une inscription sans la conditionner : le lien de
@@ -37,12 +39,15 @@ export class UserRegisteredEventHandler implements IEventHandler<UserRegisteredD
     @Inject(USER_REPOSITORY) private readonly userRepository: UserRepository,
     private readonly notificationEvents: NotificationEventService,
     private readonly sendEmailVerificationUseCase: SendEmailVerificationUseCase,
+    private readonly codesParrainage: AssurerCodeParrainageService,
+    private readonly rattacherFilleul: RattacherFilleulService,
   ) {}
 
   async handle(event: UserRegisteredDomainEvent): Promise<void> {
     // L'inscrit d'abord : c'est lui qui attend quelque chose.
     await this.sendVerificationLink(event);
     await this.notifyAdministrators(event);
+    await this.initialiserParrainage(event);
   }
 
   /**
@@ -85,6 +90,27 @@ export class UserRegisteredEventHandler implements IEventHandler<UserRegisteredD
     } catch (err) {
       this.logger.error(
         `Notification d'inscription non délivrée pour l'utilisateur ${event.userId}.`,
+        err instanceof Error ? err.stack : String(err),
+      );
+    }
+  }
+
+  /**
+   * Parrainage : le nouveau compte reçoit SON code, et se rattache à son
+   * parrain si un code valide accompagnait l'inscription. Même contrat que
+   * les deux autres réactions — un échec se journalise et ne défait rien :
+   * le filet du code manquant est la génération à la première lecture de
+   * `GET /parrainage/me` (documenté dans AssurerCodeParrainageService).
+   */
+  private async initialiserParrainage(
+    event: UserRegisteredDomainEvent,
+  ): Promise<void> {
+    try {
+      await this.codesParrainage.assurer(event.userId);
+      await this.rattacherFilleul.rattacher(event.userId, event.codeParrainage);
+    } catch (err) {
+      this.logger.error(
+        `Initialisation du parrainage échouée pour le compte ${event.userId} — l'inscription n'est pas affectée.`,
         err instanceof Error ? err.stack : String(err),
       );
     }

@@ -68,5 +68,12 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 k8s/02-secrets.yaml
 k8s/base/secrets.yaml
 k8s/**/secrets.yaml
-!k8s/**/secrets.example.yaml
+# Couvre aussi les Secrets préfixés (backup-secrets.yaml…), que le motif
+# ci-dessus laissait passer. `*.example.yaml` reste versionné : le suffixe
+# `example` empêche la correspondance avec `*secrets.yaml`.
+k8s/**/*secrets.yaml
+!k8s/**/*secrets.example.yaml
+# L'Ingress est désormais VERSIONNÉ (k8s/base/ingress.yaml + patches par
+# overlay). Cette ligne ne concerne plus qu'un éventuel fichier historique
+# resté sur un poste.
 k8s/06-ingress.yaml

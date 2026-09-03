@@ -6,7 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, EntityManager, Repository } from 'typeorm';
 import { PeriodeDistribution } from '../../domains/periode-distribution';
 import { StatutPeriodeDistribution } from '../../domains/enums/statut-periode-distribution.enum';
 import {
@@ -30,12 +30,34 @@ import {
   WalletType,
 } from 'src/wallets/domains/enums/wallet.enum';
 import { AuditLogService } from 'src/notifications/applications/audit-log.service';
+import { NotificationService } from 'src/notifications/applications/notification.service';
+import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
 import { UserRole } from 'src/iam/domains/enums/user.enum';
 import { AmlMonitorService } from 'src/common/aml/aml-monitor.service';
 import { MetricsPort } from 'src/observability/metrics/metrics.port';
 import { METRIC } from 'src/observability/metrics/metric-names';
+import {
+  PROJECT_REPOSITORY,
+  type ProjectRepository,
+} from 'src/projects/applications/ports/repositories/project.repository';
+import { TransactionalEmailNotifier } from 'src/shared/email/transactional-email.notifier';
+import { ReinvestirLoyersService } from 'src/investments/applications/services/reinvestir-loyers.service';
+import { formatEur } from 'src/shared/money/format-eur';
+import { ResolveProjectWalletUseCase } from 'src/wallets/applications/usecases/resolve-project-wallet.usecase';
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/**
+ * Versement individuel effectivement payé, retenu pour être annoncé APRÈS le
+ * commit. Rien n'est notifié depuis l'intérieur de la transaction : un
+ * rollback ultérieur laisserait l'investisseur avec l'annonce d'un versement
+ * qui n'a jamais eu lieu.
+ */
+interface VersementPaye {
+  utilisateurId: number;
+  partId: string;
+  montantNet: number;
+}
 
 export interface ExecuteDistributionResult {
   periode: PeriodeDistribution;
@@ -89,7 +111,77 @@ export class ExecuteDistributionUseCase {
     private readonly auditLog: AuditLogService,
     private readonly amlMonitor: AmlMonitorService,
     private readonly metrics: MetricsPort,
+    private readonly notificationService: NotificationService,
+    @Inject(PROJECT_REPOSITORY)
+    private readonly projectRepo: ProjectRepository,
+    private readonly transactionalEmails: TransactionalEmailNotifier,
+    /**
+     * Contrepartie DÉBITRICE de la distribution. Le portefeuille technique du
+     * projet est la seule origine légitime de ce qui est versé : il est
+     * alimenté par le porteur (`APPORT_PORTEUR`) et se vide quand la période
+     * est servie.
+     */
+    private readonly projectWalletResolver: ResolveProjectWalletUseCase,
+    // Dernière position à dessein (3 specs construisent ce usecase à la main).
+    private readonly reinvestirLoyers: ReinvestirLoyersService,
   ) {}
+
+  /**
+   * Crédit ATOMIQUE d'un portefeuille : l'incrément est calculé PAR LA BASE
+   * (`UPDATE wallet SET solde = solde + :montant`), jamais par le processus.
+   *
+   * Le schéma « lire le solde, ajouter en mémoire, réécrire la ligne » perd
+   * silencieusement toute écriture concurrente survenue entre la lecture et
+   * l'écriture — typiquement un retrait de l'investisseur qui s'intercale
+   * pendant l'exécution d'une distribution : le retrait est débité, puis
+   * écrasé par un solde reconstruit à partir d'une valeur périmée. Les euros
+   * retirés réapparaissent sur le portefeuille. Même pattern que
+   * `RequestRetraitUseCase.openRetraitTransaction`.
+   */
+  private async crediterWallet(
+    em: EntityManager,
+    walletId: string,
+    montant: number,
+  ): Promise<void> {
+    await em
+      .createQueryBuilder()
+      .update(WalletEntity)
+      .set({ solde: () => 'solde + :montant' })
+      .setParameter('montant', montant)
+      .where('id = :id', { id: walletId })
+      .execute();
+  }
+
+  /**
+   * DÉBIT du portefeuille technique du projet — la contrepartie de tout ce que
+   * la distribution verse.
+   *
+   * Sans ce débit, chaque crédit ci-dessous fabriquait des euros : le registre
+   * restait rapproché portefeuille par portefeuille (les écritures suivaient
+   * les soldes), mais la plateforme devait à ses clients plus qu'elle ne
+   * détenait — un écart qui n'apparaissait qu'au rapprochement PSP du
+   * lendemain, sans qu'aucune ligne ne dise d'où il venait.
+   *
+   * INCONDITIONNEL, exactement comme le règlement d'échéance et le
+   * remboursement de collecte : la distribution est due aux investisseurs, et
+   * un projet mal alimenté est un problème de porteur, pas un impayé
+   * d'investisseur. Le découvert n'est pas masqué pour autant — il est
+   * journalisé et remonté en jauge dès l'exécution.
+   */
+  private async debiterProjet(
+    em: EntityManager,
+    walletProjetId: string,
+    montant: number,
+  ): Promise<void> {
+    if (!montant) return;
+    await em
+      .createQueryBuilder()
+      .update(WalletEntity)
+      .set({ solde: () => 'solde - :montant' })
+      .setParameter('montant', montant)
+      .where('id = :id', { id: walletProjetId })
+      .execute();
+  }
 
   async execute(
     periodeId: string,
@@ -116,8 +208,25 @@ export class ExecuteDistributionUseCase {
     let totalNetVerse = 0;
     let totalIR = 0;
     let totalCSG = 0;
+    const versements: VersementPaye[] = [];
 
     await this.dataSource.transaction(async (em) => {
+      // ── Contrepartie DÉBITRICE de toute la période ────────────────────────
+      // Résolue une seule fois, SOUS le verrou de la ligne projet : c'est le
+      // point de rendez-vous de toutes les écritures financières d'un projet.
+      // Tout ce que la période verse — frais de plateforme, net investisseur,
+      // retenues fiscales — sort de ce portefeuille et de nulle part ailleurs.
+      const walletProjet = await this.projectWalletResolver.executeInTransaction(
+        em,
+        periode.projetId,
+      );
+      // Solde suivi HORS entité : les débits passent par un UPDATE SQL
+      // atomique, l'entité chargée n'est jamais réécrite. Muter son champ
+      // ferait croire à une seconde source de vérité ; on ne garde qu'un
+      // compteur local, pour la seule détection de découvert (même discipline
+      // que `refund-collecte.service.ts`).
+      let soldeProjetSuivi = Number(walletProjet.solde);
+
       // ── Encaissement des frais plateforme — SEULEMENT à l'exécution ──────
       // Les montants ont été figés au calcul (snapshot de taux R1) et sont
       // simplement rejoués ici : aucune dérive possible, et une période ne
@@ -145,16 +254,20 @@ export class ExecuteDistributionUseCase {
             }),
           );
         }
-        walletPlat.solde = round2(
-          Number(walletPlat.solde) + fraisPlateformeAnnuel + fraisGestionLocative,
+        const totalFrais = round2(
+          fraisPlateformeAnnuel + fraisGestionLocative,
         );
-        await em.save(WalletEntity, walletPlat);
+        // Les frais sont PRÉLEVÉS sur les revenus du projet : ils sortent de
+        // son portefeuille avant d'entrer dans celui de la plateforme.
+        await this.debiterProjet(em, walletProjet.id, totalFrais);
+        soldeProjetSuivi -= totalFrais;
+        await this.crediterWallet(em, walletPlat.id, totalFrais);
 
         if (fraisPlateformeAnnuel > 0) {
           await em.save(
             TransactionEntity,
             em.create(TransactionEntity, {
-              walletSource: null,
+              walletSource: walletProjet.id,
               walletDestination: walletPlat.id,
               type: TransactionType.FRAIS,
               montant: fraisPlateformeAnnuel,
@@ -178,7 +291,7 @@ export class ExecuteDistributionUseCase {
           await em.save(
             TransactionEntity,
             em.create(TransactionEntity, {
-              walletSource: null,
+              walletSource: walletProjet.id,
               walletDestination: walletPlat.id,
               type: TransactionType.FRAIS,
               montant: fraisGestionLocative,
@@ -239,9 +352,19 @@ export class ExecuteDistributionUseCase {
           continue;
         }
 
-        // Crédit wallet investisseur
-        wallet.solde = Number(wallet.solde) + part.montantNet;
-        await em.save(WalletEntity, wallet);
+        // DÉBIT du projet pour le BRUT de cette part : le net qui revient à
+        // l'investisseur ET les retenues fiscales, qui sortent de la même
+        // poche pour être consignées ailleurs.
+        const brutPart = round2(
+          part.montantNet +
+            Math.max(0, part.prelevementIR) +
+            Math.max(0, part.prelevementCSG),
+        );
+        await this.debiterProjet(em, walletProjet.id, brutPart);
+        soldeProjetSuivi -= brutPart;
+
+        // Crédit wallet investisseur — atomique (voir crediterWallet).
+        await this.crediterWallet(em, wallet.id, part.montantNet);
 
         // Crédit séquestre IR
         if (part.prelevementIR > 0) {
@@ -262,8 +385,7 @@ export class ExecuteDistributionUseCase {
               );
             }
           }
-          walletIR.solde = Number(walletIR.solde) + part.prelevementIR;
-          await em.save(WalletEntity, walletIR);
+          await this.crediterWallet(em, walletIR.id, part.prelevementIR);
         }
 
         // Crédit séquestre CSG
@@ -285,14 +407,14 @@ export class ExecuteDistributionUseCase {
               );
             }
           }
-          walletCSG.solde = Number(walletCSG.solde) + part.prelevementCSG;
-          await em.save(WalletEntity, walletCSG);
+          await this.crediterWallet(em, walletCSG.id, part.prelevementCSG);
         }
 
         // Ledger : crédit principal
         await em.save(
           TransactionEntity,
           em.create(TransactionEntity, {
+            walletSource: walletProjet.id,
             walletDestination: wallet.id,
             type: TransactionType.PAIEMENT_INTERETS,
             montant: part.montantNet,
@@ -312,6 +434,7 @@ export class ExecuteDistributionUseCase {
           await em.save(
             TransactionEntity,
             em.create(TransactionEntity, {
+              walletSource: walletProjet.id,
               walletDestination: walletIR.id,
               type: TransactionType.IMPOTS,
               montant: part.prelevementIR,
@@ -332,6 +455,7 @@ export class ExecuteDistributionUseCase {
           await em.save(
             TransactionEntity,
             em.create(TransactionEntity, {
+              walletSource: walletProjet.id,
               walletDestination: walletCSG.id,
               type: TransactionType.IMPOTS,
               montant: part.prelevementCSG,
@@ -364,6 +488,28 @@ export class ExecuteDistributionUseCase {
         totalNetVerse += part.montantNet;
         totalIR += part.prelevementIR;
         totalCSG += part.prelevementCSG;
+        versements.push({
+          utilisateurId: inv.utilisateurId,
+          partId: part.id,
+          montantNet: part.montantNet,
+        });
+      }
+
+      // ── Découvert du projet : dit, jamais masqué ──────────────────────────
+      // Si le projet n'était pas assez alimenté, la distribution a QUAND MÊME
+      // eu lieu — elle est due — et le trou devient visible immédiatement,
+      // sans attendre le rapprochement du lendemain. Le corriger ici serait
+      // pire que de le signaler : ce serait fabriquer les euros qui manquent.
+      if (soldeProjetSuivi < 0) {
+        this.logger.warn(
+          `Portefeuille projet ${walletProjet.id} en découvert de ` +
+          `${formatEur(Math.abs(soldeProjetSuivi))} après la distribution ${periode.id} ` +
+          `(projet ${periode.projetId}). Le projet doit être alimenté par son porteur.`,
+        );
+        this.metrics.setGauge(
+          METRIC.PROJECT_WALLET_SHORTFALL_EUR,
+          Math.abs(soldeProjetSuivi),
+        );
       }
 
       // Marquer la période DISTRIBUEE
@@ -414,6 +560,22 @@ export class ExecuteDistributionUseCase {
       });
     }
 
+    // Annonce APRÈS COMMIT — un versement encaissé mais jamais annoncé est
+    // une distribution silencieuse : l'investisseur ne peut pas rapprocher son
+    // solde d'un événement.
+    await this.annoncerVersements(periode, versements);
+
+    // Réinvestissement automatique (opt-in) — APRÈS commit et APRÈS
+    // l'annonce : chaque part passe par le service dédié, best-effort
+    // intégral (la distribution est déjà acquise, un refus se notifie).
+    for (const versement of versements) {
+      await this.reinvestirLoyers.surPartPayee({
+        partId: versement.partId,
+        utilisateurId: versement.utilisateurId,
+        montantNetEur: versement.montantNet,
+      });
+    }
+
     // Audit log — Phase 10 (traçabilité réglementaire pour mouvements de fonds)
     if (adminUserId != null) {
       await this.auditLog
@@ -442,5 +604,70 @@ export class ExecuteDistributionUseCase {
     }
 
     return result;
+  }
+
+  /**
+   * Notifie chaque bénéficiaire du versement qui vient d'être crédité :
+   * notification in-app (toujours) et e-mail transactionnel (si l'utilisateur
+   * n'a pas coupé le canal e-mail — arbitré par TransactionalEmailNotifier).
+   *
+   * Appelée APRÈS le commit, jamais depuis l'intérieur de la transaction :
+   * annoncer un versement qu'un rollback effacerait ensuite serait pire que
+   * de ne rien annoncer. Chaque envoi est isolé — l'échec d'une notification
+   * ne doit priver ni les suivantes ni l'appelant d'une distribution qui, elle,
+   * est bel et bien enregistrée.
+   *
+   * Le titre du projet est relu UNE fois pour toute la période (pas de N+1 :
+   * une période porte un seul projet).
+   */
+  private async annoncerVersements(
+    periode: PeriodeDistribution,
+    versements: VersementPaye[],
+  ): Promise<void> {
+    if (versements.length === 0) return;
+
+    let projetTitre = 'votre projet';
+    try {
+      const projet = await this.projectRepo.findProjectById(periode.projetId);
+      if (projet?.titre) projetTitre = projet.titre;
+    } catch (err: any) {
+      this.logger.warn(
+        `Titre du projet ${periode.projetId} illisible — libellé générique utilisé : ${err?.message}`,
+      );
+    }
+
+    for (const versement of versements) {
+      await this.notificationService
+        .push({
+          utilisateurId: versement.utilisateurId,
+          // Aucun type « distribution » n'existe dans NotificationType :
+          // ECHEANCE est le type des versements périodiques reçus par un
+          // investisseur, ce qu'est exactement une distribution locative.
+          type: NotificationType.ECHEANCE,
+          titre: 'Revenus locatifs versés',
+          message:
+            `${formatEur(versement.montantNet)} nets vous ont été versés pour ` +
+            `« ${projetTitre} » au titre de la période ${periode.periode}.`,
+          metadata: {
+            projetId: periode.projetId,
+            periodeDistributionId: periode.id,
+            periode: periode.periode,
+            distributionPartId: versement.partId,
+            montantNet: versement.montantNet,
+          },
+        })
+        .catch(() => {
+          // Notification non bloquante : l'argent est déjà crédité.
+        });
+
+      await this.transactionalEmails.distributionRecue(
+        versement.utilisateurId,
+        {
+          montant: versement.montantNet,
+          projetTitre,
+          periode: periode.periode,
+        },
+      );
+    }
   }
 }

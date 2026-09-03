@@ -122,13 +122,23 @@ describe('PaymentController — le dépôt se rapproche du grand livre (ANO-02)'
       /* profilRepository */ {} as any,
       walletRepo,
       /* txRepo */ { findOne: jest.fn(), create: jest.fn(), save: jest.fn() } as any,
+      /* projectRepo */ { findOne: jest.fn().mockResolvedValue(null) } as any,
       dataSource,
       /* requestRetrait */ {} as any,
+      /* crediterApportPorteur */ { execute: jest.fn() } as any,
       /* metrics */ {
         incrementCounter: jest.fn(),
         observeHistogram: jest.fn(),
         setGauge: jest.fn(),
       } as any,
+      /* transactionalEmails */ {
+        depotConfirme: jest.fn().mockResolvedValue(undefined),
+        retraitExecute: jest.fn().mockResolvedValue(undefined),
+        kycValide: jest.fn().mockResolvedValue(undefined),
+        kycRefuse: jest.fn().mockResolvedValue(undefined),
+      } as any,
+      /* amlMonitor */ { check: jest.fn().mockResolvedValue(undefined) } as any,
+      /* retraitSettlement */ {} as any,
     );
   });
 

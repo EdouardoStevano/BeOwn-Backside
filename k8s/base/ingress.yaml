@@ -1,0 +1,110 @@
+---
+# ─────────────────────────────────────────────────────────────────────────────
+# Ingress — API BeOwn (api.beown.fr → beown-backend-service:8080)
+#
+# POURQUOI CE FICHIER EXISTE MAINTENANT
+# Le routage public et le TLS vivaient uniquement sur le serveur, hors Git
+# (constat du runbook, docs/operations/runbook-lancement.md §1.3 et §8) :
+# personne ne pouvait reconstruire l'accès public à partir du dépôt, et aucun
+# réglage de l'ingress n'était relu ni versionné.
+#
+# LE DÉFAUT QU'IL CORRIGE EN PRIORITÉ
+# `proxy-body-size` vaut 1 Mo par défaut dans ingress-nginx. Les pièces
+# justificatives KYC (photo de pièce d'identité, justificatif de domicile
+# scanné) dépassent régulièrement cette taille : l'upload était rejeté en 413
+# par l'ingress, AVANT d'atteindre l'application — donc sans log applicatif,
+# sans message clair, et sans que la limite multer de 10 Mo côté code n'entre
+# jamais en jeu. 12 Mo laisse une marge au-dessus de cette limite applicative.
+#
+# ⚠⚠ À FAIRE AVANT LE PREMIER DÉPLOIEMENT DE CE FICHIER ⚠⚠
+#
+# Un Ingress existe déjà sur le cluster pour ces hôtes, créé à la main. Deux
+# Ingress revendiquant le même hôte ne provoquent pas d'erreur : ingress-nginx
+# retient le PLUS ANCIEN pour les chemins en conflit et journalise un
+# avertissement. Autrement dit, tant que l'ancien n'est pas retiré, celui-ci
+# sera ignoré et le 413 sur le KYC persistera.
+#
+#   1. Inventorier l'existant, et NOTER le nom du Secret TLS utilisé :
+#        kubectl get ingress -A
+#        kubectl get ingress -n beown -o yaml
+#   2. Reporter ci-dessous le nom réel du Secret TLS (`tls.secretName`) —
+#      renvoyer vers un Secret inexistant ferait servir à Nginx son certificat
+#      auto-signé par défaut, c'est-à-dire un avertissement de sécurité sur
+#      api.beown.fr pour tous les visiteurs.
+#   3. Supprimer l'ancien Ingress une fois celui-ci en place et vérifié.
+#   4. Vérifier après bascule :
+#        curl -sI https://api.beown.fr/health | head -1
+#        echo | openssl s_client -connect api.beown.fr:443 -servername api.beown.fr 2>/dev/null \
+#          | openssl x509 -noout -subject -issuer -dates
+#
+# ROLLBACK : `kubectl delete ingress beown-backend-ingress -n <ns>` rend
+# immédiatement la main à l'Ingress préexistant (s'il n'a pas été supprimé).
+#
+# HSTS — précision importante : `Strict-Transport-Security` ne se pose PAS ici.
+# ingress-nginx l'émet globalement, depuis la ConfigMap du contrôleur, et c'est
+# activé par défaut (`hsts: true`). Le poser par annotation exigerait
+# `configuration-snippet`, dont l'usage est refusé par le webhook d'admission
+# quand `allow-snippet-annotations` vaut false (défaut depuis la 1.9) — un
+# Ingress avec cette annotation serait purement et simplement REJETÉ.
+# Vérifier / durcir au niveau du contrôleur :
+#   kubectl -n ingress-nginx get configmap ingress-nginx-controller -o yaml
+#   kubectl -n ingress-nginx patch configmap ingress-nginx-controller --type merge -p \
+#     '{"data":{"hsts":"true","hsts-max-age":"31536000","hsts-include-subdomains":"true","hsts-preload":"false"}}'
+# (`hsts-preload` reste à false tant que la soumission au préchargement
+#  navigateur n'est pas un choix assumé : elle est difficilement réversible.)
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: beown-backend-ingress
+  labels:
+    app: beown-backend
+  annotations:
+    # Le corps de requête maximal accepté. Cause du 413 sur les pièces KYC.
+    nginx.ingress.kubernetes.io/proxy-body-size: 12m
+
+    # Délais explicites, plutôt que les défauts implicites (60 s partout).
+    # Bornés volontairement bas : une requête d'API qui dépasse 60 s est un
+    # incident, pas un cas nominal — mieux vaut la couper que laisser une
+    # connexion ouverte occuper un worker.
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: '10'
+    nginx.ingress.kubernetes.io/proxy-send-timeout: '60'
+    nginx.ingress.kubernetes.io/proxy-read-timeout: '60'
+
+    # Redirection HTTP → HTTPS, sans exception.
+    nginx.ingress.kubernetes.io/ssl-redirect: 'true'
+    nginx.ingress.kubernetes.io/force-ssl-redirect: 'true'
+
+    # WebSocket (/notifications, socket.io) : une connexion temps réel reste
+    # ouverte bien au-delà des 60 s ci-dessus. Ces deux annotations relèvent le
+    # délai pour les connexions montées en upgrade.
+    nginx.ingress.kubernetes.io/proxy-http-version: '1.1'
+
+    # TLS automatique — À ACTIVER si cert-manager est installé, en remplaçant
+    # le nom de l'émetteur par celui réellement déclaré sur le cluster
+    # (`kubectl get clusterissuer`). Laissé inactif : pointer vers un émetteur
+    # inexistant laisserait le Secret TLS vide, donc le site sans certificat.
+    # cert-manager.io/cluster-issuer: letsencrypt-prod
+
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - api.beown.fr
+      # ⚠ À COMPLÉTER — reporter ici le nom du Secret TLS RÉELLEMENT utilisé
+      # aujourd'hui (étape 1 ci-dessus). Ce nom est un exemple plausible, pas
+      # une valeur vérifiée.
+      secretName: beown-api-tls
+  rules:
+    # Hôte de production. Les overlays dev / staging / test le remplacent
+    # (voir overlays/<env>/ingress-patch.yaml).
+    - host: api.beown.fr
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: beown-backend-service
+                port:
+                  number: 8080

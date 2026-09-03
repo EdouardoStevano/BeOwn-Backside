@@ -93,8 +93,27 @@ export class NotificationService {
     });
   }
 
-  async markAsRead(id: string): Promise<void> {
-    await this.notificationRepo.update(id, { lu: true, statut: 'lu' });
+  /**
+   * Marque UNE notification comme lue.
+   *
+   * Contrainte par ressource, sur le modèle exact de `deleteOne` : sans le
+   * filtre `utilisateurId`, n'importe quel porteur de jeton pouvait marquer lue
+   * la notification d'un autre en devinant son identifiant (IDOR en écriture).
+   * Le compteur de non-lus est réémis comme le font `markAllAsRead` et
+   * `deleteOne` — sans quoi la pastille du destinataire restait fausse jusqu'au
+   * prochain rechargement.
+   */
+  async markAsRead(id: string, userId: number): Promise<{ updated: boolean }> {
+    const res = await this.notificationRepo.update(
+      { id, utilisateurId: userId },
+      { lu: true, statut: 'lu' },
+    );
+    const updated = (res.affected ?? 0) > 0;
+    if (updated) {
+      const unread = await this.countUnread(userId);
+      this.gateway.sendUnreadCount(userId, unread);
+    }
+    return { updated };
   }
 
   async markAllAsRead(userId: number): Promise<void> {

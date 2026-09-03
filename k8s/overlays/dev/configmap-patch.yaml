@@ -4,6 +4,22 @@ metadata:
   name: beown-backend-config
 data:
   NODE_ENV: 'development'
+
+  # Emails CAPTURÉS, jamais envoyés.
+  #
+  # Sans cette clé, le driver est choisi automatiquement : `nodemailer` dès que
+  # NODE_ENV vaut development, staging ou production (voir .env.example). Cet
+  # environnement expédiait donc de VRAIS emails, via le compte Gmail de
+  # production, à toutes les adresses des comptes de seed — dont certaines
+  # existent réellement. Chaque reseed, chaque test d'inscription partait dans
+  # une vraie boîte, et abîmait au passage la réputation d'expéditeur du
+  # domaine.
+  #
+  # `mailpit` capture tout, rien ne sort du cluster. Le driver LÈVE une erreur
+  # si l'API Mailpit ne répond pas : la variable ci-dessous va donc de pair
+  # avec le composant `components/mailpit` inclus dans cet overlay.
+  MAIL_DRIVER: 'mailpit'
+  MAILPIT_URL: 'http://mailpit-service:8025'
   FRONTEND_URL: 'https://dev.beown.fr'
   ADMIN_URL: 'https://admin-dev.beown.fr'
   API_URL: 'https://api-dev.beown.fr'

@@ -247,6 +247,29 @@ export class PrometheusMetricsAdapter extends MetricsPort {
       ['trigger'],
       HISTOGRAM_BUCKETS.REFUND_EUR,
     );
+    // ── Service de la dette : argent du porteur ───────────────────────────
+    this.counter(
+      METRIC.PORTEUR_APPORT_TOTAL,
+      'Alimentations du portefeuille projet par le porteur (carte Stripe).',
+      ['source', 'outcome'],
+    );
+    this.histogram(
+      METRIC.PORTEUR_APPORT_AMOUNT_EUR,
+      'Montant alimenté par le porteur sur son projet (EUR).',
+      ['source'],
+      HISTOGRAM_BUCKETS.PORTEUR_EUR,
+    );
+    this.counter(
+      METRIC.PORTEUR_VERSEMENT_TOTAL,
+      'Versements au porteur (Stripe Connect ou constat hors plateforme).',
+      ['canal', 'outcome'],
+    );
+    this.histogram(
+      METRIC.PORTEUR_VERSEMENT_AMOUNT_EUR,
+      'Montant versé au porteur (EUR).',
+      ['canal'],
+      HISTOGRAM_BUCKETS.PORTEUR_EUR,
+    );
     this.counter(
       METRIC.ECHEANCE_SETTLEMENTS_TOTAL,
       'Échéances obligataires réglées (coupon + capital, PFU prélevé).',
@@ -352,6 +375,11 @@ export class PrometheusMetricsAdapter extends MetricsPort {
       METRIC.SEQUESTRE_BALANCE_EUR,
       'Solde des wallets séquestres fiscaux (EUR).',
       ['type'],
+    );
+    this.gauge(
+      METRIC.PROJECT_WALLET_SHORTFALL_EUR,
+      'Découvert cumulé des portefeuilles de projet — Σ des soldes négatifs (EUR).',
+      [],
     );
 
     // ── Santé des dépendances ─────────────────────────────────────────────

@@ -140,9 +140,12 @@ describe('CancelInvestmentUseCase — invariant comptable (scénario : rétracta
     expect(invRow.statut).toBe(InvestmentStatus.RETRACTE);
 
     // Trace ledger : source = destination = wallet investisseur (déblocage),
-    // jamais de jambe orpheline.
+    // jamais de jambe orpheline. Le type est ESCROW_RELEASE — PAS
+    // REMBOURSEMENT_CAPITAL : rien n'est remboursé, les fonds sont LIBÉRÉS de
+    // la poche bloquée, et le tableau de bord sommerait sinon la rétractation
+    // dans les revenus perçus (cf. commentaire du usecase).
     expect(savedTxs).toHaveLength(1);
-    expect(savedTxs[0].type).toBe(TransactionType.REMBOURSEMENT_CAPITAL);
+    expect(savedTxs[0].type).toBe(TransactionType.ESCROW_RELEASE);
     expect(savedTxs[0].walletSource).toBe('w1');
     expect(savedTxs[0].walletDestination).toBe('w1');
     expect(savedTxs[0].montant).toBe(MONTANT);

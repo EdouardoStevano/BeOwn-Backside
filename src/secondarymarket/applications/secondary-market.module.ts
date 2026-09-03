@@ -12,6 +12,11 @@ import { InitiateBuyUseCase } from './usecases/initiate-buy.usecase';
 import { ExprimerInteretUseCase } from './usecases/exprimer-interet.usecase';
 import { RepondreInteretUseCase } from './usecases/repondre-interet.usecase';
 import { CancelInitiationUseCase } from './usecases/cancel-initiation.usecase';
+import { ExpirerSignatureCessionUseCase } from './usecases/expirer-signature-cession.usecase';
+import { CessionCompensationService } from './cession-compensation.service';
+import { AnnoncesExpiryCronService } from './annonces-expiry-cron.service';
+import { SignaturesExpiryCronService } from './signatures-expiry-cron.service';
+import { OrdresOrphelinsCronService } from './ordres-orphelins-cron.service';
 import { DevisCessionService } from './devis-cession.service';
 import { KycEntity } from 'src/profiles/infrastructure/persistences/entities/kyc.entity';
 import { KycValidatedGuard } from 'src/common/auth/kyc-validated.guard';
@@ -37,10 +42,23 @@ import { UsersInfrastructureModule } from 'src/iam/infrastructure/users-infrastr
     // Devis de frais servi avant tout engagement. `PlatformFeesService` vient
     // du module global `PlatformFeesModule` : aucun import supplémentaire.
     DevisCessionService,
+    // Réservation des fonds à l'acceptation et compensation d'une cession qui
+    // n'aboutit pas — partagée par l'acceptation, l'annulation, l'expiration
+    // par webhook et le cron de sécurité.
+    CessionCompensationService,
     InitiateBuyUseCase,
     ExprimerInteretUseCase,
     RepondreInteretUseCase,
     CancelInitiationUseCase,
+    ExpirerSignatureCessionUseCase,
+    // Balayages d'expiration : annonces échues (quotidien) et signatures non
+    // recueillies (horaire, indépendant du webhook prestataire).
+    AnnoncesExpiryCronService,
+    SignaturesExpiryCronService,
+    // Filet de sécurité complémentaire : ordres restés ACCEPTE sans aucune
+    // signature vivante (mort du processus en pleine acceptation, compensation
+    // échouée) — le balayage des signatures ne peut pas les voir.
+    OrdresOrphelinsCronService,
     KycValidatedGuard,
   ],
   controllers: [SecondaryMarketController, YouSignWebhookController],

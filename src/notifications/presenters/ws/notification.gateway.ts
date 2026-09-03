@@ -12,12 +12,49 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { NotificationEntity } from '../../infrastructure/persistences/entities/notification.entity';
 
+/**
+ * Origines autorisées à ouvrir le canal temps réel.
+ *
+ * CONTRAINTE : le décorateur `@WebSocketGateway` est évalué au CHARGEMENT DU
+ * MODULE, c'est-à-dire avant que la configuration de l'application soit lue.
+ * Un tableau littéral `[process.env.FRONTEND_URL ?? …]` y était donc figé sur
+ * les valeurs de repli — en production, la CORS du WebSocket pouvait n'autoriser
+ * que `localhost`, et le canal de notifications ne s'ouvrait jamais.
+ *
+ * Le contournement ne consiste PAS à charger la configuration plus tôt (cela
+ * imposerait de toucher l'amorçage, hors périmètre) mais à ne rien figer : une
+ * FONCTION d'origine est appelée par socket.io à CHAQUE POIGNÉE DE MAIN, donc
+ * bien après l'amorçage. `process.env` y est alors renseigné, quelle que soit
+ * l'ordre d'évaluation des modules.
+ *
+ * Effet de bord voulu : modifier `FRONTEND_URL` prend effet à la connexion
+ * suivante, sans redémarrage.
+ */
+const originesAutorisees = (): string[] => [
+  process.env.FRONTEND_URL ?? 'http://localhost:5173',
+  process.env.ADMIN_URL ?? 'http://localhost:5174',
+];
+
+/**
+ * Vérification d'origine évaluée à l'exécution. Une requête sans en-tête
+ * `Origin` (client natif, sonde de santé) est laissée passer : c'est le jeton
+ * JWT vérifié dans `handleConnection`, et lui seul, qui autorise l'accès aux
+ * données — la CORS ne protège que le navigateur.
+ */
+const verifierOrigine = (
+  origine: string | undefined,
+  repondre: (err: Error | null, autorise?: boolean) => void,
+): void => {
+  if (!origine || originesAutorisees().includes(origine)) {
+    repondre(null, true);
+    return;
+  }
+  repondre(null, false);
+};
+
 @WebSocketGateway({
   cors: {
-    origin: [
-      process.env.FRONTEND_URL ?? 'http://localhost:5173',
-      process.env.ADMIN_URL ?? 'http://localhost:5174',
-    ],
+    origin: verifierOrigine,
     credentials: true,
   },
   namespace: '/notifications',

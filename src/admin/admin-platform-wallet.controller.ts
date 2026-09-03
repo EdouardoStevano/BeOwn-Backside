@@ -79,10 +79,74 @@ export class AdminPlatformWalletController {
     return [...canonical, ...extras];
   }
 
+  /**
+   * Vue trésorerie : la position de CHAQUE poche d'argent que la plateforme
+   * détient pour compte de tiers ou pour elle-même. Toujours les quatre types
+   * système, à zéro si le wallet n'existe pas encore (lazy-create) : un
+   * séquestre absent de la réponse serait indistinguable d'un séquestre vide.
+   */
+  private async walletsPlateforme(): Promise<
+    { type: WalletType; solde: number; soldeBloque: number; devise: string }[]
+  > {
+    const TYPES_SYSTEME = [
+      WalletType.FRAIS_PLATEFORME,
+      WalletType.SEQUESTRE_IR,
+      WalletType.SEQUESTRE_CSG,
+      WalletType.TAXES,
+    ] as const;
+    const existants = await this.walletRepo.find({
+      where: { type: In([...TYPES_SYSTEME]) },
+    });
+    const parType = new Map(existants.map((w) => [w.type, w]));
+    return TYPES_SYSTEME.map((type) => {
+      const w = parType.get(type);
+      return {
+        type,
+        solde: Number(w?.solde ?? 0),
+        soldeBloque: Number(w?.soldeBloque ?? 0),
+        devise: w?.devise ?? 'EUR',
+      };
+    });
+  }
+
+  /**
+   * Positions des portefeuilles techniques de projet — l'argent des
+   * investisseurs en attente de distribution ou de versement au porteur.
+   * Titres résolus en lot (pas de N+1).
+   */
+  private async walletsTechniques(): Promise<
+    { projetId: string | null; titreProjet: string | null; solde: number; soldeBloque: number }[]
+  > {
+    const wallets = await this.walletRepo.find({
+      where: { type: WalletType.TECHNIQUE_PROJET },
+      order: { solde: 'DESC' },
+    });
+    const projetIds = [
+      ...new Set(wallets.map((w) => w.projetId).filter((v): v is string => !!v)),
+    ];
+    const projets = projetIds.length
+      ? await this.projetRepo.find({ where: { id: In(projetIds) } })
+      : [];
+    const titreParProjet = new Map(projets.map((p) => [p.id, p.titre]));
+    return wallets.map((w) => ({
+      projetId: w.projetId ?? null,
+      titreProjet: w.projetId ? (titreParProjet.get(w.projetId) ?? null) : null,
+      solde: Number(w.solde),
+      soldeBloque: Number(w.soldeBloque ?? 0),
+    }));
+  }
+
   @ApiOperation({ summary: 'Commissions collectées par la plateforme (super_admin)' })
   @Get()
   async getPlatformWallet(@CurrentUser() admin: ActiveUser) {
     await this.assertAdmin(admin.userId);
+
+    // Extension trésorerie : ces deux blocs s'AJOUTENT au contrat existant,
+    // dans les deux branches de retour — l'écran historique ne change pas.
+    const [walletsPlateforme, walletsTechniques] = await Promise.all([
+      this.walletsPlateforme(),
+      this.walletsTechniques(),
+    ]);
 
     const wallet = await this.walletRepo.findOne({
       where: { type: WalletType.FRAIS_PLATEFORME },
@@ -94,6 +158,8 @@ export class AdminPlatformWalletController {
         bySource: this.mergeBySource([]),
         monthly: [],
         activity: [],
+        walletsPlateforme,
+        walletsTechniques,
       };
     }
 
@@ -202,6 +268,8 @@ export class AdminPlatformWalletController {
       bySource: this.mergeBySource(bySource),
       monthly: monthly.map((r) => ({ month: r.month, total: Number(r.total) })),
       activity,
+      walletsPlateforme,
+      walletsTechniques,
     };
   }
 }

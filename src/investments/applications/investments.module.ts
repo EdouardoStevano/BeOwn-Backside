@@ -1,4 +1,7 @@
 import { Module } from '@nestjs/common';
+import { ParrainageModule } from 'src/parrainage/parrainage.module';
+import { UserPreferencesEntity } from 'src/iam/infrastructure/persistence/entities/user-preferences.entity';
+import { ReinvestirLoyersService } from './services/reinvestir-loyers.service';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { InvestmentsInfrastructureModule } from '../infrastructure/investments-infrastructure.module';
 import { ProjectsInfrastructureModule } from 'src/projects/infrastructure/projects-infrastructure.module';
@@ -16,6 +19,7 @@ import { CancelInvestmentUseCase } from './usecases/cancel-investment.usecase';
 import { InvestmentController } from '../presenters/http/investment.controller';
 import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructure.module';
 import { NotificationsModule } from 'src/notifications/notifications.module';
+import { AmlModule } from 'src/common/aml/aml.module';
 import { ProjectEntity } from 'src/projects/infrastructure/persistences/entities/project.entity';
 import { InvestmentEntity } from 'src/investments/infrastructure/persistences/entities/investment.entity';
 import { DocumentEntity } from 'src/documents/infrastructure/persistences/entities/document.entity';
@@ -38,7 +42,11 @@ import { WalletsModule } from 'src/wallets/applications/wallets.module';
 
 @Module({
   imports: [
+    // Bonus de parrainage au premier investissement définitif (cron + averti).
+    ParrainageModule,
     TypeOrmModule.forFeature([
+      // Réinvestissement des loyers : lecture de l'opt-in.
+      UserPreferencesEntity,
       ProjectEntity,
       InvestmentEntity,
       DocumentEntity,
@@ -64,8 +72,12 @@ import { WalletsModule } from 'src/wallets/applications/wallets.module';
     CloudStorageModule,
     YouSignModule,
     NotificationsModule,
+    // Vigilance LCB-FT sur la souscription (art. L.561-10 CMF) : alerte,
+    // jamais blocage.
+    AmlModule,
   ],
   providers: [
+    ReinvestirLoyersService,
     CreateInvestmentUseCase,
     ContractGeneratorService,
     TopUpInvestmentUseCase,
@@ -82,6 +94,8 @@ import { WalletsModule } from 'src/wallets/applications/wallets.module';
   ],
   controllers: [InvestmentController],
   exports: [
+    // Consommé par ExecuteDistributionUseCase (DistributionsModule).
+    ReinvestirLoyersService,
     PayEcheanceUseCase,
     IfuGenerationService,
     ProjectScheduleGeneratorService,

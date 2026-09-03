@@ -16,6 +16,7 @@ import { ProfilPPEntity } from '../infrastructure/persistences/entities/profil-p
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructure.module';
 import { NotificationsModule } from 'src/notifications/notifications.module';
+import { TransactionalEmailModule } from 'src/shared/email/transactional-email.module';
 import { RiskScoringService } from './risk-scoring.service';
 import { BeneficiaireEffectifEntity } from '../infrastructure/persistences/entities/beneficiaire-effectif.entity';
 import { ProfilPMEntity } from '../infrastructure/persistences/entities/profil-pm.entity';
@@ -26,6 +27,8 @@ import { BeneficiaireEffectifController } from '../presenters/http/beneficiaire-
     ProfilesInfrastructureModule,
     IamInfrastructureModule,
     NotificationsModule,
+    // E-mails « identité vérifiée » / « identité refusée » sur décision admin.
+    TransactionalEmailModule,
     TypeOrmModule.forFeature([QuestionnaireAdequationEntity, ProfilPPEntity, UserEntity, BeneficiaireEffectifEntity, ProfilPMEntity]),
   ],
   providers: [

@@ -142,18 +142,30 @@ export class CancelInvestmentUseCase {
         .where('id = :id', { id: wallet.id })
         .execute();
 
-      // Trace ledger du remboursement de rétractation (idempotent par
+      // Trace ledger du déblocage de rétractation (idempotent par
       // investissement : la contrainte unique verrouille tout doublon).
       // GRAND LIVRE — les fonds n'avaient jamais quitté le wallet de
       // l'investisseur : ils étaient sur sa poche bloquée le temps du délai. La
       // rétractation est donc un mouvement INTERNE au wallet (bloqué →
       // disponible) : source = destination, somme des fonds détenus conservée.
+      //
+      // TYPE — `ESCROW_RELEASE`, et surtout PAS `REMBOURSEMENT_CAPITAL`.
+      // Deux raisons, la seconde étant la plus coûteuse :
+      //  1. sémantique : aucun capital n'est remboursé ici, il est LIBÉRÉ. Le
+      //     remboursement de capital nomme la restitution d'un capital
+      //     effectivement investi (sortie du projet, cf. execute-sortie), qui
+      //     lui conserve légitimement ce type ;
+      //  2. lecture : le tableau de bord investisseur agrège les REVENUS en
+      //     sommant `paiement_interets` + `remboursement_capital`. Une
+      //     rétractation — de l'argent qui n'a jamais quitté le portefeuille —
+      //     y apparaissait donc comme un revenu perçu, gonflant la courbe
+      //     « Revenus mensuels » d'un montant purement fictif.
       await manager.save(
         TransactionEntity,
         manager.create(TransactionEntity, {
           walletSource: wallet.id,
           walletDestination: wallet.id,
-          type: TransactionType.REMBOURSEMENT_CAPITAL,
+          type: TransactionType.ESCROW_RELEASE,
           montant,
           devise: wallet.devise,
           statut: TransactionStatus.REUSSI,
