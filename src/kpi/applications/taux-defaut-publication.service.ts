@@ -22,6 +22,16 @@ import {
  * Ce service ne calcule rien : il lit les projets financés de la fenêtre, en
  * déduit deux faits par projet (défaut constaté, perte définitive) et confie
  * l'agrégation au domaine.
+ *
+ * CACHE 1 h EN MÉMOIRE DE PROCESSUS — même entorse assumée et documentée que
+ * `PublicStatisticsService`, pour la même raison, en plus marquée ici : la
+ * route qui l'expose est PUBLIQUE et non authentifiée, et un calcul coûte une
+ * lecture des projets de la fenêtre PUIS deux lectures par projet. Sans cache,
+ * chaque appel anonyme déclenchait cette rafale — une route publique qui
+ * amplifie le trafic en charge de base est un levier de déni de service
+ * gratuit. La donnée est publique, identique pour tous, et bouge à l'échelle
+ * du trimestre : la perdre au redémarrage coûte un recalcul, et la divergence
+ * entre réplicas est bornée à une heure sur une statistique à 36 mois.
  */
 @Injectable()
 export class TauxDefautPublicationService {
@@ -33,6 +43,10 @@ export class TauxDefautPublicationService {
     EcheanceStatus.PERTE_DEFINITIVE,
   ];
 
+  private static readonly TTL_MS = 3_600_000;
+  private cache: { calculeA: number; valeur: PublicationTauxDefaut } | null =
+    null;
+
   constructor(
     @InjectRepository(ProjectEntity)
     private readonly projectRepo: Repository<ProjectEntity>,
@@ -42,7 +56,29 @@ export class TauxDefautPublicationService {
     private readonly echeanceRepo: Repository<EcheanceEntity>,
   ) {}
 
-  async publier(reference: Date = new Date()): Promise<PublicationTauxDefaut> {
+  /**
+   * Publication à la date du jour, servie depuis le cache tant qu'il est
+   * frais. Une date de référence EXPLICITE (rejeu, contrôle, test) court-
+   * circuite le cache : elle désigne un autre calcul, qui n'a rien à faire
+   * dans l'entrée du calcul courant.
+   */
+  async publier(reference?: Date): Promise<PublicationTauxDefaut> {
+    if (reference) return this.calculer(reference);
+
+    const maintenant = Date.now();
+    if (
+      this.cache &&
+      maintenant - this.cache.calculeA < TauxDefautPublicationService.TTL_MS
+    ) {
+      return this.cache.valeur;
+    }
+
+    const valeur = await this.calculer(new Date());
+    this.cache = { calculeA: maintenant, valeur };
+    return valeur;
+  }
+
+  private async calculer(reference: Date): Promise<PublicationTauxDefaut> {
     const debut = debutPeriodePublication(reference);
 
     // Seuls les projets dont la collecte a abouti entrent dans la statistique :

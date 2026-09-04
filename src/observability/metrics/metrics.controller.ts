@@ -23,13 +23,19 @@ import { PrometheusMetricsAdapter } from './prometheus-metrics.adapter';
  *     couche opère au niveau IP/port, PAS au niveau chemin HTTP (`/metrics`
  *     partage le port 8080 avec le reste de l'API) : elle réduit la surface
  *     réseau mais n'isole pas `/metrics` d'un autre chemin.
- *  2. Jeton — si `METRICS_TOKEN` est défini, un `Authorization: Bearer
- *     <token>` valide est exigé (comparaison à temps constant). C'est la
- *     couche qui protège réellement `/metrics` au niveau applicatif : en
- *     PRODUCTION (`NODE_ENV=production`) elle est OBLIGATOIRE — un jeton
- *     absent fait échouer fermé (403), car la NetworkPolicy seule ne peut
- *     pas garantir l'isolation du endpoint (OBS-1). Hors production, un
- *     jeton absent retombe sur la NetworkPolicy (confort de dev/staging).
+ *  2. Jeton — un `Authorization: Bearer <token>` valide est exigé
+ *     (comparaison à temps constant). C'est la couche qui protège réellement
+ *     `/metrics` au niveau applicatif : la NetworkPolicy opère au niveau
+ *     IP/port et ne peut pas isoler un chemin HTTP (OBS-1).
+ *
+ *     Le jeton est OBLIGATOIRE PARTOUT, sauf `NODE_ENV=development`
+ *     explicitement déclaré. La règle précédente n'exemptait que la
+ *     production : tout environnement non nommé « production » — staging,
+ *     recette, préproduction, et surtout un déploiement où `NODE_ENV` n'est
+ *     tout simplement pas positionné — servait donc `/metrics` en accès libre.
+ *     Or ces métriques décrivent la plateforme : volumes de souscription,
+ *     backlog KYC, taux d'échec de paiement. Un environnement oublié est le
+ *     cas le PLUS probable, pas le moins : le défaut doit lui être fermé.
  *
  * `@Public` : contourne le JwtAuthGuard global (Alloy n'a pas de session
  * utilisateur). `@SkipThrottle` : le scrape régulier ne doit pas consommer le
@@ -59,15 +65,19 @@ export class MetricsController {
   private assertAuthorized(authorization: string | undefined): void {
     const expected = this.config.get<string>('METRICS_TOKEN');
     if (!expected) {
-      if (this.config.get<string>('NODE_ENV') === 'production') {
-        // OBS-1 : fail-closed en prod — la NetworkPolicy seule ne protège pas
-        // le chemin `/metrics` (port partagé avec l'API), donc un jeton
-        // absent en production ne doit JAMAIS retomber sur un accès public.
+      // Fail-closed par DÉFAUT : seule une déclaration explicite
+      // `NODE_ENV=development` dispense du jeton (confort de poste de
+      // travail). Tout le reste — staging, recette, production, ou un
+      // `NODE_ENV` absent — exige le jeton.
+      const nodeEnv = (this.config.get<string>('NODE_ENV') ?? '')
+        .trim()
+        .toLowerCase();
+      if (nodeEnv !== 'development') {
         throw new ForbiddenException(
-          'METRICS_TOKEN doit être configuré en production.',
+          'METRICS_TOKEN doit être configuré hors développement local.',
         );
       }
-      return; // hors production : confort dev/staging, NetworkPolicy seule
+      return;
     }
 
     const provided = (authorization ?? '').replace(/^Bearer\s+/i, '');

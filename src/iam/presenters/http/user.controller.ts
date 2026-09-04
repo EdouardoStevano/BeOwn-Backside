@@ -61,7 +61,7 @@ import type { WalletRepository } from 'src/wallets/applications/ports/repositori
 import { WalletType } from 'src/wallets/domains/enums/wallet.enum';
 import { DeleteAccountUseCase } from 'src/iam/applications/usecases/account/delete-account.usecase';
 import { projeterAccesPorteur } from 'src/porteur-access/domains/acces-porteur';
-import { SkipThrottle } from '@nestjs/throttler';
+import { SkipThrottle, Throttle } from '@nestjs/throttler';
 
 /** Rôles détenant `users:read` — back-office consultation d'un profil tiers. */
 const READ_ROLES: string[] = rolesWithPermission('users:read');
@@ -494,6 +494,21 @@ export class UserController {
     status: 409,
     description: 'Suppression bloquée (ACCOUNT_DELETION_BLOCKED)',
   })
+  @ApiResponse({ status: 429, description: 'Trop de tentatives — 5 / 15 min' })
+  /**
+   * Sortie explicite du `@SkipThrottle()` de classe.
+   *
+   * Cette route COMPARE UN MOT DE PASSE et distingue « mot de passe
+   * incorrect » (401) de « suppression bloquée » (409) : c'est un oracle de
+   * mot de passe, utilisable depuis une session volée pour retrouver le mot de
+   * passe en clair de la victime — et le réutiliser ailleurs. Un contrôleur
+   * marqué `@SkipThrottle()` en faisait un oracle SANS aucune limite.
+   *
+   * Palier `auth`, donc fail-closed sur panne Redis : mieux vaut une
+   * suppression de compte reportée qu'un oracle laissé ouvert.
+   */
+  @SkipThrottle({ short: false, medium: false, auth: false })
+  @Throttle({ auth: { ttl: 900_000, limit: 5 } })
   @HttpCode(HttpStatus.NO_CONTENT)
   @Delete('me')
   async deleteMe(

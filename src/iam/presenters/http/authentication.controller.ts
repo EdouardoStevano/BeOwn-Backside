@@ -213,6 +213,15 @@ export class AuthenticationController {
     status: 200,
     description: 'Mot de passe réinitialisé avec succès',
   })
+  @ApiResponse({ status: 429, description: 'Trop de tentatives — 5 / 15 min' })
+  // Route PUBLIQUE consommant un jeton signé : sans palier propre, elle
+  // tombait sur le filet global `auth` (500 / 15 min), qui autorise un
+  // bourrage de jetons de réinitialisation. Cinq tentatives par quart d'heure
+  // couvrent l'usage réel (on clique un lien, on choisit un mot de passe) et
+  // ferment le rejeu massif. Palier `auth` : la route est fail-closed sur
+  // panne Redis, ce qui est le bon arbitrage pour une prise de contrôle de
+  // compte.
+  @Throttle({ auth: { ttl: 900_000, limit: 5 } })
   @Public()
   @Post('reset-password')
   resetPassword(@Body() dto: ResetPasswordDto) {
@@ -274,6 +283,12 @@ export class AuthenticationController {
       'Session ouverte : accessToken, refreshToken et le compte (user)',
   })
   @ApiResponse({ status: 401, description: 'Code invalide ou expiré' })
+  @ApiResponse({ status: 429, description: 'Trop de tentatives — 5 / 15 min' })
+  // Cette route ÉCHANGE un code contre une session complète : c'est une porte
+  // d'authentification, au même titre que le sign-in, et elle n'avait aucun
+  // palier propre. Le code est à usage unique et vit 30 s, mais rien
+  // n'empêchait d'en essayer des milliers.
+  @Throttle({ auth: { ttl: 900_000, limit: 5 } })
   @Public()
   @HttpCode(HttpStatus.OK)
   @Post('exchange')
@@ -439,6 +454,12 @@ export class AuthenticationController {
     description:
       'Aucun enrôlement en cours — appeler `POST /auth/mfa/enroll` au préalable',
   })
+  @ApiResponse({ status: 429, description: 'Trop de tentatives — 5 / 15 min' })
+  // Vérification d'un code à six chiffres : sans palier, l'espace des codes
+  // se parcourt entièrement en quelques minutes. Les autres étapes MFA de ce
+  // contrôleur en avaient un, celle-ci non — c'est pourtant elle qui ARME le
+  // facteur, et un facteur armé par un tiers vaut une porte dérobée.
+  @Throttle({ auth: { ttl: 900_000, limit: 5 } })
   @HttpCode(HttpStatus.OK)
   @Post('mfa/enable')
   async enableMfa(@Body() dto: EnableMfaDto, @CurrentUser() user: ActiveUser) {

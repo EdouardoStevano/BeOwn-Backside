@@ -23,7 +23,7 @@ import {
 } from '@nestjs/swagger';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource, In } from 'typeorm';
-import { SkipThrottle } from '@nestjs/throttler';
+import { Throttle } from '@nestjs/throttler';
 import { OrdreMarcheEntity } from 'src/secondarymarket/infrastructure/persistences/entities/ordre-marche.entity';
 import { InvestmentEntity } from 'src/investments/infrastructure/persistences/entities/investment.entity';
 import { ProjectEntity } from 'src/projects/infrastructure/persistences/entities/project.entity';
@@ -69,7 +69,44 @@ import { SIGNATURE_PROVIDER_UNAVAILABLE } from 'src/common/yousign/signature-pro
 import { SignatureProviderExceptionFilter } from 'src/common/yousign/signature-provider-exception.filter';
 import { ConflitsInteretsErrorFilter } from 'src/projects/presenters/http/filters/conflits-interets-error.filter';
 
-@SkipThrottle()
+/**
+ * Palier des LECTURES du tableau d'affichage, dont une est publique
+ * (`GET /orders`). Soixante par minute couvrent largement la consultation
+ * d'un carnet d'ordres, y compris derrière un NAT d'entreprise.
+ */
+const DEBIT_LECTURE_MARCHE = {
+  short: { ttl: 60_000, limit: 60 },
+  medium: { ttl: 60_000, limit: 60 },
+  // Pas de surcharge `auth` : resserrer ce palier vaudrait déclaration
+  // « sensible au bourrage d'identifiants » et basculerait la route en
+  // fail-closed sur panne Redis. Consulter le carnet n'est pas de cet ordre —
+  // le filet global `auth` continue de s'appliquer.
+} as const;
+
+/**
+ * Palier des MUTATIONS : publier une annonce, l'annuler, exprimer un intérêt,
+ * y répondre, engager ou annuler une signature. Vingt par minute — personne ne
+ * publie vingt annonces dans la minute — et très en deçà de ce qu'exigerait
+ * l'exploitation automatisée d'une session volée.
+ */
+const DEBIT_MUTATION_MARCHE = {
+  short: { ttl: 60_000, limit: 20 },
+  medium: { ttl: 60_000, limit: 20 },
+} as const;
+
+/**
+ * Le contrôleur portait un `@SkipThrottle()` de classe, c'est-à-dire une
+ * déclaration d'intention de ne limiter NI la route publique du carnet, NI les
+ * mutations qui engagent une cession et déclenchent un parcours de signature
+ * facturé chez le prestataire.
+ *
+ * Il ne faisait de toute façon rien : un `@SkipThrottle()` sans argument
+ * n'inscrit que la clé `default`, que le guard ne lit jamais puisqu'il
+ * n'interroge que les throttlers déclarés (`short`, `medium`, `auth`). Ces
+ * routes tombaient donc sur les limites globales — larges, et jamais choisies
+ * pour elles. Même constat et même correctif que sur `AvisController`.
+ */
+@Throttle(DEBIT_LECTURE_MARCHE)
 @ApiTags('Marché Secondaire')
 @ApiBearerAuth()
 // Une panne du prestataire de signature n'est pas un défaut de la plateforme :
@@ -330,6 +367,7 @@ export class SecondaryMarketController {
       'SECONDARY_HOLDING_TOO_RECENT (détention < 6 mois) ou ' +
       "SECONDARY_PROJECT_NOT_ELIGIBLE (projet hors exploitation).",
   })
+  @Throttle(DEBIT_MUTATION_MARCHE)
   @Post('orders')
   async createOrder(
     @Body() dto: CreateOrdreMarcheDto,
@@ -466,6 +504,7 @@ export class SecondaryMarketController {
       "SECONDARY_EXECUTE_DISABLED — la cession passe par une marque d'intérêt " +
       'puis son acceptation par le vendeur.',
   })
+  @Throttle(DEBIT_MUTATION_MARCHE)
   @Post('orders/:id/execute')
   executeOrder(): never {
     // Compté pour savoir si un client appelle encore le mécanisme retiré.
@@ -492,6 +531,7 @@ export class SecondaryMarketController {
   @ApiOperation({ summary: 'Annuler un ordre (vendeur uniquement)' })
   @ApiParam({ name: 'id', description: "UUID de l'ordre" })
   @HttpCode(HttpStatus.OK)
+  @Throttle(DEBIT_MUTATION_MARCHE)
   @Delete('orders/:id/cancel')
   async cancelOrder(@Param('id') id: string, @CurrentUser() user: ActiveUser) {
     const ordre = await this.ordreRepo.findOne({ where: { id } });
@@ -531,6 +571,7 @@ export class SecondaryMarketController {
   @ApiParam({ name: 'id', description: "UUID de l'annonce" })
   @ApiResponse({ status: 403, description: 'KYC non validé' })
   @HttpCode(HttpStatus.OK)
+  @Throttle(DEBIT_MUTATION_MARCHE)
   @Post('orders/:id/interet')
   async exprimerInteret(
     @Param('id') id: string,
@@ -555,6 +596,7 @@ export class SecondaryMarketController {
       "le vendeur peut réessayer à l'identique.",
   })
   @HttpCode(HttpStatus.OK)
+  @Throttle(DEBIT_MUTATION_MARCHE)
   @Post('orders/:id/interet/acceptation')
   async accepterInteret(@Param('id') id: string, @CurrentUser() user: ActiveUser) {
     return this.repondreInteretUseCase.accepter(id, user.userId);
@@ -566,6 +608,7 @@ export class SecondaryMarketController {
   })
   @ApiParam({ name: 'id', description: "UUID de l'annonce" })
   @HttpCode(HttpStatus.OK)
+  @Throttle(DEBIT_MUTATION_MARCHE)
   @Post('orders/:id/interet/refus')
   async refuserInteret(@Param('id') id: string, @CurrentUser() user: ActiveUser) {
     return this.repondreInteretUseCase.refuser(id, user.userId);
@@ -574,6 +617,7 @@ export class SecondaryMarketController {
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Annuler une initiation d\'achat (avant signature)' })
   @HttpCode(HttpStatus.NO_CONTENT)
+  @Throttle(DEBIT_MUTATION_MARCHE)
   @Post('signatures/:signatureId/cancel')
   async cancelInitiation(
     @Param('signatureId') signatureId: string,
