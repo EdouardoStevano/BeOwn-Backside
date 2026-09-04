@@ -76,4 +76,4 @@ k8s/**/*secrets.yaml
 # L'Ingress est désormais VERSIONNÉ (k8s/base/ingress.yaml + patches par
 # overlay). Cette ligne ne concerne plus qu'un éventuel fichier historique
 # resté sur un poste.
-k8s/06-ingress.yaml
+k8s/06-ingress.yamlgraphify-out/
