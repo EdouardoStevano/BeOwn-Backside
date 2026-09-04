@@ -7,6 +7,7 @@ import {
   Logger,
   Post,
   Req,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { ApiExcludeController } from '@nestjs/swagger';
 import { SkipThrottle } from '@nestjs/throttler';
@@ -26,6 +27,15 @@ import { FinalizeSignedContractUseCase } from 'src/signatures/applications/useca
  * d'acceptation certifiée du provider de repli. Ce contrôleur ne porte plus
  * que : la vérification de l'authenticité du webhook (spécifique YouSign) et
  * le routage des événements vers les use cases.
+ *
+ * ## Authenticité — la seule barrière
+ *
+ * La route est `@Public()` : ni jeton, ni session, ni rôle. La signature HMAC
+ * est donc le SEUL contrôle d'accès d'un point d'entrée qui finalise des
+ * contrats et déplace des fonds. Un appel non authentifié est refusé en 401 —
+ * et non absorbé par un 200 « received: false », qui donnait à un appelant
+ * illégitime la même réponse qu'à YouSign et n'apparaissait nulle part comme
+ * un refus côté client.
  */
 @ApiExcludeController()
 @SkipThrottle()
@@ -51,11 +61,17 @@ export class YouSignWebhookController {
     const rawBody = (req.rawBody as Buffer | undefined)?.toString('utf-8') ?? JSON.stringify(payload);
 
     if (!this.youSignService.verifyWebhookSignature(rawBody, signature)) {
-      this.logger.warn('Invalid YouSign webhook signature — ignored');
+      // Le motif exact — signature fausse, ou secret non configuré — est
+      // journalisé par le service, côté serveur uniquement. La réponse, elle,
+      // reste muette : elle ne renseigne pas un appelant illégitime sur l'état
+      // de la configuration.
+      this.logger.warn(
+        'Webhook YouSign refusé : authenticité non établie — aucun événement traité.',
+      );
       this.metrics.incrementCounter(METRIC.WEBHOOK_SIGNATURE_INVALID_TOTAL, {
         provider: 'yousign',
       });
-      return { received: false };
+      throw new UnauthorizedException('Webhook non authentifié.');
     }
 
     const event = payload?.event_name as string;

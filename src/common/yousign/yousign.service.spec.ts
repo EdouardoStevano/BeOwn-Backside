@@ -148,3 +148,109 @@ describe('YouSignService — indisponibilité du prestataire vs faute applicativ
     ).resolves.toBe('ongoing');
   });
 });
+
+/**
+ * Authenticité des webhooks — FAIL-CLOSED.
+ *
+ * Défaut corrigé : `verifyWebhookSignature` répondait `true` dès que
+ * `YOUSIGN_WEBHOOK_SECRET` était absente ou vide, sans regarder ni le corps ni
+ * l'en-tête. C'était la SEULE barrière d'une route publique qui finalise des
+ * contrats signés et déplace des fonds — et le secret est vide par défaut dans
+ * `.env.example`, sans validation au démarrage. Autrement dit : point d'entrée
+ * ouvert, en silence.
+ *
+ * Aucun test ne couvrait cette fonction avant celui-ci.
+ */
+describe('YouSignService — signature des webhooks', () => {
+  const SECRET = 'secret-webhook-de-test';
+  const CORPS = JSON.stringify({
+    event_name: 'signature_request.done',
+    data: { signature_request: { id: 'ys-req-1' } },
+  });
+
+  const construire = (secret?: string) =>
+    new YouSignService({
+      get: (cle: string) =>
+        ({
+          YOUSIGN_BASE_URL: 'https://api-sandbox.yousign.app/v3',
+          YOUSIGN_API_KEY: 'cle-de-test',
+          YOUSIGN_WEBHOOK_SECRET: secret,
+        })[cle],
+    } as any);
+
+  /** Signature telle que YouSign la calcule. */
+  const signer = (corps: string, secret: string) =>
+    `sha256=${require('crypto')
+      .createHmac('sha256', secret)
+      .update(corps)
+      .digest('hex')}`;
+
+  it('signature valide → acceptée', () => {
+    expect(
+      construire(SECRET).verifyWebhookSignature(CORPS, signer(CORPS, SECRET)),
+    ).toBe(true);
+  });
+
+  it('signature calculée avec un AUTRE secret → refusée', () => {
+    expect(
+      construire(SECRET).verifyWebhookSignature(
+        CORPS,
+        signer(CORPS, 'secret-de-l-attaquant'),
+      ),
+    ).toBe(false);
+  });
+
+  it('corps modifié après signature → refusé', () => {
+    const signatureDOrigine = signer(CORPS, SECRET);
+    const corpsFalsifie = CORPS.replace('ys-req-1', 'ys-req-999');
+
+    expect(
+      construire(SECRET).verifyWebhookSignature(
+        corpsFalsifie,
+        signatureDOrigine,
+      ),
+    ).toBe(false);
+  });
+
+  it.each([
+    ['en-tête absent', undefined],
+    ['en-tête vide', ''],
+    ['en-tête arbitraire', 'sha256=peu-importe'],
+  ])('%s → refusé', (_nom, entete) => {
+    expect(
+      construire(SECRET).verifyWebhookSignature(CORPS, entete as never),
+    ).toBe(false);
+  });
+
+  // ── Le passe-droit supprimé ───────────────────────────────────────────────
+
+  it.each([
+    ['variable absente', undefined],
+    ['variable vide', ''],
+  ])(
+    'secret non configuré (%s) → webhook REFUSÉ, même avec une signature bien formée',
+    (_nom, secret) => {
+      const service = construire(secret);
+      const journal = jest
+        .spyOn((service as any).logger, 'error')
+        .mockImplementation(() => undefined);
+
+      expect(
+        service.verifyWebhookSignature(CORPS, signer(CORPS, SECRET)),
+      ).toBe(false);
+      // Le refus est explicite dans le journal, et dit quoi corriger.
+      expect(journal).toHaveBeenCalledTimes(1);
+      expect(journal.mock.calls[0][0]).toContain('YOUSIGN_WEBHOOK_SECRET');
+
+      journal.mockRestore();
+    },
+  );
+
+  it('CONTRE-ÉPREUVE : sans secret, RIEN n’est accepté — pas même un corps vide', () => {
+    const service = construire(undefined);
+    jest.spyOn((service as any).logger, 'error').mockImplementation(() => undefined);
+
+    expect(service.verifyWebhookSignature('', '')).toBe(false);
+    expect(service.verifyWebhookSignature(CORPS, '')).toBe(false);
+  });
+});
