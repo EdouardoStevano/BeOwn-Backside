@@ -12,11 +12,12 @@ const buildSignerConfig = () => ({
   issuer: 'localhost:3000',
 });
 
-const buildTtlConfig = () => ({
+const buildTtlConfig = (requireTypeClaim = true) => ({
   accessTokenTtl: 3600,
   refreshTokenTtl: 86400,
   emailTokenTtl: 86400,
   unsubscribeTokenTtl: 7776000,
+  requireTypeClaim,
 });
 
 /**
@@ -24,24 +25,125 @@ const buildTtlConfig = () => ({
  * (claims, audiences, cloisonnement), qui ne se vérifie qu'avec de vrais
  * tokens signés — pas sur le driver lui-même.
  */
-const makeService = () => {
-  const cacheManagerService = {
-    insertRefreshTokenId: jest.fn(),
-    validateRefreshToken: jest.fn(),
-    invalidateRefreshTokenId: jest.fn(),
-    insertEmailTokenId: jest.fn(),
-    validateEmailToken: jest.fn(),
-    invalidateEmailTokenId: jest.fn(),
-  };
-  return new TokenService(
+const makeCache = () => ({
+  insertRefreshTokenId: jest.fn(),
+  // Toujours valide côté cache : ces tests portent sur les CLAIMS, pas sur la
+  // rotation — un refus doit donc venir du type de jeton, jamais du cache.
+  validateRefreshToken: jest.fn().mockResolvedValue(true),
+  invalidateRefreshTokenId: jest.fn(),
+  insertEmailTokenId: jest.fn(),
+  validateEmailToken: jest.fn(),
+  invalidateEmailTokenId: jest.fn(),
+});
+
+const makeService = (requireTypeClaim = true) =>
+  new TokenService(
     new JwtTokenSignerAdapter(new JwtService(), buildSignerConfig() as any),
-    cacheManagerService as any,
-    buildTtlConfig() as any,
+    makeCache() as any,
+    buildTtlConfig(requireTypeClaim) as any,
   );
-};
+
+/** Jeton « legacy » : émis avant l'ajout du claim `type`. */
+const signLegacyToken = (payload: object) =>
+  new JwtService().sign(payload, {
+    secret: SECRET,
+    audience: buildSignerConfig().audience,
+    issuer: buildSignerConfig().issuer,
+    expiresIn: 3600,
+  });
+
+describe('TokenService — cloisonnement access / refresh', () => {
+  it("estampille l'access token `access` et le refresh token `refresh`", async () => {
+    const service = makeService();
+    const { accessToken, refreshToken } = await service.generateTokens({
+      sub: 42,
+      email: 'user@example.com',
+      role: 'investisseur',
+      refreshTokenId: null,
+    });
+
+    expect(new JwtService().decode(accessToken).type).toBe('access');
+    expect(new JwtService().decode(refreshToken).type).toBe('refresh');
+  });
+
+  it('REFUSE un refresh token présenté comme access token (Bearer)', async () => {
+    const service = makeService();
+    const { refreshToken } = await service.generateTokens({
+      sub: 42,
+      email: 'user@example.com',
+      role: 'super_admin',
+      refreshTokenId: null,
+    });
+
+    // Sans cette garde, le refresh token valait Bearer 24 h durant : la
+    // rétrogradation d'un rôle, qui ne prend effet qu'à la rotation, restait
+    // contournable tout ce temps.
+    await expect(service.verifyAccessToken(refreshToken)).rejects.toThrow(
+      InvalidAccessTokenError,
+    );
+  });
+
+  it('REFUSE un access token présenté sur le chemin de rafraîchissement', async () => {
+    const service = makeService();
+    const { accessToken } = await service.generateTokens({
+      sub: 42,
+      email: 'user@example.com',
+      refreshTokenId: null,
+    });
+
+    await expect(service.consumeRefreshToken(accessToken)).rejects.toThrow();
+  });
+
+  it('accepte le refresh token sur son propre chemin', async () => {
+    const service = makeService();
+    const { refreshToken } = await service.generateTokens({
+      sub: 42,
+      email: 'user@example.com',
+      refreshTokenId: null,
+    });
+
+    await expect(service.consumeRefreshToken(refreshToken)).resolves.toEqual({
+      sub: 42,
+      email: 'user@example.com',
+    });
+  });
+
+  describe('fenêtre de transition (JWT_REQUIRE_TYPE_CLAIM)', () => {
+    it('refuse un jeton legacy sans claim type quand le claim est exigé (défaut)', async () => {
+      const service = makeService(true);
+      const legacy = signLegacyToken({ sub: 42, email: 'user@example.com' });
+
+      await expect(service.verifyAccessToken(legacy)).rejects.toThrow(
+        InvalidAccessTokenError,
+      );
+    });
+
+    it('tolère un jeton legacy sans claim type quand la fenêtre est ouverte', async () => {
+      const service = makeService(false);
+      const legacy = signLegacyToken({ sub: 42, email: 'user@example.com' });
+
+      await expect(service.verifyAccessToken(legacy)).resolves.toMatchObject({
+        sub: 42,
+      });
+    });
+
+    it("la fenêtre ouverte ne relâche PAS le refus d'un jeton typé refresh", async () => {
+      const service = makeService(false);
+      const { refreshToken } = await service.generateTokens({
+        sub: 42,
+        email: 'user@example.com',
+        refreshTokenId: null,
+      });
+
+      await expect(service.verifyAccessToken(refreshToken)).rejects.toThrow(
+        InvalidAccessTokenError,
+      );
+    });
+  });
+});
 
 describe('TokenService — confusion de tokens typés vs access tokens', () => {
-  it('accepte toujours un access token légitime (aucun claim type)', async () => {
+  it('accepte un access token légitime', async () => {
     const service = makeService();
     const { accessToken } = await service.generateTokens({
       sub: 42,

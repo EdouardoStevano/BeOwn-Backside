@@ -8,14 +8,18 @@ import {
   type TokenSigner,
 } from 'src/shared/token/applications/ports/token-signer.port';
 import {
+  ACCESS_TOKEN_TYPE,
   AuthTokens,
   EmailTokenPayload,
   EmailTokenPurpose,
   NOTIF_UNSUBSCRIBE_TYPE,
+  REFRESH_TOKEN_TYPE,
   RefreshSessionIdentity,
   TokenPayload,
   UNSUBSCRIBE_TOKEN_AUDIENCE,
   UnsubscribeTokenPayload,
+  accepteCommeJetonDacces,
+  accepteCommeJetonDeRafraichissement,
 } from '../../models/auth-token';
 import { SessionCacheService } from '../session-cache.service';
 
@@ -45,17 +49,21 @@ export class TokenService {
   async generateTokens(payload: TokenPayload): Promise<AuthTokens> {
     const refreshTokenId = randomUUID();
 
+    // Chaque jeton porte SON type. C'est ce qui empêche un refresh token de
+    // valoir access token en `Authorization: Bearer` — cf.
+    // `ACCESS_TOKEN_TYPE` pour le détail de la faille corrigée.
     const [accessToken, refreshToken] = await Promise.all([
-      this.signToken<{ email: string; role?: string }>(
+      this.signToken<{ email: string; role?: string; type: string }>(
         payload.sub,
         this.jwtConfiguration.accessTokenTtl,
-        { email: payload.email, role: payload.role },
+        { email: payload.email, role: payload.role, type: ACCESS_TOKEN_TYPE },
       ),
 
       this.signToken(payload.sub, this.jwtConfiguration.refreshTokenTtl, {
         refreshTokenId,
         email: payload.email,
         role: payload.role,
+        type: REFRESH_TOKEN_TYPE,
       }),
     ]);
 
@@ -91,14 +99,24 @@ export class TokenService {
    * pas l'état des comptes).
    */
   async consumeRefreshToken(token: string): Promise<RefreshSessionIdentity> {
-    const { sub, email, refreshTokenId } =
-      await this.tokenSigner.verify<TokenPayload>(token);
+    const { sub, email, refreshTokenId, type } = await this.tokenSigner.verify<
+      Omit<TokenPayload, 'type'> & { type?: string }
+    >(token);
 
     // Un access token ne porte pas d'identifiant de rotation : présenté ici, il
     // est refusé comme n'importe quel refresh token périmé, sans interroger le
     // cache. Le typage l'impose désormais — `TOKEN_SIGNER` rend une charge
     // utile typée là où `verifyAsync` rendait `any`.
+    //
+    // Le claim `type` verrouille le sens inverse ET les jetons typés
+    // (`email_verify`, `password_reset`, `notif_unsubscribe`) : le contrôle est
+    // symétrique de celui de `verifyAccessToken`, de sorte qu'aucun jeton ne
+    // puisse servir sur les deux chemins.
     const isValidToken =
+      accepteCommeJetonDeRafraichissement(
+        type,
+        this.jwtConfiguration.requireTypeClaim,
+      ) &&
       typeof refreshTokenId === 'string' &&
       (await this.sessionCache.validateRefreshToken(email, refreshTokenId));
 
@@ -115,22 +133,30 @@ export class TokenService {
   }
 
   async verifyAccessToken(token: string): Promise<TokenPayload> {
+    // `type` est relu en `string` libre, jamais en `SessionTokenType` : la
+    // charge utile entrante n'est pas de confiance et peut porter n'importe
+    // quelle valeur (`email_verify`, `notif_unsubscribe`, …). C'est la garde
+    // ci-dessous qui la ramène dans le domaine attendu.
     const payload = await this.tokenSigner.verify<
-      TokenPayload & { type?: string }
+      Omit<TokenPayload, 'type'> & { type?: string }
     >(token);
 
-    // Garde anti-confusion de token (finding CRITIQUE) : les tokens typés
-    // (`email_verify`, `password_reset`, `notif_unsubscribe`) sont signés
-    // avec le même secret et seraient sinon acceptés ici comme access tokens
-    // — un lien de désinscription (90 j, non single-use, distribué en masse
-    // par email) deviendrait un Bearer token de la victime. Les access et
-    // refresh tokens légitimes ne portent JAMAIS de claim `type` (voir
-    // generateTokens/signToken) : tout token qui en porte un est rejeté.
-    if (payload.type) {
+    // Garde anti-confusion de token (finding CRITIQUE) : tous les jetons du
+    // contexte sont signés avec le même secret et la même audience. Sans claim
+    // `type`, un lien de désinscription (90 j, non single-use, distribué en
+    // masse par email) ou un REFRESH TOKEN présenté en Bearer valaient access
+    // token. Seule l'estampille `access` ouvre désormais ce chemin.
+    if (
+      !accepteCommeJetonDacces(
+        payload.type,
+        this.jwtConfiguration.requireTypeClaim,
+      )
+    ) {
       throw new InvalidAccessTokenError();
     }
 
-    return payload;
+    // Sûr après la garde : `type` vaut ici `'access'` ou rien.
+    return payload as TokenPayload;
   }
 
   async generateEmailToken(

@@ -18,4 +18,11 @@ export default registerAs('jwt', () => ({
     process.env.JWT_TOKEN_UNSUBSCRIBE_TTL ?? '7776000',
     10,
   ),
+  /**
+   * Exige le claim `type` sur les jetons de session (fail-closed par défaut).
+   * Passer à `false` UNIQUEMENT le temps d'un déploiement, pour ne pas
+   * déconnecter les sessions ouvertes avant l'ajout de l'estampille — voir
+   * `accepteCommeJetonDacces` pour ce que cette fenêtre réexpose.
+   */
+  requireTypeClaim: (process.env.JWT_REQUIRE_TYPE_CLAIM ?? 'true') !== 'false',
 }));

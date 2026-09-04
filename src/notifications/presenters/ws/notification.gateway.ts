@@ -7,9 +7,13 @@ import {
   ConnectedSocket,
   MessageBody,
 } from '@nestjs/websockets';
+import { Inject } from '@nestjs/common';
 import { Server, Socket } from 'socket.io';
-import { JwtService } from '@nestjs/jwt';
-import { ConfigService } from '@nestjs/config';
+import { TokenService } from 'src/iam/applications/services/token/token.service';
+import {
+  USER_REPOSITORY,
+  type UserRepository,
+} from 'src/iam/domains/ports/user.repository';
 import { NotificationEntity } from '../../infrastructure/persistences/entities/notification.entity';
 
 /**
@@ -66,10 +70,25 @@ export class NotificationGateway
   server: Server;
 
   constructor(
-    private readonly jwtService: JwtService,
-    private readonly configService: ConfigService,
+    private readonly tokenService: TokenService,
+    @Inject(USER_REPOSITORY) private readonly userRepository: UserRepository,
   ) {}
 
+  /**
+   * Poignée de main : mêmes exigences que sur une requête HTTP authentifiée.
+   *
+   * La vérification était auparavant faite ici à la main (`JwtService.verify`
+   * secret-only, sans audience ni émetteur), avec sa propre garde de claim
+   * `type` — une deuxième politique de jetons, qui dérivait de celle d'IAM.
+   * Elle passe par `TokenService.verifyAccessToken`, seul détenteur de la
+   * politique : un refresh token, un lien de désinscription ou un token de
+   * vérification d'email n'ouvrent plus le canal.
+   *
+   * S'y ajoute la relecture du STATUT en base, équivalent WebSocket
+   * d'`AccountStatusGuard` : sans elle, une connexion établie avant une
+   * suspension continuait de recevoir les notifications de la victime pendant
+   * toute la vie du socket, alors que ses requêtes HTTP étaient coupées.
+   */
   async handleConnection(client: Socket) {
     try {
       const token =
@@ -84,24 +103,16 @@ export class NotificationGateway
         return;
       }
 
-      const payload = this.jwtService.verify(token, {
-        secret: this.configService.get<string>('JWT_SECRET'),
-      });
+      const payload = await this.tokenService.verifyAccessToken(token);
 
-      // Garde anti-confusion de token : la vérification ci-dessus est
-      // secret-only (pas d'audience), donc les tokens typés signés avec le
-      // même secret (`email_verify`, `password_reset`, `notif_unsubscribe`)
-      // passeraient et permettraient de s'abonner à `user-<victimId>`. Les
-      // access tokens légitimes ne portent jamais de claim `type` : tout
-      // token qui en porte un est refusé.
-      if (payload.type) {
+      const user = await this.userRepository.findById(payload.sub);
+      if (!user || user.isSuspended() || user.isClosed()) {
         client.disconnect();
         return;
       }
 
-      const userId: number = payload.sub ?? payload.userId ?? payload.id;
-      client.data.userId = userId;
-      await client.join(`user-${userId}`);
+      client.data.userId = payload.sub;
+      await client.join(`user-${payload.sub}`);
     } catch {
       client.disconnect();
     }

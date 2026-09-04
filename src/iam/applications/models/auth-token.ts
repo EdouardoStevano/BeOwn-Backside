@@ -1,10 +1,67 @@
 import { PublicUser } from 'src/iam/domains/mappers/user.mapper';
 
+/**
+ * Type des deux jetons de SESSION, porté par le claim `type`.
+ *
+ * Correctif d'une confusion de jetons : access et refresh étaient signés avec
+ * le même secret, la même audience et le même émetteur, et aucun des deux ne
+ * portait de claim distinctif. Un refresh token présenté en `Authorization:
+ * Bearer` passait donc `verifyAccessToken` — il valait access token pendant
+ * toute sa durée de vie (24 h). Conséquence directe : la révocation d'un rôle
+ * ou d'un accès, qui repose sur la ROTATION du refresh token pour reprendre le
+ * rôle en base, restait contournable 24 h en n'appelant jamais
+ * `POST /auth/refresh-tokens` et en présentant le refresh token comme access.
+ *
+ * Chaque jeton est désormais estampillé à l'émission et chaque site de
+ * vérification exige l'estampille qui lui correspond.
+ */
+export const ACCESS_TOKEN_TYPE = 'access';
+export const REFRESH_TOKEN_TYPE = 'refresh';
+
+export type SessionTokenType =
+  | typeof ACCESS_TOKEN_TYPE
+  | typeof REFRESH_TOKEN_TYPE;
+
+/**
+ * Politique de transition, en un seul endroit — partagée par `TokenService` et
+ * par la passerelle WebSocket, qui doivent accepter exactement les mêmes
+ * jetons.
+ *
+ * Les jetons émis AVANT ce déploiement ne portent aucun claim `type`.
+ * `exigerLeClaimType` (variable d'env `JWT_REQUIRE_TYPE_CLAIM`) vaut `true`
+ * par défaut : fail-closed, les sessions ouvertes avant la mise en production
+ * sont invalidées et les fronts repassent par une authentification. Le mettre
+ * à `false` le temps d'un déploiement ouvre une fenêtre de tolérance : un
+ * jeton SANS type est alors accepté comme access — ce qui réexpose exactement
+ * la confusion corrigée ici, mais seulement pour les jetons antérieurs, et au
+ * plus le temps d'un TTL de refresh (24 h) après quoi la rotation naturelle a
+ * tout ré-estampillé. Un jeton portant `type: 'refresh'` est refusé dans les
+ * DEUX modes.
+ */
+export const accepteCommeJetonDacces = (
+  type: string | undefined,
+  exigerLeClaimType: boolean,
+): boolean =>
+  type === ACCESS_TOKEN_TYPE || (type === undefined && !exigerLeClaimType);
+
+/** Symétrique de {@link accepteCommeJetonDacces} pour le chemin de rotation. */
+export const accepteCommeJetonDeRafraichissement = (
+  type: string | undefined,
+  exigerLeClaimType: boolean,
+): boolean =>
+  type === REFRESH_TOKEN_TYPE || (type === undefined && !exigerLeClaimType);
+
 export interface TokenPayload {
   sub: number;
   email: string;
   role?: string;
   refreshTokenId: string | null;
+  /**
+   * Absent des charges utiles passées à `generateTokens` (c'est le service qui
+   * estampille), présent sur toute charge utile RELUE d'un jeton émis depuis
+   * ce correctif.
+   */
+  type?: SessionTokenType;
 }
 
 export interface AuthTokens {

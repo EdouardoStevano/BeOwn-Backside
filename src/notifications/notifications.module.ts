@@ -1,7 +1,5 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { JwtModule } from '@nestjs/jwt';
-import { ConfigModule, ConfigService } from '@nestjs/config';
 import { NotificationEntity } from './infrastructure/persistences/entities/notification.entity';
 import { AuditLogEntity } from './infrastructure/persistences/entities/audit-log.entity';
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
@@ -34,15 +32,11 @@ import { UsersInfrastructureModule } from 'src/iam/infrastructure/users-infrastr
       ProfilPPEntity,
       AdminSettingsEntity,
     ]),
+    // `TokenService` (politique de jetons) et `USER_REPOSITORY` : la
+    // passerelle WebSocket les consomme désormais au lieu de re-vérifier les
+    // JWT elle-même — l'enregistrement local de `JwtModule` n'a plus d'objet.
     IamInfrastructureModule,
     UsersInfrastructureModule,
-    JwtModule.registerAsync({
-      imports: [ConfigModule],
-      useFactory: (config: ConfigService) => ({
-        secret: config.get<string>('JWT_SECRET'),
-      }),
-      inject: [ConfigService],
-    }),
   ],
   providers: [
     NotificationService,
