@@ -24,6 +24,7 @@ import { ContractGeneratorService } from 'src/investments/applications/usecases/
 import { SignatureProvider } from 'src/signatures/applications/ports/signature-provider.port';
 import { GelDesAvoirsPort } from 'src/common/aml/gel-des-avoirs.port';
 import { formatEur } from 'src/shared/money/format-eur';
+import { ConflitsInteretsService } from 'src/projects/applications/conflits-interets.service';
 
 /**
  * Initiation du parcours contractuel d'une cession : génération du contrat de
@@ -68,6 +69,8 @@ export class InitiateBuyUseCase {
     private readonly signatureProvider: SignatureProvider,
     // Gel des avoirs (L. 562-4 CMF) — port DIP, en dernière position.
     private readonly gelDesAvoirs: GelDesAvoirsPort,
+    // Conflits d'intérêts (décision D5) — en queue, comme le précédent.
+    private readonly conflitsInterets: ConflitsInteretsService,
   ) {}
 
   async execute(
@@ -110,6 +113,17 @@ export class InitiateBuyUseCase {
 
     const totalCost = nbFractions * Number(ordre.prixUnitaire);
     const projetId = ordre.investissement.projetId;
+
+    // ── Conflits d'intérêts (décision D5) ────────────────────────────────────
+    // La garde vise l'ACHETEUR : acquérir des parts, c'est souscrire par une
+    // autre porte. Le porteur du projet ne peut pas racheter les parts de sa
+    // propre société support. Le projet vient de la relation déjà chargée
+    // (`relations: ['investissement', 'investissement.projet']`) ; à défaut, on
+    // se rabat sur l'identifiant plutôt que de décider sans savoir.
+    await this.conflitsInterets.assertPasPorteurDuProjet(
+      userId,
+      ordre.investissement?.projet ?? projetId,
+    );
 
     // ── Vérification solde wallet (sans débiter) ───────────────────────────────
     const wallet = await this.walletRepo.findOne({

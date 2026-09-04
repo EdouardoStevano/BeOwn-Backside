@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 import { ProfilPPEntity } from 'src/profiles/infrastructure/persistences/entities/profil-pp.entity';
-import { ConflitsInteretsService } from './conflits-interets.service';
+import { ConflitsInteretsModule } from './conflits-interets.module';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ProjectsInfrastructureModule } from '../infrastructure/projects-infrastructure.module';
 import { InvestmentsInfrastructureModule } from 'src/investments/infrastructure/investments-infrastructure.module';
@@ -45,6 +45,9 @@ import { ProjectTimelineCronService } from './project-timeline-cron.service';
     // `USER_REPOSITORY` : PorteurAccessGuard relit en base le couple
     // rôle/porteurAccess sur POST /projects/submit (lot 4, D1).
     UsersInfrastructureModule,
+    // Conflits d'intérêts : art. 8 (éligibilité du porteur) et décision D5
+    // (séparation porteur/investisseur). Une seule instance pour tout le dépôt.
+    ConflitsInteretsModule,
     TypeOrmModule.forFeature([
       WalletEntity,
       TransactionEntity,
@@ -57,7 +60,6 @@ import { ProjectTimelineCronService } from './project-timeline-cron.service';
   providers: [
     PorteurAccessGuard,
     CreateProjectUseCase,
-    ConflitsInteretsService,
     UpdateProjectUseCase,
     UpdateProjectStatusUseCase,
     GetProjectsUseCase,

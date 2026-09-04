@@ -88,6 +88,24 @@ export class InvestmentTypeOrmRepository implements InvestmentRepository {
     return Object.fromEntries(rows.map((r) => [r.projetId, Number(r.total)]));
   }
 
+  async existeDetentionSurSocieteSupport(
+    utilisateurId: number,
+    spvId: string,
+  ): Promise<boolean> {
+    // Part de l'index `investment.utilisateurId`, puis joint le projet par sa
+    // clé primaire : le volume balayé est celui du portefeuille de l'appelant,
+    // jamais celui de la table. `getExists` s'arrête au premier enregistrement.
+    return this.investRepo
+      .createQueryBuilder('i')
+      .innerJoin(ProjectEntity, 'p', 'p.id = i."projetId"')
+      .where('i.utilisateurId = :utilisateurId', { utilisateurId })
+      .andWhere('p.spvId = :spvId', { spvId })
+      .andWhere('i.statut NOT IN (:...exclus)', {
+        exclus: [InvestmentStatus.RETRACTE, InvestmentStatus.ANNULE],
+      })
+      .getExists();
+  }
+
   async updateInvestmentStatus(
     id: string,
     status: InvestmentStatus,

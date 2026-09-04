@@ -55,13 +55,26 @@ describe('RepondreInteretUseCase', () => {
       libererFonds: jest.fn().mockResolvedValue(0),
     };
 
+    const conflitsInterets = {
+      assertPasPorteurDuProjetCede: jest.fn().mockResolvedValue(undefined),
+    };
+
     const usecase = new RepondreInteretUseCase(
       ordreRepo as any,
       initiateBuy as any,
       notifications as any,
       compensation as any,
+      conflitsInterets as any,
     );
-    return { usecase, ordreRepo, initiateBuy, notifications, compensation, updates };
+    return {
+      usecase,
+      ordreRepo,
+      initiateBuy,
+      notifications,
+      compensation,
+      conflitsInterets,
+      updates,
+    };
   };
 
   /** Notification poussée à un destinataire donné, ou `undefined`. */

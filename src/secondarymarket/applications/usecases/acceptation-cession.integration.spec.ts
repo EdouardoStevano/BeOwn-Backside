@@ -3,6 +3,8 @@ import { RepondreInteretUseCase } from './repondre-interet.usecase';
 import { InitiateBuyUseCase } from './initiate-buy.usecase';
 import { OrdreMarcheStatus } from 'src/secondarymarket/domains/ordre-marche';
 import { SignatureProviderUnavailableError } from 'src/common/yousign/signature-provider.error';
+import { ConflitsInteretsService } from 'src/projects/applications/conflits-interets.service';
+import { PorteurDeSonPropreProjetError } from 'src/projects/domains/errors/conflits-interets.errors';
 
 /**
  * Intégration des deux use cases du parcours de cession — ANO-01.
@@ -90,9 +92,36 @@ describe('Acceptation vendeur → initiation de cession (intégration)', () => {
     {
       ordre = construireOrdre(),
       erreurYousign = null,
-    }: { ordre?: any; erreurYousign?: Error | null } = {},
+      porteurDuProjet = VENDEUR_ID,
+    }: {
+      ordre?: any;
+      erreurYousign?: Error | null;
+      porteurDuProjet?: number | null;
+    } = {},
   ) => {
     const ordreRepo = construireDepotOrdres(ordre);
+
+    // Service de conflits d'intérêts RÉEL, partagé par les deux use cases —
+    // même raison que le dépôt d'ordres : c'est l'accord des deux étapes qu'on
+    // veut éprouver, pas la délégation à un `jest.fn()`. Seuls ses ports sont
+    // simulés. Par défaut le porteur est le VENDEUR : personne n'est en
+    // conflit, les scénarios historiques sont inchangés.
+    const conflitsInterets = new ConflitsInteretsService(
+      { findOne: jest.fn(async () => null) } as any, // userRepo (art. 8)
+      { findOne: jest.fn(async () => null) } as any, // profilRepo (art. 8)
+      {
+        findProjectById: jest.fn(async () => ({
+          id: 'projet-1',
+          porteurId: porteurDuProjet,
+        })),
+      } as any,
+      {
+        findInvestmentById: jest.fn(async () => ({
+          id: 'inv-vendeur',
+          projetId: 'projet-1',
+        })),
+      } as any,
+    );
 
     const signaturesEnregistrees: any[] = [];
     const initiateBuy = new InitiateBuyUseCase(
@@ -148,6 +177,7 @@ describe('Acceptation vendeur → initiation de cession (intégration)', () => {
         }),
       } as any,
       /* gelDesAvoirs */ { assertAvoirsNonGeles: jest.fn().mockResolvedValue(undefined) } as any,
+      conflitsInterets,
     );
 
     const notifications = { push: jest.fn() };
@@ -175,6 +205,7 @@ describe('Acceptation vendeur → initiation de cession (intégration)', () => {
       initiateBuy,
       notifications as any,
       compensation as any,
+      conflitsInterets,
     );
 
     return {
@@ -343,5 +374,40 @@ describe('Acceptation vendeur → initiation de cession (intégration)', () => {
     await expect(repondre.accepter(ORDRE_ID, VENDEUR_ID)).rejects.toBeInstanceOf(
       BadRequestException,
     );
+  });
+
+  // ── Conflits d'intérêts sur le parcours complet (décision D5) ─────────────
+  //
+  // La garde est posée aux deux étapes ; ce qui compte ici, c'est qu'un refus
+  // à la première n'abandonne RIEN derrière lui — ni annonce coincée en
+  // ACCEPTE, ni euro bloqué sur un acheteur qui ne peut pas acheter.
+
+  it("l'acheteur porteur du projet est refusé : aucun fonds bloqué, l'annonce reste répondable", async () => {
+    const { repondre, position, ordre, signaturesEnregistrees } = construire({
+      porteurDuProjet: ACHETEUR_ID,
+    });
+
+    await expect(
+      repondre.accepter(ORDRE_ID, VENDEUR_ID),
+    ).rejects.toBeInstanceOf(PorteurDeSonPropreProjetError);
+
+    // Refus AVANT la réservation : rien n'a bougé sur le portefeuille.
+    expect(position.bloque).toBe(0);
+    expect(position.disponible).toBe(10_000);
+    // Ni sur l'annonce, qui n'a jamais quitté l'attente de réponse.
+    expect(ordre.statut).toBe(OrdreMarcheStatus.INTERET_EXPRIME);
+    // Et aucun contrat n'a été émis : l'initiation n'a pas été atteinte.
+    expect(signaturesEnregistrees).toHaveLength(0);
+  });
+
+  it('CONTRE-ÉPREUVE : le vendeur porteur du projet ne bloque pas la cession', async () => {
+    // La garde vise l'ACHETEUR. Un vendeur qui se trouve être le porteur cède
+    // ses propres parts : c'est une sortie, pas une entrée d'argent.
+    const { repondre, position } = construire({ porteurDuProjet: VENDEUR_ID });
+
+    await expect(
+      repondre.accepter(ORDRE_ID, VENDEUR_ID),
+    ).resolves.toMatchObject({ ordreId: ORDRE_ID });
+    expect(position.bloque).toBe(300);
   });
 });

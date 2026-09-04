@@ -62,6 +62,9 @@ describe('ExprimerInteretUseCase', () => {
       notifications as any,
       devisCession,
       /* gelDesAvoirs */ { assertAvoirsNonGeles: jest.fn().mockResolvedValue(undefined) } as any,
+      /* conflitsInterets */ {
+        assertPasPorteurDuProjetCede: jest.fn().mockResolvedValue(undefined),
+      } as any,
     );
     return { usecase, ordreRepo, walletRepo, investRepo, notifications };
   };

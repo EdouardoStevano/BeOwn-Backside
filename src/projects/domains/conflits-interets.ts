@@ -114,3 +114,80 @@ export function verifierEligibiliteInvestisseur(
       "Art. 8(1) : le prestataire ne peut participer à aucune offre de financement participatif publiée sur sa propre plateforme.",
   };
 }
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * Décision fondateur D5 — un porteur n'investit pas dans SON projet
+ *
+ * Deux fondements, cumulatifs :
+ *  - PRATIQUE COMMERCIALE TROMPEUSE : l'avancement d'une collecte est le
+ *    principal signal donné au public. Un porteur qui souscrit sa propre offre
+ *    gonfle ce signal avec son propre argent, et l'investisseur qui rejoint
+ *    « une collecte à 60 % » n'achète pas ce qu'on lui montre.
+ *  - CIRCULARITÉ LCB-FT : des fonds qui partent du porteur, transitent par la
+ *    collecte et lui reviennent en qualité de porteur ne laissent, en sortie,
+ *    aucune trace de leur origine.
+ *
+ * L'interdiction porte sur le PORTEUR DE CE PROJET PRÉCIS, jamais sur le rôle :
+ * un porteur reste un investisseur ordinaire sur les projets des autres. La
+ * clause « conflits » des CGU dit la même chose dans les deux sens — ni
+ * souscrire, ni réserver, ni acquérir au marché secondaire les parts de la
+ * société support d'un projet qu'on porte ; et pas de rôle porteur sur un
+ * projet dont on détient déjà des parts.
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * Vrai si cet utilisateur est le porteur de ce projet.
+ *
+ * Un projet sans porteur identifié (`null` — offre montée par la plateforme)
+ * n'a personne à exclure : la comparaison doit rester fausse, jamais indécise.
+ */
+export function estPorteurDuProjet(
+  utilisateurId: number,
+  porteurIdDuProjet: number | null | undefined,
+): boolean {
+  if (porteurIdDuProjet === null || porteurIdDuProjet === undefined) {
+    return false;
+  }
+  return porteurIdDuProjet === utilisateurId;
+}
+
+/**
+ * Le porteur d'un projet ne peut ni y souscrire, ni le réserver, ni en
+ * acquérir des parts sur le marché secondaire.
+ *
+ * S'applique indifféremment aux sept portes d'entrée de l'argent : la règle
+ * est la même, elle n'est écrite qu'ici.
+ */
+export function verifierInvestisseurNonPorteur(
+  utilisateurId: number,
+  porteurIdDuProjet: number | null | undefined,
+): VerdictConflitInterets {
+  if (!estPorteurDuProjet(utilisateurId, porteurIdDuProjet)) return AUTORISE;
+
+  return {
+    autorise: false,
+    motif:
+      'Vous portez ce projet : vous ne pouvez ni y souscrire, ni le réserver, ' +
+      'ni en acquérir des parts sur le marché secondaire.',
+  };
+}
+
+/**
+ * Réciproque : on ne devient pas porteur d'un projet dont on détient déjà des
+ * parts de la société support.
+ *
+ * La détention se constate en amont (positions non annulées) ; le domaine ne
+ * fait qu'en tirer la conséquence.
+ */
+export function verifierPorteurSansPartsDeLaSocieteSupport(
+  detientDejaDesParts: boolean,
+): VerdictConflitInterets {
+  if (!detientDejaDesParts) return AUTORISE;
+
+  return {
+    autorise: false,
+    motif:
+      'Vous détenez déjà des parts de la société support de ce projet : vous ' +
+      "ne pouvez pas en être le porteur.",
+  };
+}

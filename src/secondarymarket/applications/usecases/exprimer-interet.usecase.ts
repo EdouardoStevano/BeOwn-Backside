@@ -26,6 +26,7 @@ import {
   DevisCessionService,
 } from 'src/secondarymarket/applications/devis-cession.service';
 import { GelDesAvoirsPort } from 'src/common/aml/gel-des-avoirs.port';
+import { ConflitsInteretsService } from 'src/projects/applications/conflits-interets.service';
 
 export interface ResultatExpressionInteret {
   ordreId: string;
@@ -67,6 +68,8 @@ export class ExprimerInteretUseCase {
     // Gel des avoirs (L. 562-4 CMF) — port DIP, en dernière position (les
     // specs construisent ce usecase à la main).
     private readonly gelDesAvoirs: GelDesAvoirsPort,
+    // Conflits d'intérêts (décision D5) — en queue, comme le précédent.
+    private readonly conflitsInterets: ConflitsInteretsService,
   ) {}
 
   async execute(
@@ -111,6 +114,16 @@ export class ExprimerInteretUseCase {
     if (!verdict.recevable) {
       throw new BadRequestException(verdict.motif ?? 'Marque d\'intérêt irrecevable.');
     }
+
+    // ── Conflits d'intérêts (décision D5) ────────────────────────────────────
+    // Refus AVANT que le vendeur ne soit sollicité : une marque d'intérêt
+    // engage le vendeur dans une négociation, et le porteur du projet n'a pas à
+    // se porter acquéreur des parts de sa propre société support. Le projet est
+    // désigné par l'investissement d'origine du vendeur.
+    await this.conflitsInterets.assertPasPorteurDuProjetCede(
+      acheteurId,
+      ordre.investissementId,
+    );
 
     // Contrôle de solvabilité SANS débit ni blocage : on évite de solliciter le
     // vendeur pour un acheteur qui ne pourrait pas payer, sans pour autant

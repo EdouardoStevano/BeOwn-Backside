@@ -48,6 +48,7 @@ import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/w
 import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entities/transaction.entity';
 import { WalletMapper } from 'src/wallets/infrastructure/persistences/mappers/wallet.mapper';
 import { ResolveProjectWalletUseCase } from 'src/wallets/applications/usecases/resolve-project-wallet.usecase';
+import { ConflitsInteretsService } from 'src/projects/applications/conflits-interets.service';
 
 @Injectable()
 export class TopUpInvestmentUseCase {
@@ -71,6 +72,9 @@ export class TopUpInvestmentUseCase {
     @InjectDataSource()
     private readonly dataSource: DataSource,
     private readonly projectWalletResolver: ResolveProjectWalletUseCase,
+    // Conflits d'intérêts (décision D5) — en queue de constructeur : les specs
+    // construisent ce usecase à la main.
+    private readonly conflitsInterets: ConflitsInteretsService,
   ) {}
 
   /** Clé d'idempotence d'un top-up, liée à l'appelant et à l'investissement. */
@@ -113,6 +117,12 @@ export class TopUpInvestmentUseCase {
 
     const project = await this.projectRepository.findProjectById(investment.projetId);
     if (!project) throw new NotFoundException('Projet introuvable');
+
+    // Conflits d'intérêts (décision D5) : ajouter des fractions, c'est
+    // souscrire. Cas réel visé — un investisseur devenu porteur du projet
+    // qu'il avait financé ne peut plus renforcer sa position dessus. Projet
+    // déjà chargé, aucune requête.
+    await this.conflitsInterets.assertPasPorteurDuProjet(userId, project);
 
     const prixFraction = Number(investment.valeurTitre ?? project.prixFraction ?? project.ticketMinimum ?? 0);
     const nbFractionsTotal = project.nbFractions ?? Math.floor(Number(project.capitalCible) / prixFraction);

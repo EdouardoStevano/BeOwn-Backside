@@ -7,6 +7,8 @@ import { PayoutMethodError } from 'src/payments/applications/ports/payout-method
 import { statutHttpDePayoutMethodError } from 'src/payments/presenters/http/payout-method-exception.filter';
 import { SignatureProviderUnavailableError } from 'src/common/yousign/signature-provider.error';
 import { STATUT_SIGNATURE_INDISPONIBLE } from 'src/common/yousign/signature-provider-exception.filter';
+import { ConflitsInteretsError } from 'src/projects/domains/errors/conflits-interets.errors';
+import { statutHttpDeConflitsInteretsError } from 'src/projects/presenters/http/filters/conflits-interets-error.filter';
 
 /**
  * Statut HTTP réellement renvoyé au client pour une exception donnée.
@@ -61,6 +63,10 @@ const RESOLVEURS: ReadonlyArray<(erreur: unknown) => number | undefined> = [
   (e) =>
     e instanceof SignatureProviderUnavailableError
       ? STATUT_SIGNATURE_INDISPONIBLE
+      : undefined,
+  (e) =>
+    e instanceof ConflitsInteretsError
+      ? statutHttpDeConflitsInteretsError(e)
       : undefined,
 ];
 
