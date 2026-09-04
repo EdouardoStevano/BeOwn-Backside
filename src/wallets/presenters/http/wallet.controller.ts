@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   ForbiddenException,
@@ -9,6 +10,8 @@ import {
   ParseIntPipe,
   Post,
 } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import {
   ApiBearerAuth,
   ApiOperation,
@@ -27,8 +30,11 @@ import { hasPermission } from 'src/common/auth/permissions.constants';
 import {
   TransactionFournisseur,
   TransactionStatus,
+  TYPES_WALLET_PLATEFORME,
   WalletType,
 } from 'src/wallets/domains/enums/wallet.enum';
+import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
+import { AuditLogService } from 'src/notifications/applications/audit-log.service';
 import { CreateTransactionDto, CreateWalletDto } from '../dto/wallet.dto';
 
 @ApiTags('Wallets & Transactions')
@@ -38,6 +44,9 @@ export class WalletController {
   constructor(
     @Inject(WALLET_REPOSITORY)
     private readonly walletRepository: WalletRepository,
+    @InjectRepository(UserEntity)
+    private readonly userRepo: Repository<UserEntity>,
+    private readonly auditLog: AuditLogService,
   ) {}
 
   private canManageWallets(user: ActiveUser): boolean {
@@ -131,13 +140,44 @@ export class WalletController {
     return this.walletRepository.findTransactionsByWallet(id);
   }
 
-  @ApiOperation({ summary: 'Créer une transaction' })
+  /**
+   * Écriture passée À LA MAIN au grand livre depuis le back-office.
+   *
+   * Elle acceptait n'importe quels `walletSourceId` / `walletDestinationId` —
+   * aucune vérification d'existence, aucune vérification de nature. Un jeton
+   * `platform:wallet` permettait donc d'inscrire au grand livre un mouvement
+   * entre deux portefeuilles d'investisseurs, ou vers un identifiant qui
+   * n'existe pas : la ligne apparaissait ensuite dans les relevés, les exports
+   * comptables et le rapprochement, sans qu'aucun parcours métier ne l'ait
+   * produite. Trois gardes désormais :
+   *
+   *  1. les portefeuilles cités EXISTENT (404 sinon) ;
+   *  2. l'écriture touche au moins un portefeuille de la plateforme
+   *     ({@link TYPES_WALLET_PLATEFORME}) — un virement entre deux
+   *     investisseurs n'est pas une opération d'exploitation ;
+   *  3. le rôle de l'appelant est RELU EN BASE, comme sur toute route qui
+   *     touche à l'argent.
+   *
+   * Et l'opération laisse une entrée d'audit métier nominative.
+   *
+   * NOTE : cette écriture ne déplace aucun solde (statut INITIE). Elle
+   * n'en est pas anodine pour autant — c'est le grand livre qui fait foi au
+   * rapprochement.
+   */
+  @ApiOperation({ summary: 'Créer une écriture au grand livre (back-office)' })
   @ApiResponse({ status: 201, description: 'Transaction enregistrée' })
+  @ApiResponse({ status: 400, description: 'Aucun portefeuille désigné' })
+  @ApiResponse({ status: 403, description: 'Rôle non habilité, ou écriture entre deux portefeuilles personnels' })
+  @ApiResponse({ status: 404, description: 'Portefeuille introuvable' })
   @Post('transactions')
   @RequirePermission('platform:wallet')
   async createTransaction(
     @Body() dto: CreateTransactionDto,
+    @CurrentUser() user: ActiveUser,
   ): Promise<Transaction> {
+    const role = await this.assertPlatformWallet(user.userId);
+    const { source, destination } = await this.assertOperationPlateforme(dto);
+
     const tx = new Transaction();
     tx.walletSource = dto.walletSourceId ?? null;
     tx.walletDestination = dto.walletDestinationId ?? null;
@@ -156,6 +196,86 @@ export class WalletController {
     tx.fraisPlateforme = 0;
     tx.metadata = null;
     tx.motifEchec = null;
-    return this.walletRepository.saveTransaction(tx);
+    const saved = await this.walletRepository.saveTransaction(tx);
+
+    await this.auditLog.create(
+      String(user.userId),
+      role,
+      'wallet.transaction.manuelle',
+      'transaction',
+      String(saved.id ?? ''),
+      undefined,
+      undefined,
+      {
+        montant: dto.montant,
+        type: dto.type,
+        walletSourceId: dto.walletSourceId ?? null,
+        walletSourceType: source?.type ?? null,
+        walletDestinationId: dto.walletDestinationId ?? null,
+        walletDestinationType: destination?.type ?? null,
+      },
+    );
+
+    return saved;
+  }
+
+  /**
+   * Rôle RELU EN BASE : un jeton antérieur au retrait d'un rôle ne doit pas
+   * pouvoir écrire au grand livre. Rend le rôle, dont l'entrée d'audit a
+   * besoin.
+   */
+  private async assertPlatformWallet(userId: number): Promise<string> {
+    const acteur = await this.userRepo.findOne({
+      where: { userId },
+      select: ['userId', 'role'],
+    });
+    if (!acteur || !hasPermission(acteur.role, 'platform:wallet')) {
+      throw new ForbiddenException('Acces refuse.');
+    }
+    return acteur.role;
+  }
+
+  /**
+   * Résout les deux extrémités de l'écriture et vérifie qu'elle relève bien de
+   * l'exploitation de la plateforme.
+   */
+  private async assertOperationPlateforme(dto: CreateTransactionDto): Promise<{
+    source: Wallet | null;
+    destination: Wallet | null;
+  }> {
+    if (!dto.walletSourceId && !dto.walletDestinationId) {
+      throw new BadRequestException(
+        'Une écriture doit désigner au moins un portefeuille.',
+      );
+    }
+
+    const [source, destination] = await Promise.all([
+      dto.walletSourceId
+        ? this.walletRepository.findWalletById(dto.walletSourceId)
+        : Promise.resolve(null),
+      dto.walletDestinationId
+        ? this.walletRepository.findWalletById(dto.walletDestinationId)
+        : Promise.resolve(null),
+    ]);
+
+    if (dto.walletSourceId && !source) {
+      throw new NotFoundException('Portefeuille source introuvable.');
+    }
+    if (dto.walletDestinationId && !destination) {
+      throw new NotFoundException('Portefeuille destinataire introuvable.');
+    }
+
+    const touchePlateforme = [source, destination].some(
+      (w) => w !== null && TYPES_WALLET_PLATEFORME.includes(w.type),
+    );
+    if (!touchePlateforme) {
+      throw new ForbiddenException(
+        "Cette écriture ne touche aucun portefeuille de la plateforme : un " +
+          "mouvement entre portefeuilles personnels relève des parcours métier " +
+          '(souscription, cession, distribution), pas du back-office.',
+      );
+    }
+
+    return { source, destination };
   }
 }

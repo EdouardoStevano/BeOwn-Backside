@@ -10,6 +10,26 @@ export enum ProjectStatus {
   ANNULE = 'annule',
 }
 
+/**
+ * Statuts pour lesquels les AVIS d'un projet sont consultables sans
+ * authentification.
+ *
+ * Deux routes publiques servent la même donnée — `GET /projects/:id/avis` et
+ * `GET /avis/projet/:projetId` — et une seule filtrait : la seconde servait
+ * les avis de n'importe quel projet désigné par son UUID, brouillon ou
+ * archivé compris, ce qui en faisait un oracle d'existence. La liste est
+ * désormais partagée, pour qu'une porte ne puisse plus diverger de l'autre.
+ *
+ * Volontairement plus étroite que `STATUTS_PROJETS_PUBLICS` (sitemap, qui
+ * inclut ANNONCE) : ce périmètre-ci reproduit à l'identique celui qui existait
+ * déjà côté `project.controller`, et l'élargir serait une décision produit.
+ */
+export const STATUTS_PROJET_AVIS_PUBLICS: readonly ProjectStatus[] = [
+  ProjectStatus.EN_COLLECTE,
+  ProjectStatus.PRE_INVESTISSEMENT,
+  ProjectStatus.FINANCE,
+];
+
 export enum ProjectType {
   RESIDENTIEL = 'residentiel',
   TERTIAIRE = 'tertiaire',

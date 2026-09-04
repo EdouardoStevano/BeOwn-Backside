@@ -131,10 +131,27 @@ export class ProfileController {
     }
   }
 
-  /** Auto-accès (son propre dossier) ou permission kyc:validate. */
-  private assertSelfOrKycReviewer(user: ActiveUser, targetUserId: number): void {
+  /**
+   * Auto-accès (son propre dossier) ou permission `kyc:validate`.
+   *
+   * Le rôle est RELU EN BASE, comme dans `assertKycReviewer` juste au-dessus.
+   * Il était lu dans le CLAIM du jeton : agir sur le dossier KYC d'un TIERS —
+   * créer son profil, ouvrir son dossier, le basculer en revue manuelle —
+   * restait donc possible avec un jeton émis avant le retrait du rôle
+   * compliance, pendant toute la durée de vie de ce jeton. L'auto-accès, lui,
+   * ne coûte aucune requête : il se décide sur l'identité, qui est le seul
+   * usage légitime du claim.
+   */
+  private async assertSelfOrKycReviewer(
+    user: ActiveUser,
+    targetUserId: number,
+  ): Promise<void> {
     if (String(user.userId) === String(targetUserId)) return;
-    if (!hasPermission(user.role, 'kyc:validate')) {
+    const acteur = await this.userRepo.findOne({
+      where: { userId: user.userId },
+      select: ['userId', 'role'],
+    });
+    if (!acteur || !hasPermission(acteur.role, 'kyc:validate')) {
       throw new ForbiddenException('Accès réservé.');
     }
   }
@@ -143,23 +160,23 @@ export class ProfileController {
   @ApiResponse({ status: 201, description: 'Profil PP créé' })
   @ApiResponse({ status: 409, description: 'Profil déjà existant' })
   @Post(':userId/pp')
-  createPP(
+  async createPP(
     @Param('userId', ParseIntPipe) userId: number,
     @Body() dto: CreateProfilPPDto,
     @CurrentUser() user: ActiveUser,
   ) {
-    this.assertSelfOrKycReviewer(user, userId);
+    await this.assertSelfOrKycReviewer(user, userId);
     return this.createProfilPP.execute(userId, dto);
   }
 
   @ApiOperation({ summary: 'Initialiser le dossier KYC' })
   @ApiResponse({ status: 201, description: 'KYC créé' })
   @Post(':userId/kyc')
-  initKyc(
+  async initKyc(
     @Param('userId', ParseIntPipe) userId: number,
     @CurrentUser() user: ActiveUser,
   ) {
-    this.assertSelfOrKycReviewer(user, userId);
+    await this.assertSelfOrKycReviewer(user, userId);
     return this.createKyc.execute(userId);
   }
 
@@ -179,7 +196,7 @@ export class ProfileController {
     @Param('userId', ParseIntPipe) userId: number,
     @CurrentUser() user: ActiveUser,
   ) {
-    this.assertSelfOrKycReviewer(user, userId);
+    await this.assertSelfOrKycReviewer(user, userId);
     const updated = await this.updateKycStatus.execute(
       userId,
       KycStatus.EN_REVUE,

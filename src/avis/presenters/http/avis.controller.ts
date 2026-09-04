@@ -23,6 +23,13 @@ import { Inject, ParseUUIDPipe } from '@nestjs/common';
 import { AVIS_REPOSITORY } from 'src/avis/applications/ports/repositories/avis.repository';
 import type { AvisRepository } from 'src/avis/applications/ports/repositories/avis.repository';
 import { Avis } from 'src/avis/domains/avis';
+import {
+  type AvisPublic,
+  projeterAvisPublics,
+} from 'src/avis/domains/avis-public';
+import { PROJECT_REPOSITORY } from 'src/projects/applications/ports/repositories/project.repository';
+import type { ProjectRepository } from 'src/projects/applications/ports/repositories/project.repository';
+import { STATUTS_PROJET_AVIS_PUBLICS } from 'src/projects/domains/enums/project-status.enum';
 import { CreateAvisDto } from '../dto/avis.dto';
 import { Throttle } from '@nestjs/throttler';
 
@@ -78,6 +85,8 @@ export class AvisController {
   constructor(
     @Inject(AVIS_REPOSITORY)
     private readonly avisRepository: AvisRepository,
+    @Inject(PROJECT_REPOSITORY)
+    private readonly projectRepository: ProjectRepository,
   ) {}
 
   @ApiOperation({ summary: 'Soumettre un avis sur un projet' })
@@ -139,21 +148,50 @@ export class AvisController {
     return this.avisRepository.findByUserAndProjet(user.userId, projetId);
   }
 
-  @ApiOperation({ summary: 'Liste des avis d\'un projet (accès public)' })
+  /**
+   * Deux corrections par rapport à la version publique précédente :
+   *
+   *  1. Le projet doit être PUBLIÉ. La route servait les avis de n'importe
+   *     quel projet désigné par son UUID — brouillon, refusé, archivé —, alors
+   *     que `GET /projects/:id/avis` filtrait déjà : deux portes sur la même
+   *     donnée, une seule fermée. La seconde devient un oracle d'existence sur
+   *     des projets non publiés.
+   *  2. L'auteur est ANONYMISÉ. La liste sortait `userId`, prénom et nom
+   *     complet — voir `projeterAvisPublic`.
+   */
+  @ApiOperation({ summary: "Liste des avis d'un projet publié (accès public)" })
   @ApiParam({ name: 'projetId', description: 'UUID du projet' })
-  @ApiResponse({ status: 200, description: 'Liste des avis' })
+  @ApiResponse({ status: 200, description: 'Liste des avis, auteurs anonymisés' })
+  @ApiResponse({ status: 404, description: 'Projet inexistant ou non publié' })
   @Public()
   @Get('projet/:projetId')
-  getByProjet(@Param('projetId', ParseUUIDPipe) projetId: string) {
-    return this.avisRepository.findByProjetId(projetId);
+  async getByProjet(
+    @Param('projetId', ParseUUIDPipe) projetId: string,
+  ): Promise<AvisPublic[]> {
+    await this.assertProjetPublie(projetId);
+    return projeterAvisPublics(await this.avisRepository.findByProjetId(projetId));
   }
 
   @ApiOperation({ summary: 'Statistiques des avis d\'un projet (accès public)' })
   @ApiParam({ name: 'projetId', description: 'UUID du projet' })
   @ApiResponse({ status: 200, description: 'Note moyenne et nombre d\'avis' })
+  @ApiResponse({ status: 404, description: 'Projet inexistant ou non publié' })
   @Public()
   @Get('projet/:projetId/stats')
-  getStats(@Param('projetId', ParseUUIDPipe) projetId: string) {
+  async getStats(@Param('projetId', ParseUUIDPipe) projetId: string) {
+    await this.assertProjetPublie(projetId);
     return this.avisRepository.getStats(projetId);
+  }
+
+  /**
+   * Même périmètre que `GET /projects/:id/avis` : seuls les projets réellement
+   * exposés au public ont des avis publics. Un projet inexistant et un projet
+   * non publié rendent la MÊME 404, pour ne rien dire de l'un ni de l'autre.
+   */
+  private async assertProjetPublie(projetId: string): Promise<void> {
+    const projet = await this.projectRepository.findProjectById(projetId);
+    if (!projet || !STATUTS_PROJET_AVIS_PUBLICS.includes(projet.statut)) {
+      throw new NotFoundException('Projet introuvable.');
+    }
   }
 }

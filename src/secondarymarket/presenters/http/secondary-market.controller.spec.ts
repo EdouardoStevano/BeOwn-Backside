@@ -267,38 +267,100 @@ describe('GET orders/mine/interets — anti-IDOR par construction', () => {
   });
 });
 
-describe('GET orders — devis de frais attaché à chaque annonce', () => {
-  it('chaque annonce publiée porte fraisTransaction et fraisPlusValue', async () => {
-    const ordres = [
-      {
-        id: 'o-1',
-        nbFractions: 10,
-        prixUnitaire: '100.00',
-        investissement: { valeurTitre: '80.00', nbTitres: 100, montant: '8000.00' },
+/**
+ * `GET /secondary-market/orders` est `@Public()`. Elle renvoyait l'entité
+ * `OrdreMarcheEntity` avec ses relations et le devis du vendeur : `vendeurId`,
+ * `acheteurId`, l'`InvestmentEntity` complète (donc le prix de revient) et la
+ * plus-value du vendeur étaient lisibles sans authentification.
+ */
+describe('GET orders — projection publique', () => {
+  const ordresFixture = () => [
+    {
+      id: 'o-1',
+      investissementId: 'inv-1',
+      vendeurId: 7,
+      acheteurId: 9,
+      statut: OrdreMarcheStatus.EN_CARNET,
+      nbFractions: 10,
+      montant: '1000.00',
+      prixUnitaire: '100.00',
+      valideJusquAu: null,
+      createdAt: new Date('2026-08-01T10:00:00.000Z'),
+      investissement: {
+        id: 'inv-1',
+        utilisateurId: 7,
+        valeurTitre: '80.00',
+        nbTitres: 100,
+        montant: '8000.00',
+        projet: {
+          id: 'p-1',
+          slug: 'residence-les-jardins',
+          titre: 'Résidence Les Jardins',
+          ville: 'Saint-Denis',
+          type: 'residentiel',
+          statut: 'en_exploitation',
+          adresseComplete: '12 rue interne',
+        },
       },
-      {
-        id: 'o-2',
-        nbFractions: 5,
-        prixUnitaire: '90.00',
-        investissement: { valeurTitre: '100.00', nbTitres: 50, montant: '5000.00' },
-      },
-    ];
-    const qb = fakeQueryBuilder(ordres);
+    },
+  ];
+
+  const listerAnnonces = async () => {
+    const qb = fakeQueryBuilder(ordresFixture());
     const { controller, deps } = buildController({
-      ordreRepo: { createQueryBuilder: jest.fn(() => qb), findOne: jest.fn(), save: jest.fn() },
+      ordreRepo: {
+        createQueryBuilder: jest.fn(() => qb),
+        findOne: jest.fn(),
+        save: jest.fn(),
+      },
     });
+    return { annonces: (await controller.listOrders()) as any[], deps };
+  };
 
-    const result = await controller.listOrders();
+  it("ne publie ni l'identité des parties, ni l'investissement du vendeur", async () => {
+    const { annonces } = await listerAnnonces();
 
-    expect(result).toHaveLength(2);
-    for (const ordre of result as any[]) {
-      expect(ordre.devis).toMatchObject({
-        fraisTransaction: expect.any(Number),
-        fraisPlusValue: expect.any(Number),
-      });
+    expect(annonces).toHaveLength(1);
+    for (const champ of ['vendeurId', 'acheteurId', 'vendeur', 'acheteur', 'devis']) {
+      expect(annonces[0]).not.toHaveProperty(champ);
     }
-    expect(deps.devisCession.chargerTaux).toHaveBeenCalledTimes(1);
-    expect(deps.devisCession.calculer).toHaveBeenCalledTimes(2);
+    // L'investissement n'est plus qu'un porteur de contexte projet : ni
+    // montant, ni valeur de titre, ni propriétaire.
+    for (const champ of ['id', 'utilisateurId', 'montant', 'nbTitres', 'valeurTitre']) {
+      expect(annonces[0].investissement).not.toHaveProperty(champ);
+    }
+  });
+
+  it('ne calcule même pas le devis du vendeur sur une route publique', async () => {
+    const { deps } = await listerAnnonces();
+
+    expect(deps.devisCession.calculer).not.toHaveBeenCalled();
+    expect(deps.devisCession.chargerTaux).not.toHaveBeenCalled();
+  });
+
+  it("sert ce qu'un tableau d'affichage doit montrer", async () => {
+    const { annonces } = await listerAnnonces();
+
+    expect(annonces[0]).toEqual({
+      id: 'o-1',
+      investissementId: 'inv-1',
+      statut: OrdreMarcheStatus.EN_CARNET,
+      nbFractions: 10,
+      prixUnitaire: 100,
+      montant: 1000,
+      valideJusquAu: null,
+      createdAt: new Date('2026-08-01T10:00:00.000Z'),
+      investissement: {
+        projet: {
+          id: 'p-1',
+          slug: 'residence-les-jardins',
+          titre: 'Résidence Les Jardins',
+          ville: 'Saint-Denis',
+          type: 'residentiel',
+          statut: 'en_exploitation',
+        },
+      },
+    });
   });
 });
 

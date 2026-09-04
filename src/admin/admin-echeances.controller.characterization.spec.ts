@@ -294,4 +294,66 @@ describe('AdminEcheancesController — caractérisation (vague 4)', () => {
       expect(e2Update?.[1].montantTotal).toBe(300);
     });
   });
+
+  // ── markPaid : cloisonnement par projet ────────────────────────────────────
+  /**
+   * La route est montée sous `/admin/projects/:projectId/echeances`, mais
+   * `:projectId` n'était pas lu : n'importe quel UUID de projet permettait de
+   * déclencher le paiement de n'importe quelle échéance de la plateforme.
+   */
+  describe('markPaid — l’échéance doit appartenir au projet de l’URL', () => {
+    beforeEach(() => {
+      userRepo.findOne.mockResolvedValue({ userId: 1, role: PAY_ROLE });
+      echeanceRepo.findOne = jest
+        .fn()
+        .mockResolvedValue({ id: 'e1', investissementId: 'i1' });
+      investRepo.findOne = jest
+        .fn()
+        .mockResolvedValue({ id: 'i1', projetId: 'p1' });
+      payEcheance.execute.mockResolvedValue({ paid: true });
+    });
+
+    it("paie l'échéance quand elle relève bien du projet", async () => {
+      await expect(controller.markPaid('p1', 'e1', admin)).resolves.toEqual({
+        paid: true,
+      });
+      expect(payEcheance.execute).toHaveBeenCalledWith('e1', 1, PAY_ROLE);
+    });
+
+    it("REFUSE (404) une échéance rattachée à un AUTRE projet", async () => {
+      await expect(
+        controller.markPaid('p2', 'e1', admin),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(payEcheance.execute).not.toHaveBeenCalled();
+    });
+
+    it('404 si l’échéance n’existe pas', async () => {
+      echeanceRepo.findOne.mockResolvedValue(null);
+
+      await expect(
+        controller.markPaid('p1', 'e1', admin),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(payEcheance.execute).not.toHaveBeenCalled();
+    });
+
+    it("404 si l'investissement sous-jacent a disparu", async () => {
+      investRepo.findOne.mockResolvedValue(null);
+
+      await expect(
+        controller.markPaid('p1', 'e1', admin),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('même message pour « autre projet » et « inexistante » : rien ne fuit', async () => {
+      const autreProjet = await controller
+        .markPaid('p2', 'e1', admin)
+        .catch((e) => e.message);
+      echeanceRepo.findOne.mockResolvedValue(null);
+      const inexistante = await controller
+        .markPaid('p1', 'e1', admin)
+        .catch((e) => e.message);
+
+      expect(autreProjet).toBe(inexistante);
+    });
+  });
 });

@@ -16,6 +16,7 @@ import { WalletsModule } from 'src/wallets/applications/wallets.module';
 import { InvestmentsModule } from 'src/investments/applications/investments.module';
 import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/wallet.entity';
 import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entities/transaction.entity';
+import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 import { CalculateDistributionPeriodeUseCase } from './usecases/calculate-distribution-periode.usecase';
 import { ValidatePeriodeDistributionUseCase } from './usecases/validate-periode-distribution.usecase';
 import { ExecuteDistributionUseCase } from './usecases/execute-distribution.usecase';
@@ -38,7 +39,9 @@ import { InvestisseurDistributionsController } from '../presenters/http/investis
     TransactionalEmailModule,
     AmlModule,
     IamInfrastructureModule,
-    TypeOrmModule.forFeature([WalletEntity, TransactionEntity]),
+    // `UserEntity` en LECTURE SEULE : relecture du rôle en base avant
+    // l'exécution d'un versement (défense en profondeur).
+    TypeOrmModule.forFeature([WalletEntity, TransactionEntity, UserEntity]),
   ],
   controllers: [
     AdminDistributionsController,

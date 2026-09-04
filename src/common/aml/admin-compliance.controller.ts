@@ -3,6 +3,7 @@ import {
   Body,
   Controller,
   Delete,
+  ForbiddenException,
   Get,
   NotFoundException,
   Param,
@@ -23,6 +24,7 @@ import {
 } from 'class-validator';
 import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
 import { RequirePermission } from 'src/common/auth/require-permission.decorator';
+import { hasPermission } from 'src/common/auth/permissions.constants';
 import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
@@ -86,6 +88,28 @@ export class AdminComplianceController {
     private readonly screening: SanctionsScreeningService,
   ) {}
 
+  /**
+   * Rôle RELU EN BASE avant toute mutation de conformité, et rendu pour que
+   * l'audit enregistre le rôle RÉEL de l'acteur.
+   *
+   * Le contrôleur ne s'appuyait que sur le claim `aml:manage` du jeton, et
+   * l'audit du flag PEP recopiait `admin.role` — donc une valeur fournie par
+   * le jeton — avec un repli sur « compliance » quand le claim manquait. Un
+   * jeton antérieur au retrait d'un accès conservait le pouvoir de geler des
+   * avoirs, et le journal en attribuait l'acte à un rôle qui n'était peut-être
+   * plus le sien.
+   */
+  private async assertAml(userId: number): Promise<string> {
+    const acteur = await this.userRepo.findOne({
+      where: { userId },
+      select: ['userId', 'role'],
+    });
+    if (!acteur || !hasPermission(acteur.role, 'aml:manage')) {
+      throw new ForbiddenException('Accès réservé à la conformité.');
+    }
+    return acteur.role;
+  }
+
   @Get('pep')
   @ApiOperation({ summary: 'Liste des utilisateurs flaggés PEP' })
   async listPep() {
@@ -111,6 +135,7 @@ export class AdminComplianceController {
     @Body() dto: SetPepFlagDto,
     @CurrentUser() admin: ActiveUser,
   ) {
+    const roleActeur = await this.assertAml(admin.userId);
     const targetUserId = parseInt(userIdStr, 10);
     if (!Number.isFinite(targetUserId)) {
       throw new BadRequestException('userId invalide.');
@@ -127,7 +152,7 @@ export class AdminComplianceController {
     await this.auditLog
       .create(
         String(admin.userId),
-        admin.role ?? UserRole.COMPLIANCE,
+        roleActeur,
         dto.pepFlagged ? 'compliance.pep.flag' : 'compliance.pep.unflag',
         'user',
         String(targetUserId),
@@ -161,6 +186,7 @@ export class AdminComplianceController {
     @Body() dto: CreatePersonneGeleeDto,
     @CurrentUser() admin: ActiveUser,
   ) {
+    await this.assertAml(admin.userId);
     const saved = await this.personneGeleeRepo.save(
       this.personneGeleeRepo.create({
         nom: dto.nom.trim(),
@@ -177,7 +203,11 @@ export class AdminComplianceController {
 
   @Post('gel/personnes/:id/desactiver')
   @ApiOperation({ summary: 'Désactiver une inscription (radiation du registre) — jamais de suppression' })
-  async desactiverPersonneGelee(@Param('id') id: string) {
+  async desactiverPersonneGelee(
+    @Param('id') id: string,
+    @CurrentUser() admin: ActiveUser,
+  ) {
+    await this.assertAml(admin.userId);
     const personne = await this.personneGeleeRepo.findOne({ where: { id } });
     if (!personne) throw new NotFoundException('Inscription introuvable.');
     personne.actif = false;
@@ -200,10 +230,35 @@ export class AdminComplianceController {
     @Body() dto: GelerAvoirsDto,
     @CurrentUser() admin: ActiveUser,
   ) {
-    const targetUserId = parseInt(userIdStr, 10);
-    if (!Number.isFinite(targetUserId)) {
-      throw new BadRequestException('userId invalide.');
+    await this.assertAml(admin.userId);
+    const targetUserId = this.parseUserId(userIdStr);
+
+    // Un gel coupe dépôt, souscription, retrait et achat au marché
+    // secondaire. Deux cibles sont donc interdites :
+    //
+    //  - SOI-MÊME : un compte compliance qui se gèle se prive du levier dont
+    //    il a la charge, et l'acte n'a aucun sens de conformité — le gel vise
+    //    une contrepartie, pas son instructeur ;
+    //  - un SUPER_ADMIN : c'est le seul rôle qui puisse tout rétablir. Le
+    //    geler, c'est se donner les moyens de neutraliser l'administration de
+    //    la plateforme depuis un rôle de contrôle, et la levée du gel exige
+    //    précisément le compte qu'on vient de bloquer.
+    if (targetUserId === admin.userId) {
+      throw new BadRequestException(
+        'Un compte ne peut pas geler ses propres avoirs.',
+      );
     }
+    const cible = await this.userRepo.findOne({
+      where: { userId: targetUserId },
+      select: ['userId', 'role'],
+    });
+    if (!cible) throw new NotFoundException('Utilisateur introuvable.');
+    if (cible.role === UserRole.SUPER_ADMIN) {
+      throw new ForbiddenException(
+        "Les avoirs d'un super_admin ne peuvent pas être gelés depuis cet endpoint.",
+      );
+    }
+
     return this.gelDesAvoirs.geler(targetUserId, dto.motif, admin);
   }
 
@@ -213,11 +268,8 @@ export class AdminComplianceController {
     @Param('userId') userIdStr: string,
     @CurrentUser() admin: ActiveUser,
   ) {
-    const targetUserId = parseInt(userIdStr, 10);
-    if (!Number.isFinite(targetUserId)) {
-      throw new BadRequestException('userId invalide.');
-    }
-    return this.gelDesAvoirs.degeler(targetUserId, admin);
+    await this.assertAml(admin.userId);
+    return this.gelDesAvoirs.degeler(this.parseUserId(userIdStr), admin);
   }
 
   @Post('gel/rescan')
@@ -225,7 +277,16 @@ export class AdminComplianceController {
     summary:
       'Re-scan global des comptes contre la liste active — crée des alertes, ne gèle jamais seul',
   })
-  async rescanGlobal() {
+  async rescanGlobal(@CurrentUser() admin: ActiveUser) {
+    await this.assertAml(admin.userId);
     return this.screening.rescanTous();
+  }
+
+  private parseUserId(userIdStr: string): number {
+    const userId = parseInt(userIdStr, 10);
+    if (!Number.isFinite(userId)) {
+      throw new BadRequestException('userId invalide.');
+    }
+    return userId;
   }
 }

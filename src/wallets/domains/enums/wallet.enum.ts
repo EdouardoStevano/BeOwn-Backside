@@ -8,6 +8,28 @@ export enum WalletType {
   SEQUESTRE_CSG = 'sequestre_csg', // Wallet séquestre pour CSG/CRDS (17.2%)
 }
 
+/**
+ * Portefeuilles TENUS PAR LA PLATEFORME, par opposition au portefeuille
+ * personnel d'un investisseur.
+ *
+ * Sert de critère de légitimité aux écritures passées à la main depuis le
+ * back-office (`POST /wallets/transactions`) : une opération d'exploitation
+ * touche toujours, d'un côté au moins, un portefeuille de la plateforme —
+ * trésorerie d'un projet, SCI, frais, taxes, séquestre fiscal. Une écriture
+ * dont les DEUX extrémités sont des portefeuilles d'investisseurs n'est pas
+ * une opération d'exploitation : c'est un virement entre deux personnes, que
+ * seuls les parcours métier (souscription, cession, distribution) ont le droit
+ * de produire, avec leurs contrôles.
+ */
+export const TYPES_WALLET_PLATEFORME: readonly WalletType[] = [
+  WalletType.TECHNIQUE_PROJET,
+  WalletType.SPV,
+  WalletType.FRAIS_PLATEFORME,
+  WalletType.TAXES,
+  WalletType.SEQUESTRE_IR,
+  WalletType.SEQUESTRE_CSG,
+];
+
 export enum TransactionType {
   DEPOT = 'depot',
   RETRAIT = 'retrait',

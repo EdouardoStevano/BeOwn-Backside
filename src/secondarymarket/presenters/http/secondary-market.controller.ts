@@ -28,6 +28,7 @@ import { OrdreMarcheEntity } from 'src/secondarymarket/infrastructure/persistenc
 import { InvestmentEntity } from 'src/investments/infrastructure/persistences/entities/investment.entity';
 import { ProjectEntity } from 'src/projects/infrastructure/persistences/entities/project.entity';
 import {
+  AnnoncePubliqueDto,
   CreateOrdreMarcheDto,
   ExprimerInteretDto,
   InteretRecuDto,
@@ -107,11 +108,15 @@ export class SecondaryMarketController {
 
   @Public()
   @ApiOperation({
-    summary:
-      "Annonces publiées sur le tableau d'affichage (public). Chaque annonce porte le devis de frais du vendeur.",
+    summary: "Annonces publiées sur le tableau d'affichage (public)",
+    description:
+      "Projection publique : projet, quantité, prix et validité. Ni l'identité " +
+      'des parties, ni le prix de revient, ni le devis du vendeur — voir ' +
+      'AnnoncePubliqueDto.',
   })
+  @ApiResponse({ status: 200, type: [AnnoncePubliqueDto] })
   @Get('orders')
-  async listOrders() {
+  async listOrders(): Promise<AnnoncePubliqueDto[]> {
     // Une annonce échue n'est plus cessible : elle ne doit pas figurer au
     // tableau d'affichage, même tant que le cron d'expiration ne l'a pas
     // balayée. Sans ce filtre, la date de validité saisie par le vendeur
@@ -125,7 +130,46 @@ export class SecondaryMarketController {
       )
       .orderBy('ord.createdAt', 'DESC')
       .getMany();
-    return this.avecDevis(ordres);
+    return ordres.map((ordre) => this.projeterAnnoncePublique(ordre));
+  }
+
+  /**
+   * Réduit une annonce à ce qu'un tableau d'affichage PUBLIC doit montrer.
+   *
+   * Le devis n'est délibérément pas calculé ici : il porte la plus-value et le
+   * net du VENDEUR, qui ne regardent que lui (`GET /orders/mine`). Ne pas
+   * l'attacher évite au passage un appel de tarification par annonce sur une
+   * route non authentifiée.
+   */
+  private projeterAnnoncePublique(
+    ordre: OrdreMarcheEntity,
+  ): AnnoncePubliqueDto {
+    const projet = (
+      ordre.investissement as (InvestmentEntity & { projet?: ProjectEntity }) | undefined
+    )?.projet;
+
+    return {
+      id: ordre.id,
+      investissementId: ordre.investissementId,
+      statut: ordre.statut,
+      nbFractions: Number(ordre.nbFractions),
+      prixUnitaire: Number(ordre.prixUnitaire),
+      montant: Number(ordre.montant),
+      valideJusquAu: ordre.valideJusquAu ?? null,
+      createdAt: ordre.createdAt,
+      investissement: projet
+        ? {
+            projet: {
+              id: projet.id,
+              slug: projet.slug,
+              titre: projet.titre,
+              ville: projet.ville ?? null,
+              type: projet.type ?? null,
+              statut: projet.statut,
+            },
+          }
+        : null,
+    };
   }
 
   @UseGuards(JwtAuthGuard)

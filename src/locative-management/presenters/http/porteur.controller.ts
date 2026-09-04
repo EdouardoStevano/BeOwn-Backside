@@ -14,7 +14,12 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
 import { PorteurAccessGuard } from 'src/common/auth/porteur-access.guard';
 import { CurrentUser } from 'src/common/auth/current-user.decorator';
@@ -165,11 +170,24 @@ export class PorteurController {
 
   @Post('baux')
   @ApiOperation({ summary: 'Créer un bail (avec locataire inline)' })
+  @ApiResponse({
+    status: 403,
+    description: "Unité ou SCI n'appartenant pas au porteur",
+  })
   async createBailEndpoint(
     @Body() dto: CreateBailDto,
     @CurrentUser() user: ActiveUser,
   ) {
-    await this.assertOwnsUnite(dto.uniteLouableId, user.userId);
+    // DEUX rattachements à vérifier, pas un. Seule l'unité l'était : un
+    // porteur pouvait créer un bail sur SON bien en le rattachant à la SCI
+    // d'un AUTRE porteur — les loyers et le locataire nominatif entraient
+    // alors dans la comptabilité d'un tiers. La garde existait déjà
+    // (`assertOwnsSpv`, utilisée ailleurs dans ce contrôleur) ; elle n'était
+    // simplement pas appelée ici.
+    await Promise.all([
+      this.assertOwnsUnite(dto.uniteLouableId, user.userId),
+      this.assertOwnsSpv(dto.spvId, user.userId),
+    ]);
     return this.createBail.execute({
       uniteLouableId: dto.uniteLouableId,
       locataire: dto.locataire,

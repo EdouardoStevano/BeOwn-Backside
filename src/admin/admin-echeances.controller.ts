@@ -153,13 +153,49 @@ export class AdminEcheancesController {
   }
 
   @ApiOperation({ summary: "Marquer une échéance comme payée (crédite le wallet)" })
+  @ApiParam({ name: 'projectId', description: 'UUID du projet' })
   @ApiParam({ name: 'id', description: "UUID de l'échéance" })
+  @ApiResponse({ status: 404, description: "Échéance absente de ce projet" })
   @HttpCode(HttpStatus.OK)
   @RequirePermission('echeancier:pay')
   @Post(':id/pay')
-  async markPaid(@Param('id') id: string, @CurrentUser() user: ActiveUser) {
+  async markPaid(
+    @Param('projectId') projectId: string,
+    @Param('id') id: string,
+    @CurrentUser() user: ActiveUser,
+  ) {
     await this.assertPay(user);
+    await this.assertEcheanceDuProjet(id, projectId);
     return this.payEcheance.execute(id, user.userId, user.role);
+  }
+
+  /**
+   * L'échéance désignée doit bien appartenir au projet de l'URL.
+   *
+   * La route est montée sous `/admin/projects/:projectId/echeances`, mais
+   * `:projectId` n'était pas lu : n'importe quel UUID de projet — voire un
+   * projet inexistant — permettait de déclencher le paiement de n'importe
+   * quelle échéance de la plateforme. Le chemin annonçait un cloisonnement
+   * qui n'existait pas, et l'audit du use case rattachait l'acte au mauvais
+   * projet.
+   */
+  private async assertEcheanceDuProjet(
+    echeanceId: string,
+    projectId: string,
+  ): Promise<void> {
+    const echeance = await this.echeanceRepo.findOne({
+      where: { id: echeanceId },
+    });
+    if (!echeance) throw new NotFoundException('Échéance introuvable.');
+
+    const investissement = await this.investRepo.findOne({
+      where: { id: echeance.investissementId },
+    });
+    // Même 404 dans les deux cas : ne rien dire de l'existence d'une échéance
+    // rattachée à un autre projet.
+    if (!investissement || investissement.projetId !== projectId) {
+      throw new NotFoundException('Échéance introuvable.');
+    }
   }
 
   @ApiOperation({

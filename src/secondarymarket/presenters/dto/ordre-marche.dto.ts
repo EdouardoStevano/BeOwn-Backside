@@ -120,7 +120,67 @@ export class ProjetAnnonceDto {
   @ApiProperty() slug: string;
   @ApiProperty() titre: string;
   @ApiPropertyOptional({ nullable: true }) ville: string | null;
+  /**
+   * Servi par le tableau d'affichage public (filtre par nature de bien) ;
+   * absent de la vue « intérêts reçus », où il n'apporte rien au vendeur.
+   */
+  @ApiPropertyOptional({ nullable: true }) type?: string | null;
   @ApiProperty({ description: 'Statut du projet sous-jacent' }) statut: string;
+}
+
+/**
+ * Annonce telle qu'elle est servie AU PUBLIC (`GET /secondary-market/orders`,
+ * route `@Public()`).
+ *
+ * La route renvoyait l'entité `OrdreMarcheEntity` avec ses relations, plus le
+ * devis de frais du vendeur. Étaient donc lisibles sans authentification :
+ *  - `vendeurId` et `acheteurId` — qui vend quoi, et à qui ;
+ *  - l'`InvestmentEntity` complète du vendeur — son `utilisateurId`, le
+ *    montant qu'il avait investi, sa valeur de titre, donc son PRIX DE
+ *    REVIENT ;
+ *  - le devis, dont `plusValueVendeur` et `netVendeur` : la plus-value et le
+ *    net d'un tiers identifiable, autrement dit sa position financière.
+ *
+ * Ce que le tableau d'affichage doit montrer, et rien d'autre : quel projet,
+ * combien de fractions, à quel prix, jusqu'à quand. Le devis du vendeur reste
+ * servi au VENDEUR (`GET /orders/mine`) et à lui seul.
+ */
+export class AnnoncePubliqueDto {
+  @ApiProperty({ description: "UUID de l'annonce" })
+  id: string;
+
+  @ApiProperty({
+    description:
+      "UUID de l'investissement sous-jacent — identifiant opaque, conservé " +
+      "comme libellé de repli quand le projet n'est pas résolu.",
+  })
+  investissementId: string;
+
+  @ApiProperty({ enum: OrdreMarcheStatus })
+  statut: OrdreMarcheStatus;
+
+  @ApiProperty({ example: 10 })
+  nbFractions: number;
+
+  @ApiProperty({ example: 100 })
+  prixUnitaire: number;
+
+  @ApiProperty({ example: 1000, description: 'nbFractions × prixUnitaire' })
+  montant: number;
+
+  @ApiPropertyOptional({ nullable: true, description: 'Date de fin de validité' })
+  valideJusquAu: Date | null;
+
+  @ApiProperty()
+  createdAt: Date;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    description:
+      'Contexte du projet sous-jacent. Le reste de l’investissement du ' +
+      'vendeur (montant, valeur de titre, propriétaire) n’en fait pas partie.',
+  })
+  investissement: { projet: ProjetAnnonceDto | null } | null;
 }
 
 /**

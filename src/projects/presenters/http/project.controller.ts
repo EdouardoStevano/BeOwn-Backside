@@ -38,6 +38,7 @@ import {
 import {
   ProjectStatus,
   ProjectType,
+  STATUTS_PROJET_AVIS_PUBLICS,
 } from 'src/projects/domains/enums/project-status.enum';
 import type { ProjectRepository } from 'src/projects/applications/ports/repositories/project.repository';
 import { PROJECT_REPOSITORY } from 'src/projects/applications/ports/repositories/project.repository';
@@ -46,6 +47,7 @@ import { RegimeFiscal } from 'src/projects/domains/enums/regime-fiscal.enum';
 import { AVIS_REPOSITORY } from 'src/avis/applications/ports/repositories/avis.repository';
 import type { AvisRepository } from 'src/avis/applications/ports/repositories/avis.repository';
 import { Avis } from 'src/avis/domains/avis';
+import { projeterAvisPublics } from 'src/avis/domains/avis-public';
 import { CreateAvisDto } from 'src/avis/presenters/dto/avis.dto';
 import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
@@ -354,7 +356,20 @@ export class ProjectController {
     return this.projectRepository.saveSpv(spv);
   }
 
-  @ApiOperation({ summary: 'Lister les SPV' })
+  /**
+   * Les SPV portent la structure juridique et financière des véhicules :
+   * raison sociale, SIREN, forme, capital social, adresse du siège, régime
+   * fiscal, gestionnaire. Sans permission, la route les servait à tout compte
+   * authentifié — n'importe quel investisseur pouvait énumérer les sociétés
+   * de projet, y compris celles de projets non publiés.
+   *
+   * `projects:read` est le minimum : c'est la permission qui ouvre déjà le
+   * dossier d'un projet côté back-office. La gestion des SPV a sa propre
+   * permission (`spv:manage`), qui reste exigée pour les écritures.
+   */
+  @ApiOperation({ summary: 'Lister les SPV (back-office)' })
+  @ApiResponse({ status: 403, description: 'Permission projects:read requise' })
+  @RequirePermission('projects:read')
   @Get('spv/list')
   listSpv() {
     return this.projectRepository.findAllSpv();
@@ -424,26 +439,23 @@ export class ProjectController {
 
   // ─── Avis ──────────────────────────────────────────────────────────────────
 
-  @ApiOperation({ summary: "Lister les avis d'un projet" })
+  @ApiOperation({ summary: "Lister les avis d'un projet publié" })
   @ApiParam({ name: 'id', description: 'UUID du projet' })
-  @ApiResponse({ status: 200, description: 'Liste des avis' })
+  @ApiResponse({ status: 200, description: 'Liste des avis, auteurs anonymisés' })
   @Public()
   @Get(':id/avis')
   async listAvis(@Param('id') id: string) {
     const project = await this.projectRepository.findProjectById(id);
-    if (!project) throw new NotFoundException('Projet introuvable.');
-    if (![
-      ProjectStatus.EN_COLLECTE,
-      ProjectStatus.PRE_INVESTISSEMENT,
-      ProjectStatus.FINANCE,
-    ].includes(project.statut)) {
+    if (!project || !STATUTS_PROJET_AVIS_PUBLICS.includes(project.statut)) {
       throw new NotFoundException('Projet introuvable.');
     }
     const [avis, stats] = await Promise.all([
       this.avisRepository.findByProjetId(id),
       this.avisRepository.getStats(id),
     ]);
-    return { ...stats, avis };
+    // Même projection que `GET /avis/projet/:projetId` : la liste sortait
+    // `userId` et le nom complet de chaque auteur sur une route publique.
+    return { ...stats, avis: projeterAvisPublics(avis) };
   }
 
   @ApiOperation({
