@@ -1,4 +1,6 @@
 import {
+  BadRequestException,
+  Body,
   Controller,
   Get,
   Patch,
@@ -8,7 +10,12 @@ import {
   NotFoundException,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
@@ -18,6 +25,7 @@ import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.ent
 import { UserRole } from 'src/iam/domains/enums/user.enum';
 import { InvestmentEntity } from 'src/investments/infrastructure/persistences/entities/investment.entity';
 import { randomBytes } from 'crypto';
+import { LinkClientToCgpDto } from './dto/link-client-to-cgp.dto';
 
 @ApiTags('CGP / Distributeurs')
 @ApiBearerAuth()
@@ -123,23 +131,79 @@ export class CgpController {
     return { referralCode: code };
   }
 
-  @ApiOperation({ summary: "Lier un client à ce CGP via son userId (admin ou auto via code)" })
+  /**
+   * Rattachement d'un client à un CGP, DÉCIDÉ PAR LA PLATEFORME.
+   *
+   * IDOR corrigé : la route acceptait n'importe quel `clientId` de la part de
+   * n'importe quel CGP et écrivait `client.cgpId = user.userId`. Un CGP
+   * pouvait donc s'attribuer un investisseur qui ne l'avait jamais mandaté,
+   * et par là lire son identité, ses investissements et son encours via
+   * `GET /cgp/me/clients` — le rattachement N'ÉTAIT PAS consenti par le
+   * client. La branche `SUPER_ADMIN` était par ailleurs inopérante :
+   * `client.cgpId = client.cgpId` ne changeait rien.
+   *
+   * Deux chemins légitimes existent désormais, et deux seulement :
+   *   - le client s'inscrit lui-même auprès d'un CGP via son code de
+   *     parrainage (`PATCH /cgp/join/:referralCode`) — c'est le consentement ;
+   *   - la plateforme rattache elle-même, ici, réservé à `super_admin`.
+   *
+   * SUIVI : le parcours d'INVITATION (le CGP invite, le client accepte) reste
+   * à construire. Tant qu'il n'existe pas, un CGP ne rattache personne — la
+   * régression fonctionnelle est assumée, c'est le seul état sûr.
+   */
+  @ApiOperation({
+    summary: 'Rattacher un client à un CGP (réservé à la plateforme)',
+    description:
+      "Réservé à super_admin, rôle relu en base. Un CGP ne peut pas s'attribuer " +
+      'un client : le client se rattache lui-même via le code de parrainage.',
+  })
+  @ApiResponse({ status: 403, description: 'Rôle non habilité' })
+  @ApiResponse({ status: 404, description: 'Client ou CGP introuvable' })
   @Patch('clients/:clientId/link')
   async linkClient(
     @Param('clientId', ParseIntPipe) clientId: number,
+    @Body() dto: LinkClientToCgpDto,
     @CurrentUser() user: ActiveUser,
   ) {
-    if (user.role !== UserRole.CGP && user.role !== UserRole.SUPER_ADMIN) {
-      throw new ForbiddenException('Accès refusé.');
+    await this.assertSuperAdmin(user.userId);
+
+    if (clientId === dto.cgpId) {
+      throw new BadRequestException(
+        'Un CGP ne peut pas être son propre client.',
+      );
     }
 
-    const client = await this.userRepo.findOne({ where: { userId: clientId } });
+    const [client, cgp] = await Promise.all([
+      this.userRepo.findOne({ where: { userId: clientId } }),
+      this.userRepo.findOne({ where: { userId: dto.cgpId } }),
+    ]);
     if (!client) throw new NotFoundException('Client introuvable.');
+    if (!cgp || cgp.role !== UserRole.CGP) {
+      throw new NotFoundException('CGP introuvable.');
+    }
 
-    client.cgpId = user.role === UserRole.CGP ? user.userId : client.cgpId;
+    // Le CGP désigné est celui du corps de requête, jamais l'appelant : c'est
+    // ce qui rend la branche administrateur effective.
+    client.cgpId = cgp.userId;
     await this.userRepo.save(client);
 
     return { clientId, cgpId: client.cgpId, linked: true };
+  }
+
+  /**
+   * Rôle RELU EN BASE, et pas seulement lu dans le jeton. Le claim `role`
+   * identifie, il n'autorise jamais (ADR-role-relu-en-base-et-usertype) : un
+   * jeton antérieur au retrait d'un rôle administrateur ne doit pas pouvoir
+   * réassigner la clientèle d'un distributeur.
+   */
+  private async assertSuperAdmin(userId: number): Promise<void> {
+    const acteur = await this.userRepo.findOne({ where: { userId } });
+    if (!acteur || acteur.role !== UserRole.SUPER_ADMIN) {
+      throw new ForbiddenException(
+        'Rattachement réservé à la plateforme. Un client se rattache à un CGP ' +
+          'par son code de parrainage.',
+      );
+    }
   }
 
   @ApiOperation({ summary: "Rejoindre un CGP via son code de parrainage" })
