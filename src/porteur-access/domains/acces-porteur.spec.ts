@@ -1,7 +1,10 @@
-import { UserRole } from 'src/iam/domains/enums/user.enum';
+import { UserRole, UserStatus } from 'src/iam/domains/enums/user.enum';
+import { buildUser } from 'src/iam/domains/models/user.fixture';
 import {
+  compteDecidable,
   peutAccederEspacePorteur,
   peutDemanderAccesPorteur,
+  projeterAccesPorteur,
 } from './acces-porteur';
 import {
   LIBELLES_MOTIF_REFUS,
@@ -81,6 +84,68 @@ describe('Éligibilité à la DEMANDE', () => {
       expect(peutDemanderAccesPorteur(role)).toBe(false);
     }
   });
+});
+
+describe("Projection publiable de l'accès porteur", () => {
+  it('un investisseur accepté voit son espace porteur OUVERT', () => {
+    expect(
+      projeterAccesPorteur({
+        role: UserRole.INVESTISSEUR,
+        porteurAccess: true,
+      }),
+    ).toEqual({ porteurAccess: true, espacePorteurOuvert: true });
+  });
+
+  it('un porteur « pur » aussi, alors que son drapeau vaut false', () => {
+    // C'est LA raison d'être de `espacePorteurOuvert` : le front qui lirait
+    // seulement `porteurAccess` masquerait l'espace porteur de tous les comptes
+    // porteurs seed.
+    expect(
+      projeterAccesPorteur({ role: UserRole.PORTEUR, porteurAccess: false }),
+    ).toEqual({ porteurAccess: false, espacePorteurOuvert: true });
+  });
+
+  it('un investisseur sans le drapeau a un espace FERMÉ', () => {
+    expect(
+      projeterAccesPorteur({
+        role: UserRole.INVESTISSEUR,
+        porteurAccess: false,
+      }),
+    ).toEqual({ porteurAccess: false, espacePorteurOuvert: false });
+  });
+
+  it.each([null, undefined])(
+    'une lecture %p (compte introuvable, échec) ferme l’accès',
+    (acces) => {
+      // En matière d'autorisation, l'absence d'information ne vaut jamais
+      // permission.
+      expect(projeterAccesPorteur(acces)).toEqual({
+        porteurAccess: false,
+        espacePorteurOuvert: false,
+      });
+    },
+  );
+});
+
+describe("Décidabilité d'un dossier selon le statut du compte", () => {
+  it.each(Object.values(UserStatus))(
+    'PARITÉ avec User.canOpenSession() sur le statut %s',
+    (statut) => {
+      // La file d'instruction n'a pas d'agrégat `User` sous la main : elle
+      // duplique la règle. Ce test borne la duplication — toute divergence
+      // future échoue ici, pas en recette.
+      expect(compteDecidable(statut)).toBe(
+        buildUser({ status: statut }).canOpenSession(),
+      );
+    },
+  );
+
+  it.each([null, undefined, 'inconnu'])(
+    'un statut %p n’est pas décidable',
+    (statut) => {
+      expect(compteDecidable(statut as string)).toBe(false);
+    },
+  );
 });
 
 describe('Liste fermée des motifs de refus', () => {

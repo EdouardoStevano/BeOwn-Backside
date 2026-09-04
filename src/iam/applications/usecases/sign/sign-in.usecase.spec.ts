@@ -45,6 +45,15 @@ const makeUsecase = (user: User | null, passwordValid = true) => {
     findOneBySocialId: jest.fn(),
     findPreferences: jest.fn(),
     savePreferences: jest.fn(),
+    // Accès porteur : lecture ciblée hors agrégat, jointe au profil de session
+    // pour que le front connaisse l'état de l'espace porteur dès la connexion.
+    findAccesPorteur: jest
+      .fn()
+      .mockResolvedValue(
+        user
+          ? { role: user.role, porteurAccess: false, accesRevoqueLe: null }
+          : null,
+      ),
   };
   // Par défaut, aucun facteur MFA actif : la connexion se termine en un temps,
   // comme avant l'introduction de la double authentification.

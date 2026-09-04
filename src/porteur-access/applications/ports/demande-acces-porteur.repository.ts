@@ -1,3 +1,4 @@
+import { UserStatus } from 'src/iam/domains/enums/user.enum';
 import {
   DemandeAccesPorteur,
   StatutDemandeAccesPorteur,
@@ -22,9 +23,25 @@ export interface FiltreDemandesAccesPorteur {
   limit?: number;
 }
 
+/**
+ * Une ligne de la file d'instruction : le dossier ET l'état du COMPTE
+ * demandeur.
+ *
+ * Le statut du compte n'appartient pas à la demande — mais sans lui,
+ * l'instructeur ne comprend pas pourquoi un dossier qu'il voit se refuse à
+ * toute décision : un compte SUSPENDU reste listé (il n'est ni clos ni
+ * supprimé) et chaque tentative renvoie 409 sans explication lisible à
+ * l'écran. La file est une VUE DE LECTURE : elle a le droit de joindre.
+ */
+export interface LigneFileDemandesAccesPorteur {
+  demande: DemandeAccesPorteur;
+  /** Statut du compte demandeur, `null` si la ligne compte a disparu. */
+  statutCompte: UserStatus | null;
+}
+
 /** Page de résultats — même forme que le journal d'audit du back-office. */
 export interface PageDemandesAccesPorteur {
-  items: DemandeAccesPorteur[];
+  items: LigneFileDemandesAccesPorteur[];
   total: number;
   page: number;
   limit: number;
@@ -61,6 +78,10 @@ export abstract class DemandeAccesPorteurReader {
    * option d'appel : instruire le dossier d'un compte qui n'existe plus n'a
    * aucun sens, et ces dossiers fantômes vieillissaient dans la file jusqu'à
    * déclencher l'alerte J+25. Toute implémentation doit l'honorer.
+   *
+   * PORTE le statut du compte demandeur sur chaque ligne (voir
+   * {@link LigneFileDemandesAccesPorteur}), en une seule lecture supplémentaire
+   * par page — jamais une par ligne.
    */
   abstract lister(
     filtre: FiltreDemandesAccesPorteur,

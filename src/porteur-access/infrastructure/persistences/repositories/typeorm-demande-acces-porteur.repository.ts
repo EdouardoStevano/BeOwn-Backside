@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, IsNull, Not, Repository } from 'typeorm';
 import { UserStatus } from 'src/iam/domains/enums/user.enum';
+import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 import {
   DemandeAccesPorteurReader,
   DemandeAccesPorteurWriter,
@@ -44,6 +45,11 @@ export class TypeOrmDemandeAccesPorteurRepository
   constructor(
     @InjectRepository(DemandeAccesPorteurEntity)
     private readonly repo: Repository<DemandeAccesPorteurEntity>,
+    // Lecture du STATUT des comptes demandeurs pour la file d'instruction —
+    // dépendance d'infrastructure à infrastructure, assumée : la file est une
+    // vue de lecture qui joint deux tables, pas un agrégat qui en compose deux.
+    @InjectRepository(UserEntity)
+    private readonly users: Repository<UserEntity>,
   ) {}
 
   async findById(id: string): Promise<DemandeAccesPorteur | null> {
@@ -112,12 +118,35 @@ export class TypeOrmDemandeAccesPorteurRepository
 
     const [rows, total] = await qb.getManyAndCount();
 
+    // Statut des comptes de LA PAGE, en UNE requête indexée (clé primaire),
+    // jamais une par ligne. La page est bornée à 100 : la clause `IN` l'est
+    // donc aussi.
+    const statuts = await this.statutsDesComptes(
+      rows.map((r) => r.utilisateurId),
+    );
+
     return {
-      items: rows.map((r) => DemandeAccesPorteurMapper.toDomain(r)),
+      items: rows.map((r) => ({
+        demande: DemandeAccesPorteurMapper.toDomain(r),
+        statutCompte: statuts.get(r.utilisateurId) ?? null,
+      })),
       total,
       page,
       limit,
     };
+  }
+
+  /** Statut des comptes demandeurs, indexé par identifiant. */
+  private async statutsDesComptes(
+    utilisateurIds: number[],
+  ): Promise<Map<number, UserStatus>> {
+    const ids = [...new Set(utilisateurIds)];
+    if (ids.length === 0) return new Map();
+    const comptes = await this.users.find({
+      where: { userId: In(ids) },
+      select: ['userId', 'status'],
+    });
+    return new Map(comptes.map((c) => [c.userId, c.status]));
   }
 
   async creer(demande: DemandeAccesPorteur): Promise<DemandeAccesPorteur> {

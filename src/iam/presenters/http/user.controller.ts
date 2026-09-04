@@ -57,6 +57,7 @@ import { WALLET_REPOSITORY } from 'src/wallets/applications/ports/repositories/w
 import type { WalletRepository } from 'src/wallets/applications/ports/repositories/wallet.repository';
 import { WalletType } from 'src/wallets/domains/enums/wallet.enum';
 import { DeleteAccountUseCase } from 'src/iam/applications/usecases/account/delete-account.usecase';
+import { projeterAccesPorteur } from 'src/porteur-access/domains/acces-porteur';
 import { SkipThrottle } from '@nestjs/throttler';
 
 /** Rôles détenant `users:read` — back-office consultation d'un profil tiers. */
@@ -108,17 +109,33 @@ export class UserController {
     const found = await this.userRepository.findById(user.userId);
     if (!found) throw new NotFoundException('Utilisateur introuvable.');
 
-    const [profilPP, profilPM, kyc, documents, wallet] = await Promise.all([
-      this.profilRepository.findProfilPPByUserId(user.userId).catch(() => null),
-      this.profilRepository.findProfilPMByUserId(user.userId).catch(() => null),
-      this.profilRepository.findKycByUserId(user.userId).catch(() => null),
-      this.documentRepository.findByUserId(user.userId).catch(() => []),
-      this.walletRepository
-        .findWalletByUser(user.userId, WalletType.INVESTISSEUR)
-        .catch(() => null),
-    ]);
+    const [profilPP, profilPM, kyc, documents, wallet, accesPorteur] =
+      await Promise.all([
+        this.profilRepository
+          .findProfilPPByUserId(user.userId)
+          .catch(() => null),
+        this.profilRepository
+          .findProfilPMByUserId(user.userId)
+          .catch(() => null),
+        this.profilRepository.findKycByUserId(user.userId).catch(() => null),
+        this.documentRepository.findByUserId(user.userId).catch(() => []),
+        this.walletRepository
+          .findWalletByUser(user.userId, WalletType.INVESTISSEUR)
+          .catch(() => null),
+        // Accès porteur : lecture CIBLÉE, hors agrégat (ADR § 3). Sans elle, le
+        // drapeau n'apparaissait dans aucune réponse utilisateur — un compte
+        // dont la demande venait d'être acceptée n'avait aucun moyen de le
+        // savoir, et le front ne pouvait ni afficher le sélecteur d'espace, ni
+        // assouplir ses gardes.
+        this.userRepository.findAccesPorteur(user.userId).catch(() => null),
+      ]);
 
-    const userSafe = found.toJSON();
+    // `toJSON(mfa?, accesPorteur?)` : le second facteur n'est pas chargé ici
+    // (clé absente = « on n'en sait rien »), l'accès porteur l'est.
+    const userSafe = found.toJSON(
+      undefined,
+      projeterAccesPorteur(accesPorteur),
+    );
     const kycStatut = kyc?.statut ?? 'non_demarre';
 
     // ── Granular completion steps ──────────────────────────────────────────

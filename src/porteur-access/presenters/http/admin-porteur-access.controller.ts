@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   Param,
+  ParseIntPipe,
   ParseUUIDPipe,
   Patch,
   Query,
@@ -27,17 +28,23 @@ import {
   DeciderDemandePorteurUseCase,
   type DecisionDemandeAccesPorteur,
 } from 'src/porteur-access/applications/usecases/decider-demande-porteur.usecase';
+import { StatuerAccesPorteurUseCase } from 'src/porteur-access/applications/usecases/statuer-acces-porteur.usecase';
 import {
   SEUIL_ALERTE_INSTRUCTION_JOURS,
   StatutDemandeAccesPorteur,
 } from 'src/porteur-access/domains/demande-acces-porteur';
 import { LIBELLES_MOTIF_REFUS } from 'src/porteur-access/domains/motif-refus';
+import { LIBELLES_MOTIF_RETRAIT } from 'src/porteur-access/domains/motif-retrait';
 import {
   DeciderDemandeAccesPorteurDto,
   ListerDemandesAccesPorteurDto,
+  StatuerAccesPorteurDto,
 } from '../dto/porteur-access.dto';
 import { PorteurAccessErrorFilter } from './filters/porteur-access-error.filter';
-import { versVueInstructeur } from './demande-acces-porteur.presenter';
+import {
+  versLigneFile,
+  versVueInstructeur,
+} from './demande-acces-porteur.presenter';
 
 /**
  * File de traitement des demandes d'accès porteur — back-office.
@@ -52,10 +59,12 @@ import { versVueInstructeur } from './demande-acces-porteur.presenter';
  * peut pas connaître) et est imputée à l'administrateur appelant : aucune
  * décision n'est rendue de façon entièrement automatisée.
  *
- * `@AuditSansCorps()` : le corps du PATCH porte `motifRefusComplement`, texte
- * libre interne sur une personne. Il ne doit pas être recopié dans
- * `audit_log` (cinq ans, hors purge, hors export) ; l'entrée métier du use
- * case retient le motif CODÉ, qui suffit à relire la décision.
+ * `@AuditSansCorps()` : le corps du PATCH de décision porte
+ * `motifRefusComplement`, texte libre interne sur une personne. Il ne doit pas
+ * être recopié dans `audit_log` (cinq ans, hors purge, hors export) ; l'entrée
+ * métier du use case retient le motif CODÉ, qui suffit à relire la décision.
+ * Le PATCH de retrait, lui, ne transporte AUCUN texte libre — son entrée
+ * métier reste néanmoins la seule à porter l'état antérieur du drapeau.
  */
 @ApiTags('Admin — Accès porteur')
 @ApiBearerAuth()
@@ -69,13 +78,14 @@ export class AdminPorteurAccessController {
     private readonly lecture: DemandeAccesPorteurReader,
     private readonly instruire: InstruireDemandePorteurUseCase,
     private readonly decider: DeciderDemandePorteurUseCase,
+    private readonly statuerAcces: StatuerAccesPorteurUseCase,
   ) {}
 
   @ApiOperation({
     summary:
       "File des demandes d'accès porteur (paginée, filtrable par statut)",
     description:
-      "Chaque ligne porte `alerteInstructionLe` (J+25) et `enAlerte` : de quoi remonter les dossiers qui approchent de l'engagement de réponse à 30 jours annoncé par les CGU.",
+      "Chaque ligne porte `alerteInstructionLe` (J+25) et `enAlerte` — de quoi remonter les dossiers qui approchent de l'engagement de réponse à 30 jours annoncé par les CGU — ainsi que l'état du COMPTE demandeur (`statutCompte`, `compteSuspendu`, `decisionPossible`) : un dossier de compte suspendu reste listé et refuse toute décision (409), l'instructeur doit voir pourquoi avant de cliquer.",
   })
   @Get('demandes')
   async lister(@Query() query: ListerDemandesAccesPorteurDto) {
@@ -87,10 +97,11 @@ export class AdminPorteurAccessController {
     const maintenant = new Date();
     return {
       ...page,
-      items: page.items.map((d) => versVueInstructeur(d, maintenant)),
-      // Référentiels rendus au back-office : la liste fermée des motifs et le
+      items: page.items.map((ligne) => versLigneFile(ligne, maintenant)),
+      // Référentiels rendus au back-office : les listes fermées de motifs et le
       // seuil d'alerte viennent du serveur, l'écran ne les recopie pas.
       motifsRefus: LIBELLES_MOTIF_REFUS,
+      motifsRetrait: LIBELLES_MOTIF_RETRAIT,
       seuilAlerteJours: SEUIL_ALERTE_INSTRUCTION_JOURS,
     };
   }
@@ -144,6 +155,49 @@ export class AdminPorteurAccessController {
     return {
       demande: versVueInstructeur(resultat.demande),
       porteurAccess: resultat.porteurAccess,
+      sessionInvalidee: resultat.sessionInvalidee,
+    };
+  }
+
+  @ApiOperation({
+    summary: "Retirer ou rétablir l'accès porteur d'un compte",
+    description:
+      "Chemin de RÉVOCATION exigé par la clause CGU de retrait : motivé (code de liste fermée obligatoire sur `acces: false`), notifié (le titulaire reçoit le LIBELLÉ du motif, jamais un texte rédigé sur lui) et réversible (`acces: true` rétablit). N'altère AUCUNE demande : le dossier accepté reste la preuve de l'examen initial. La session de la cible est coupée pour que son espace se rafraîchisse.",
+  })
+  @ApiResponse({ status: 200, description: 'Accès mis à jour' })
+  @ApiResponse({
+    status: 400,
+    description: 'Motif de retrait manquant ou hors liste',
+  })
+  @ApiResponse({ status: 404, description: 'Compte introuvable' })
+  @ApiResponse({
+    status: 409,
+    description:
+      'État déjà en vigueur (PORTEUR_ACCESS_ETAT_INCHANGE) ou compte inactif (PORTEUR_ACCESS_COMPTE_INACTIF)',
+  })
+  @Patch('acces/:userId')
+  async statuerAccesPorteur(
+    @Param('userId', ParseIntPipe) userId: number,
+    @Body() dto: StatuerAccesPorteurDto,
+    @CurrentUser() admin: ActiveUser,
+  ) {
+    const resultat = await this.statuerAcces.execute({
+      utilisateurId: userId,
+      acces: dto.acces,
+      motif: dto.motif ?? null,
+      // L'identité de l'administrateur vient du JWT, jamais du corps : c'est ce
+      // qui rend la mesure imputable à un humain.
+      decideurAdminId: admin.userId,
+      decideurRole: admin.role ?? UserRole.COMPLIANCE,
+    });
+
+    return {
+      utilisateurId: resultat.utilisateurId,
+      porteurAccess: resultat.porteurAccess,
+      accesRevoqueLe: resultat.accesRevoqueLe
+        ? resultat.accesRevoqueLe.toISOString()
+        : null,
+      motifRetrait: resultat.motifRetrait,
       sessionInvalidee: resultat.sessionInvalidee,
     };
   }

@@ -11,6 +11,8 @@ import { SoumettreDemandePorteurUseCase } from './applications/usecases/soumettr
 import { InstruireDemandePorteurUseCase } from './applications/usecases/instruire-demande-porteur.usecase';
 import { DeciderDemandePorteurUseCase } from './applications/usecases/decider-demande-porteur.usecase';
 import { RetirerDemandePorteurUseCase } from './applications/usecases/retirer-demande-porteur.usecase';
+import { StatuerAccesPorteurUseCase } from './applications/usecases/statuer-acces-porteur.usecase';
+import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 import { DemandeAccesPorteurEntity } from './infrastructure/persistences/entities/demande-acces-porteur.entity';
 import { TypeOrmDemandeAccesPorteurRepository } from './infrastructure/persistences/repositories/typeorm-demande-acces-porteur.repository';
 import { PorteurAccessController } from './presenters/http/porteur-access.controller';
@@ -31,7 +33,9 @@ import { AdminPorteurAccessController } from './presenters/http/admin-porteur-ac
  */
 @Module({
   imports: [
-    TypeOrmModule.forFeature([DemandeAccesPorteurEntity]),
+    // `UserEntity` : lecture du STATUT des comptes demandeurs pour la file
+    // d'instruction (une requête par page, jamais une par ligne).
+    TypeOrmModule.forFeature([DemandeAccesPorteurEntity, UserEntity]),
     UsersInfrastructureModule,
     IamInfrastructureModule,
     NotificationsModule,
@@ -51,6 +55,7 @@ import { AdminPorteurAccessController } from './presenters/http/admin-porteur-ac
     InstruireDemandePorteurUseCase,
     DeciderDemandePorteurUseCase,
     RetirerDemandePorteurUseCase,
+    StatuerAccesPorteurUseCase,
   ],
 })
 export class PorteurAccessModule {}

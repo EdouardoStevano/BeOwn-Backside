@@ -107,6 +107,21 @@ export class UserEntity {
   @Column({ type: 'boolean', default: false })
   porteurAccess: boolean;
 
+  // Date du dernier RETRAIT d'accès porteur (lot 4b) — NULL tant que l'accès
+  // court, ou s'il n'a jamais été ouvert. Posée par le retrait motivé
+  // (`PATCH /admin/porteur-access/acces/:userId`) et par un refus qui referme
+  // un accès ouvert ; effacée à tout ré-octroi. Invariant :
+  // `porteurAccess = true` ⟹ `accesRevoqueLe IS NULL`.
+  //
+  // Ce n'est pas une trace décorative : c'est le POINT DE DÉPART du barème de
+  // conservation d'une demande ACCEPTÉE (« durée de l'accès, puis 5 ans »),
+  // que la purge RGPD lit par COALESCE avec `anonymiseLe` puis `decideeLe`.
+  // L'HISTORIQUE des octrois/retraits, lui, vit dans `audit_log` (5 ans, états
+  // avant/après) — pas de table dédiée, pas de seconde source de vérité.
+  // Colonne ajoutée via décorateur + SQL manuel (ADR migrations).
+  @Column({ type: 'timestamptz', nullable: true })
+  accesRevoqueLe: Date | null;
+
   @Column({ type: 'varchar', default: RegimeFiscal.PFU })
   regimeFiscal: RegimeFiscal;
 

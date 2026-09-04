@@ -96,27 +96,40 @@ export class UserTypeOrmRepository implements UserRepository {
   }
 
   /**
-   * Projection à deux colonnes, appelée à chaque requête gardée « espace
+   * Projection à trois colonnes, appelée à chaque requête gardée « espace
    * porteur » : `select` explicite pour ne pas charger — ni faire transiter —
    * le reste de la ligne compte.
    */
   async findAccesPorteur(userId: number): Promise<AccesPorteurEnBase | null> {
     const row = await this.usersRepository.findOne({
       where: { userId },
-      select: ['userId', 'role', 'porteurAccess'],
+      select: ['userId', 'role', 'porteurAccess', 'accesRevoqueLe'],
     });
     if (!row) return null;
     // `porteurAccess` a un défaut en base ; le `?? false` couvre les lignes
     // écrites avant la pose de la colonne sur un environnement déployé.
-    return { role: row.role, porteurAccess: row.porteurAccess ?? false };
+    return {
+      role: row.role,
+      porteurAccess: row.porteurAccess ?? false,
+      accesRevoqueLe: row.accesRevoqueLe ?? null,
+    };
   }
 
-  /** Écriture ciblée d'une seule colonne, hors agrégat (voir le port). */
+  /**
+   * Écriture ciblée des deux colonnes d'état, hors agrégat (voir le port). Un
+   * seul UPDATE : le couple « drapeau + horodatage » ne doit jamais être
+   * observable à moitié écrit. Aucune règle ici — les valeurs viennent déjà
+   * décidées par le domaine.
+   */
   async updatePorteurAccess(
     userId: number,
     porteurAccess: boolean,
+    accesRevoqueLe: Date | null,
   ): Promise<void> {
-    await this.usersRepository.update({ userId }, { porteurAccess });
+    await this.usersRepository.update(
+      { userId },
+      { porteurAccess, accesRevoqueLe },
+    );
   }
 
   async findOneBySocialId(socialId: string): Promise<User | null> {

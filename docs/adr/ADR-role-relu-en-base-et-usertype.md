@@ -30,6 +30,12 @@ Conséquence pour le lot 8 (bascule PP→PM) : basculer le type, c'est créer/ac
 
 `SessionCacheService` est fail-closed : sans Redis, `validateRefreshToken` répond `false` et **toute session meurt à l'expiration de l'access token**, sans reprise possible. Ce n'est pas une dégradation douce (« cache et OTP dégradés » du runbook est en dessous de la réalité) : Redis est un prérequis d'exploitation du rafraîchissement de session. Sonde de disponibilité et alerte à poser (suivi S4, devops). En local, l'absence de Redis fait passer les tests de révocation « au vert » pour la mauvaise raison — les recettes de session exigent un Redis actif.
 
+### 5. Couplage assumé : `src/common/audit/statut-erreur-metier.ts` dépend des modules métier
+
+Ce module transverse importe une famille d'erreurs et sa fonction de statut depuis chaque module métier concerné (`iam`, `porteur-access`, `payments`, signature) : c'est une dépendance **transverse → métier**, à contre-sens de la règle habituelle, assumée pour que l'`AuditInterceptor` journalise le statut RÉELLEMENT renvoyé au client — la seule alternative, poser un `statutHttp` sur les classes d'erreurs, remettrait HTTP dans le domaine, exactement ce que ces hiérarchies évitent.
+
+Le garde-fou est l'exhaustivité, pas la discipline : `statut-erreur-metier.spec.ts` rejoue chaque filtre réel et **échoue si une famille couverte par un filtre est absente de l'aiguillage** — un module métier qui ajoute sa propre famille d'erreurs sans la déclarer ici casse la suite avant la revue.
+
 ## Alternatives écartées
 
 - **Relire le rôle à chaque requête** (guard qui interroge la base) : ferme la fenêtre d'une heure mais ajoute une lecture par requête sur tout le trafic authentifié ; disproportionné tant que la rotation du refresh borne l'exposition.

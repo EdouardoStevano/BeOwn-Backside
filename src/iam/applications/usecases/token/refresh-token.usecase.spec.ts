@@ -39,6 +39,16 @@ const makeUsecase = (
     findOneBySocialId: jest.fn(),
     findPreferences: jest.fn(),
     savePreferences: jest.fn(),
+    // Relu à chaque rafraîchissement, comme le statut et le rôle : un accès
+    // porteur accordé ou RETIRÉ depuis la connexion doit se voir sur la
+    // session reprise.
+    findAccesPorteur: jest
+      .fn()
+      .mockResolvedValue(
+        user
+          ? { role: user.role, porteurAccess: false, accesRevoqueLe: null }
+          : null,
+      ),
   };
 
   const mfaFactors = {
@@ -92,6 +102,48 @@ describe('RefreshTokenUseCase', () => {
         role: UserRole.PORTEUR,
       }),
     );
+  });
+
+  it("publie l'accès porteur RELU EN BASE sur la session reprise", async () => {
+    // Anomalie de validation (P0, S1) : le drapeau n'apparaissait dans aucune
+    // réponse. Le front ne pouvait pas savoir qu'un espace porteur venait de
+    // s'ouvrir — ni, symétriquement, de se refermer.
+    const { usecase, userRepository } = makeUsecase(
+      buildUserFixture({ status: UserStatus.ACTIF }),
+    );
+    userRepository.findAccesPorteur.mockResolvedValue({
+      role: UserRole.INVESTISSEUR,
+      porteurAccess: true,
+      accesRevoqueLe: null,
+    });
+
+    const session = await usecase.execute('old-refresh');
+
+    expect(userRepository.findAccesPorteur).toHaveBeenCalledWith(42);
+    expect(session.user.accesPorteur).toEqual({
+      porteurAccess: true,
+      espacePorteurOuvert: true,
+    });
+  });
+
+  it('un accès RETIRÉ se voit dès le rafraîchissement suivant', async () => {
+    // C'est ce qui rend le retrait perceptible côté front : la révocation de
+    // session force précisément cette rotation.
+    const { usecase, userRepository } = makeUsecase(
+      buildUserFixture({ status: UserStatus.ACTIF }),
+    );
+    userRepository.findAccesPorteur.mockResolvedValue({
+      role: UserRole.INVESTISSEUR,
+      porteurAccess: false,
+      accesRevoqueLe: new Date('2026-09-04T12:00:00.000Z'),
+    });
+
+    const session = await usecase.execute('old-refresh');
+
+    expect(session.user.accesPorteur).toEqual({
+      porteurAccess: false,
+      espacePorteurOuvert: false,
+    });
   });
 
   it('relit le compte AVANT d’émettre les nouveaux tokens', async () => {

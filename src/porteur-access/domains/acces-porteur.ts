@@ -17,7 +17,9 @@
  * exact que le lot 2 vient de corriger sur `role`.
  */
 
-import { UserRole } from 'src/iam/domains/enums/user.enum';
+import { UserRole, UserStatus } from 'src/iam/domains/enums/user.enum';
+import type { PublicUserAccesPorteur } from 'src/iam/domains/mappers/user.mapper';
+import type { AccesPorteurEnBase } from 'src/iam/domains/ports/user.repository';
 
 /** Code stable consommé par le front pour distinguer ce refus d'un 403 générique. */
 export const CODE_PORTEUR_ACCESS_REQUIS = 'PORTEUR_ACCESS_REQUIS';
@@ -49,4 +51,51 @@ export function peutDemanderAccesPorteur(
   role: UserRole | string | null | undefined,
 ): boolean {
   return role === UserRole.INVESTISSEUR;
+}
+
+/**
+ * Projection PUBLIABLE de l'accès porteur, à partir de ce qui a été lu en base.
+ *
+ * Écrite ICI, dans le module qui détient la règle du double accès, et non dans
+ * IAM : ce que le front doit lire n'est pas le drapeau brut — il vaut `false`
+ * sur les comptes porteurs « purs », qui ont pourtant l'espace ouvert. La seule
+ * réponse juste est celle de `peutAccederEspacePorteur`, et il n'existe qu'une
+ * façon de la calculer.
+ *
+ * `null` (compte introuvable, lecture en échec) donne un accès FERMÉ : en
+ * matière d'autorisation, l'absence d'information ne vaut jamais permission.
+ */
+export function projeterAccesPorteur(
+  acces: Pick<AccesPorteurEnBase, 'role' | 'porteurAccess'> | null | undefined,
+): PublicUserAccesPorteur {
+  return {
+    porteurAccess: acces?.porteurAccess === true,
+    espacePorteurOuvert: peutAccederEspacePorteur(
+      acces?.role,
+      acces?.porteurAccess,
+    ),
+  };
+}
+
+/**
+ * Le compte demandeur est-il en état de recevoir une décision ?
+ *
+ * Miroir PUR de `User.canOpenSession()` — un compte suspendu, clos ou supprimé
+ * n'est pas décidable (`CompteInactifError`, 409). Ce doublon existe parce que
+ * la file d'instruction n'a pas d'agrégat `User` sous la main : elle liste des
+ * dossiers et ne connaît de leur titulaire que le statut lu en base. Un test de
+ * PARITÉ (`acces-porteur.spec.ts`) rejoue les deux sur tous les statuts et
+ * échoue à la première divergence — la duplication est donc bornée, pas subie.
+ *
+ * `null` (compte introuvable) est traité comme non décidable : on ne tranche
+ * pas le dossier de quelqu'un qui n'existe plus.
+ */
+export function compteDecidable(
+  statut: UserStatus | string | null | undefined,
+): boolean {
+  return (
+    statut === UserStatus.CREE ||
+    statut === UserStatus.EMAIL_VERIFIE ||
+    statut === UserStatus.ACTIF
+  );
 }

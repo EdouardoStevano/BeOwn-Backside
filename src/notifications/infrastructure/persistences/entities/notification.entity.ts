@@ -42,6 +42,12 @@ export enum NotificationType {
   PORTEUR_ACCESS_DEMANDE = 'porteur_access_demande',
   PORTEUR_ACCESS_ACCEPTE = 'porteur_access_accepte',
   PORTEUR_ACCESS_REFUSE = 'porteur_access_refuse',
+  // ── Retrait / rétablissement de l'accès porteur (lot 4b) ─────────────
+  // La clause CGU de retrait exige une mesure NOTIFIÉE : ces deux types sont
+  // le canal de cette notification. Le message ne porte que le LIBELLÉ d'un
+  // motif codé — aucun texte libre n'existe sur ce chemin.
+  PORTEUR_ACCESS_REVOQUE = 'porteur_access_revoque',
+  PORTEUR_ACCESS_RETABLI = 'porteur_access_retabli',
 }
 
 @Entity('notification')

@@ -20,6 +20,7 @@ import {
   CompteIntrouvableError,
   DemandeAccesPorteurIntrouvableError,
 } from 'src/porteur-access/domains/errors/porteur-access.errors';
+import { accesRevoqueLeApresDecision } from 'src/porteur-access/domains/retrait-acces-porteur';
 import {
   DemandeAccesPorteurReader,
   DemandeAccesPorteurWriter,
@@ -119,8 +120,19 @@ export class DeciderDemandePorteurUseCase {
       );
     }
 
-    // Écriture idempotente, en premier (voir l'en-tête de classe).
-    await this.users.updatePorteurAccess(demande.utilisateurId, accepte);
+    // Écriture idempotente, en premier (voir l'en-tête de classe). Un REFUS
+    // qui referme un accès ouvert est un retrait : il s'horodate, et c'est
+    // cet horodatage qui donne au barème de conservation son point de départ.
+    const accesRevoqueLe = accesRevoqueLeApresDecision(
+      accesActuel,
+      accepte,
+      maintenant,
+    );
+    await this.users.updatePorteurAccess(
+      demande.utilisateurId,
+      accepte,
+      accesRevoqueLe,
+    );
     const enregistree = await this.ecriture.enregistrer(demande);
 
     // Coupe la rotation de session de la CIBLE.
@@ -196,6 +208,7 @@ export class DeciderDemandePorteurUseCase {
           porteurAccessAvant: accesActuel.porteurAccess,
           porteurAccessApres: accepte,
           motifRefus: enregistree.motifRefus,
+          accesRevoqueLe: accesRevoqueLe ? accesRevoqueLe.toISOString() : null,
           sessionInvalidee,
         },
       )

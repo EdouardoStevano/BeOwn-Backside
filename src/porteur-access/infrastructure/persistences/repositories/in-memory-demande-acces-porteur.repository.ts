@@ -1,4 +1,5 @@
 import { randomUUID } from 'crypto';
+import { UserStatus } from 'src/iam/domains/enums/user.enum';
 import {
   DemandeAccesPorteurReader,
   DemandeAccesPorteurWriter,
@@ -33,16 +34,28 @@ export class InMemoryDemandeAccesPorteurRepository
   private readonly lignes: EtatDemandeAccesPorteur[] = [];
 
   /**
-   * Comptes clos ou supprimés — équivalent en mémoire de la sous-requête sur
+   * Statut des comptes demandeurs — équivalent en mémoire de la lecture de
    * `users.status` de l'adaptateur PostgreSQL. Sans cet état, `lister` ne
-   * pourrait pas honorer la clause « la file n'affiche pas les demandes des
-   * comptes disparus » et les deux implémentations divergeraient.
+   * pourrait honorer ni la clause « la file n'affiche pas les demandes des
+   * comptes disparus », ni la remontée du statut sur chaque ligne : les deux
+   * implémentations divergeraient.
+   *
+   * Un compte absent de la table vaut `null` — exactement ce que rend
+   * l'adaptateur réel quand la ligne `users` n'existe pas (référence sans FK
+   * dure).
    */
-  constructor(private readonly comptesClos: Set<number> = new Set()) {}
+  constructor(
+    private readonly statutsComptes: Map<number, UserStatus> = new Map(),
+  ) {}
 
-  /** Fixture : marque un compte comme clos/supprimé. */
+  /** Fixture : marque un compte comme supprimé (donc hors file). */
   marquerCompteClos(utilisateurId: number): void {
-    this.comptesClos.add(utilisateurId);
+    this.statutsComptes.set(utilisateurId, UserStatus.SUPPRIME);
+  }
+
+  /** Fixture : pose un statut quelconque sur un compte demandeur. */
+  definirStatutCompte(utilisateurId: number, statut: UserStatus): void {
+    this.statutsComptes.set(utilisateurId, statut);
   }
 
   findById(id: string): Promise<DemandeAccesPorteur | null> {
@@ -89,18 +102,25 @@ export class InMemoryDemandeAccesPorteurRepository
       Math.max(1, Number(filtre.limit) || LIMITE_PAR_DEFAUT),
     );
     const filtrees = this.lignes
-      .filter((l) => !this.comptesClos.has(l.utilisateurId))
+      .filter((l) => !this.compteDisparu(l.utilisateurId))
       .filter((l) => (filtre.statut ? l.statut === filtre.statut : true))
       .sort((a, b) => b.soumiseLe.getTime() - a.soumiseLe.getTime());
 
     return Promise.resolve({
-      items: filtrees
-        .slice((page - 1) * limit, page * limit)
-        .map((l) => this.hydrater(l)),
+      items: filtrees.slice((page - 1) * limit, page * limit).map((l) => ({
+        demande: this.hydrater(l),
+        statutCompte: this.statutsComptes.get(l.utilisateurId) ?? null,
+      })),
       total: filtrees.length,
       page,
       limit,
     });
+  }
+
+  /** Comptes clos ou supprimés — exclus de la file (contrat du port). */
+  private compteDisparu(utilisateurId: number): boolean {
+    const statut = this.statutsComptes.get(utilisateurId);
+    return statut === UserStatus.CLOS || statut === UserStatus.SUPPRIME;
   }
 
   creer(demande: DemandeAccesPorteur): Promise<DemandeAccesPorteur> {

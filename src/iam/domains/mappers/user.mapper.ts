@@ -29,6 +29,34 @@ export const NO_MFA: PublicUserMfa = Object.freeze({
 });
 
 /**
+ * État de l'accès à l'espace porteur, tel qu'on l'expose à son titulaire.
+ *
+ * Comme le second facteur, il n'appartient PAS à l'agrégat `User` : le drapeau
+ * `users.porteurAccess` est une autorisation à état, lue par une méthode de
+ * port dédiée (`findAccesPorteur`) et posée par la décision d'un instructeur
+ * (`docs/adr/ADR-role-relu-en-base-et-usertype.md` § 3 — l'ajouter à l'agrégat
+ * créerait une seconde source de vérité). Il est donc **fourni** au mapper par
+ * l'appelant qui l'a chargé ; la projection dit ce qui sort, elle ne va pas le
+ * chercher.
+ *
+ * Sans ce champ, le drapeau n'apparaissait dans AUCUNE réponse utilisateur : un
+ * investisseur dont la demande venait d'être acceptée n'avait aucun moyen de
+ * savoir que son espace porteur était ouvert, et le front ne pouvait ni
+ * afficher le sélecteur d'espace, ni assouplir ses gardes.
+ */
+export interface PublicUserAccesPorteur {
+  /** Drapeau `users.porteurAccess` LU EN BASE. */
+  porteurAccess: boolean;
+  /**
+   * L'espace porteur est-il ouvert ? Décision du domaine (règle du DOUBLE
+   * ACCÈS) : `true` pour un porteur « pur » comme pour un investisseur dont
+   * l'accès a été accordé. C'est CE booléen que le front doit lire — pas
+   * `porteurAccess` seul, qui vaut `false` sur les comptes porteurs seed.
+   */
+  espacePorteurOuvert: boolean;
+}
+
+/**
  * Représentation exposable du compte : ce que le domaine accepte de publier.
  * L'empreinte du mot de passe en est absente par construction — c'est un type,
  * pas une convention, donc l'oubli est impossible.
@@ -69,6 +97,18 @@ export interface PublicUser {
    * refresh-tokens, exchange) le renseignent toujours.
    */
   mfa?: PublicUserMfa;
+  /**
+   * Accès à l'espace porteur, **absent** quand l'appelant ne l'a pas chargé.
+   *
+   * Même sémantique que `mfa` : absent veut dire « on n'en sait rien ici »,
+   * `{ espacePorteurOuvert: false }` veut dire « fermé ». Les confondre ferait
+   * disparaître l'espace porteur d'un compte qui y a droit sur toute route qui
+   * ne consulte pas le drapeau.
+   *
+   * Renseigné par `GET /users/me` et par les réponses d'authentification
+   * (sign-in, sign-in/mfa, refresh-tokens).
+   */
+  accesPorteur?: PublicUserAccesPorteur;
 }
 
 /**
@@ -159,11 +199,17 @@ export class UserMapper {
    * qui sort du domaine — l'oubli y coûte une fuite, jamais un champ manquant,
    * que le compilateur signale de toute façon.
    *
-   * `mfa` est le seul champ que l'entité ne porte pas : le facteur vit hors de
-   * l'agrégat, et seul l'appelant qui l'a chargé peut le fournir. Omis, il ne
-   * paraît pas dans la projection — voir {@link PublicUser.mfa}.
+   * `mfa` et `accesPorteur` sont les deux seuls champs que l'entité ne porte
+   * pas : le second facteur et le drapeau d'accès porteur vivent hors de
+   * l'agrégat, et seul l'appelant qui les a chargés peut les fournir. Omis, ils
+   * ne paraissent pas dans la projection — voir {@link PublicUser.mfa} et
+   * {@link PublicUser.accesPorteur}.
    */
-  static toPublic(user: User, mfa?: PublicUserMfa): PublicUser {
+  static toPublic(
+    user: User,
+    mfa?: PublicUserMfa,
+    accesPorteur?: PublicUserAccesPorteur,
+  ): PublicUser {
     return {
       userId: user.userId,
       firstname: user.firstname,
@@ -187,6 +233,7 @@ export class UserMapper {
       // chargé, plutôt que d'exister à `undefined`. `JSON.stringify` traite les
       // deux pareil, mais un `'mfa' in user` côté serveur, lui, les distingue.
       ...(mfa ? { mfa } : {}),
+      ...(accesPorteur ? { accesPorteur } : {}),
     };
   }
 }

@@ -16,6 +16,15 @@ export const USER_REPOSITORY = Symbol('USER_REPOSITORY');
 export interface AccesPorteurEnBase {
   role: UserRole;
   porteurAccess: boolean;
+  /**
+   * Date du dernier RETRAIT d'accès, `null` tant qu'il court (ou s'il n'a
+   * jamais été ouvert). Lue avec les deux autres parce qu'elle est écrite avec
+   * elles : le use case qui referme un accès doit pouvoir laisser INTACTE la
+   * date d'un retrait antérieur quand son acte n'en produit pas de nouveau
+   * (cf. `accesRevoqueLeApresDecision`). C'est aussi le point de départ du
+   * barème de conservation d'une demande acceptée.
+   */
+  accesRevoqueLe: Date | null;
 }
 
 export interface UserRepository {
@@ -44,7 +53,7 @@ export interface UserRepository {
    */
   updateUserType(userId: number, userType: UserType): Promise<void>;
   /**
-   * Lit `users.role` ET `users.porteurAccess` en une seule requête.
+   * Lit l'état d'accès porteur du compte en une seule requête.
    *
    * C'est la lecture qu'exécute `PorteurAccessGuard` à CHAQUE requête sur une
    * route de l'espace porteur : l'accès porteur est une autorisation à état,
@@ -54,12 +63,23 @@ export interface UserRepository {
    */
   findAccesPorteur(userId: number): Promise<AccesPorteurEnBase | null>;
   /**
-   * Écrit la colonne `users.porteurAccess`, et elle seule — même motif que
-   * `updateUserType` : le drapeau n'appartient pas à l'agrégat `User`, il est
-   * posé par la DÉCISION d'un instructeur sur une demande d'accès porteur
-   * (module `porteur-access`), jamais par une édition de profil.
+   * Écrit l'ÉTAT d'accès porteur — le drapeau et l'horodatage de retrait — en
+   * une seule opération, et rien d'autre. Même motif que `updateUserType` : ces
+   * colonnes n'appartiennent pas à l'agrégat `User`, elles sont posées par la
+   * DÉCISION d'un instructeur (module `porteur-access`), jamais par une édition
+   * de profil.
+   *
+   * Les deux valeurs voyagent ENSEMBLE parce qu'elles forment un invariant
+   * (« accès ouvert ⟹ pas de date de retrait ») : les écrire en deux fois
+   * laisserait une fenêtre où l'état est contradictoire, et la purge RGPD lit
+   * précisément ce couple. Ce que chacune doit valoir est décidé par le
+   * domaine (`acterAccesPorteur`, `accesRevoqueLeApresDecision`), pas ici.
    */
-  updatePorteurAccess(userId: number, porteurAccess: boolean): Promise<void>;
+  updatePorteurAccess(
+    userId: number,
+    porteurAccess: boolean,
+    accesRevoqueLe: Date | null,
+  ): Promise<void>;
   findOneBySocialId(socialId: string): Promise<User | null>;
   findPreferences(userId: number): Promise<UserPreferences>;
   savePreferences(

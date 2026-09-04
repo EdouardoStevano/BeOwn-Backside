@@ -88,6 +88,8 @@ const makeHarness = (
   const compte = {
     role: roleEnBase,
     status,
+    /** Drapeau d'accès porteur, mutable comme le rôle : lui aussi est relu. */
+    porteurAccess: false,
   };
   const userRepository = {
     findById: jest.fn(() =>
@@ -100,6 +102,13 @@ const makeHarness = (
           status: compte.status,
         }),
       ),
+    ),
+    findAccesPorteur: jest.fn(() =>
+      Promise.resolve({
+        role: compte.role,
+        porteurAccess: compte.porteurAccess,
+        accesRevoqueLe: null,
+      }),
     ),
   };
 

@@ -143,6 +143,48 @@ export class MotifRefusRequisError extends PorteurAccessError {
 }
 
 /**
+ * Retirer sans motif CODÉ est interdit (400).
+ *
+ * La clause CGU de retrait exige une mesure MOTIVÉE. Le motif est tiré de la
+ * liste fermée `MotifRetraitAccesPorteur` : seul son libellé part au titulaire,
+ * et seul son code entre dans le journal d'audit — aucun texte libre ne
+ * circule sur ce chemin.
+ */
+export class MotifRetraitRequisError extends PorteurAccessError {
+  readonly kind = PorteurAccessErrorKind.INVALID_INPUT;
+  readonly code = 'PORTEUR_ACCESS_MOTIF_RETRAIT_REQUIS';
+
+  constructor(
+    message = 'Un motif de retrait codé, choisi dans la liste fermée, est obligatoire.',
+  ) {
+    super(message);
+  }
+}
+
+/**
+ * L'accès demandé est DÉJÀ l'accès en vigueur (409).
+ *
+ * Le no-op est refusé plutôt qu'absorbé en silence : un retrait est une mesure
+ * notifiée et auditée. Répondre 200 sur un compte déjà fermé produirait une
+ * notification de retrait sans retrait, une entrée d'audit sans changement
+ * d'état, et laisserait croire à l'instructeur qu'il vient d'agir. Le 409 dit
+ * ce qui est vrai : il n'y a rien à faire.
+ */
+export class AccesPorteurEtatInchangeError extends PorteurAccessError {
+  readonly kind = PorteurAccessErrorKind.CONFLICT;
+  readonly code = 'PORTEUR_ACCESS_ETAT_INCHANGE';
+
+  constructor(accesActuel: boolean) {
+    super(
+      accesActuel
+        ? "L'espace porteur est déjà ouvert sur ce compte."
+        : "L'espace porteur est déjà fermé sur ce compte.",
+      { details: { porteurAccess: accesActuel } },
+    );
+  }
+}
+
+/**
  * Décision sans auteur humain identifiable (400).
  *
  * Les CGU engagent BeOwn à ne rendre AUCUNE décision entièrement automatisée :

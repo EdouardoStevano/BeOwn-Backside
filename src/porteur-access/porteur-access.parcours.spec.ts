@@ -37,6 +37,7 @@ import { SoumettreDemandePorteurUseCase } from './applications/usecases/soumettr
 import { InstruireDemandePorteurUseCase } from './applications/usecases/instruire-demande-porteur.usecase';
 import { DeciderDemandePorteurUseCase } from './applications/usecases/decider-demande-porteur.usecase';
 import { RetirerDemandePorteurUseCase } from './applications/usecases/retirer-demande-porteur.usecase';
+import { StatuerAccesPorteurUseCase } from './applications/usecases/statuer-acces-porteur.usecase';
 import { AdminPorteurAccessController } from './presenters/http/admin-porteur-access.controller';
 import { PorteurAccessController } from './presenters/http/porteur-access.controller';
 import {
@@ -46,13 +47,21 @@ import {
 } from './domains/demande-acces-porteur';
 import { MotifRefusAccesPorteur } from './domains/motif-refus';
 import {
+  LIBELLES_MOTIF_RETRAIT,
+  MotifRetraitAccesPorteur,
+} from './domains/motif-retrait';
+import { versLigneFile } from './presenters/http/demande-acces-porteur.presenter';
+import {
   AccesPorteurDejaOuvertError,
+  AccesPorteurEtatInchangeError,
   CompteInactifError,
+  CompteIntrouvableError,
   DemandeAccesPorteurEnCoursError,
   DemandeAccesPorteurEtrangereError,
   DemandeAccesPorteurIntrouvableError,
   DemandeTropRapprocheeError,
   MotifRefusRequisError,
+  MotifRetraitRequisError,
   RoleNonEligibleError,
   TransitionDemandeInterditeError,
 } from './domains/errors/porteur-access.errors';
@@ -77,6 +86,8 @@ const ADMIN_ID = 7;
 const EMAIL = 'investisseur@example.com';
 const MOTIVATION =
   'Je porte un immeuble de trois logements et souhaite le financer sur BeOwn.';
+/** Horodatage fixe des retraits — comparable sans dépendre de l'horloge. */
+const T_RETRAIT = new Date('2026-09-04T12:00:00.000Z');
 
 /** Compte en mémoire : `role` et `porteurAccess` sont mutables, comme en base. */
 interface Compte {
@@ -84,6 +95,8 @@ interface Compte {
   email: string;
   role: UserRole;
   porteurAccess: boolean;
+  /** Horodatage du dernier retrait d'accès — `null` tant qu'il court. */
+  accesRevoqueLe: Date | null;
   status: UserStatus;
 }
 
@@ -115,14 +128,25 @@ class InMemoryUserRepository implements Partial<UserRepository> {
     const compte = this.comptes.find((c) => c.userId === userId);
     return Promise.resolve(
       compte
-        ? { role: compte.role, porteurAccess: compte.porteurAccess }
+        ? {
+            role: compte.role,
+            porteurAccess: compte.porteurAccess,
+            accesRevoqueLe: compte.accesRevoqueLe,
+          }
         : null,
     );
   }
 
-  updatePorteurAccess(userId: number, porteurAccess: boolean): Promise<void> {
+  updatePorteurAccess(
+    userId: number,
+    porteurAccess: boolean,
+    accesRevoqueLe: Date | null,
+  ): Promise<void> {
     const compte = this.comptes.find((c) => c.userId === userId);
-    if (compte) compte.porteurAccess = porteurAccess;
+    if (compte) {
+      compte.porteurAccess = porteurAccess;
+      compte.accesRevoqueLe = accesRevoqueLe;
+    }
     return Promise.resolve();
   }
 }
@@ -134,6 +158,7 @@ const makeHarness = () => {
       email: EMAIL,
       role: UserRole.INVESTISSEUR,
       porteurAccess: false,
+      accesRevoqueLe: null,
       status: UserStatus.ACTIF,
     },
     {
@@ -141,6 +166,7 @@ const makeHarness = () => {
       email: 'porteur@example.com',
       role: UserRole.PORTEUR,
       porteurAccess: false,
+      accesRevoqueLe: null,
       status: UserStatus.ACTIF,
     },
   ];
@@ -213,6 +239,12 @@ const makeHarness = () => {
     audit,
   );
   const retirer = new RetirerDemandePorteurUseCase(demandes, demandes, audit);
+  const statuerAcces = new StatuerAccesPorteurUseCase(
+    users as unknown as UserRepository,
+    sessions,
+    notifications,
+    audit,
+  );
 
   const porteurAccessGuard = new PorteurAccessGuard(
     users as unknown as UserRepository,
@@ -229,6 +261,7 @@ const makeHarness = () => {
     instruire,
     decider,
     retirer,
+    statuerAcces,
     porteurAccessGuard,
   };
 };
@@ -318,7 +351,7 @@ describe('Cycle complet : soumission → examen → acceptation → accès effec
     ).resolves.toBe(true);
 
     // Retrait de l'accès en base, jeton inchangé.
-    await h.users.updatePorteurAccess(INVESTISSEUR_ID, false);
+    await h.users.updatePorteurAccess(INVESTISSEUR_ID, false, new Date());
 
     await expect(
       h.porteurAccessGuard.canActivate(contexteHttp(INVESTISSEUR_ID)),
@@ -627,7 +660,7 @@ describe('Double soumission et carence', () => {
 
   it('un compte qui a DÉJÀ l’accès ne peut pas redemander (409)', async () => {
     const h = makeHarness();
-    await h.users.updatePorteurAccess(INVESTISSEUR_ID, true);
+    await h.users.updatePorteurAccess(INVESTISSEUR_ID, true, null);
     await expect(
       h.soumettre.execute({
         utilisateurId: INVESTISSEUR_ID,
@@ -850,6 +883,408 @@ describe('Décision déjà rendue', () => {
   });
 });
 
+/**
+ * Anomalie de validation (P0, S2) : le lot 4 avait livré l'OCTROI sans son
+ * inverse. Un accès accordé ne pouvait plus se refermer, alors que la clause
+ * CGU de retrait exige une mesure MOTIVÉE, NOTIFIÉE et RÉVERSIBLE.
+ *
+ * Ces tests éprouvent la chaîne réelle : vrai use case, vrai garde relu en
+ * base — c'est-à-dire la seule chose qui compte, « l'accès est-il coupé à la
+ * requête SUIVANTE ? ».
+ */
+describe("Retrait et rétablissement de l'accès porteur", () => {
+  /** Amène le compte investisseur à « accès ouvert » par le parcours normal. */
+  const avecAccesOuvert = async () => {
+    const h = makeHarness();
+    const demande = await h.soumettre.execute({
+      utilisateurId: INVESTISSEUR_ID,
+      motivation: MOTIVATION,
+    });
+    await h.decider.execute({
+      demandeId: demande.id as string,
+      decision: StatutDemandeAccesPorteur.ACCEPTEE,
+      decideurAdminId: ADMIN_ID,
+      decideurRole: UserRole.COMPLIANCE,
+    });
+    // On repart d'observations propres : l'octroi a déjà notifié et audité.
+    h.sessionsInvalidees.length = 0;
+    h.notificationsPoussees.length = 0;
+    h.entreesAudit.length = 0;
+    return { h, demande };
+  };
+
+  it("coupe l'accès à la requête SUIVANTE (garde relu en base)", async () => {
+    const { h } = await avecAccesOuvert();
+    await expect(
+      h.porteurAccessGuard.canActivate(contexteHttp(INVESTISSEUR_ID)),
+    ).resolves.toBe(true);
+
+    const resultat = await h.statuerAcces.execute({
+      utilisateurId: INVESTISSEUR_ID,
+      acces: false,
+      motif: MotifRetraitAccesPorteur.MANQUEMENT_CONTRACTUEL,
+      decideurAdminId: ADMIN_ID,
+      decideurRole: UserRole.COMPLIANCE,
+      maintenant: T_RETRAIT,
+    });
+
+    expect(resultat.porteurAccess).toBe(false);
+    expect(resultat.accesRevoqueLe).toEqual(T_RETRAIT);
+
+    // Le jeton n'a pas changé : c'est la BASE qui décide.
+    await expect(
+      h.porteurAccessGuard.canActivate(
+        contexteHttp(INVESTISSEUR_ID, UserRole.INVESTISSEUR),
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('horodate le retrait EN BASE — point de départ du barème de conservation', async () => {
+    const { h } = await avecAccesOuvert();
+    await h.statuerAcces.execute({
+      utilisateurId: INVESTISSEUR_ID,
+      acces: false,
+      motif: MotifRetraitAccesPorteur.CRITERES_NON_MAINTENUS,
+      decideurAdminId: ADMIN_ID,
+      decideurRole: UserRole.COMPLIANCE,
+      maintenant: T_RETRAIT,
+    });
+    const compte = h.comptes.find((c) => c.userId === INVESTISSEUR_ID);
+    expect(compte?.accesRevoqueLe).toEqual(T_RETRAIT);
+    // Le RÔLE n'a pas bougé : retirer l'accès porteur n'est pas rétrograder.
+    expect(compte?.role).toBe(UserRole.INVESTISSEUR);
+  });
+
+  it("rétablit l'accès et EFFACE l'horodatage (réversibilité)", async () => {
+    const { h } = await avecAccesOuvert();
+    await h.statuerAcces.execute({
+      utilisateurId: INVESTISSEUR_ID,
+      acces: false,
+      motif: MotifRetraitAccesPorteur.OCTROI_ERRONE,
+      decideurAdminId: ADMIN_ID,
+      decideurRole: UserRole.COMPLIANCE,
+      maintenant: T_RETRAIT,
+    });
+
+    const resultat = await h.statuerAcces.execute({
+      utilisateurId: INVESTISSEUR_ID,
+      acces: true,
+      decideurAdminId: ADMIN_ID,
+      decideurRole: UserRole.COMPLIANCE,
+    });
+
+    expect(resultat.porteurAccess).toBe(true);
+    expect(resultat.accesRevoqueLe).toBeNull();
+    expect(
+      h.comptes.find((c) => c.userId === INVESTISSEUR_ID)?.accesRevoqueLe,
+    ).toBeNull();
+    await expect(
+      h.porteurAccessGuard.canActivate(contexteHttp(INVESTISSEUR_ID)),
+    ).resolves.toBe(true);
+  });
+
+  it('refuse le no-op (409) sans rien écrire ni notifier', async () => {
+    const h = makeHarness();
+    await expect(
+      h.statuerAcces.execute({
+        utilisateurId: INVESTISSEUR_ID,
+        acces: false,
+        motif: MotifRetraitAccesPorteur.OCTROI_ERRONE,
+        decideurAdminId: ADMIN_ID,
+        decideurRole: UserRole.COMPLIANCE,
+      }),
+    ).rejects.toBeInstanceOf(AccesPorteurEtatInchangeError);
+
+    await new Promise(process.nextTick);
+    expect(h.notificationsPoussees).toEqual([]);
+    expect(h.entreesAudit).toEqual([]);
+    expect(h.sessionsInvalidees).toEqual([]);
+  });
+
+  it("refuse le retrait sans motif codé (400), rien n'est écrit", async () => {
+    const { h } = await avecAccesOuvert();
+    await expect(
+      h.statuerAcces.execute({
+        utilisateurId: INVESTISSEUR_ID,
+        acces: false,
+        decideurAdminId: ADMIN_ID,
+        decideurRole: UserRole.COMPLIANCE,
+      }),
+    ).rejects.toBeInstanceOf(MotifRetraitRequisError);
+
+    expect(
+      h.comptes.find((c) => c.userId === INVESTISSEUR_ID)?.porteurAccess,
+    ).toBe(true);
+  });
+
+  it("refuse d'agir sur un compte inactif (409, code réutilisé)", async () => {
+    const { h } = await avecAccesOuvert();
+    const compte = h.comptes.find((c) => c.userId === INVESTISSEUR_ID);
+    if (compte) compte.status = UserStatus.SUSPENDU;
+
+    await h.statuerAcces
+      .execute({
+        utilisateurId: INVESTISSEUR_ID,
+        acces: false,
+        motif: MotifRetraitAccesPorteur.OBSTACLE_LEGAL_LCBFT,
+        decideurAdminId: ADMIN_ID,
+        decideurRole: UserRole.COMPLIANCE,
+      })
+      .catch((erreur: CompteInactifError) => {
+        expect(erreur.code).toBe('PORTEUR_ACCESS_COMPTE_INACTIF');
+        expect(statutHttpDeLErreur(erreur)).toBe(409);
+      });
+    expect(compte?.porteurAccess).toBe(true);
+    expect.assertions(3);
+  });
+
+  it('un compte inconnu est un 404', async () => {
+    const h = makeHarness();
+    await expect(
+      h.statuerAcces.execute({
+        utilisateurId: 999_999,
+        acces: true,
+        decideurAdminId: ADMIN_ID,
+        decideurRole: UserRole.COMPLIANCE,
+      }),
+    ).rejects.toBeInstanceOf(CompteIntrouvableError);
+  });
+
+  it('coupe la session de la CIBLE', async () => {
+    const { h } = await avecAccesOuvert();
+    const resultat = await h.statuerAcces.execute({
+      utilisateurId: INVESTISSEUR_ID,
+      acces: false,
+      motif: MotifRetraitAccesPorteur.MANQUEMENT_CONTRACTUEL,
+      decideurAdminId: ADMIN_ID,
+      decideurRole: UserRole.COMPLIANCE,
+    });
+    expect(h.sessionsInvalidees).toEqual([EMAIL]);
+    expect(resultat.sessionInvalidee).toBe(true);
+  });
+
+  it('NOTIFIE le titulaire — libellé du motif codé, aucun texte libre', async () => {
+    const { h } = await avecAccesOuvert();
+    await h.statuerAcces.execute({
+      utilisateurId: INVESTISSEUR_ID,
+      acces: false,
+      motif: MotifRetraitAccesPorteur.MANQUEMENT_CONTRACTUEL,
+      decideurAdminId: ADMIN_ID,
+      decideurRole: UserRole.COMPLIANCE,
+    });
+    await new Promise(process.nextTick);
+
+    const notif = h.notificationsPoussees.find(
+      (n) => n.type === 'porteur_access_revoque',
+    );
+    expect(notif).toBeDefined();
+    expect(notif?.utilisateurId).toBe(INVESTISSEUR_ID);
+    expect(notif?.message).toContain(
+      LIBELLES_MOTIF_RETRAIT[MotifRetraitAccesPorteur.MANQUEMENT_CONTRACTUEL],
+    );
+    // La motivation de la personne ne ressort JAMAIS d'une notification, et
+    // aucun autre texte libre n'existe sur ce chemin.
+    expect(JSON.stringify(notif)).not.toContain('immeuble');
+  });
+
+  it('notifie aussi le RÉTABLISSEMENT', async () => {
+    const { h } = await avecAccesOuvert();
+    await h.statuerAcces.execute({
+      utilisateurId: INVESTISSEUR_ID,
+      acces: false,
+      motif: MotifRetraitAccesPorteur.DEMANDE_DU_TITULAIRE,
+      decideurAdminId: ADMIN_ID,
+      decideurRole: UserRole.COMPLIANCE,
+    });
+    await h.statuerAcces.execute({
+      utilisateurId: INVESTISSEUR_ID,
+      acces: true,
+      decideurAdminId: ADMIN_ID,
+      decideurRole: UserRole.COMPLIANCE,
+    });
+    await new Promise(process.nextTick);
+
+    expect(
+      h.notificationsPoussees.find((n) => n.type === 'porteur_access_retabli'),
+    ).toBeDefined();
+  });
+
+  it("l'audit porte l'état AVANT et APRÈS, et le motif CODÉ", async () => {
+    const { h } = await avecAccesOuvert();
+    await h.statuerAcces.execute({
+      utilisateurId: INVESTISSEUR_ID,
+      acces: false,
+      motif: MotifRetraitAccesPorteur.OBSTACLE_LEGAL_LCBFT,
+      decideurAdminId: ADMIN_ID,
+      decideurRole: UserRole.COMPLIANCE,
+      maintenant: T_RETRAIT,
+    });
+
+    const entree = h.entreesAudit.find(
+      (e) => e.action === 'porteur_access.acces.retire',
+    );
+    expect(entree).toBeDefined();
+    expect(entree?.acteurId).toBe(String(ADMIN_ID));
+    expect(entree?.objetId).toBe(String(INVESTISSEUR_ID));
+    expect(entree?.metadata).toMatchObject({
+      utilisateurId: INVESTISSEUR_ID,
+      porteurAccessAvant: true,
+      porteurAccessApres: false,
+      motifRetrait: MotifRetraitAccesPorteur.OBSTACLE_LEGAL_LCBFT,
+      accesRevoqueLe: T_RETRAIT.toISOString(),
+      sessionInvalidee: true,
+    });
+  });
+
+  it('le rétablissement est audité lui aussi', async () => {
+    const { h } = await avecAccesOuvert();
+    await h.statuerAcces.execute({
+      utilisateurId: INVESTISSEUR_ID,
+      acces: false,
+      motif: MotifRetraitAccesPorteur.OCTROI_ERRONE,
+      decideurAdminId: ADMIN_ID,
+      decideurRole: UserRole.COMPLIANCE,
+    });
+    await h.statuerAcces.execute({
+      utilisateurId: INVESTISSEUR_ID,
+      acces: true,
+      decideurAdminId: ADMIN_ID,
+      decideurRole: UserRole.COMPLIANCE,
+    });
+
+    const entree = h.entreesAudit.find(
+      (e) => e.action === 'porteur_access.acces.retabli',
+    );
+    expect(entree?.metadata).toMatchObject({
+      porteurAccessAvant: false,
+      porteurAccessApres: true,
+      motifRetrait: null,
+      accesRevoqueLe: null,
+    });
+  });
+
+  it("n'altère AUCUNE demande : la preuve de l'examen initial survit", async () => {
+    const { h, demande } = await avecAccesOuvert();
+    await h.statuerAcces.execute({
+      utilisateurId: INVESTISSEUR_ID,
+      acces: false,
+      motif: MotifRetraitAccesPorteur.MANQUEMENT_CONTRACTUEL,
+      decideurAdminId: ADMIN_ID,
+      decideurRole: UserRole.COMPLIANCE,
+    });
+
+    const relue = await h.demandes.findById(demande.id as string);
+    expect(relue?.statut).toBe(StatutDemandeAccesPorteur.ACCEPTEE);
+    expect(relue?.decideurAdminId).toBe(ADMIN_ID);
+  });
+});
+
+describe('Refus qui REFERME un accès ouvert', () => {
+  it('horodate le retrait, comme une révocation', async () => {
+    // Chemin rare mais réel : l'accès a été ouvert (par un rétablissement),
+    // une nouvelle demande traîne, et elle est refusée. Le refus referme
+    // l'accès — c'est un retrait, il doit s'horodater sous peine de fausser le
+    // point de départ du barème.
+    const h = makeHarness();
+    await h.users.updatePorteurAccess(INVESTISSEUR_ID, true, null);
+    const demande = await h.demandes.creer(
+      DemandeAccesPorteur.soumettre({
+        utilisateurId: INVESTISSEUR_ID,
+        motivation: MOTIVATION,
+      }),
+    );
+
+    await h.decider.execute({
+      demandeId: demande.id as string,
+      decision: StatutDemandeAccesPorteur.REFUSEE,
+      motifRefus: MotifRefusAccesPorteur.HORS_CRITERES,
+      decideurAdminId: ADMIN_ID,
+      decideurRole: UserRole.COMPLIANCE,
+      maintenant: T_RETRAIT,
+    });
+
+    const compte = h.comptes.find((c) => c.userId === INVESTISSEUR_ID);
+    expect(compte?.porteurAccess).toBe(false);
+    expect(compte?.accesRevoqueLe).toEqual(T_RETRAIT);
+  });
+
+  it('un refus sur un compte sans accès ne pose AUCUN horodatage', async () => {
+    const h = makeHarness();
+    const demande = await h.soumettre.execute({
+      utilisateurId: INVESTISSEUR_ID,
+      motivation: MOTIVATION,
+    });
+    await h.decider.execute({
+      demandeId: demande.id as string,
+      decision: StatutDemandeAccesPorteur.REFUSEE,
+      motifRefus: MotifRefusAccesPorteur.HORS_CRITERES,
+      decideurAdminId: ADMIN_ID,
+      decideurRole: UserRole.COMPLIANCE,
+      maintenant: T_RETRAIT,
+    });
+    expect(
+      h.comptes.find((c) => c.userId === INVESTISSEUR_ID)?.accesRevoqueLe,
+    ).toBeNull();
+  });
+
+  it('une acceptation EFFACE un horodatage antérieur', async () => {
+    // Un compte dont l'accès avait été retiré redépose et obtient gain de
+    // cause : l'accès court de nouveau, la date de fermeture n'a plus d'objet.
+    const h = makeHarness();
+    await h.users.updatePorteurAccess(INVESTISSEUR_ID, false, T_RETRAIT);
+    const demande = await h.soumettre.execute({
+      utilisateurId: INVESTISSEUR_ID,
+      motivation: MOTIVATION,
+    });
+    await h.decider.execute({
+      demandeId: demande.id as string,
+      decision: StatutDemandeAccesPorteur.ACCEPTEE,
+      decideurAdminId: ADMIN_ID,
+      decideurRole: UserRole.COMPLIANCE,
+    });
+
+    const compte = h.comptes.find((c) => c.userId === INVESTISSEUR_ID);
+    expect(compte?.porteurAccess).toBe(true);
+    expect(compte?.accesRevoqueLe).toBeNull();
+  });
+});
+
+describe("File d'instruction : état du compte demandeur", () => {
+  it('chaque ligne porte le statut, la suspension et la décidabilité', async () => {
+    // Anomalie de validation (S8) : un compte SUSPENDU n'est ni clos ni
+    // supprimé, son dossier reste donc listé — et toute décision renvoyait 409
+    // sans que l'instructeur puisse comprendre pourquoi.
+    const h = makeHarness();
+    await h.soumettre.execute({
+      utilisateurId: INVESTISSEUR_ID,
+      motivation: MOTIVATION,
+    });
+    h.demandes.definirStatutCompte(INVESTISSEUR_ID, UserStatus.SUSPENDU);
+
+    const page = await h.demandes.lister({});
+    const vue = versLigneFile(page.items[0]);
+
+    expect(vue.statutCompte).toBe(UserStatus.SUSPENDU);
+    expect(vue.compteSuspendu).toBe(true);
+    expect(vue.decisionPossible).toBe(false);
+    // La vue instructeur du dossier lui-même est inchangée.
+    expect(vue.utilisateurId).toBe(INVESTISSEUR_ID);
+  });
+
+  it('un compte actif reste décidable et non suspendu', async () => {
+    const h = makeHarness();
+    await h.soumettre.execute({
+      utilisateurId: INVESTISSEUR_ID,
+      motivation: MOTIVATION,
+    });
+    h.demandes.definirStatutCompte(INVESTISSEUR_ID, UserStatus.ACTIF);
+
+    const vue = versLigneFile((await h.demandes.lister({})).items[0]);
+    expect(vue.compteSuspendu).toBe(false);
+    expect(vue.decisionPossible).toBe(true);
+  });
+});
+
 describe('Autorisation des routes du back-office', () => {
   const reflector = new Reflector();
   const permissions = new PermissionsGuard(reflector);
@@ -871,7 +1306,7 @@ describe('Autorisation des routes du back-office', () => {
   // sont éprouvées, pas une copie de la déclaration.
   const AdminControleur = AdminPorteurAccessController;
 
-  it.each(['lister', 'statuer'])(
+  it.each(['lister', 'statuer', 'statuerAccesPorteur'])(
     'un rôle sans porteur_access:review reçoit 403 sur %s',
     (methode) => {
       for (const role of [
@@ -896,7 +1331,7 @@ describe('Autorisation des routes du back-office', () => {
     },
   );
 
-  it.each(['lister', 'statuer'])(
+  it.each(['lister', 'statuer', 'statuerAccesPorteur'])(
     'compliance et super_admin passent sur %s',
     (methode) => {
       expect(

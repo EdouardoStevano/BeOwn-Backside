@@ -23,6 +23,7 @@ import { MfaMethodType } from 'src/iam/domains/enums/mfa-method.enum';
 import { MfaChallengePurpose } from 'src/iam/applications/models/mfa-challenge';
 import { MFAChallengeCacheService } from '../../services/mfa/mfa-challenge-cache.service';
 import { User } from 'src/iam/domains/models/user';
+import { projeterAccesPorteur } from 'src/porteur-access/domains/acces-porteur';
 import { MfaFactorService } from '../../services/mfa/mfa-factor.service';
 
 /** Entrée du use case — indépendante du DTO HTTP (§1). */
@@ -145,14 +146,25 @@ export class SignInUsecase {
       role: user.role,
     } as TokenPayload);
 
+    // Accès porteur : lecture CIBLÉE, hors agrégat (ADR § 3). Le front reçoit
+    // le profil complet à l'ouverture de session, sélecteur d'espace compris —
+    // sans quoi l'espace porteur n'apparaîtrait qu'après un GET /users/me.
+    // Une lecture de plus par CONNEXION (pas par requête), sur la clé primaire.
+    const accesPorteur = await this.usersRepository.findAccesPorteur(
+      user.userId,
+    );
+
     // Le compte accompagne les tokens : le front dispose du profil sans
     // enchaîner un GET /users/me juste après la connexion. `toJSON()` est la
     // seule projection publiable — l'empreinte du mot de passe en est exclue.
     return {
-      user: user.toJSON({
-        enabled: activeMfaMethod !== null,
-        method: activeMfaMethod,
-      }),
+      user: user.toJSON(
+        {
+          enabled: activeMfaMethod !== null,
+          method: activeMfaMethod,
+        },
+        projeterAccesPorteur(accesPorteur),
+      ),
       ...tokens,
     };
   }

@@ -7,6 +7,7 @@ import { UserRole, UserStatus } from 'src/iam/domains/enums/user.enum';
 import {
   UserMapper,
   type PublicUser,
+  type PublicUserAccesPorteur,
   type PublicUserMfa,
 } from 'src/iam/domains/mappers/user.mapper';
 import { AggregateRoot } from '@nestjs/cqrs';
@@ -380,13 +381,16 @@ export class User extends AggregateRoot {
    * un appel explicite. Sans cette méthode, il ressortirait avec ses clés
    * privées `_userId`, `_firstname`… et surtout `_passwordHash`.
    *
-   * `mfa` est le seul apport extérieur : le second facteur ne fait pas partie
-   * de l'agrégat, l'appelant qui l'a chargé le passe ici. Omis — cas de la
-   * sérialisation automatique par `res.json()` — la clé n'apparaît tout
-   * simplement pas.
+   * `mfa` et `accesPorteur` sont les deux apports extérieurs : ni le second
+   * facteur ni le drapeau d'accès porteur ne font partie de l'agrégat,
+   * l'appelant qui les a chargés les passe ici. Omis — cas de la sérialisation
+   * automatique par `res.json()` — les clés n'apparaissent tout simplement pas.
    */
-  toJSON(mfa?: PublicUserMfa): PublicUser {
-    return UserMapper.toPublic(this, mfa);
+  toJSON(
+    mfa?: PublicUserMfa,
+    accesPorteur?: PublicUserAccesPorteur,
+  ): PublicUser {
+    return UserMapper.toPublic(this, mfa, accesPorteur);
   }
 
   get passwordHash(): string | null {

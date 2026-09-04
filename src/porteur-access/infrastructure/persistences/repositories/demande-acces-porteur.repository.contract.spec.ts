@@ -1,3 +1,4 @@
+import { UserStatus } from 'src/iam/domains/enums/user.enum';
 import {
   DemandeAccesPorteurReader,
   DemandeAccesPorteurWriter,
@@ -42,12 +43,16 @@ const nouvelle = (utilisateurId: number, soumiseLe = new Date()) =>
 
 /**
  * Ce que toute implémentation doit fournir pour être éprouvée : le dépôt, et
- * de quoi simuler un compte clos — la file d'instruction devant les exclure,
- * le contrat ne peut pas se vérifier sans ce levier.
+ * de quoi poser un statut sur un compte demandeur — la file d'instruction
+ * devant exclure les comptes disparus ET remonter le statut des autres, le
+ * contrat ne peut pas se vérifier sans ce levier.
  */
 export interface HarnaisDepot {
   depot: DemandeAccesPorteurReader & DemandeAccesPorteurWriter;
-  marquerCompteClos: (utilisateurId: number) => void | Promise<void>;
+  definirStatutCompte: (
+    utilisateurId: number,
+    statut: UserStatus,
+  ) => void | Promise<void>;
 }
 
 export function executerContratDepot(
@@ -56,11 +61,14 @@ export function executerContratDepot(
 ): void {
   describe(`Contrat du dépôt de demandes — ${nom}`, () => {
     let depot: DemandeAccesPorteurReader & DemandeAccesPorteurWriter;
-    let marquerCompteClos: HarnaisDepot['marquerCompteClos'];
+    let definirStatutCompte: HarnaisDepot['definirStatutCompte'];
+    /** Raccourci : le cas « compte disparu » du contrat de `lister`. */
+    const marquerCompteClos = (utilisateurId: number) =>
+      definirStatutCompte(utilisateurId, UserStatus.SUPPRIME);
     beforeEach(() => {
       const harnais = fabrique();
       depot = harnais.depot;
-      marquerCompteClos = harnais.marquerCompteClos;
+      definirStatutCompte = harnais.definirStatutCompte;
     });
 
     it('creer attribue un identifiant et rend la demande relisible', async () => {
@@ -181,7 +189,7 @@ export function executerContratDepot(
       expect(soumises.total).toBe(4);
       expect(
         soumises.items.every(
-          (d) => d.statut === StatutDemandeAccesPorteur.SOUMISE,
+          (l) => l.demande.statut === StatutDemandeAccesPorteur.SOUMISE,
         ),
       ).toBe(true);
 
@@ -191,11 +199,11 @@ export function executerContratDepot(
       expect(page2.items).toHaveLength(2);
       expect(page1.total).toBe(5);
       // Aucun chevauchement entre deux pages consécutives.
-      const ids = [...page1.items, ...page2.items].map((d) => d.id);
+      const ids = [...page1.items, ...page2.items].map((l) => l.demande.id);
       expect(new Set(ids).size).toBe(4);
       // Tri décroissant sur la date de soumission.
-      expect(page1.items[0].soumiseLe.getTime()).toBeGreaterThanOrEqual(
-        page1.items[1].soumiseLe.getTime(),
+      expect(page1.items[0].demande.soumiseLe.getTime()).toBeGreaterThanOrEqual(
+        page1.items[1].demande.soumiseLe.getTime(),
       );
     });
 
@@ -219,7 +227,7 @@ export function executerContratDepot(
 
       const page = await depot.lister({});
       expect(page.total).toBe(1);
-      expect(page.items.map((d) => d.utilisateurId)).toEqual([USER_B]);
+      expect(page.items.map((l) => l.demande.utilisateurId)).toEqual([USER_B]);
     });
 
     it("l'exclusion vaut aussi avec un filtre de statut", async () => {
@@ -231,6 +239,26 @@ export function executerContratDepot(
       });
       expect(page.items).toEqual([]);
       expect(page.total).toBe(0);
+    });
+
+    it('chaque ligne de la file PORTE le statut du compte demandeur', async () => {
+      // Anomalie de recette (lot 4b) : un compte SUSPENDU n'est ni clos ni
+      // supprimé — son dossier reste donc listé, mais toute décision renvoie
+      // 409. Sans le statut sur la ligne, l'instructeur ne pouvait pas savoir
+      // pourquoi.
+      await depot.creer(nouvelle(USER_A));
+      await definirStatutCompte(USER_A, UserStatus.SUSPENDU);
+
+      const page = await depot.lister({});
+      expect(page.items).toHaveLength(1);
+      expect(page.items[0].statutCompte).toBe(UserStatus.SUSPENDU);
+    });
+
+    it('et vaut null quand la ligne compte a disparu', async () => {
+      // Référence sans FK dure : le compte peut ne plus exister du tout.
+      await depot.creer(nouvelle(USER_B));
+      const page = await depot.lister({});
+      expect(page.items[0].statutCompte).toBeNull();
     });
 
     it("mais l'historique du compte, lui, reste lisible", async () => {
@@ -266,7 +294,7 @@ executerContratDepot('implémentation en mémoire', () => {
   const depot = new InMemoryDemandeAccesPorteurRepository();
   return {
     depot,
-    marquerCompteClos: (utilisateurId) =>
-      depot.marquerCompteClos(utilisateurId),
+    definirStatutCompte: (utilisateurId, statut) =>
+      depot.definirStatutCompte(utilisateurId, statut),
   };
 });

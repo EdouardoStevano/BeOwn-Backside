@@ -14,6 +14,7 @@ import {
   AccountSuspendedError,
   InvalidRefreshTokenError,
 } from 'src/iam/domains/errors';
+import { projeterAccesPorteur } from 'src/porteur-access/domains/acces-porteur';
 import { MfaFactorService } from '../../services/mfa/mfa-factor.service';
 
 /**
@@ -74,9 +75,7 @@ export class RefreshTokenUseCase {
     // un facteur armé ou retiré depuis la connexion doit se voir sur la session
     // reprise, sans quoi le front garderait l'état du jour où elle a été
     // ouverte.
-    const activeMfaMethod = await this.mfaFactors.findActiveMethod(
-      user.userId,
-    );
+    const activeMfaMethod = await this.mfaFactors.findActiveMethod(user.userId);
 
     // Le nouveau couple porte le rôle EN BASE, jamais celui du claim entrant.
     // L'adresse suit la même règle ; le repli sur celle du token ne couvre que
@@ -88,13 +87,24 @@ export class RefreshTokenUseCase {
       role: user.role,
     } as TokenPayload);
 
+    // Relu au même titre que le statut, le rôle et le facteur : un accès
+    // porteur ACCORDÉ ou RETIRÉ depuis la connexion doit se voir sur la session
+    // reprise. C'est ce qui rend le retrait perceptible côté front dès la
+    // rotation suivante — la révocation de session force précisément celle-ci.
+    const accesPorteur = await this.userRepository.findAccesPorteur(
+      user.userId,
+    );
+
     // `toJSON()` est la seule projection publiable — l'empreinte du mot de
     // passe en est exclue par construction (PublicUser).
     return {
-      user: user.toJSON({
-        enabled: activeMfaMethod !== null,
-        method: activeMfaMethod,
-      }),
+      user: user.toJSON(
+        {
+          enabled: activeMfaMethod !== null,
+          method: activeMfaMethod,
+        },
+        projeterAccesPorteur(accesPorteur),
+      ),
       ...tokens,
     };
   }

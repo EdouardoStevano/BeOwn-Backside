@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
+  IsBoolean,
   IsEnum,
   IsIn,
   IsInt,
@@ -21,6 +22,7 @@ import {
   MOTIF_REFUS_COMPLEMENT_LONGUEUR_MAX,
   MotifRefusAccesPorteur,
 } from 'src/porteur-access/domains/motif-refus';
+import { MotifRetraitAccesPorteur } from 'src/porteur-access/domains/motif-retrait';
 
 /**
  * Dépôt d'une demande d'accès porteur.
@@ -96,6 +98,32 @@ export class DeciderDemandeAccesPorteurDto {
   @IsString()
   @MaxLength(MOTIF_REFUS_COMPLEMENT_LONGUEUR_MAX)
   motifRefusComplement?: string;
+}
+
+/**
+ * Retrait ou ré-octroi de l'accès porteur, hors dossier de demande.
+ *
+ * `motif` n'accepte QUE des codes de la liste fermée : c'est ce qui permet de
+ * notifier le titulaire (libellé opposable) et d'auditer la mesure (code) sans
+ * jamais faire circuler de texte libre écrit sur une personne. Le domaine le
+ * re-vérifie — ce DTO est la première barrière, pas la dernière.
+ */
+export class StatuerAccesPorteurDto {
+  @ApiProperty({
+    description:
+      "Accès VOULU après l'acte : `false` retire l'accès porteur, `true` le rétablit.",
+  })
+  @IsBoolean()
+  acces: boolean;
+
+  @ApiPropertyOptional({
+    enum: MotifRetraitAccesPorteur,
+    description:
+      'Obligatoire lorsque acces = false. LISTE FERMÉE : seul le libellé associé à ce code est communiqué au titulaire.',
+  })
+  @ValidateIf((dto: StatuerAccesPorteurDto) => dto.acces === false)
+  @IsEnum(MotifRetraitAccesPorteur)
+  motif?: MotifRetraitAccesPorteur;
 }
 
 /** Pagination et filtre de la file de traitement du back-office. */

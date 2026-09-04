@@ -123,7 +123,8 @@ Déclarées dans les entités (le `synchronize` du seed les pose en dev), à jou
   -- SEUL contrôle qui tienne sous concurrence — sans lui, deux requêtes
   -- simultanées passent toutes deux la vérification applicative et ouvrent
   -- deux dossiers. La clause doit rester identique à `STATUTS_NON_TERMINAUX`
-  -- du domaine (un test éprouve la parité).
+  -- du domaine : `demande-acces-porteur.index.spec.ts` lit la clause dans la
+  -- métadonnée TypeORM du décorateur et la compare au domaine.
   CREATE UNIQUE INDEX "UQ_demande_acces_porteur_en_cours"
     ON demande_acces_porteur ("utilisateurId")
     WHERE statut IN ('soumise', 'en_examen');
@@ -133,6 +134,17 @@ Déclarées dans les entités (le `synchronize` du seed les pose en dev), à jou
   - **Aucun backfill** : `porteurAccess = false` est l'état exact du stock existant — le double accès n'existait pas, et il ne s'accorde que par une décision instruite (`PATCH /admin/porteur-access/demandes/:id`, permission `porteur_access:review`). Les porteurs « purs » gardent leur accès par leur rôle.
   - En production, préférer `CREATE INDEX CONCURRENTLY` pour les quatre index non contraignants ; l'index UNIQUE partiel doit être posé sur table vide (c'est le cas à la création) ou en `CREATE UNIQUE INDEX CONCURRENTLY` puis vérification.
   - `ALTER TABLE users ADD COLUMN … DEFAULT false` est instantané depuis PostgreSQL 11 (défaut non volatile, pas de réécriture de table).
-  - `statut` prend l'une de cinq valeurs : `soumise`, `en_examen`, `acceptee`, `refusee`, `retiree`, `caduque` — cette dernière étant posée lorsque le compte demandeur est supprimé et anonymisé avant toute décision (un CONSTAT de la plateforme, distinct d'un retrait par la personne). Aucune contrainte `CHECK` : le vocabulaire est tenu par la machine à états du domaine, comme partout ailleurs dans ce schéma.
+  - `statut` prend l'une de six valeurs : `soumise`, `en_examen`, `acceptee`, `refusee`, `retiree`, `caduque` — cette dernière étant posée lorsque le compte demandeur est supprimé et anonymisé avant toute décision (un CONSTAT de la plateforme, distinct d'un retrait par la personne). Aucune contrainte `CHECK` : le vocabulaire est tenu par la machine à états du domaine, comme partout ailleurs dans ce schéma.
   - `motifRefus` est un CODE de liste fermée (`identite_non_verifiee`, `dossier_incomplet`, `hors_criteres`, `obstacle_legal_lcbft`) — d'où `varchar(40)` et non du texte libre ; `motifRefusComplement` et `motivation` sont les deux seules colonnes de texte libre, purgées par la finalité `demande_porteur_texte_libre` (2 ans après un refus) SANS supprimer la ligne de décision.
-  - **Non appliqué sur la base dev à ce jour** : ce lot n'a pas été joué contre une base (aucun harnais de base jetable dans le dépôt). À poser par `npm run schema:drop && npm run seed` en dev, et par le SQL ci-dessus ailleurs.
+  - **Appliqué sur la base dev le 2026-09-04** (schéma rejoué par `npm run schema:drop && npm run seed`, parcours validé en recette réelle). Sur tout environnement déployé, poser le SQL ci-dessus. Le dépôt ne dispose toujours d'aucun harnais de base jetable : les suites automatisées éprouvent le domaine, l'application et les métadonnées de schéma, jamais PostgreSQL lui-même.
+
+- 2026-09-04 — **Accès porteur : retrait motivé et réversible (lot 4b)**. Horodatage du dernier retrait sur `users`. SQL ordonné, réversible :
+  ```sql
+  ALTER TABLE users ADD COLUMN "accesRevoqueLe" timestamptz NULL;
+  ```
+  Retour arrière : `ALTER TABLE users DROP COLUMN "accesRevoqueLe";`
+  Notes :
+  - **Aucun backfill** : `NULL` est l'état exact du stock existant — aucun accès n'avait jamais été retiré, faute de chemin de révocation. `NULL` signifie « accès en cours, ou jamais ouvert » ; invariant tenu par l'application : `porteurAccess = true` ⟹ `accesRevoqueLe IS NULL`.
+  - **Aucun index** : la colonne n'est jamais un critère de sélection à elle seule — elle est lue par jointure sur la clé primaire de `users` (purge RGPD) et par la lecture ciblée du garde d'accès.
+  - **Pas de table d'historique** : la chronologie des octrois et des retraits vit déjà dans `audit_log` (5 ans, entrées `porteur_access.acces.retire` / `.retabli` et `porteur_access.demande.acceptee` / `.refusee`, avec `porteurAccessAvant` / `porteurAccessApres`). Une seconde table serait une seconde source de vérité à tenir en phase pour une question qui se résume à « quand l'accès s'est-il refermé ? ». Cette date sert de POINT DE DÉPART au barème de conservation d'une demande acceptée (« durée de l'accès, puis 5 ans ») : `RgpdPurgeService` la lit par `COALESCE("accesRevoqueLe", "anonymiseLe", "decideeLe")`.
+  - `ALTER TABLE … ADD COLUMN … NULL` sans défaut est instantané, quelle que soit la version de PostgreSQL.
