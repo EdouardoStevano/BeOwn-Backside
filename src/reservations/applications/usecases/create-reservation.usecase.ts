@@ -12,6 +12,7 @@ import { Reservation } from 'src/reservations/domains/reservation';
 import { ReservationStatus } from 'src/reservations/domains/enums/reservation-status.enum';
 import { CreateReservationDto } from 'src/reservations/presenters/dto/reservation.dto';
 import { ProjectStatus } from 'src/projects/domains/enums/project-status.enum';
+import { ConflitsInteretsService } from 'src/projects/applications/conflits-interets.service';
 
 @Injectable()
 export class CreateReservationUseCase {
@@ -20,6 +21,8 @@ export class CreateReservationUseCase {
     private readonly reservationRepository: ReservationRepository,
     @Inject(PROJECT_REPOSITORY)
     private readonly projectRepository: ProjectRepository,
+    // Conflits d'intérêts (décision D5) — en queue de constructeur.
+    private readonly conflitsInterets: ConflitsInteretsService,
   ) {}
 
   async execute(
@@ -28,6 +31,11 @@ export class CreateReservationUseCase {
   ): Promise<Reservation> {
     const project = await this.projectRepository.findProjectById(dto.projetId);
     if (!project) throw new NotFoundException('Projet introuvable.');
+
+    // Conflits d'intérêts (décision D5) : réserver, c'est se placer dans la
+    // file d'une collecte et en afficher l'engouement. Le porteur du projet
+    // n'y a pas sa place. Projet déjà chargé, aucune requête.
+    await this.conflitsInterets.assertPasPorteurDuProjet(userId, project);
 
     if (project.statut !== ProjectStatus.ANNONCE) {
       throw new BadRequestException(

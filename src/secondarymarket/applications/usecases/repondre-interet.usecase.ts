@@ -15,6 +15,7 @@ import { InitiateBuyUseCase } from './initiate-buy.usecase';
 import { estIndisponibiliteFournisseur } from 'src/common/yousign/signature-provider.error';
 import { CessionCompensationService } from 'src/secondarymarket/applications/cession-compensation.service';
 import { formatEur } from 'src/shared/money/format-eur';
+import { ConflitsInteretsService } from 'src/projects/applications/conflits-interets.service';
 
 /**
  * Réponse du vendeur à une marque d'intérêt — art. 25 du règlement
@@ -38,6 +39,8 @@ export class RepondreInteretUseCase {
     private readonly initiateBuy: InitiateBuyUseCase,
     private readonly notifications: NotificationService,
     private readonly compensation: CessionCompensationService,
+    // Conflits d'intérêts (décision D5) — en queue de constructeur.
+    private readonly conflitsInterets: ConflitsInteretsService,
   ) {}
 
   async accepter(
@@ -53,6 +56,18 @@ export class RepondreInteretUseCase {
         "Aucune marque d'intérêt exploitable sur cette annonce.",
       );
     }
+
+    // ── Conflits d'intérêts (décision D5) ────────────────────────────────────
+    // La garde porte sur l'ACHETEUR, pas sur le vendeur qui répond : c'est lui
+    // qui acquiert les parts et qui sera débité. Elle est rejouée ici, et pas
+    // seulement à l'expression d'intérêt, parce que le porteur d'un projet peut
+    // l'être devenu ENTRE les deux : rien ne doit se former sur un conflit né
+    // dans l'intervalle. Elle passe avant la réservation des fonds, pour ne
+    // bloquer aucun euro sur une cession qui ne peut pas aboutir.
+    await this.conflitsInterets.assertPasPorteurDuProjetCede(
+      acheteurId,
+      ordre.investissementId,
+    );
 
     const claim = await this.ordreRepo
       .createQueryBuilder()

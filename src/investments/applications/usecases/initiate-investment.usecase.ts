@@ -23,6 +23,7 @@ import { formatEur } from 'src/shared/money/format-eur';
 import { ContractGeneratorService } from './contract-generator.service';
 import { SignatureProvider } from 'src/signatures/applications/ports/signature-provider.port';
 import { Investment } from 'src/investments/domains/investment';
+import { ConflitsInteretsService } from 'src/projects/applications/conflits-interets.service';
 
 @Injectable()
 export class InitiateInvestmentUseCase {
@@ -46,6 +47,8 @@ export class InitiateInvestmentUseCase {
     private readonly cloudStorage: CloudStorageService,
     private readonly contractGenerator: ContractGeneratorService,
     private readonly signatureProvider: SignatureProvider,
+    // Conflits d'intérêts (décision D5) — en queue de constructeur.
+    private readonly conflitsInterets: ConflitsInteretsService,
   ) {}
 
   async execute(
@@ -56,6 +59,10 @@ export class InitiateInvestmentUseCase {
     // ── Validation du projet ──────────────────────────────────────────────────
     const project = await this.projectRepo.findOne({ where: { id: projetId } });
     if (!project) throw new NotFoundException('Projet introuvable');
+
+    // Conflits d'intérêts (décision D5) : le porteur de ce projet n'ouvre pas
+    // de parcours de signature dessus. Projet déjà chargé, aucune requête.
+    await this.conflitsInterets.assertPasPorteurDuProjet(userId, project);
 
     if (project.statut !== ProjectStatus.EN_COLLECTE) {
       throw new BadRequestException(

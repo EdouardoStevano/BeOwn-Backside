@@ -26,6 +26,13 @@ import { PayoutMethodError } from 'src/payments/applications/ports/payout-method
 import { PayoutMethodExceptionFilter } from 'src/payments/presenters/http/payout-method-exception.filter';
 import { SignatureProviderUnavailableError } from 'src/common/yousign/signature-provider.error';
 import { SignatureProviderExceptionFilter } from 'src/common/yousign/signature-provider-exception.filter';
+import {
+  ConflitsInteretsError,
+  ConflitsInteretsErrorKind,
+  DetenteurDePartsDeLaSocieteSupportError,
+  PorteurDeSonPropreProjetError,
+} from 'src/projects/domains/errors/conflits-interets.errors';
+import { ConflitsInteretsErrorFilter } from 'src/projects/presenters/http/filters/conflits-interets-error.filter';
 
 /**
  * Anomalie de recette (MAJEUR) : `AuditInterceptor` écrivait
@@ -51,6 +58,13 @@ class IamErrorStub extends IamError {
 class PorteurAccessErrorStub extends PorteurAccessError {
   readonly code = 'STUB';
   constructor(readonly kind: PorteurAccessErrorKind) {
+    super('peu importe');
+  }
+}
+
+class ConflitsInteretsErrorStub extends ConflitsInteretsError {
+  readonly code = 'STUB';
+  constructor(readonly kind: ConflitsInteretsErrorKind) {
     super('peu importe');
   }
 }
@@ -133,6 +147,30 @@ describe('Résolution du statut — par famille', () => {
       expect(
         statutHttpDeLErreur(new PayoutMethodError(code as never, 'msg')),
       ).toBe(attendu);
+    });
+  });
+
+  describe('ConflitsInteretsError', () => {
+    it.each([
+      [ConflitsInteretsErrorKind.FORBIDDEN, HttpStatus.FORBIDDEN],
+      [ConflitsInteretsErrorKind.CONFLICT, HttpStatus.CONFLICT],
+    ])('%s → %i', (kind, attendu) => {
+      expect(statutHttpDeLErreur(new ConflitsInteretsErrorStub(kind))).toBe(
+        attendu,
+      );
+    });
+
+    it('les deux refus réels de la décision D5 portent le bon statut', () => {
+      // Le porteur qui vise SON projet : refus d'identité → 403.
+      expect(
+        statutHttpDeLErreur(new PorteurDeSonPropreProjetError('motif')),
+      ).toBe(403);
+      // Le candidat porteur déjà détenteur de parts : refus d'état → 409.
+      expect(
+        statutHttpDeLErreur(
+          new DetenteurDePartsDeLaSocieteSupportError('motif'),
+        ),
+      ).toBe(409);
     });
   });
 
@@ -219,6 +257,12 @@ describe('Non-divergence : le statut journalisé est celui envoyé au client', (
       rejouer: (e: never, host: ArgumentsHost) =>
         new PayoutMethodExceptionFilter().catch(e, host),
     })),
+    ...Object.values(ConflitsInteretsErrorKind).map((kind) => ({
+      famille: `ConflitsInteretsError(${kind})`,
+      erreur: new ConflitsInteretsErrorStub(kind),
+      rejouer: (e: never, host: ArgumentsHost) =>
+        new ConflitsInteretsErrorFilter().catch(e, host),
+    })),
     {
       famille: 'SignatureProviderUnavailableError',
       erreur: new SignatureProviderUnavailableError({
@@ -246,10 +290,11 @@ describe('Non-divergence : le statut journalisé est celui envoyé au client', (
   );
 
   it('couvre TOUTES les familles d’erreurs métier à filtre du dépôt', () => {
-    // Garde-fou d'exhaustivité : une cinquième famille introduite sans être
+    // Garde-fou d'exhaustivité : une famille de plus introduite sans être
     // ajoutée ici — et donc au résolveur — fait échouer ce test.
     const familles = new Set(cas.map((c) => c.famille.replace(/\(.*\)$/, '')));
     expect([...familles].sort()).toEqual([
+      'ConflitsInteretsError',
       'IamError',
       'PayoutMethodError',
       'PorteurAccessError',

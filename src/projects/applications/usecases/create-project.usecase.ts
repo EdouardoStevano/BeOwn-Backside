@@ -34,7 +34,20 @@ export class CreateProjectUseCase {
 
     // Art. 8 : les interdictions de conflit d'intérêts se vérifient avant tout
     // le reste — une offre interdite n'a pas à être examinée au fond.
-    if (porteurId) await this.conflitsInterets.assertPorteurEligible(porteurId);
+    if (porteurId) {
+      await this.conflitsInterets.assertPorteurEligible(porteurId);
+
+      // Décision D5, SENS INVERSE : on ne se rattache pas comme porteur à un
+      // projet dont on détient déjà des parts. C'est ici, et nulle part
+      // ailleurs, que `porteurId` est posé sur un projet — la mise à jour de
+      // projet ne touche pas ce champ. Le conflit ne peut naître que d'une
+      // SOCIÉTÉ SUPPORT réutilisée : un projet neuf n'a pas encore d'associés,
+      // mais la SCI à laquelle on l'adosse, elle, en a peut-être déjà.
+      await this.conflitsInterets.assertPorteurSansPartsDeLaSocieteSupport(
+        porteurId,
+        dto.spvId,
+      );
+    }
 
     await this.verifierPlafondPorteur(porteurId, dto.capitalCible);
 

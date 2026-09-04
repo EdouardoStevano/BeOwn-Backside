@@ -161,6 +161,9 @@ describe('TopUpInvestmentUseCase — atomicité', () => {
       notificationEvents,
       dataSource,
       projectWalletResolver,
+      /* conflitsInterets */ {
+        assertPasPorteurDuProjet: jest.fn().mockResolvedValue(undefined),
+      } as any,
     );
   });
 

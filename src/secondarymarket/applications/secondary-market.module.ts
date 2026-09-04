@@ -28,6 +28,7 @@ import { UsersModule } from 'src/iam/applications/users.module';
 import { UsersInfrastructureModule } from 'src/iam/infrastructure/users-infrastructure.module';
 import { SignaturesModule } from 'src/signatures/applications/signatures.module';
 import { AmlModule } from 'src/common/aml/aml.module';
+import { ConflitsInteretsModule } from 'src/projects/applications/conflits-interets.module';
 
 @Module({
   imports: [
@@ -49,6 +50,10 @@ import { AmlModule } from 'src/common/aml/aml.module';
     // Gel des avoirs : la garde 403 AVOIRS_GELES protège l'expression
     // d'intérêt et l'initiation d'achat (port GelDesAvoirsPort).
     AmlModule,
+    // Conflits d'intérêts (décision D5) : le porteur d'un projet ne rachète
+    // pas les parts de sa propre société support — garde posée sur l'ACHETEUR
+    // aux trois étapes du parcours de cession.
+    ConflitsInteretsModule,
   ],
   providers: [
     ContractGeneratorService,

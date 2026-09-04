@@ -9,6 +9,7 @@ import { RESERVATION_REPOSITORY } from './ports/repositories/reservation.reposit
 import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructure.module';
 import { KycEntity } from 'src/profiles/infrastructure/persistences/entities/kyc.entity';
 import { KycValidatedGuard } from 'src/common/auth/kyc-validated.guard';
+import { ConflitsInteretsModule } from 'src/projects/applications/conflits-interets.module';
 
 @Module({
   imports: [
@@ -16,6 +17,9 @@ import { KycValidatedGuard } from 'src/common/auth/kyc-validated.guard';
     ReservationsInfrastructureModule,
     ProjectsInfrastructureModule,
     IamInfrastructureModule,
+    // Conflits d'intérêts (décision D5) : le porteur d'un projet ne réserve
+    // pas sur sa propre collecte.
+    ConflitsInteretsModule,
   ],
   providers: [
     CreateReservationUseCase,

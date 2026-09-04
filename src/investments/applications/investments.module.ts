@@ -39,6 +39,7 @@ import { RefundCollecteService } from './refund-collecte.service';
 import { ConfirmRetractationCronService } from './confirm-retractation-cron.service';
 import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entities/transaction.entity';
 import { WalletsModule } from 'src/wallets/applications/wallets.module';
+import { ConflitsInteretsModule } from 'src/projects/applications/conflits-interets.module';
 
 @Module({
   imports: [
@@ -77,6 +78,10 @@ import { WalletsModule } from 'src/wallets/applications/wallets.module';
     // Vigilance LCB-FT sur la souscription (art. L.561-10 CMF) : alerte,
     // jamais blocage.
     AmlModule,
+    // Conflits d'intérêts (décision D5) : le porteur d'un projet n'y souscrit
+    // pas, n'y ajoute pas de fractions et n'y ouvre pas de parcours de
+    // signature.
+    ConflitsInteretsModule,
   ],
   providers: [
     ReinvestirLoyersService,

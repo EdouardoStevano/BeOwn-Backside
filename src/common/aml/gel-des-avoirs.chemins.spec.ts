@@ -72,7 +72,9 @@ describe('Gel des avoirs — refus 403 sur les 4 chemins d’argent sortant', ()
         piege(), // projectWalletResolver
         piege(), // amlMonitor
         piege(), // bonusParrainage
-        garde, // gelDesAvoirs — dernière position
+        garde, // gelDesAvoirs
+        piege(), // conflitsInterets — atteint seulement APRÈS le chargement du
+        // projet, donc jamais dans ces cas : les pièges de dépôt sautent avant.
       );
 
     it('compte gelé → 403 AVOIRS_GELES avant toute lecture', async () => {
@@ -136,7 +138,8 @@ describe('Gel des avoirs — refus 403 sur les 4 chemins d’argent sortant', ()
         piege(), // investRepo
         piege(), // notifications
         piege(), // devisCession
-        garde, // gelDesAvoirs — dernière position
+        garde, // gelDesAvoirs
+        piege(), // conflitsInterets — après la lecture de l'annonce
       );
 
     it('acheteur gelé → 403 AVOIRS_GELES avant toute lecture de l’annonce', async () => {
@@ -166,7 +169,8 @@ describe('Gel des avoirs — refus 403 sur les 4 chemins d’argent sortant', ()
         piege(), // cloudStorage
         piege(), // contractGenerator
         piege(), // signatureProvider
-        garde, // gelDesAvoirs — dernière position
+        garde, // gelDesAvoirs
+        piege(), // conflitsInterets — après la lecture de l'annonce
       );
 
     it('acheteur gelé (fenêtre intérêt→acceptation) → 403 AVOIRS_GELES', async () => {

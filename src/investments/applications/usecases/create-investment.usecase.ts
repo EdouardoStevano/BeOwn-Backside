@@ -63,6 +63,7 @@ import {
 import { calculerEcheanceRetractation } from 'src/investments/domains/retractation';
 import { AmlMonitorService } from 'src/common/aml/aml-monitor.service';
 import { GelDesAvoirsPort } from 'src/common/aml/gel-des-avoirs.port';
+import { ConflitsInteretsService } from 'src/projects/applications/conflits-interets.service';
 
 @Injectable()
 export class CreateInvestmentUseCase {
@@ -95,6 +96,8 @@ export class CreateInvestmentUseCase {
     private readonly bonusParrainage: AttribuerBonusParrainageService,
     // Gel des avoirs (L. 562-4 CMF) — port DIP, en dernière position.
     private readonly gelDesAvoirs: GelDesAvoirsPort,
+    // Conflits d'intérêts (décision D5) — en queue, comme les précédents.
+    private readonly conflitsInterets: ConflitsInteretsService,
   ) {}
 
   async execute(userId: number, dto: CreateInvestmentDto): Promise<Investment> {
@@ -117,6 +120,12 @@ export class CreateInvestmentUseCase {
     }
     const project = await this.projectRepository.findProjectById(dto.projetId);
     if (!project) throw new NotFoundException('Projet introuvable.');
+
+    // ── Conflits d'intérêts (décision D5) ────────────────────────────────────
+    // Le porteur de CE projet n'y souscrit pas — y compris par le
+    // réinvestissement automatique des loyers, qui passe par ce même usecase.
+    // Le projet est déjà chargé : la garde ne coûte aucune requête.
+    await this.conflitsInterets.assertPasPorteurDuProjet(userId, project);
 
     // ── Catégorie de l'investisseur — règlement (UE) 2020/1503 ────────────────
     // Le défaut protecteur est « non averti » : un profil absent, incomplet ou
