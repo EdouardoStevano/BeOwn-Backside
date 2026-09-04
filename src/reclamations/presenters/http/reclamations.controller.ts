@@ -40,6 +40,19 @@ import {
  *
  * L'article impose non seulement de traiter les réclamations, mais de PUBLIER
  * la description de la procédure : d'où la route publique `/reclamations/procedure`.
+ *
+ * ## Régime d'accès
+ *
+ * Une réclamation contient l'identité d'un plaignant, le récit d'un litige et
+ * la réponse de la plateforme. Deux catégories d'appelants seulement y ont
+ * accès :
+ *  - le DEMANDEUR, pour ses propres réclamations ;
+ *  - les rôles portant `reclamations:manage`, pour les traiter.
+ *
+ * Aucune route ne raisonne « par exclusion » d'un rôle : c'est ce qui avait
+ * ouvert la consultation à tout compte back-office, y compris ceux qui n'ont
+ * rien à voir avec le traitement des réclamations. La décision appartient au
+ * service, qui la prend sur la ressource chargée.
  */
 @ApiTags('Réclamations')
 @Controller('reclamations')
@@ -91,24 +104,36 @@ export class ReclamationsController {
 
   @ApiOperation({ summary: 'File de traitement des réclamations' })
   @ApiQuery({ name: 'statut', required: false, enum: StatutReclamation })
+  @ApiResponse({ status: 403, description: 'Rôle sans permission reclamations:manage' })
   @UseGuards(PermissionsGuard)
   @RequirePermission('reclamations:manage')
   @Get('back-office')
-  async fileDeTraitement(@Query('statut') statut?: StatutReclamation) {
-    return this.reclamations.listerPourBackOffice(statut);
+  async fileDeTraitement(
+    @CurrentUser() user: ActiveUser,
+    @Query('statut') statut?: StatutReclamation,
+  ) {
+    return this.reclamations.listerPourBackOffice(user, statut);
   }
 
-  @ApiOperation({ summary: 'Consulter une réclamation' })
+  @ApiOperation({
+    summary: 'Consulter une réclamation',
+    description:
+      "Réservée au demandeur de la réclamation et aux rôles portant la permission reclamations:manage.",
+  })
+  @ApiResponse({ status: 403, description: "Réclamation d'autrui, sans habilitation à la traiter" })
+  @ApiResponse({ status: 404, description: 'Réclamation introuvable' })
   @Get(':id')
   async consulter(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() user: ActiveUser,
   ) {
-    const estBackOffice = Boolean(user.role && user.role !== 'investisseur');
-    return this.reclamations.consulter(id, user.userId, estBackOffice);
+    // Le presenter transmet l'IDENTITÉ de l'appelant, jamais un droit :
+    // l'habilitation se décide dans le service, sur la ressource chargée.
+    return this.reclamations.consulter(id, user);
   }
 
   @ApiOperation({ summary: 'Prendre une réclamation en instruction' })
+  @ApiResponse({ status: 403, description: 'Rôle sans permission reclamations:manage' })
   @UseGuards(PermissionsGuard)
   @RequirePermission('reclamations:manage')
   @Patch(':id/instruction')
@@ -116,10 +141,11 @@ export class ReclamationsController {
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() user: ActiveUser,
   ) {
-    return this.reclamations.prendreEnInstruction(id, user.userId);
+    return this.reclamations.prendreEnInstruction(id, user);
   }
 
   @ApiOperation({ summary: 'Répondre à une réclamation et la clore' })
+  @ApiResponse({ status: 403, description: 'Rôle sans permission reclamations:manage' })
   @UseGuards(PermissionsGuard)
   @RequirePermission('reclamations:manage')
   @Patch(':id/reponse')
@@ -128,6 +154,6 @@ export class ReclamationsController {
     @CurrentUser() user: ActiveUser,
     @Body() dto: RepondreReclamationDto,
   ) {
-    return this.reclamations.repondre(id, user.userId, dto);
+    return this.reclamations.repondre(id, user, dto);
   }
 }

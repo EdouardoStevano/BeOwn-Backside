@@ -321,12 +321,64 @@ export class YouSignService implements SignatureProvider {
     }
   }
 
+  /**
+   * Authenticité d'un webhook YouSign — FAIL-CLOSED.
+   *
+   * ## Le défaut corrigé
+   *
+   * Cette méthode répondait `true` quand `YOUSIGN_WEBHOOK_SECRET` était absente
+   * ou vide, sans même regarder le corps ni l'en-tête. Or c'est la SEULE
+   * barrière du point d'entrée : la route est `@Public()`, hors throttler, et
+   * ce qu'elle déclenche n'est pas anodin — finalisation de contrats signés,
+   * mouvements de fonds sur les cessions, expiration de signatures. Un secret
+   * non configuré — le cas par défaut de `.env.example`, où la variable est
+   * déclarée VIDE, et sans validation au démarrage — laissait donc n'importe
+   * qui piloter ces règlements avec un simple POST.
+   *
+   * Un secret absent n'est pas une autorisation implicite : c'est une
+   * configuration incomplète. Le webhook est refusé, et le journal dit
+   * exactement quoi corriger.
+   *
+   * Effet en développement : aucun, tant que le prestataire de signature actif
+   * est le provider de repli — YouSign n'émet alors aucun webhook. Sur un
+   * environnement réellement branché à YouSign, le refus est le comportement
+   * voulu : mieux vaut des règlements en attente, visibles, qu'un point
+   * d'entrée ouvert.
+   */
   verifyWebhookSignature(rawBody: string, headerSignature: string): boolean {
-    if (!this.webhookSecret) return true;
+    if (!this.webhookSecret) {
+      this.logger.error(
+        'Webhook YouSign REFUSÉ : YOUSIGN_WEBHOOK_SECRET n\'est pas configurée. ' +
+          "Sans ce secret, l'authenticité de l'appel ne peut pas être établie et " +
+          'aucun règlement de signature ne sera traité. Renseignez la variable ' +
+          "d'environnement avec le secret du webhook fourni par YouSign, puis " +
+          'redémarrez le service.',
+      );
+      return false;
+    }
+
     const expected = `sha256=${crypto
       .createHmac('sha256', this.webhookSecret)
       .update(rawBody)
       .digest('hex')}`;
-    return expected === headerSignature;
+
+    return this.comparerConstant(expected, headerSignature);
+  }
+
+  /**
+   * Comparaison à temps constant : une comparaison de chaînes s'arrête au
+   * premier octet différent et laisse mesurer, appel après appel, combien de
+   * caractères de tête sont justes.
+   */
+  private comparerConstant(attendu: string, recu: string | undefined): boolean {
+    if (typeof recu !== 'string') return false;
+
+    const a = Buffer.from(attendu, 'utf-8');
+    const b = Buffer.from(recu, 'utf-8');
+    // `timingSafeEqual` exige des longueurs égales ; les comparer d'abord ne
+    // divulgue que la longueur, qui est ici constante et publique.
+    if (a.length !== b.length) return false;
+
+    return crypto.timingSafeEqual(a, b);
   }
 }
