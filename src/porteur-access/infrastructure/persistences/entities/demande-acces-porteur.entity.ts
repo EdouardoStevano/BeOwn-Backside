@@ -37,7 +37,8 @@ import { MotifRefusAccesPorteur } from 'src/porteur-access/domains/motif-refus';
  * pas seulement par le use case : sans cet index partiel, deux requêtes
  * concurrentes passeraient toutes deux le contrôle applicatif et ouvriraient
  * deux dossiers. La clause reprend `STATUTS_NON_TERMINAUX` du domaine ; les
- * deux listes doivent rester identiques (un test l'éprouve).
+ * deux listes doivent rester identiques — `demande-acces-porteur.index.spec.ts`
+ * LIT cette clause dans la métadonnée TypeORM et la compare au domaine.
  */
 @Index('UQ_demande_acces_porteur_en_cours', ['utilisateurId'], {
   unique: true,

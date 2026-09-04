@@ -382,14 +382,6 @@ export class DemandeAccesPorteur {
   }
 
   /**
-   * Retrait par le demandeur, tant qu'aucune décision n'est rendue.
-   *
-   * L'appartenance est vérifiée DANS le domaine : c'est une règle métier
-   * (« on ne retire que sa propre demande »), pas un détail de transport. Le
-   * contrôleur ne peut donc pas l'oublier. Aucun `decideurAdminId` n'est posé :
-   * un retrait n'est pas une décision de BeOwn.
-   */
-  /**
    * Constat de caducité : le compte demandeur a disparu (clôture, suppression,
    * anonymisation) avant toute décision.
    *
@@ -408,6 +400,14 @@ export class DemandeAccesPorteur {
     this.etat.decideeLe = maintenant;
   }
 
+  /**
+   * Retrait par le demandeur, tant qu'aucune décision n'est rendue.
+   *
+   * L'appartenance est vérifiée DANS le domaine : c'est une règle métier
+   * (« on ne retire que sa propre demande »), pas un détail de transport. Le
+   * contrôleur ne peut donc pas l'oublier. Aucun `decideurAdminId` n'est posé :
+   * un retrait n'est pas une décision de BeOwn.
+   */
   retirer(parUtilisateurId: number, maintenant: Date = new Date()): void {
     if (parUtilisateurId !== this.etat.utilisateurId) {
       throw new DemandeAccesPorteurEtrangereError();
