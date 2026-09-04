@@ -31,6 +31,7 @@ import { PeriodeDistributionEntity } from 'src/distributions/infrastructure/pers
 import { DistributionPartEntity } from 'src/distributions/infrastructure/persistences/entities/distribution-part.entity';
 import { ReclamationEntity } from 'src/reclamations/infrastructure/persistences/entities/reclamation.entity';
 import { NewsEntity } from 'src/news/news.entity';
+import { DemandeAccesPorteurEntity } from 'src/porteur-access/infrastructure/persistences/entities/demande-acces-porteur.entity';
 import { SeedService } from './seed.service';
 
 const SEED_ENTITIES = [
@@ -64,6 +65,7 @@ const SEED_ENTITIES = [
   DistributionPartEntity,
   ReclamationEntity,
   NewsEntity,
+  DemandeAccesPorteurEntity,
 ];
 
 @Module({

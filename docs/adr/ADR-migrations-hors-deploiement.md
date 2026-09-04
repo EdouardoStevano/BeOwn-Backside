@@ -92,3 +92,46 @@ Déclarées dans les entités (le `synchronize` du seed les pose en dev), à jou
   ```
   Retour arrière : `DROP TABLE personne_gelee; ALTER TABLE users DROP COLUMN "avoirsGelesLe"; ALTER TABLE users DROP COLUMN "avoirsGelesMotif";`
   Note : `avoirsGelesLe` NULL = compte non gelé (aucun backfill nécessaire) ; la purge RGPD suspend tout traitement d'un compte où il est non NULL (`suspendusGel` dans le rapport de `RgpdPurgeService`). Les lignes `personne_gelee` ne se suppriment jamais — désactivation logique (`actif=false`) pour trace. Appliqué sur la base dev le 2026-09-03.
+
+- 2026-09-04 — **Accès porteur : demande instruite + double accès (lot 4, décision fondateur D1)**. Drapeau d'accès cumulé sur `users` et table des demandes `demande_acces_porteur` (module `src/porteur-access/`). SQL ordonné, réversible :
+  ```sql
+  -- (a) Drapeau d'accès porteur cumulé. Un investisseur dont la demande est
+  -- acceptée CONSERVE son rôle `investisseur` et gagne ce drapeau ; il est RELU
+  -- EN BASE par PorteurAccessGuard à chaque requête de l'espace porteur.
+  ALTER TABLE users ADD COLUMN "porteurAccess" boolean NOT NULL DEFAULT false;
+
+  -- (b) Dossiers de demande. Aucune FK dure (comme le reste du schéma).
+  CREATE TABLE demande_acces_porteur (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    "utilisateurId" integer NOT NULL,
+    statut varchar NOT NULL DEFAULT 'soumise',
+    motivation text NOT NULL,
+    "cguVersionAcceptee" varchar(20) NOT NULL DEFAULT '1.0',
+    "soumiseLe" timestamptz NOT NULL,
+    "decideeLe" timestamptz NULL,
+    "decideurAdminId" integer NULL,
+    "motifRefus" varchar(40) NULL,
+    "motifRefusComplement" varchar(1000) NULL,
+    "createdAt" timestamptz NOT NULL DEFAULT now(),
+    "updatedAt" timestamptz NOT NULL DEFAULT now()
+  );
+  CREATE INDEX "IDX_demande_acces_porteur_utilisateur" ON demande_acces_porteur ("utilisateurId");
+  CREATE INDEX "IDX_demande_acces_porteur_statut_soumise" ON demande_acces_porteur (statut, "soumiseLe");
+  CREATE INDEX "IDX_demande_acces_porteur_soumise" ON demande_acces_porteur ("soumiseLe");
+  CREATE INDEX "IDX_demande_acces_porteur_decidee" ON demande_acces_porteur ("decideeLe");
+  -- UNICITÉ PARTIELLE : une seule demande NON TERMINALE par compte. C'est le
+  -- SEUL contrôle qui tienne sous concurrence — sans lui, deux requêtes
+  -- simultanées passent toutes deux la vérification applicative et ouvrent
+  -- deux dossiers. La clause doit rester identique à `STATUTS_NON_TERMINAUX`
+  -- du domaine (un test éprouve la parité).
+  CREATE UNIQUE INDEX "UQ_demande_acces_porteur_en_cours"
+    ON demande_acces_porteur ("utilisateurId")
+    WHERE statut IN ('soumise', 'en_examen');
+  ```
+  Retour arrière : `DROP TABLE demande_acces_porteur;` (les index partent avec) puis `ALTER TABLE users DROP COLUMN "porteurAccess";`
+  Notes :
+  - **Aucun backfill** : `porteurAccess = false` est l'état exact du stock existant — le double accès n'existait pas, et il ne s'accorde que par une décision instruite (`PATCH /admin/porteur-access/demandes/:id`, permission `porteur_access:review`). Les porteurs « purs » gardent leur accès par leur rôle.
+  - En production, préférer `CREATE INDEX CONCURRENTLY` pour les quatre index non contraignants ; l'index UNIQUE partiel doit être posé sur table vide (c'est le cas à la création) ou en `CREATE UNIQUE INDEX CONCURRENTLY` puis vérification.
+  - `ALTER TABLE users ADD COLUMN … DEFAULT false` est instantané depuis PostgreSQL 11 (défaut non volatile, pas de réécriture de table).
+  - `motifRefus` est un CODE de liste fermée (`identite_non_verifiee`, `dossier_incomplet`, `hors_criteres`, `obstacle_legal_lcbft`) — d'où `varchar(40)` et non du texte libre ; `motifRefusComplement` et `motivation` sont les deux seules colonnes de texte libre, purgées par la finalité `demande_porteur_texte_libre` (2 ans après un refus) SANS supprimer la ligne de décision.
+  - **Non appliqué sur la base dev à ce jour** : ce lot n'a pas été joué contre une base (aucun harnais de base jetable dans le dépôt). À poser par `npm run schema:drop && npm run seed` en dev, et par le SQL ci-dessus ailleurs.

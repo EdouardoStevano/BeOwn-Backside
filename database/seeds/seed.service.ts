@@ -75,6 +75,9 @@ import {
   genererReference,
 } from 'src/reclamations/domains/reclamation';
 import { NewsEntity, NewsStatus } from 'src/news/news.entity';
+import { DemandeAccesPorteurEntity } from 'src/porteur-access/infrastructure/persistences/entities/demande-acces-porteur.entity';
+import { StatutDemandeAccesPorteur } from 'src/porteur-access/domains/demande-acces-porteur';
+import { CGU_VERSION_COURANTE } from 'src/porteur-access/domains/cgu-version';
 import { DEFAULT_FEE_RATES } from 'src/common/platform-fees/platform-fees.service';
 import { EffetMouvement, LivreSeed } from './seed-ledger';
 import { ACTUALITES, ficiComplet, ficiPartiel } from './seed-fixtures';
@@ -84,12 +87,14 @@ import { ACTUALITES, ficiComplet, ficiPartiel } from './seed-fixtures';
  *  DATAFAKE BeOwn — jeu de données scénarisé pour testeurs réels
  * ════════════════════════════════════════════════════════════════════════════
  *
- *  20 utilisateurs :
+ *  22 utilisateurs :
  *    • 1 SUPER_ADMIN + 4 rôles métier + 6 rôles complémentaires (compliance,
  *      financier, support, dpo, rcci, cgp — auparavant clonés en SQL hors seed)
  *    • 3 PORTEURS   — porteur3 est réunionnais (marché cible La Réunion/France)
- *    • 6 INVESTISSEURS — KYC validé (×3), non démarré, refusé, en revue ;
- *      investisseur6 est une personne morale
+ *    • 8 INVESTISSEURS — KYC validé (×3), non démarré, refusé, en revue ;
+ *      investisseur6 est une personne morale ; investisseur7 a une demande
+ *      d'accès porteur SOUMISE ; investisseur8 a le DOUBLE ACCÈS (rôle
+ *      investisseur + `porteurAccess`, demande acceptée à l'appui)
  *
  *  7 projets couvrant tout le cycle de vie :
  *    A  Résidence Les Jardins (Dakar)   EN_EXPLOITATION — 3 distributions versées
@@ -196,6 +201,8 @@ export class SeedService {
     private readonly notificationRepo: Repository<NotificationEntity>,
     @InjectRepository(AuditLogEntity)
     private readonly auditLogRepo: Repository<AuditLogEntity>,
+    @InjectRepository(DemandeAccesPorteurEntity)
+    private readonly demandeAccesPorteurRepo: Repository<DemandeAccesPorteurEntity>,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -536,6 +543,7 @@ export class SeedService {
       'ordre_marche',
       'avis',
       'signature',
+      'demande_acces_porteur',
     ];
     const rows: Array<{ table_name: string }> = await this.dataSource.query(
       `SELECT table_name FROM information_schema.tables
@@ -633,8 +641,59 @@ export class SeedService {
     await createUser('Diane', 'Données', 'dpo@beown.fr', UserRole.DPO, pwdAdmin, null);
     await createUser('Rachid', 'Contrôle', 'rcci@beown.fr', UserRole.RCCI, pwdAdmin, null);
     await createUser('Camille', 'Gestion', 'cgp@beown.fr', UserRole.CGP, pwdAdmin, null);
+    // 21-22 : personas ACCÈS PORTEUR (lot 4, décision fondateur D1). Ajoutés
+    // APRÈS les 20 existants — aucun userId antérieur ne bouge.
+    // 21 : demande SOUMISE, en attente d'instruction par le back-office.
+    const uInv7 = await createUser('Nadia', 'Rivière', 'investisseur7@beown.fr', UserRole.INVESTISSEUR, pwdInvestisseur, UserType.PP);
+    // 22 : DOUBLE ACCÈS déjà accordé — rôle investisseur CONSERVÉ, plus
+    // `porteurAccess`. C'est le compte qui prouve la décision D1 en recette :
+    // il doit voir son espace investisseur ET l'espace porteur.
+    const uInv8 = await createUser('Téo', 'Lebon', 'investisseur8@beown.fr', UserRole.INVESTISSEUR, pwdInvestisseur, UserType.PP);
+    await this.userRepo.update(
+      { userId: uInv8.userId },
+      { porteurAccess: true },
+    );
 
-    this.logger.log('✅ 20 utilisateurs créés (emails uniques, userId stables)');
+    this.logger.log('✅ 22 utilisateurs créés (emails uniques, userId stables)');
+
+    // ── Demandes d'accès porteur (lot 4) ─────────────────────────────────────
+    // Deux dossiers, un par persona. Celui d'inv8 est ACCEPTÉ : le drapeau
+    // `porteurAccess` posé plus haut n'est jamais orphelin — la pièce qui
+    // justifie l'octroi existe, comme l'exige l'examen prévu aux CGU.
+    await this.demandeAccesPorteurRepo.save(
+      this.demandeAccesPorteurRepo.create({
+        utilisateurId: uInv7.userId,
+        statut: StatutDemandeAccesPorteur.SOUMISE,
+        motivation:
+          "Je porte un immeuble de trois logements à Saint-Denis et souhaite le financer sur BeOwn. J'ai déjà mené deux opérations de rénovation en nom propre.",
+        cguVersionAcceptee: CGU_VERSION_COURANTE,
+        soumiseLe: this.daysAgo(4),
+        decideeLe: null,
+        decideurAdminId: null,
+        motifRefus: null,
+        motifRefusComplement: null,
+      }),
+    );
+    const demandeAcceptee = await this.demandeAccesPorteurRepo.save(
+      this.demandeAccesPorteurRepo.create({
+        utilisateurId: uInv8.userId,
+        statut: StatutDemandeAccesPorteur.ACCEPTEE,
+        motivation:
+          "Gérant d'une SCI familiale au Tampon, je souhaite proposer un programme de deux villas en location longue durée et conserver mon compte investisseur.",
+        cguVersionAcceptee: CGU_VERSION_COURANTE,
+        soumiseLe: this.daysAgo(40),
+        decideeLe: this.daysAgo(33),
+        // Décision IMPUTABLE à un humain : les CGU excluent toute décision
+        // entièrement automatisée.
+        decideurAdminId: admin.userId,
+        motifRefus: null,
+        motifRefusComplement: null,
+      }),
+    );
+    await this.audit(admin, 'porteur_access.demande.acceptee', 'demande_acces_porteur', demandeAcceptee.id, this.daysAgo(33));
+    this.logger.log(
+      "✅ Accès porteur : 1 demande soumise (inv7), 1 acceptée + double accès (inv8)",
+    );
 
     // ════════════════════════════════════════════════════════════════════════
     // 2. PROFILS, KYC & QUESTIONNAIRES D'ADÉQUATION
@@ -2281,7 +2340,7 @@ Deux appartements (T3 et T2) dans une résidence récente du Tampon, tous deux l
     this.logger.log(`  BACK-OFFICE   cio/marketing/analyste/relation/compliance/financier/`);
     this.logger.log(`                support/dpo/rcci/cgp @beown.fr → ${this.ADMIN_PASSWORD}`);
     this.logger.log(`  PORTEURS      porteur1/2/3@beown.fr   → ${this.PORTEUR_PASSWORD}`);
-    this.logger.log(`  INVESTISSEURS investisseur1..6@beown.fr → ${this.INVESTISSEUR_PASSWORD}`);
+    this.logger.log(`  INVESTISSEURS investisseur1..8@beown.fr → ${this.INVESTISSEUR_PASSWORD}`);
     this.logger.log(line);
     this.logger.log('Investisseurs :');
     this.logger.log(`  inv1 Fatou Ndiaye     KYC validé (avertie) — wallet ${solde(wInv1)}`);
@@ -2290,6 +2349,8 @@ Deux appartements (T3 et T2) dans une résidence récente du Tampon, tous deux l
     this.logger.log('  inv4 Jean-Hugues Técher  KYC NON COMMENCÉ (aucun dossier, aucun wallet) — persona gating');
     this.logger.log('  inv5 Marie Payet      KYC REFUSÉ (motif visible côté admin)');
     this.logger.log('  inv6 Grondin Invest   PM — KYC EN REVUE manuelle');
+    this.logger.log("  inv7 Nadia Rivière    demande d'accès porteur SOUMISE (à instruire)");
+    this.logger.log('  inv8 Téo Lebon        DOUBLE ACCÈS : investisseur + espace porteur ouvert');
     this.logger.log(line);
     this.logger.log('Projets :');
     this.logger.log('  A  Résidence Les Jardins   en_exploitation — 3 distributions versées, sortie projetée');
