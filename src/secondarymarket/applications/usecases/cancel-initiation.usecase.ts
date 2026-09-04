@@ -8,7 +8,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { SignatureEntity } from 'src/signatures/infrastructure/persistences/entities/signature.entity';
 import { SignatureStatus } from 'src/signatures/domains/enums/signature-status.enum';
-import { YouSignService } from 'src/common/yousign/yousign.service';
+import { SignatureProvider } from 'src/signatures/applications/ports/signature-provider.port';
 import { CessionCompensationService } from 'src/secondarymarket/applications/cession-compensation.service';
 import { NotificationService } from 'src/notifications/applications/notification.service';
 import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
@@ -33,7 +33,7 @@ export class CancelInitiationUseCase {
     private readonly signatureRepo: Repository<SignatureEntity>,
     @InjectRepository(OrdreMarcheEntity)
     private readonly ordreRepo: Repository<OrdreMarcheEntity>,
-    private readonly youSignService: YouSignService,
+    private readonly signatureProvider: SignatureProvider,
     private readonly compensation: CessionCompensationService,
     private readonly notifications: NotificationService,
   ) {}
@@ -59,12 +59,13 @@ export class CancelInitiationUseCase {
       .execute();
     if (!annulation.affected) return; // idempotent
 
-    // Annuler la procédure YouSign de manière non-bloquante
-    this.youSignService
+    // Clore la demande côté prestataire de manière non-bloquante (no-op
+    // documenté sur le provider de repli).
+    this.signatureProvider
       .cancelSignatureRequest(signature.youSignRequestId)
       .catch((err) =>
         this.logger.warn(
-          `Could not cancel YouSign ${signature.youSignRequestId}: ${err?.message}`,
+          `Could not cancel signature request ${signature.youSignRequestId}: ${err?.message}`,
         ),
       );
 

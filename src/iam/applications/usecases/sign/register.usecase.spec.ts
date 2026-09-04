@@ -1,5 +1,8 @@
 import { RegisterUseCase } from './register.usecase';
-import { EmailAlreadyRegisteredError } from 'src/iam/domains/errors';
+import {
+  CguNotAcceptedError,
+  EmailAlreadyRegisteredError,
+} from 'src/iam/domains/errors';
 import { User } from 'src/iam/domains/models/user';
 import { buildUser as buildUserFixture } from 'src/iam/domains/models/user.fixture';
 import { UserStatus } from 'src/iam/domains/enums/user.enum';
@@ -9,6 +12,9 @@ const INPUT = {
   firstname: 'Jean',
   email: 'user@example.com',
   password: 'S3cret!password',
+  // Consentement CGU (lot 2) : requis par le usecase, cas de refus testés plus bas.
+  accepteCgu: true,
+  cguVersion: '1.0',
 };
 
 const makeUsecase = (existing: User | null = null) => {
@@ -96,4 +102,24 @@ describe('RegisterUseCase', () => {
     expect(userFactory.create).not.toHaveBeenCalled();
     expect(userRepository.save).not.toHaveBeenCalled();
   });
+  it.each([
+    ['absence du champ', { ...INPUT, accepteCgu: undefined }],
+    ['acceptation à false', { ...INPUT, accepteCgu: false }],
+    ['version vide', { ...INPUT, cguVersion: '   ' }],
+    ['version absente', { ...INPUT, cguVersion: undefined }],
+  ])(
+    'refuse l’inscription sans consentement CGU exploitable : %s',
+    async (_cas, entree) => {
+      const { usecase, userRepository, eventBus } = makeUsecase();
+
+      await expect(usecase.execute(entree as any)).rejects.toBeInstanceOf(
+        CguNotAcceptedError,
+      );
+      // Refus AVANT toute lecture ou écriture : rien ne part en base, rien
+      // n’est annoncé.
+      expect(userRepository.findByEmail).not.toHaveBeenCalled();
+      expect(userRepository.save).not.toHaveBeenCalled();
+      expect(eventBus.publish).not.toHaveBeenCalled();
+    },
+  );
 });

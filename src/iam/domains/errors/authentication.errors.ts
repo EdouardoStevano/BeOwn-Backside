@@ -80,6 +80,27 @@ export class PasswordResetEmailFailedError extends IamError {
   }
 }
 
+/** Code stable consommé par le front quand l'inscription omet les CGU. */
+export const CGU_NOT_ACCEPTED_CODE = 'CGU_NOT_ACCEPTED';
+
+/**
+ * Inscription sans acceptation explicite des CGU (`accepteCgu !== true`), ou
+ * acceptation sans version identifiable (`cguVersion` vide) — une acceptation
+ * dont on ne peut pas dire quel texte elle couvre n'est pas une preuve de
+ * consentement (art. 7.1 RGPD), donc elle est refusée au même titre.
+ *
+ * INVALID_INPUT → 400 par `IamErrorFilter`, avec le code stable ci-dessus.
+ */
+export class CguNotAcceptedError extends IamError {
+  readonly kind = IamErrorKind.INVALID_INPUT;
+  constructor() {
+    super(
+      "Vous devez accepter les conditions générales d'utilisation pour créer votre compte.",
+      { code: CGU_NOT_ACCEPTED_CODE },
+    );
+  }
+}
+
 /** Code stable du conflit d'inscription non imputable aux données saisies. */
 export const REGISTRATION_CONFLICT_CODE = 'REGISTRATION_CONFLICT';
 

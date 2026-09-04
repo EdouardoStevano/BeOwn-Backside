@@ -10,7 +10,7 @@ import { DocumentsInfrastructureModule } from 'src/documents/infrastructure/docu
 import { UsersInfrastructureModule } from 'src/iam/infrastructure/users-infrastructure.module';
 import { ProfilesInfrastructureModule } from 'src/profiles/infrastructure/profiles-infrastructure.module';
 import { CloudStorageModule } from 'src/shared/cloud-storage/cloud-storage.module';
-import { YouSignModule } from 'src/common/yousign/yousign.module';
+import { SignatureProviderModule } from 'src/signatures/infrastructure/signature-provider.module';
 import { CreateInvestmentUseCase } from './usecases/create-investment.usecase';
 import { ContractGeneratorService } from './usecases/contract-generator.service';
 import { TopUpInvestmentUseCase } from './usecases/top-up-investment.usecase';
@@ -70,7 +70,9 @@ import { WalletsModule } from 'src/wallets/applications/wallets.module';
     UsersInfrastructureModule,
     ProfilesInfrastructureModule,
     CloudStorageModule,
-    YouSignModule,
+    // Port SignatureProvider (DIP) — consommé par InitiateInvestmentUseCase
+    // (parcours 410, conservé mais débranché).
+    SignatureProviderModule,
     NotificationsModule,
     // Vigilance LCB-FT sur la souscription (art. L.561-10 CMF) : alerte,
     // jamais blocage.

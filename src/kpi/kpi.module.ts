@@ -7,6 +7,8 @@ import { TauxDefautPublicationService } from './applications/taux-defaut-publica
 import { TauxDefautController } from './presenters/http/taux-defaut.controller';
 import { PublicStatisticsController } from './presenters/http/public-statistics.controller';
 import { PublicStatisticsService } from './applications/public-statistics.service';
+import { PublicSitemapController } from './presenters/http/public-sitemap.controller';
+import { PublicSitemapService } from './applications/public-sitemap.service';
 
 /**
  * KpiCalculator reste un module pur, importé directement par les services.
@@ -17,8 +19,16 @@ import { PublicStatisticsService } from './applications/public-statistics.servic
   imports: [
     TypeOrmModule.forFeature([ProjectEntity, InvestmentEntity, EcheanceEntity]),
   ],
-  controllers: [TauxDefautController, PublicStatisticsController],
-  providers: [TauxDefautPublicationService, PublicStatisticsService],
+  controllers: [
+    TauxDefautController,
+    PublicStatisticsController,
+    PublicSitemapController,
+  ],
+  providers: [
+    TauxDefautPublicationService,
+    PublicStatisticsService,
+    PublicSitemapService,
+  ],
   exports: [TauxDefautPublicationService],
 })
 export class KpiModule {}

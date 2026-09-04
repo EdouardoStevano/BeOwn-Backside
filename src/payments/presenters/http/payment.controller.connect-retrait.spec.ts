@@ -89,6 +89,7 @@ describe('PaymentController — retrait Stripe Connect (E3, sécurité argent)',
       metricsPort,
       new PayoutDestinationResolver(new InMemoryPayoutMethodsAdapter()),
       /* amlMonitor */ { check: jest.fn().mockResolvedValue(undefined) } as any,
+      /* gelDesAvoirs */ { assertAvoirsNonGeles: jest.fn().mockResolvedValue(undefined) } as any,
     );
 
     controller = new PaymentController(
@@ -128,6 +129,7 @@ describe('PaymentController — retrait Stripe Connect (E3, sécurité argent)',
           retraitExecute: jest.fn().mockResolvedValue(undefined),
         } as any,
       ),
+      /* gelDesAvoirs */ { assertAvoirsNonGeles: jest.fn().mockResolvedValue(undefined) } as any,
     );
   });
 

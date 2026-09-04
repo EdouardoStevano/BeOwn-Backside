@@ -1,4 +1,4 @@
-import { PaymentController } from './payment.controller';
+﻿import { PaymentController } from './payment.controller';
 import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entities/transaction.entity';
 import {
   EcritureGrandLivre,
@@ -139,6 +139,7 @@ describe('PaymentController — le dépôt se rapproche du grand livre (ANO-02)'
       } as any,
       /* amlMonitor */ { check: jest.fn().mockResolvedValue(undefined) } as any,
       /* retraitSettlement */ {} as any,
+      /* gelDesAvoirs */ { assertAvoirsNonGeles: jest.fn().mockResolvedValue(undefined) } as any,
     );
   });
 

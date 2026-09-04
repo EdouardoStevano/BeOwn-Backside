@@ -1,4 +1,4 @@
-export enum DocumentType {
+﻿export enum DocumentType {
   IDENTITE = 'IDENTITE',
   /**
    * Photo du visage exigée par la vérification manuelle, en complément de la
@@ -23,6 +23,11 @@ export enum DocumentType {
   DIS = 'DIS',
   IFU_ANNUEL = 'IFU_ANNUEL',
   CONTRAT_RAJOUT = 'CONTRAT_RAJOUT',
+  /**
+   * Certificat d'acceptation du parcours de signature de repli
+   * (SIGNATURE_PROVIDER=acknowledge) : horodatage serveur + IP + SHA-256.
+   */
+  CERTIFICAT_ACCEPTATION = 'CERTIFICAT_ACCEPTATION',
   DBE_S1 = 'DBE_S1',
 }
 

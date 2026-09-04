@@ -21,7 +21,8 @@ import { SignatureStatus } from 'src/signatures/domains/enums/signature-status.e
 import { WalletType } from 'src/wallets/domains/enums/wallet.enum';
 import { CloudStorageService } from 'src/shared/cloud-storage/cloud-storage.service';
 import { ContractGeneratorService } from 'src/investments/applications/usecases/contract-generator.service';
-import { YouSignService } from 'src/common/yousign/yousign.service';
+import { SignatureProvider } from 'src/signatures/applications/ports/signature-provider.port';
+import { GelDesAvoirsPort } from 'src/common/aml/gel-des-avoirs.port';
 import { formatEur } from 'src/shared/money/format-eur';
 
 /**
@@ -61,7 +62,12 @@ export class InitiateBuyUseCase {
     private readonly userEmailRepo: Repository<UserEmailEntity>,
     private readonly cloudStorage: CloudStorageService,
     private readonly contractGenerator: ContractGeneratorService,
-    private readonly youSignService: YouSignService,
+    // Port DIP : YouSign ou repli « acceptation certifiée » selon
+    // SIGNATURE_PROVIDER (même position de constructeur que l'ancien service
+    // concret — les specs construisent à la main).
+    private readonly signatureProvider: SignatureProvider,
+    // Gel des avoirs (L. 562-4 CMF) — port DIP, en dernière position.
+    private readonly gelDesAvoirs: GelDesAvoirsPort,
   ) {}
 
   async execute(
@@ -69,6 +75,13 @@ export class InitiateBuyUseCase {
     userId: number,
     nbFractions: number,
   ): Promise<{ signingUrl: string; signatureId: string }> {
+    // ── Gel des avoirs de l'ACHETEUR — avant la formation du contrat ─────────
+    // Couvre la fenêtre « intérêt exprimé avant le gel, acceptation vendeur
+    // après » : l'acceptation est alors compensée proprement par
+    // RepondreInteretUseCase (fonds libérés, annonce restaurée) et l'erreur
+    // 403 AVOIRS_GELES remonte. Docs/adr/ADR-gel-des-avoirs.md.
+    await this.gelDesAvoirs.assertAvoirsNonGeles(userId);
+
     // ── Validation de l'ordre ──────────────────────────────────────────────────
     const ordre = await this.ordreRepo.findOne({
       where: { id: ordreId },
@@ -172,11 +185,11 @@ export class InitiateBuyUseCase {
     });
     const savedDoc = await this.documentRepo.save(docEntity);
 
-    // ── Envoi à YouSign + lien de signature embarqué ───────────────────────────
+    // ── Ouverture de la demande de signature (provider configuré) ──────────────
     const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:5173';
     const successRedirectUrl = `${frontendUrl}/dashboard/invest/success?ordreId=${ordreId}`;
-    const { requestId, signerId, signingUrl } =
-      await this.youSignService.createEmbeddedSignatureRequest({
+    const { requestId, signerId, signingUrl, provider, documentHash } =
+      await this.signatureProvider.createEmbeddedSignatureRequest({
         documentBuffer: pdfBuffer,
         documentName: filename,
         signerEmail: userEmail?.email ?? '',
@@ -192,6 +205,8 @@ export class InitiateBuyUseCase {
       youSignRequestId: requestId,
       youSignSignerId: signerId,
       youSignSigningUrl: signingUrl,
+      provider,
+      documentHash,
       documentId: savedDoc.id,
       investmentId: existingInvestment?.id ?? null,
       ordreId,

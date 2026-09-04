@@ -13,6 +13,8 @@ export interface CreateUserProps {
   password: string | null;
   socialId: string | null;
   emailVerified?: boolean;
+  /** Acceptation des CGU — relayée telle quelle à `User.register` (qui pose l'horodatage serveur). */
+  cguAcceptation?: { version: string; ip: string | null };
 }
 
 @Injectable()
@@ -39,6 +41,7 @@ export class UserFactory {
       passwordHash,
       socialId: props.socialId,
       emailVerified: props.emailVerified,
+      cguAcceptation: props.cguAcceptation,
     });
   }
 }

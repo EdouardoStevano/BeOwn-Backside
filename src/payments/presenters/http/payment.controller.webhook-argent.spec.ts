@@ -146,6 +146,7 @@ describe('PaymentController — branches argent du webhook Stripe', () => {
         requestRetrait,
         transactionalEmails,
       ),
+      /* gelDesAvoirs */ { assertAvoirsNonGeles: jest.fn().mockResolvedValue(undefined) } as any,
     );
   });
 

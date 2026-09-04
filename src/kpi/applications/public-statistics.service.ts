@@ -26,9 +26,13 @@ export interface PublicStatistics {
  *    (net + IR + CSG = ce que les biens ont réellement produit) ;
  *  - `investisseursActifs`  : nombre DISTINCT de détenteurs d'au moins un
  *    investissement engagé ;
- *  - `tauxOccupationMoyenPct` : `null` tant que l'agrégat locatif n'est pas
- *    branché — un « non publié » assumé, JAMAIS un zéro qui se lirait comme
- *    « tout est vide » ni un chiffre inventé (le front affiche « — »).
+ *  - `tauxOccupationMoyenPct` : moyenne, sur les projets EN_EXPLOITATION
+ *    ayant au moins une unité louable, du taux d'occupation par projet =
+ *    unités couvertes par ≥ 1 bail ACTIF / unités totales — MÊME définition
+ *    que locative-management/get-project-occupation.usecase.ts, répliquée en
+ *    SQL ; `null` (jamais 0) si aucun projet exploité n'a d'unité louable —
+ *    un « non publié » assumé, JAMAIS un zéro qui se lirait comme « tout est
+ *    vide » (le front affiche « — »).
  *
  * CACHE 60 s EN MÉMOIRE DE PROCESSUS — entorse assumée à la règle stateless,
  * documentée : la donnée est publique, idempotente, identique pour tous ; la
@@ -54,7 +58,7 @@ export class PublicStatisticsService {
       return this.cache.valeur;
     }
 
-    const [projets, engagements, loyers] = await Promise.all([
+    const [projets, engagements, loyers, occupation] = await Promise.all([
       this.dataSource.query(
         `SELECT
            COUNT(*) FILTER (WHERE statut IN ('finance', 'en_exploitation', 'cloture')) AS finances,
@@ -73,7 +77,27 @@ export class PublicStatisticsService {
          FROM distribution_part
          WHERE "payeLe" IS NOT NULL`,
       ),
+      // Occupation par projet = unités distinctes couvertes par ≥ 1 bail ACTIF
+      // / unités totales — réplique SQL fidèle de GetProjectOccupationUseCase
+      // (locative-management), moyenne restreinte aux projets en_exploitation
+      // ayant au moins une unité louable. AVG(NULL si aucune ligne) → le
+      // mapping conserve `null`, jamais un 0 inventé.
+      this.dataSource.query(
+        `SELECT ROUND(AVG(t.taux) * 100, 1) AS taux_moyen_pct
+         FROM (
+           SELECT (COUNT(DISTINCT u.id) FILTER (WHERE b.id IS NOT NULL))::numeric
+                    / COUNT(DISTINCT u.id) AS taux
+           FROM unite_louable u
+           INNER JOIN projet p ON p.id = u."projetId"
+           LEFT JOIN bail b
+             ON b."uniteLouableId" = u.id AND b.statut = 'actif'
+           WHERE p.statut = 'en_exploitation'
+           GROUP BY u."projetId"
+         ) t`,
+      ),
     ]);
+
+    const tauxOccupationBrut = occupation[0]?.taux_moyen_pct;
 
     const valeur: PublicStatistics = {
       misAJourLe: new Date().toISOString(),
@@ -82,7 +106,9 @@ export class PublicStatisticsService {
       montantCollecteEur: Number(engagements[0]?.collecte ?? 0),
       loyersDistribuesEur: Number(loyers[0]?.brut ?? 0),
       investisseursActifs: Number(engagements[0]?.investisseurs ?? 0),
-      tauxOccupationMoyenPct: null,
+      // `Number(null)` vaudrait 0 — le null se propage donc explicitement.
+      tauxOccupationMoyenPct:
+        tauxOccupationBrut == null ? null : Number(tauxOccupationBrut),
     };
 
     this.cache = { calculeA: maintenant, valeur };

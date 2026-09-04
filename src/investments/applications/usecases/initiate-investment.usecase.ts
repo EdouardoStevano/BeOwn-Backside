@@ -21,7 +21,7 @@ import { WalletType } from 'src/wallets/domains/enums/wallet.enum';
 import { CloudStorageService } from 'src/shared/cloud-storage/cloud-storage.service';
 import { formatEur } from 'src/shared/money/format-eur';
 import { ContractGeneratorService } from './contract-generator.service';
-import { YouSignService } from 'src/common/yousign/yousign.service';
+import { SignatureProvider } from 'src/signatures/applications/ports/signature-provider.port';
 import { Investment } from 'src/investments/domains/investment';
 
 @Injectable()
@@ -45,7 +45,7 @@ export class InitiateInvestmentUseCase {
     private readonly userEmailRepo: Repository<UserEmailEntity>,
     private readonly cloudStorage: CloudStorageService,
     private readonly contractGenerator: ContractGeneratorService,
-    private readonly youSignService: YouSignService,
+    private readonly signatureProvider: SignatureProvider,
   ) {}
 
   async execute(
@@ -181,11 +181,11 @@ export class InitiateInvestmentUseCase {
     });
     const savedDoc = await this.documentRepo.save(docEntity);
 
-    // ── Envoi à YouSign + lien de signature embarqué ───────────────────────────
+    // ── Ouverture de la demande de signature (provider configuré) ──────────────
     const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:5173';
     const successRedirectUrl = `${frontendUrl}/dashboard/invest/success?investmentId=${savedInvestment.id}`;
-    const { requestId, signerId, signingUrl } =
-      await this.youSignService.createEmbeddedSignatureRequest({
+    const { requestId, signerId, signingUrl, provider, documentHash } =
+      await this.signatureProvider.createEmbeddedSignatureRequest({
         documentBuffer: pdfBuffer,
         documentName: filename,
         signerEmail: userEmail?.email ?? '',
@@ -201,6 +201,8 @@ export class InitiateInvestmentUseCase {
       youSignRequestId: requestId,
       youSignSignerId: signerId,
       youSignSigningUrl: signingUrl,
+      provider,
+      documentHash,
       documentId: savedDoc.id,
       investmentId: savedInvestment.id,
       ordreId: null,

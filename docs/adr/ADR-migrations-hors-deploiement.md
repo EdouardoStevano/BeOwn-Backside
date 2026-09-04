@@ -47,3 +47,48 @@ Déclarées dans les entités (le `synchronize` du seed les pose en dev), à jou
   ```
   Retour arrière : `DROP TABLE parrainage_attribution;` + `ALTER TABLE … DROP COLUMN` sur les quatre colonnes.
   Note : pas de backfill des codes du stock existant — `GET /parrainage/me` génère le code à la première lecture (filet documenté dans AssurerCodeParrainageService).
+- 2026-09-03 — **Signature de repli « acceptation certifiée » (lot 2, mission 1)**. Colonnes sur `signature` (port `SignatureProvider`, provider `acknowledge`). SQL ordonné, réversible :
+  ```sql
+  ALTER TABLE signature ADD COLUMN "provider" varchar NOT NULL DEFAULT 'yousign';
+  ALTER TABLE signature ADD COLUMN "documentHash" varchar NULL;
+  ALTER TABLE signature ADD COLUMN "acknowledgedAt" timestamptz NULL;
+  ALTER TABLE signature ADD COLUMN "acknowledgedIp" varchar NULL;
+  ALTER TABLE signature ADD COLUMN "certificatDocumentId" uuid NULL;
+  ```
+  Retour arrière : `ALTER TABLE signature DROP COLUMN` sur les cinq colonnes.
+  Note : défaut `'yousign'` — tout le stock existant a été ouvert chez YouSign ; les colonnes d'acceptation (`documentHash`, `acknowledgedAt`, `acknowledgedIp`, `certificatDocumentId`) ne sont renseignées que par le parcours de repli (`SIGNATURE_PROVIDER=acknowledge`). Appliqué sur la base dev le 2026-09-03.
+
+- 2026-09-03 — **Preuve de consentement CGU (lot 2, mission 2)**. Colonnes sur `users`, à côté du `cguAccepteesLe` préexistant (jusqu'ici jamais écrit). SQL ordonné, réversible :
+  ```sql
+  ALTER TABLE users ADD COLUMN "cguVersionAcceptee" varchar(20) NULL;
+  ALTER TABLE users ADD COLUMN "cguAcceptationIp" varchar(45) NULL;
+  ```
+  Retour arrière : `ALTER TABLE users DROP COLUMN` sur les deux colonnes.
+  Note : nullable SANS backfill — un consentement ne se reconstitue pas a posteriori (art. 7.1 RGPD) ; les comptes antérieurs au lot 2 et les comptes OAuth restent à NULL. varchar(45) = IPv6 textuelle maximale. Appliqué sur la base dev le 2026-09-03.
+
+- 2026-09-03 — **Anonymisation RGPD + purge par finalité (lot 2, mission 3)**. Module `src/rgpd/` : marqueur d'anonymisation sur `users` (idempotence + date de clôture de la relation d'affaires, point de départ des 5 ans L. 561-12 CMF) et marqueur d'archivage « conservation légale » sur `document` (pièce KYC d'un compte supprimé, conservée puis purgée par le cron à clôture + 5 ans). SQL ordonné, réversible :
+  ```sql
+  ALTER TABLE users ADD COLUMN "anonymiseLe" timestamptz NULL;
+  ALTER TABLE document ADD COLUMN "archiveConservationLegale" boolean NOT NULL DEFAULT false;
+  ```
+  Retour arrière : `ALTER TABLE users DROP COLUMN "anonymiseLe"; ALTER TABLE document DROP COLUMN "archiveConservationLegale";`
+  Note : aucun backfill — le stock de comptes déjà SUPPRIME et non anonymisés est rattrapé automatiquement par le cron de purge (finalité `compte_supprime_a_anonymiser`, sélection auto-extinctive). Appliqué sur la base dev le 2026-09-03.
+
+- 2026-09-03 — **Gel des avoirs (lot 2, mission 4 — art. L. 562-4 CMF)**. Statut gelé sur `users` (posé/levé uniquement par l'endpoint admin compliance, jamais par le screening) et liste interne `personne_gelee` (saisie manuelle registre national des gels — cf. `docs/adr/ADR-gel-des-avoirs.md`). SQL ordonné, réversible :
+  ```sql
+  ALTER TABLE users ADD COLUMN "avoirsGelesLe" timestamptz NULL;
+  ALTER TABLE users ADD COLUMN "avoirsGelesMotif" varchar(500) NULL;
+  CREATE TABLE personne_gelee (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    nom varchar NOT NULL,
+    prenom varchar NOT NULL,
+    "dateNaissance" date NULL,
+    motif varchar(500) NOT NULL,
+    source varchar NOT NULL,
+    actif boolean NOT NULL DEFAULT true,
+    "creePar" integer NOT NULL,
+    "creeLe" timestamptz NOT NULL DEFAULT now()
+  );
+  ```
+  Retour arrière : `DROP TABLE personne_gelee; ALTER TABLE users DROP COLUMN "avoirsGelesLe"; ALTER TABLE users DROP COLUMN "avoirsGelesMotif";`
+  Note : `avoirsGelesLe` NULL = compte non gelé (aucun backfill nécessaire) ; la purge RGPD suspend tout traitement d'un compte où il est non NULL (`suspendusGel` dans le rapport de `RgpdPurgeService`). Les lignes `personne_gelee` ne se suppriment jamais — désactivation logique (`actif=false`) pour trace. Appliqué sur la base dev le 2026-09-03.

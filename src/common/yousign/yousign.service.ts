@@ -5,18 +5,24 @@ import {
   SignatureProviderUnavailableError,
   motifIndisponibilite,
 } from './signature-provider.error';
+import {
+  CreateEmbeddedSignatureParams,
+  EmbeddedSignatureResult,
+  SignatureProvider,
+} from 'src/signatures/applications/ports/signature-provider.port';
 
-export interface EmbeddedSignatureResult {
-  requestId: string;
-  signerId: string;
-  signingUrl: string;
-}
+export type { EmbeddedSignatureResult };
 
 /** Au-delà, on considère que le prestataire ne répondra pas. */
 const DELAI_APPEL_MS_PAR_DEFAUT = 20_000;
 
+/**
+ * Adapter YouSign du port `SignatureProvider`. Garde en propre
+ * `verifyWebhookSignature`, hors port (ISP) : l'authenticité des webhooks est
+ * une affaire entre YouSign et son presenter dédié.
+ */
 @Injectable()
-export class YouSignService {
+export class YouSignService implements SignatureProvider {
   private readonly logger = new Logger(YouSignService.name);
   private readonly baseUrl: string;
   private readonly apiKey: string;
@@ -147,16 +153,9 @@ export class YouSignService {
     return res.json() as T;
   }
 
-  async createEmbeddedSignatureRequest(params: {
-    documentBuffer: Buffer;
-    documentName: string;
-    signerEmail: string;
-    signerFirstname: string;
-    signerLastname: string;
-    expiresAt?: Date;
-    successRedirectUrl?: string;
-    errorRedirectUrl?: string;
-  }): Promise<EmbeddedSignatureResult> {
+  async createEmbeddedSignatureRequest(
+    params: CreateEmbeddedSignatureParams,
+  ): Promise<EmbeddedSignatureResult> {
     const expiresAt =
       params.expiresAt ?? new Date(Date.now() + 48 * 60 * 60 * 1000);
 
@@ -271,6 +270,10 @@ export class YouSignService {
       requestId: signatureRequest.id,
       signerId: signer.id,
       signingUrl,
+      provider: 'yousign',
+      // La preuve YouSign vit dans le dossier de preuve du prestataire ; la
+      // plateforme ne calcule pas d'empreinte de son côté sur ce parcours.
+      documentHash: null,
     };
   }
 

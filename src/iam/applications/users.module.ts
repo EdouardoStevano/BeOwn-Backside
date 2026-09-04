@@ -11,9 +11,12 @@ import { ProfilesInfrastructureModule } from 'src/profiles/infrastructure/profil
 import { DocumentsInfrastructureModule } from 'src/documents/infrastructure/documents-infrastructure.module';
 import { WalletsInfrastructureModule } from 'src/wallets/infrastructure/wallets-infrastructure.module';
 import { NotificationsModule } from 'src/notifications/notifications.module';
+import { RgpdModule } from 'src/rgpd/rgpd.module';
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 import { NotificationEntity } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
 import { InvestorInactivityCronService } from 'src/iam/applications/services/investor-inactivity-cron.service';
+import { PersonalDataExportService } from 'src/iam/applications/services/personal-data-export.service';
+import { PersonalDataController } from 'src/iam/presenters/http/personal-data.controller';
 import { InvestmentEntity } from 'src/investments/infrastructure/persistences/entities/investment.entity';
 import { OrdreMarcheEntity } from 'src/secondarymarket/infrastructure/persistences/entities/ordre-marche.entity';
 import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/wallet.entity';
@@ -46,14 +49,20 @@ import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entit
     DocumentsInfrastructureModule,
     WalletsInfrastructureModule,
     NotificationsModule,
+    // Anonymisation RGPD, invoquée par DeleteAccountUseCase après le
+    // soft-delete (lot 2, mission 3).
+    RgpdModule,
   ],
   providers: [
     DeleteAccountUseCase,
     InvestorInactivityCronService,
     UserFactory,
     { provide: HASHING_SERVICE, useClass: BcryptService },
+    // Export RGPD art. 15/20 — lit via le DataSource global (projection
+    // transverse en lecture seule, voir l'en-tête du service).
+    PersonalDataExportService,
   ],
-  controllers: [UserController],
+  controllers: [UserController, PersonalDataController],
   exports: [UserFactory, DeleteAccountUseCase],
 })
 export class UsersModule {}

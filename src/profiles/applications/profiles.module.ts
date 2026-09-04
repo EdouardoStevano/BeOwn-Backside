@@ -21,6 +21,7 @@ import { RiskScoringService } from './risk-scoring.service';
 import { BeneficiaireEffectifEntity } from '../infrastructure/persistences/entities/beneficiaire-effectif.entity';
 import { ProfilPMEntity } from '../infrastructure/persistences/entities/profil-pm.entity';
 import { BeneficiaireEffectifController } from '../presenters/http/beneficiaire-effectif.controller';
+import { AmlModule } from 'src/common/aml/aml.module';
 
 @Module({
   imports: [
@@ -29,6 +30,9 @@ import { BeneficiaireEffectifController } from '../presenters/http/beneficiaire-
     NotificationsModule,
     // E-mails « identité vérifiée » / « identité refusée » sur décision admin.
     TransactionalEmailModule,
+    // Screening de la liste de gel au passage KYC → VALIDE (port
+    // SanctionsScreeningPort — signale, ne gèle jamais seul).
+    AmlModule,
     TypeOrmModule.forFeature([QuestionnaireAdequationEntity, ProfilPPEntity, UserEntity, BeneficiaireEffectifEntity, ProfilPMEntity]),
   ],
   providers: [

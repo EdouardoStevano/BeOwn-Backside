@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
+﻿import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { PaymentController } from './payment.controller';
 import { UserRole } from 'src/iam/domains/enums/user.enum';
 
@@ -64,6 +64,7 @@ function build(overrides: Record<string, any> = {}) {
     } as any,
     /* amlMonitor */ { check: jest.fn().mockResolvedValue(undefined) } as any,
     /* retraitSettlement */ {} as any,
+      /* gelDesAvoirs */ { assertAvoirsNonGeles: jest.fn().mockResolvedValue(undefined) } as any,
   );
 
   return { controller, stripeService, crediterApportPorteur, projectRepo, notificationService, metrics };

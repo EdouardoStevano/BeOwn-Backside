@@ -66,6 +66,7 @@ import { SkipThrottle, Throttle } from '@nestjs/throttler';
 import { NotificationService } from 'src/notifications/applications/notification.service';
 import { TransactionalEmailNotifier } from 'src/shared/email/transactional-email.notifier';
 import { AmlMonitorService } from 'src/common/aml/aml-monitor.service';
+import { GelDesAvoirsPort } from 'src/common/aml/gel-des-avoirs.port';
 import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
 import { UserRole } from 'src/iam/domains/enums/user.enum';
 import { AuditLogService } from 'src/notifications/applications/audit-log.service';
@@ -128,6 +129,9 @@ export class PaymentController {
     // rattrapage (`RetraitsReaperService`) doit clore EXACTEMENT de la même
     // façon quand l'événement n'a jamais été reçu.
     private readonly retraitSettlement: RetraitSettlementService,
+    // Gel des avoirs (L. 562-4 CMF) — port DIP, en dernière position (les
+    // specs construisent ce contrôleur à la main).
+    private readonly gelDesAvoirs: GelDesAvoirsPort,
   ) {}
 
   private async assertCanAccessKycSession(
@@ -184,6 +188,12 @@ export class PaymentController {
     @Body() dto: CreatePaymentIntentDto,
     @CurrentUser() user: ActiveUser,
   ) {
+    // ── Gel des avoirs — AVANT toute création d'intention chez le PSP ────────
+    // Le gel bloque la CRÉATION du dépôt (aucune nouvelle opération sur le
+    // compte) ; un PaymentIntent déjà payé chez Stripe reste, lui, crédité par
+    // le webhook — refuser le crédit d'un paiement encaissé créerait un écart
+    // de réconciliation (docs/adr/ADR-gel-des-avoirs.md). 403 AVOIRS_GELES.
+    await this.gelDesAvoirs.assertAvoirsNonGeles(user.userId);
     return this.stripeService.createPaymentIntent({
       amount: dto.amount,
       currency: dto.currency,

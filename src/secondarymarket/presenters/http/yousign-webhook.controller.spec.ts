@@ -1,4 +1,5 @@
 import { YouSignWebhookController } from './yousign-webhook.controller';
+import { FinalizeSignedContractUseCase } from 'src/signatures/applications/usecases/finalize-signed-contract.usecase';
 import { SignatureEntity } from 'src/signatures/infrastructure/persistences/entities/signature.entity';
 import { SignatureStatus } from 'src/signatures/domains/enums/signature-status.enum';
 import { InvestmentEntity } from 'src/investments/infrastructure/persistences/entities/investment.entity';
@@ -136,15 +137,14 @@ describe('YouSignWebhookController.handleSignatureDone (atomicité SIGNED)', () 
       execute: jest.fn().mockResolvedValue('noop'),
     };
 
-    const controller = new YouSignWebhookController(
+    // Le règlement atomique vit désormais dans FinalizeSignedContractUseCase
+    // (extraction verbatim hors du presenter) : c'est LUI que ces tests
+    // exercent — le contrôleur ne fait plus que router le webhook vers lui.
+    const finalize = new FinalizeSignedContractUseCase(
       signatureRepo,
-      noopRepo, // investRepo (unused: exécution via manager)
-      noopRepo, // echeanceRepo
+      noopRepo, // ordreRepo (branche souscription initiale : inutilisé)
       noopRepo, // projectRepo
-      noopRepo, // ordreRepo
       noopRepo, // documentRepo
-      noopRepo, // walletRepo
-      noopRepo, // txRepo
       dataSource,
       youSignService,
       notificationService,
@@ -153,17 +153,22 @@ describe('YouSignWebhookController.handleSignatureDone (atomicité SIGNED)', () 
       notificationEvents,
       platformFees,
       metrics,
+    );
+    const controller = new YouSignWebhookController(
+      youSignService,
+      metrics,
       expirerSignature,
+      finalize,
     );
 
-    return { controller, signature, lockedSignature, investment, wallet, project, dataSource, manager, notificationEvents, expirerSignature };
+    return { controller, finalize, signature, lockedSignature, investment, wallet, project, dataSource, manager, notificationEvents, expirerSignature };
   }
 
   it('laisse la signature PENDING quand l\'exécution échoue (rejouable), puis réussit au rejeu', async () => {
     // Solde insuffisant → executeInvestmentSignature lève avant tout write.
     const ctx = setup({ solde: 50, preTxSignature: {} });
 
-    await expect(ctx.controller.handleSignatureDone(REQ_ID)).rejects.toThrow(
+    await expect(ctx.finalize.execute(REQ_ID)).rejects.toThrow(
       /Solde insuffisant/,
     );
 
@@ -173,7 +178,7 @@ describe('YouSignWebhookController.handleSignatureDone (atomicité SIGNED)', () 
 
     // Rejeu après approvisionnement du wallet : l'exécution aboutit.
     ctx.wallet.solde = 500;
-    await ctx.controller.handleSignatureDone(REQ_ID);
+    await ctx.finalize.execute(REQ_ID);
 
     expect(ctx.investment.statut).toBe(InvestmentStatus.CONFIRME);
     expect(ctx.signature.statut).toBe(SignatureStatus.SIGNED);
@@ -187,7 +192,7 @@ describe('YouSignWebhookController.handleSignatureDone (atomicité SIGNED)', () 
       preTxSignature: { statut: SignatureStatus.SIGNED },
     });
 
-    await ctx.controller.handleSignatureDone(REQ_ID);
+    await ctx.finalize.execute(REQ_ID);
 
     // Aucune transaction ouverte, aucune exécution.
     expect(ctx.dataSource.transaction).not.toHaveBeenCalled();
@@ -204,7 +209,7 @@ describe('YouSignWebhookController.handleSignatureDone (atomicité SIGNED)', () 
       lockedSignature: { statut: SignatureStatus.SIGNED },
     });
 
-    await ctx.controller.handleSignatureDone(REQ_ID);
+    await ctx.finalize.execute(REQ_ID);
 
     expect(ctx.dataSource.transaction).toHaveBeenCalledTimes(1);
     // La branche exécution n'est jamais atteinte : l'investissement reste INITIE.
@@ -241,7 +246,7 @@ describe('YouSignWebhookController.handleSignatureDone (atomicité SIGNED)', () 
         project: { modeleEconomique: ModeleEconomique.OBLIGATAIRE } as any,
       });
 
-      await ctx.controller.handleSignatureDone(REQ_ID);
+      await ctx.finalize.execute(REQ_ID);
 
       const echeances = echeancesSauvegardees(ctx.manager);
       expect(echeances).toHaveLength(12); // dureeMois du projet de test
@@ -256,7 +261,7 @@ describe('YouSignWebhookController.handleSignatureDone (atomicité SIGNED)', () 
         project: { modeleEconomique: ModeleEconomique.EQUITY } as any,
       });
 
-      await ctx.controller.handleSignatureDone(REQ_ID);
+      await ctx.finalize.execute(REQ_ID);
 
       expect(echeancesSauvegardees(ctx.manager)).toHaveLength(0);
       // Le reste de la souscription se déroule normalement : la garde ne
@@ -273,7 +278,7 @@ describe('YouSignWebhookController.handleSignatureDone (atomicité SIGNED)', () 
         project: { modeleEconomique: undefined } as any,
       });
 
-      await ctx.controller.handleSignatureDone(REQ_ID);
+      await ctx.finalize.execute(REQ_ID);
 
       expect(echeancesSauvegardees(ctx.manager)).toHaveLength(12);
     });
@@ -462,24 +467,29 @@ describe('YouSignWebhookController — règlement marché secondaire', () => {
       execute: jest.fn().mockResolvedValue('noop'),
     };
 
-    const controller = new YouSignWebhookController(
+    const youSignService = {
+      downloadSignedDocument: jest.fn(),
+      verifyWebhookSignature: () => true,
+    } as any;
+    const finalize = new FinalizeSignedContractUseCase(
       signatureRepo,
-      noopRepo,
-      noopRepo,
-      projectRepo,
       ordreRepo,
+      projectRepo,
       documentRepo,
-      noopRepo,
-      noopRepo,
       dataSource,
-      { downloadSignedDocument: jest.fn(), verifyWebhookSignature: () => true } as any,
+      youSignService,
       notificationService,
       { upload: jest.fn() } as any,
       userRepository,
       notificationEvents,
       platformFees,
       metrics,
+    );
+    const controller = new YouSignWebhookController(
+      youSignService,
+      metrics,
       expirerSignature,
+      finalize,
     );
 
     /** Position (solde + soldeBloque) de chaque portefeuille, à un instant t. */
@@ -493,6 +503,7 @@ describe('YouSignWebhookController — règlement marché secondaire', () => {
 
     return {
       controller,
+      finalize,
       signature,
       ordre,
       sellerInvest,
@@ -516,7 +527,7 @@ describe('YouSignWebhookController — règlement marché secondaire', () => {
     const ctx = setupCession({ nbFractionsSignees: 4 });
     const avant = ctx.instantane();
 
-    await ctx.controller.handleSignatureDone(REQ_ID);
+    await ctx.finalize.execute(REQ_ID);
 
     const mouvements = mouvementsDepuisInstantanes(avant, ctx.instantane());
     expect(grandLivreEquilibre(mouvements)).toBe(true);
@@ -535,7 +546,7 @@ describe('YouSignWebhookController — règlement marché secondaire', () => {
     // L'acheteur dispose en plus de 5 000 € libres : ils ne doivent pas bouger.
     ctx.buyerWallet.solde = 5000;
 
-    await ctx.controller.handleSignatureDone(REQ_ID);
+    await ctx.finalize.execute(REQ_ID);
 
     expect(ctx.buyerWallet.soldeBloque).toBe(0);
     expect(ctx.buyerWallet.solde).toBe(5000);
@@ -545,7 +556,7 @@ describe('YouSignWebhookController — règlement marché secondaire', () => {
     const ctx = setupCession({ nbFractionsSignees: 4, fondsNonReserves: true });
     const avant = ctx.instantane();
 
-    await ctx.controller.handleSignatureDone(REQ_ID);
+    await ctx.finalize.execute(REQ_ID);
 
     expect(ctx.buyerWallet.solde).toBe(0);
     expect(ctx.buyerWallet.soldeBloque).toBe(0);
@@ -560,7 +571,7 @@ describe('YouSignWebhookController — règlement marché secondaire', () => {
     const ctx = setupCession({ nbFractionsSignees: 4, sansWalletVendeur: true });
     const avant = ctx.instantane();
 
-    await expect(ctx.controller.handleSignatureDone(REQ_ID)).rejects.toThrow(
+    await expect(ctx.finalize.execute(REQ_ID)).rejects.toThrow(
       /Wallet vendeur .* introuvable/,
     );
 
@@ -576,7 +587,7 @@ describe('YouSignWebhookController — règlement marché secondaire', () => {
   it('un règlement en échec prévient les DEUX parties et les administrateurs', async () => {
     const ctx = setupCession({ nbFractionsSignees: 4, sansWalletVendeur: true });
 
-    await expect(ctx.controller.handleSignatureDone(REQ_ID)).rejects.toThrow();
+    await expect(ctx.finalize.execute(REQ_ID)).rejects.toThrow();
 
     const destinataires = ctx.notificationService.push.mock.calls.map(
       (appel: any[]) => appel[0].utilisateurId,
@@ -591,7 +602,7 @@ describe('YouSignWebhookController — règlement marché secondaire', () => {
   it('fill PARTIEL : le reliquat revient EN_CARNET, purgé de tout acheteur', async () => {
     const ctx = setupCession({ nbFractionsSignees: 4 });
 
-    await ctx.controller.handleSignatureDone(REQ_ID);
+    await ctx.finalize.execute(REQ_ID);
 
     expect(ctx.ordre.statut).toBe(OrdreMarcheStatus.EN_CARNET);
     expect(ctx.ordre.nbFractions).toBe(6); // 10 − 4
@@ -605,7 +616,7 @@ describe('YouSignWebhookController — règlement marché secondaire', () => {
   it("fill TOTAL : l'annonce est servie — EXECUTE, acheteur inscrit", async () => {
     const ctx = setupCession({ nbFractionsSignees: 10 });
 
-    await ctx.controller.handleSignatureDone(REQ_ID);
+    await ctx.finalize.execute(REQ_ID);
 
     expect(ctx.ordre.statut).toBe(OrdreMarcheStatus.EXECUTE);
     expect(ctx.ordre.acheteurId).toBe(ACHETEUR_ID);
@@ -616,7 +627,7 @@ describe('YouSignWebhookController — règlement marché secondaire', () => {
   it("la position du vendeur est décrémentée du COÛT D'ACQUISITION, pas du prix de vente", async () => {
     const ctx = setupCession({ nbFractionsSignees: 4 });
 
-    await ctx.controller.handleSignatureDone(REQ_ID);
+    await ctx.finalize.execute(REQ_ID);
 
     // 4 fractions cédées 150 € mais acquises 100 € : la position perd 400 € de
     // coût, pas 600 € de produit. Le coût moyen résiduel reste 600/6 = 100 €.
@@ -628,7 +639,7 @@ describe('YouSignWebhookController — règlement marché secondaire', () => {
   it('la plus-value facturée est celle du coût réel (frais sur gain non nuls)', async () => {
     const ctx = setupCession({ nbFractionsSignees: 4 });
 
-    await ctx.controller.handleSignatureDone(REQ_ID);
+    await ctx.finalize.execute(REQ_ID);
 
     const fraisGain = ctx.transactions.find(
       (tx: any) => tx.metadata?.source === 'gain_revente_actions',
@@ -642,7 +653,7 @@ describe('YouSignWebhookController — règlement marché secondaire', () => {
   it('le grand livre crédite le vendeur de son NET, sans double compte ni source externe', async () => {
     const ctx = setupCession({ nbFractionsSignees: 4 });
 
-    await ctx.controller.handleSignatureDone(REQ_ID);
+    await ctx.finalize.execute(REQ_ID);
 
     // Le paiement brut acheteur → vendeur est la SEULE écriture créditrice du
     // vendeur ; les frais repartent de lui vers la plateforme. Son net au

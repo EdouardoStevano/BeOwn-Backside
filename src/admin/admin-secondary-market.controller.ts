@@ -555,7 +555,13 @@ export class AdminSecondaryMarketController {
         buyerInvest = await em.save(InvestmentEntity, newInvest);
       }
 
-      // Réduire fractions vendeur
+      // Réduire fractions vendeur — décrémenter du COÛT D'ACQUISITION des
+      // parts cédées, jamais du prix de vente : le rapport montant/nbTitres
+      // reste égal au coût moyen d'origine et la plus-value de la vente
+      // SUIVANTE reste juste (même correctif que finalize-signed-contract
+      // étape 5 — voir domains/cout-acquisition.ts). Décrémenter du prix de
+      // vente déplaçait le coût moyen à chaque cession partielle et pouvait
+      // rendre `montant` négatif sur une plus-value ; clamp à 0 par sûreté.
       const sellerInvest = await em.findOne(InvestmentEntity, {
         where: { id: ordre.investissementId },
       });
@@ -563,7 +569,7 @@ export class AdminSecondaryMarketController {
         const remaining = Number(sellerInvest.nbTitres) - nbFractions;
         sellerInvest.nbTitres = Math.max(0, remaining);
         sellerInvest.montant = remaining > 0
-          ? Number(sellerInvest.montant) - montantTotal
+          ? Math.max(0, round2(Number(sellerInvest.montant) - coutAcquisition))
           : 0;
         await em.save(InvestmentEntity, sellerInvest);
       }

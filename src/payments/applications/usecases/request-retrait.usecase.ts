@@ -27,6 +27,7 @@ import {
   type ResolvedPayoutDestination,
 } from '../services/payout-destination.resolver';
 import { AmlMonitorService } from 'src/common/aml/aml-monitor.service';
+import { GelDesAvoirsPort } from 'src/common/aml/gel-des-avoirs.port';
 
 /**
  * Cas d'usage « demande de retrait » (extrait de PaymentController — SRP).
@@ -52,9 +53,18 @@ export class RequestRetraitUseCase {
     // Lot 4a — décide et VALIDE la destination du versement avant tout débit.
     private readonly destinationResolver: PayoutDestinationResolver,
     private readonly amlMonitor: AmlMonitorService,
+    // Gel des avoirs (L. 562-4 CMF) — port DIP, en dernière position (les
+    // specs construisent ce usecase à la main).
+    private readonly gelDesAvoirs: GelDesAvoirsPort,
   ) {}
 
   async execute(dto: CreateRetraitDto, user: ActiveUser) {
+    // ── Gel des avoirs — AVANT tout, y compris le rejeu idempotent ───────────
+    // Le retrait est LE chemin par lequel les fonds quittent la plateforme :
+    // un compte gelé n'obtient ni nouveau retrait ni relecture d'une demande
+    // antérieure. Refus 403 AVOIRS_GELES (docs/adr/ADR-gel-des-avoirs.md).
+    await this.gelDesAvoirs.assertAvoirsNonGeles(user.userId);
+
     // ── Idempotence explicite (L-2) ──────────────────────────────────────────
     // Si le client fournit une clé, une resoumission de la même demande renvoie
     // le retrait déjà enregistré au lieu d'en créer un second.

@@ -147,6 +147,7 @@ describe('Acceptation vendeur → initiation de cession (intégration)', () => {
           };
         }),
       } as any,
+      /* gelDesAvoirs */ { assertAvoirsNonGeles: jest.fn().mockResolvedValue(undefined) } as any,
     );
 
     const notifications = { push: jest.fn() };

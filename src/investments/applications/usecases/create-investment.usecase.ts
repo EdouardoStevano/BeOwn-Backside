@@ -62,6 +62,7 @@ import {
 } from 'src/profiles/domains/investor-classification';
 import { calculerEcheanceRetractation } from 'src/investments/domains/retractation';
 import { AmlMonitorService } from 'src/common/aml/aml-monitor.service';
+import { GelDesAvoirsPort } from 'src/common/aml/gel-des-avoirs.port';
 
 @Injectable()
 export class CreateInvestmentUseCase {
@@ -89,12 +90,20 @@ export class CreateInvestmentUseCase {
     private readonly metrics: MetricsPort,
     private readonly projectWalletResolver: ResolveProjectWalletUseCase,
     private readonly amlMonitor: AmlMonitorService,
-    // Dernière position à dessein : trois specs construisent ce usecase à la
-    // main, un ajout en queue ne décale aucun argument existant.
+    // Les specs construisent ce usecase à la main : tout ajout se fait en
+    // QUEUE de constructeur, pour ne décaler aucun argument existant.
     private readonly bonusParrainage: AttribuerBonusParrainageService,
+    // Gel des avoirs (L. 562-4 CMF) — port DIP, en dernière position.
+    private readonly gelDesAvoirs: GelDesAvoirsPort,
   ) {}
 
   async execute(userId: number, dto: CreateInvestmentDto): Promise<Investment> {
+    // ── Gel des avoirs — AVANT toute lecture ou écriture ─────────────────────
+    // Un compte gelé ne souscrit pas, y compris via le réinvestissement
+    // automatique des loyers qui passe par ce même usecase. Refus 403
+    // AVOIRS_GELES, message neutre unique (docs/adr/ADR-gel-des-avoirs.md).
+    await this.gelDesAvoirs.assertAvoirsNonGeles(userId);
+
     if (dto.idempotencyKey) {
       const previous = await this.walletRepository.findTransactionByIdempotencyKey(
         `invest-request:${userId}:${dto.idempotencyKey}`,

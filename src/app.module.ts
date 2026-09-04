@@ -38,6 +38,7 @@ import { LocativeManagementModule } from './locative-management/applications/loc
 import { DistributionsModule } from './distributions/applications/distributions.module';
 import { FiscaliteModule } from './fiscalite/applications/fiscalite.module';
 import { AmlModule } from './common/aml/aml.module';
+import { RgpdModule } from './rgpd/rgpd.module';
 import { PlatformFeesModule } from './common/platform-fees/platform-fees.module';
 import { PlatformSettingsModule } from './common/platform-settings/platform-settings.module';
 import { ContactModule } from './common/contact/contact.module';
@@ -150,6 +151,9 @@ function requireEnv(name: string): string {
     DistributionsModule,
     FiscaliteModule,
     AmlModule,
+    // Anonymisation à la suppression de compte + cron de purge du barème de
+    // conservation (lot 2, mission 3).
+    RgpdModule,
     PlatformFeesModule,
     PlatformSettingsModule,
     ContactModule,

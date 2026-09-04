@@ -38,6 +38,7 @@ describe('DeleteAccountUseCase', () => {
   let notificationEvents: any;
   let templates: any;
   let emailService: any;
+  let anonymizeAccount: any;
 
   // État du portefeuille tel que relu SOUS VERROU dans la transaction.
   let lockedWallet: any;
@@ -99,6 +100,9 @@ describe('DeleteAccountUseCase', () => {
     emailService = {
       sendTransactionalEmail: jest.fn().mockResolvedValue(undefined),
     };
+    anonymizeAccount = {
+      anonymiser: jest.fn().mockResolvedValue({ statut: 'anonymise' }),
+    };
 
     useCase = new DeleteAccountUseCase(
       userRepo,
@@ -111,6 +115,7 @@ describe('DeleteAccountUseCase', () => {
       notificationEvents,
       templates,
       emailService,
+      anonymizeAccount,
     );
   });
 
@@ -366,6 +371,54 @@ describe('DeleteAccountUseCase', () => {
       '<html></html>',
     );
     expect(notificationEvents.accountDeletedByUser).toHaveBeenCalled();
+  });
+
+  // ── Anonymisation RGPD (lot 2, mission 3) ───────────────────────────────
+
+  it("aucun bloqueur → l'anonymisation RGPD est invoquée APRÈS le soft-delete et après l'email d'adieu", async () => {
+    const ordre: string[] = [];
+    userRepo.save.mockImplementation(async (u: any) => {
+      ordre.push('soft-delete');
+      return u;
+    });
+    emailService.sendTransactionalEmail.mockImplementation(async () => {
+      ordre.push('email');
+    });
+    anonymizeAccount.anonymiser.mockImplementation(async () => {
+      ordre.push('anonymisation');
+      return { statut: 'anonymise' };
+    });
+
+    await useCase.execute(USER_ID, SELF);
+
+    expect(anonymizeAccount.anonymiser).toHaveBeenCalledWith(USER_ID);
+    // L'email d'adieu part avant l'écrasement de l'adresse.
+    expect(ordre).toEqual(['soft-delete', 'email', 'anonymisation']);
+  });
+
+  it("un échec d'anonymisation ne fait PAS échouer la suppression (le cron rattrape)", async () => {
+    anonymizeAccount.anonymiser.mockRejectedValue(new Error('cloudinary down'));
+    await expect(useCase.execute(USER_ID, SELF)).resolves.toBeUndefined();
+    expect(userRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({ status: UserStatus.SUPPRIME }),
+    );
+  });
+
+  it('suppression bloquée (409) → aucune anonymisation', async () => {
+    investRepo.count.mockResolvedValue(1);
+    await expect(useCase.execute(USER_ID, SELF)).rejects.toBeInstanceOf(
+      AccountDeletionBlockedError,
+    );
+    expect(anonymizeAccount.anonymiser).not.toHaveBeenCalled();
+  });
+
+  it('cible déjà SUPPRIME (no-op idempotent) → pas de nouvelle anonymisation ici (rôle du cron)', async () => {
+    userRepo.findOne.mockResolvedValue({
+      ...baseUser(),
+      status: UserStatus.SUPPRIME,
+    });
+    await useCase.execute(USER_ID, ADMIN);
+    expect(anonymizeAccount.anonymiser).not.toHaveBeenCalled();
   });
 
   it('chemin heureux robuste si template désactivé (render → null) : suppression quand même', async () => {

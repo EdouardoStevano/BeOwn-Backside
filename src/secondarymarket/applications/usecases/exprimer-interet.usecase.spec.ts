@@ -61,6 +61,7 @@ describe('ExprimerInteretUseCase', () => {
       investRepo as any,
       notifications as any,
       devisCession,
+      /* gelDesAvoirs */ { assertAvoirsNonGeles: jest.fn().mockResolvedValue(undefined) } as any,
     );
     return { usecase, ordreRepo, walletRepo, investRepo, notifications };
   };

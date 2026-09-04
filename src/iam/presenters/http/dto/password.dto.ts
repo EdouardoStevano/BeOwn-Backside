@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  IsBoolean,
   IsEmail,
   IsNotEmpty,
   IsOptional,
@@ -7,6 +8,7 @@ import {
   MaxLength,
   MinLength,
   Matches,
+  ValidateIf,
 } from 'class-validator';
 
 export class ForgotPasswordDto {
@@ -72,4 +74,31 @@ export class SignUpDto {
   @IsOptional()
   @MaxLength(20)
   codeParrainage?: string;
+
+  @ApiProperty({
+    example: true,
+    description:
+      "Acceptation explicite des CGU — l'inscription est refusée (400, code stable `CGU_NOT_ACCEPTED`) tant que la valeur n'est pas strictement `true`.",
+  })
+  // `@IsOptional` au DTO, PAS optionnel métier : l'exigence `=== true` vit
+  // dans `RegisterUseCase` pour que l'absence du champ comme sa valeur `false`
+  // produisent le MÊME 400 `CGU_NOT_ACCEPTED` (un champ requis ici rendrait un
+  // 400 de validation générique sans code stable quand le champ manque).
+  @IsBoolean()
+  @IsOptional()
+  accepteCgu?: boolean;
+
+  @ApiProperty({
+    example: '1.0',
+    description:
+      "Version des CGU affichée à l'utilisateur au moment de l'acceptation (persistée comme preuve de consentement).",
+  })
+  // Exigée dès que l'acceptation est déclarée ; quand `accepteCgu` est absent
+  // ou `false`, c'est le usecase qui refuse déjà tout — inutile de valider une
+  // version qui ne sera jamais lue.
+  @ValidateIf((dto: SignUpDto) => dto.accepteCgu === true)
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(20)
+  cguVersion?: string;
 }

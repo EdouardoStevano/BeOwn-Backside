@@ -23,6 +23,7 @@ import { EmailTemplateService } from 'src/shared/email/email-template.service';
 import { EMAIL_SERVICE } from 'src/shared/email/email.service';
 import type { EmailService } from 'src/shared/email/email.service';
 import { hasPermission } from 'src/common/auth/permissions.constants';
+import { AnonymizeAccountService } from 'src/rgpd/applications/anonymize-account.service';
 import { formatEur } from 'src/shared/money/format-eur';
 import {
   AccountDeletionBlockedError,
@@ -129,6 +130,9 @@ export class DeleteAccountUseCase {
     private readonly templates: EmailTemplateService,
     @Inject(EMAIL_SERVICE)
     private readonly emailService: EmailService,
+    // EN DERNIÈRE POSITION (convention du dépôt : les specs construisent à la
+    // main) — anonymisation RGPD post-suppression (lot 2, mission 3).
+    private readonly anonymizeAccount: AnonymizeAccountService,
   ) {}
 
   async execute(userId: number, initiator: DeletionInitiator): Promise<void> {
@@ -245,7 +249,23 @@ export class DeleteAccountUseCase {
     user.status = UserStatus.SUPPRIME;
     await this.userRepo.save(user);
 
+    // L'email d'adieu part AVANT l'anonymisation : dernier usage légitime de
+    // l'adresse (elle est écrasée juste après).
     await this.notifyAccountDeleted(user, initiator);
+
+    // ── Anonymisation RGPD (barème lot 2, §2) — APRÈS le soft-delete réussi ─
+    // Résiliente : un échec ici ne doit pas transformer une suppression
+    // aboutie en 500 (le compte EST supprimé). Le cron de purge quotidien
+    // rattrape tout compte SUPPRIME resté non anonymisé (finalité
+    // `compte_supprime_a_anonymiser`), et l'opération est idempotente.
+    try {
+      await this.anonymizeAccount.anonymiser(userId);
+    } catch (err) {
+      this.logger.error(
+        `Anonymisation RGPD échouée (user ${userId}) — le cron de purge la rattrapera : ${(err as Error)?.message}`,
+        (err as Error)?.stack,
+      );
+    }
   }
 
   /**

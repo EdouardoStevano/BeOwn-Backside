@@ -457,7 +457,11 @@ export class UserController {
     const found = await this.userRepository.findByIdWithPassword(user.userId);
     if (!found) throw new NotFoundException('Utilisateur introuvable.');
 
-    const passwordHash = (found as any).password;
+    // Le modèle domaine n'expose le hash que par le getter `passwordHash`
+    // (l'ancien accès `(found as any).password` lisait un champ d'entité qui
+    // n'existe plus sur le domaine : il renvoyait undefined et cassait la
+    // suppression self-service pour TOUS les comptes).
+    const passwordHash = found.passwordHash;
     if (!passwordHash)
       throw new UnauthorizedException('Confirmation impossible.');
 

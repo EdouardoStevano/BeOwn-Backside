@@ -4,6 +4,7 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  Ip,
   Post,
   Query,
   Req,
@@ -157,9 +158,22 @@ export class AuthenticationController {
   @Throttle({ auth: { ttl: 900_000, limit: 10 } })
   @Public()
   @Post('sign-up')
-  async signUp(@Body() dto: SignUpDto) {
+  async signUp(@Body() dto: SignUpDto, @Ip() ip: string) {
     await this.recaptchaService.verify(dto.captchaToken);
-    const user = await this.registerUseCase.execute(dto);
+    // Champs relayés explicitement : le usecase ne reçoit jamais le DTO HTTP
+    // (ni son `captchaToken`, déjà consommé). L'IP vient de `req.ip` — fiable
+    // derrière le proxy grâce à `trust proxy` (main.ts) — et sert de preuve de
+    // consentement CGU, persistée avec l'horodatage serveur et la version.
+    const user = await this.registerUseCase.execute({
+      firstname: dto.firstname,
+      lastname: dto.lastname,
+      email: dto.email,
+      password: dto.password,
+      codeParrainage: dto.codeParrainage,
+      accepteCgu: dto.accepteCgu,
+      cguVersion: dto.cguVersion,
+      cguAcceptationIp: ip ?? null,
+    });
     // `toJSON()` exclut l'empreinte du mot de passe — l'ancien étalement
     // exposerait désormais le champ privé `_passwordHash`. `NO_MFA` n'est pas
     // une supposition : un compte qui vient de naître n'a aucun facteur.

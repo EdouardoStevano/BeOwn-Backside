@@ -79,6 +79,10 @@ describe('RegisterUseCase — traduction des conflits de persistance', () => {
     lastname: 'Persona',
     email: 'qa@beown.fr',
     password: 'QaKyc2026Test!',
+    // Consentement CGU (lot 2) : requis en amont de toute persistance — ces
+    // tests visent la traduction des conflits, pas le refus (couvert ailleurs).
+    accepteCgu: true,
+    cguVersion: '1.0',
   };
 
   const makeUseCase = (saveImpl: () => Promise<any>) => {

@@ -31,6 +31,14 @@ export interface UserSnapshot {
   role: UserRole;
   status: UserStatus;
   cguAccepteesLe: Date | null;
+  /**
+   * Preuve de consentement CGU (lot 2 RGPD) : version du texte acceptée et IP
+   * au moment de l'acceptation. `null` sur tout compte antérieur au lot 2 et
+   * sur les comptes nés par OAuth — AUCUN backfill : un consentement ne
+   * s'invente pas a posteriori (art. 7.1 RGPD, charge de la preuve).
+   */
+  cguVersionAcceptee: string | null;
+  cguAcceptationIp: string | null;
   lastLoginAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
@@ -57,6 +65,8 @@ export interface UserState {
   role: UserRole;
   status: UserStatus;
   cguAccepteesLe: Date | null;
+  cguVersionAcceptee: string | null;
+  cguAcceptationIp: string | null;
   lastLoginAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
@@ -73,6 +83,16 @@ export interface RegisterUserProps {
   passwordHash: string | null;
   socialId: string | null;
   emailVerified?: boolean;
+  /**
+   * Acceptation des CGU recueillie à l'inscription. L'horodatage est posé ICI,
+   * côté serveur (`new Date()` dans `register`) — jamais fourni par l'appelant,
+   * pour que la preuve ne dépende pas de l'horloge du client.
+   *
+   * Absent pour les comptes nés par OAuth (`social-auth.usecase`) : leur
+   * consentement CGU n'a pas été recueilli à ce jour — `cguAccepteesLe` reste
+   * `null`, sans backfill (on n'invente pas un consentement).
+   */
+  cguAcceptation?: { version: string; ip: string | null };
 }
 
 /**
@@ -106,6 +126,8 @@ export class User extends AggregateRoot {
   private _role: UserRole;
   private _status: UserStatus;
   private _cguAccepteesLe: Date | null;
+  private _cguVersionAcceptee: string | null;
+  private _cguAcceptationIp: string | null;
   private _lastLoginAt: Date | null;
   private _createdAt: Date;
   private _updatedAt: Date;
@@ -142,6 +164,8 @@ export class User extends AggregateRoot {
     this._role = state.role;
     this._status = state.status;
     this._cguAccepteesLe = state.cguAccepteesLe;
+    this._cguVersionAcceptee = state.cguVersionAcceptee;
+    this._cguAcceptationIp = state.cguAcceptationIp;
     this._lastLoginAt = state.lastLoginAt;
     this._createdAt = state.createdAt;
     this._updatedAt = state.updatedAt;
@@ -168,7 +192,12 @@ export class User extends AggregateRoot {
       passwordHash: props.passwordHash,
       role: UserRole.INVESTISSEUR,
       status: UserStatus.CREE,
-      cguAccepteesLe: null,
+      // Preuve de consentement (art. 7.1 RGPD) : horodatage SERVEUR posé à la
+      // création, jamais transmis par le client. Sans acceptation fournie
+      // (comptes OAuth), les trois champs restent null — aucun backfill.
+      cguAccepteesLe: props.cguAcceptation ? new Date() : null,
+      cguVersionAcceptee: props.cguAcceptation?.version ?? null,
+      cguAcceptationIp: props.cguAcceptation?.ip ?? null,
       lastLoginAt: null,
       createdAt: undefined as unknown as Date,
       updatedAt: undefined as unknown as Date,
@@ -203,6 +232,12 @@ export class User extends AggregateRoot {
   }
   get cguAccepteesLe(): Date | null {
     return this._cguAccepteesLe;
+  }
+  get cguVersionAcceptee(): string | null {
+    return this._cguVersionAcceptee;
+  }
+  get cguAcceptationIp(): string | null {
+    return this._cguAcceptationIp;
   }
   get lastLoginAt(): Date | null {
     return this._lastLoginAt;

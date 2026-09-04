@@ -7,6 +7,7 @@ import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructu
 import { NotificationsModule } from 'src/notifications/notifications.module';
 import { CloudStorageModule } from 'src/shared/cloud-storage/cloud-storage.module';
 import { YouSignModule } from 'src/common/yousign/yousign.module';
+import { SignatureProviderModule } from 'src/signatures/infrastructure/signature-provider.module';
 import { ContractGeneratorService } from 'src/investments/applications/usecases/contract-generator.service';
 import { InitiateBuyUseCase } from './usecases/initiate-buy.usecase';
 import { ExprimerInteretUseCase } from './usecases/exprimer-interet.usecase';
@@ -25,6 +26,8 @@ import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.ent
 import { InvestmentEntity } from 'src/investments/infrastructure/persistences/entities/investment.entity';
 import { UsersModule } from 'src/iam/applications/users.module';
 import { UsersInfrastructureModule } from 'src/iam/infrastructure/users-infrastructure.module';
+import { SignaturesModule } from 'src/signatures/applications/signatures.module';
+import { AmlModule } from 'src/common/aml/aml.module';
 
 @Module({
   imports: [
@@ -33,9 +36,19 @@ import { UsersInfrastructureModule } from 'src/iam/infrastructure/users-infrastr
     IamInfrastructureModule,
     NotificationsModule,
     CloudStorageModule,
+    // YouSignModule reste importé pour le presenter du webhook
+    // (verifyWebhookSignature, spécifique YouSign) ; les use cases passent par
+    // le port SignatureProvider.
     YouSignModule,
+    SignatureProviderModule,
     UsersModule,
     UsersInfrastructureModule,
+    // Règlement des contrats signés — partagé entre le webhook YouSign et le
+    // parcours d'acceptation certifiée (provider de repli).
+    SignaturesModule,
+    // Gel des avoirs : la garde 403 AVOIRS_GELES protège l'expression
+    // d'intérêt et l'initiation d'achat (port GelDesAvoirsPort).
+    AmlModule,
   ],
   providers: [
     ContractGeneratorService,

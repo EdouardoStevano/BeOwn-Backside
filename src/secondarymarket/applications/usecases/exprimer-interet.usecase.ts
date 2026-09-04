@@ -25,6 +25,7 @@ import {
   DevisCession,
   DevisCessionService,
 } from 'src/secondarymarket/applications/devis-cession.service';
+import { GelDesAvoirsPort } from 'src/common/aml/gel-des-avoirs.port';
 
 export interface ResultatExpressionInteret {
   ordreId: string;
@@ -63,6 +64,9 @@ export class ExprimerInteretUseCase {
     private readonly investRepo: Repository<InvestmentEntity>,
     private readonly notifications: NotificationService,
     private readonly devisCession: DevisCessionService,
+    // Gel des avoirs (L. 562-4 CMF) — port DIP, en dernière position (les
+    // specs construisent ce usecase à la main).
+    private readonly gelDesAvoirs: GelDesAvoirsPort,
   ) {}
 
   async execute(
@@ -70,6 +74,11 @@ export class ExprimerInteretUseCase {
     acheteurId: number,
     nbFractions: number,
   ): Promise<ResultatExpressionInteret> {
+    // ── Gel des avoirs — AVANT toute sollicitation du vendeur ────────────────
+    // Un compte gelé n'engage aucun achat au marché secondaire. Refus 403
+    // AVOIRS_GELES, message neutre unique (docs/adr/ADR-gel-des-avoirs.md).
+    await this.gelDesAvoirs.assertAvoirsNonGeles(acheteurId);
+
     const ordre = await this.ordreRepo.findOne({ where: { id: ordreId } });
     if (!ordre) throw new NotFoundException('Annonce introuvable');
     if (ordre.statut !== OrdreMarcheStatus.EN_CARNET) {

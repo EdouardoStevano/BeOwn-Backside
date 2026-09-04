@@ -23,6 +23,8 @@ export class UserMapper {
       role: entity.role,
       status: entity.status,
       cguAccepteesLe: entity.cguAccepteesLe,
+      cguVersionAcceptee: entity.cguVersionAcceptee,
+      cguAcceptationIp: entity.cguAcceptationIp,
       lastLoginAt: entity.lastLoginAt,
       createdAt: entity.createdAt,
       updatedAt: entity.updatedAt,
@@ -48,6 +50,14 @@ export class UserMapper {
     // CREE → EMAIL_VERIFIE lors de la confirmation d'email) était perdu au
     // save(). Undefined reste ignoré par TypeORM (insert → défaut CREE).
     if (snapshot.status) entity.status = snapshot.status;
+
+    // Preuve de consentement CGU (lot 2 RGPD). `cguAccepteesLe` existait dans
+    // le domaine mais n'était PAS mappé ici : la valeur posée par
+    // `User.register` était perdue au save(). Les trois champs voyagent
+    // ensemble — null reste null (comptes OAuth, stock antérieur au lot 2).
+    entity.cguAccepteesLe = snapshot.cguAccepteesLe;
+    entity.cguVersionAcceptee = snapshot.cguVersionAcceptee;
+    entity.cguAcceptationIp = snapshot.cguAcceptationIp;
 
     if (snapshot.email !== null) {
       const emailEntity = new UserEmailEntity();

@@ -1,4 +1,4 @@
-import { ConflictException } from '@nestjs/common';
+﻿import { ConflictException } from '@nestjs/common';
 import { PaymentController } from './payment.controller';
 import { KycStatus } from 'src/profiles/domains/enums/kyc-status.enum';
 
@@ -66,6 +66,7 @@ describe('PaymentController — POST /payments/kyc/start', () => {
       } as any,
       /* amlMonitor */ { check: jest.fn().mockResolvedValue(undefined) } as any,
       /* retraitSettlement */ {} as any,
+      /* gelDesAvoirs */ { assertAvoirsNonGeles: jest.fn().mockResolvedValue(undefined) } as any,
     );
   };
 

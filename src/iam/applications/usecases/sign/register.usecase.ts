@@ -1,6 +1,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { EventBus } from '@nestjs/cqrs';
 import {
+  CguNotAcceptedError,
   EmailAlreadyRegisteredError,
   RegistrationConflictError,
 } from 'src/iam/domains/errors';
@@ -30,6 +31,17 @@ export interface RegisterInput {
   password: string;
   /** Code de parrainage saisi (optionnel) — relayé tel quel dans l'événement. */
   codeParrainage?: string;
+  /**
+   * Acceptation explicite des CGU. Optionnels dans le TYPE pour que l'absence
+   * du champ traverse la frontière HTTP et soit refusée ICI avec le code
+   * stable `CGU_NOT_ACCEPTED` (un `@IsBoolean()` requis au DTO rendrait un 400
+   * de validation générique, sans code exploitable par le front).
+   */
+  accepteCgu?: boolean;
+  /** Version des CGU affichée par le client au moment de l'acceptation. */
+  cguVersion?: string;
+  /** IP de la requête d'inscription (req.ip, trust proxy réglé dans main.ts). */
+  cguAcceptationIp?: string | null;
 }
 
 /**
@@ -60,6 +72,17 @@ export class RegisterUseCase {
   ) {}
 
   async execute(registerDto: RegisterInput): Promise<User> {
+    // Consentement CGU (lot 2 RGPD) : aucune inscription sans acceptation
+    // EXPLICITE (`=== true` — ni false, ni absent, ni truthy) NI sans version
+    // identifiable du texte accepté. La validation front n'est jamais une
+    // preuve ; c'est ce refus serveur qui fait foi. Les comptes créés AVANT ce
+    // lot gardent `cguAccepteesLe` null — aucun backfill, un consentement ne
+    // se reconstitue pas a posteriori (art. 7.1 RGPD).
+    const cguVersion = registerDto.cguVersion?.trim();
+    if (registerDto.accepteCgu !== true || !cguVersion) {
+      throw new CguNotAcceptedError();
+    }
+
     const existing = await this.userRepository.findByEmail(registerDto.email);
     if (existing) {
       throw new EmailAlreadyRegisteredError();
@@ -71,6 +94,11 @@ export class RegisterUseCase {
       email: registerDto.email,
       password: registerDto.password,
       socialId: null,
+      // L'horodatage serveur est posé par `User.register`, pas ici.
+      cguAcceptation: {
+        version: cguVersion,
+        ip: registerDto.cguAcceptationIp ?? null,
+      },
     });
 
     const savedUser = await this.saveOrTranslateConflict(user);

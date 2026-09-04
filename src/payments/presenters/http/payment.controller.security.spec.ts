@@ -90,6 +90,7 @@ describe('PaymentController — sécurité des flux monétaires (H-1 / H-2)', ()
       metricsPort,
       new PayoutDestinationResolver(new InMemoryPayoutMethodsAdapter()),
       /* amlMonitor */ { check: jest.fn().mockResolvedValue(undefined) } as any,
+      /* gelDesAvoirs */ { assertAvoirsNonGeles: jest.fn().mockResolvedValue(undefined) } as any,
     );
 
     controller = new PaymentController(
@@ -116,6 +117,7 @@ describe('PaymentController — sécurité des flux monétaires (H-1 / H-2)', ()
       } as any,
       /* amlMonitor */ { check: jest.fn().mockResolvedValue(undefined) } as any,
       /* retraitSettlement */ {} as any,
+      /* gelDesAvoirs */ { assertAvoirsNonGeles: jest.fn().mockResolvedValue(undefined) } as any,
     );
   });
 

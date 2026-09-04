@@ -59,6 +59,18 @@ export class DocumentEntity {
   @Column({ type: 'boolean', default: false })
   estPrincipale: boolean;
 
+  /**
+   * Archivage restreint RGPD/LCB-FT (lot 2, mission 3) : pièce KYC d'un compte
+   * supprimé, conservée 5 ans après la clôture de la relation (L. 561-12 CMF)
+   * au lieu d'être détruite. La restriction d'accès est APPLICATIVE (barème
+   * lot 2, note d'implémentation §2.3) : Cloudinary n'a pas d'accès restreint
+   * natif — le fichier reste, ce marqueur l'exclut des parcours courants et le
+   * cron de purge RGPD le détruit à l'échéance des 5 ans.
+   * Colonne ajoutée via décorateur + SQL manuel (ADR migrations).
+   */
+  @Column({ type: 'boolean', default: false })
+  archiveConservationLegale: boolean;
+
   @CreateDateColumn()
   createdAt: Date;
 }

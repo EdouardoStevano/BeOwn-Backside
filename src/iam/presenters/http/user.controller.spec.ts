@@ -39,9 +39,12 @@ describe('UserController.deleteMe', () => {
   });
 
   it('charge le hash via findByIdWithPassword (pas findById) et délègue au usecase avec le bon mot de passe', async () => {
+    // Forme du modèle DOMAINE : le hash n'est accessible que par le getter
+    // `passwordHash` (l'entité ORM garde `password`, mais elle ne sort jamais
+    // du repository). Le mock reflète le contrat réel du domaine.
     userRepository.findByIdWithPassword.mockResolvedValue({
       userId: 42,
-      password: '$2b$hash',
+      passwordHash: '$2b$hash',
       role: 'investisseur',
     });
     hashingService.compare.mockResolvedValue(true);
@@ -60,7 +63,7 @@ describe('UserController.deleteMe', () => {
   it('mauvais mot de passe → 401 avec code INVALID_PASSWORD, sans supprimer', async () => {
     userRepository.findByIdWithPassword.mockResolvedValue({
       userId: 42,
-      password: '$2b$hash',
+      passwordHash: '$2b$hash',
       role: 'investisseur',
     });
     hashingService.compare.mockResolvedValue(false);

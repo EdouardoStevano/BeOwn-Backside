@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+﻿import { BadRequestException } from '@nestjs/common';
 import { PaymentController } from './payment.controller';
 import { KycStatus } from 'src/profiles/domains/enums/kyc-status.enum';
 import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
@@ -104,6 +104,7 @@ describe('PaymentController — webhook Stripe Identity (KYC auto + fallback rev
       } as any,
       /* amlMonitor */ { check: jest.fn().mockResolvedValue(undefined) } as any,
       /* retraitSettlement */ {} as any,
+      /* gelDesAvoirs */ { assertAvoirsNonGeles: jest.fn().mockResolvedValue(undefined) } as any,
     );
   });
 

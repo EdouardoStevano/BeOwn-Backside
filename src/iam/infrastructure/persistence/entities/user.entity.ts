@@ -45,6 +45,47 @@ export class UserEntity {
   @Column({ type: 'timestamp', nullable: true })
   cguAccepteesLe: Date | null;
 
+  // ─── Preuve de consentement CGU (lot 2 RGPD, mission 2) ──────────────────
+  // Version du texte acceptée (« 1.0 » au 2026-09-03) et IP au moment de
+  // l'acceptation, posées à l'inscription avec l'horodatage serveur
+  // `cguAccepteesLe`. Les comptes ANTÉRIEURS au lot 2 et les comptes nés par
+  // OAuth restent à NULL : AUCUN backfill — un consentement ne s'invente pas
+  // (art. 7.1 RGPD). Conservation : durée du compte + 5 ans (barème lot 2,
+  // docs/conformite/2026-09-03-baremes-lot2.md ligne 8).
+  // Colonnes ajoutées via décorateurs + SQL manuel (ADR migrations).
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  cguVersionAcceptee: string | null;
+
+  // varchar(45) : une IPv6 textuelle tient en 45 caractères au maximum.
+  @Column({ type: 'varchar', length: 45, nullable: true })
+  cguAcceptationIp: string | null;
+
+  // ─── Anonymisation RGPD (lot 2, mission 3) ───────────────────────────────
+  // Horodatage de l'anonymisation irréversible des identifiants directs,
+  // posé par AnonymizeAccountService APRÈS le soft-delete (statut SUPPRIME).
+  // Double rôle :
+  //  1. marqueur d'idempotence — un compte déjà anonymisé n'est jamais retraité ;
+  //  2. date de « clôture de la relation d'affaires » servant de point de
+  //     départ à l'archivage restreint 5 ans des données d'identité
+  //     (L. 561-12 CMF), purgées ensuite par le cron RGPD.
+  // Colonne ajoutée via décorateur + SQL manuel (ADR migrations).
+  @Column({ type: 'timestamptz', nullable: true })
+  anonymiseLe: Date | null;
+
+  // ─── Gel des avoirs (lot 2, mission 4 — art. L. 562-4 CMF) ───────────────
+  // Posé et levé UNIQUEMENT par un humain via l'endpoint admin compliance
+  // dédié (GelDesAvoirsService, motif obligatoire, audité) — jamais par le
+  // screening, qui ne fait que signaler. Un compte gelé ne peut plus ni
+  // déposer, ni souscrire, ni retirer, ni acheter au marché secondaire
+  // (403 AVOIRS_GELES) ; les crédits entrants (distributions) restent versés
+  // et la purge RGPD le concernant est suspendue (barème, règle transverse 3).
+  // Colonnes ajoutées via décorateurs + SQL manuel (ADR migrations).
+  @Column({ type: 'timestamptz', nullable: true })
+  avoirsGelesLe: Date | null;
+
+  @Column({ type: 'varchar', length: 500, nullable: true })
+  avoirsGelesMotif: string | null;
+
   @Column({ type: 'timestamp', nullable: true })
   lastLoginAt: Date | null;
 

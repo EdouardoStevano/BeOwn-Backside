@@ -90,6 +90,7 @@ mécanique est testée sans base : `npx jest seed-ledger`
 3. **Interdiction absolue** : `npm run migration:run` (cassé). Reset uniquement par `npm run schema:drop` puis `npm run seed`.
 4. Le backend sert un build : ne pas s'attendre à voir des modifications de code sans rebuild + restart explicite et coordonné.
 5. **Calculer une distribution** ne fonctionne que sur un projet equity en statut `finance` → utiliser le projet **G** (les périodes du projet A sont historiques, son statut `en_exploitation` bloque volontairement un recalcul).
+6. **Vérification d'email d'un compte créé pendant les tests** : l'envoi de mail est absent en dev (Brevo non configuré), donc un compte issu de `POST /auth/sign-up` ne peut pas cliquer son lien et son sign-in est bloqué. Procédure connue (préparation de donnée de test, PAS un défaut applicatif) : `UPDATE user_emails SET "isVerified" = true WHERE "userId" = <id>;` puis sign-in normal. Ne jamais l'appliquer à `investisseur4` (persona « KYC non commencé » à préserver).
 
 ## Reset complet (destructif — à coordonner)
 
