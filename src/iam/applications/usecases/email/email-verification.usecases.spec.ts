@@ -20,7 +20,6 @@ const makeDeps = (user: User | null) => {
     generateEmailToken: jest.fn(),
     verifyEmailToken: jest.fn(),
     generateTokens: jest.fn(),
-    refreshTokens: jest.fn(),
     verifyAccessToken: jest.fn(),
   };
   const usersRepository = {

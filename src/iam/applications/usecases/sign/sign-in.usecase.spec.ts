@@ -33,7 +33,6 @@ const makeUsecase = (user: User | null, passwordValid = true) => {
       accessToken: 'access',
       refreshToken: 'refresh',
     }),
-    refreshTokens: jest.fn(),
     verifyAccessToken: jest.fn(),
     generateEmailToken: jest.fn(),
     verifyEmailToken: jest.fn(),

@@ -18,7 +18,6 @@ const makeUsecase = () => {
     verifyEmailToken: jest.fn(),
     generateEmailToken: jest.fn(),
     generateTokens: jest.fn(),
-    refreshTokens: jest.fn(),
     verifyAccessToken: jest.fn(),
   };
   const hashingService = {
