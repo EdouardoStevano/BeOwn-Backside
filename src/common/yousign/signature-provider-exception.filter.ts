@@ -42,6 +42,14 @@ import { Sentry } from 'src/observability/sentry';
 export const DELAI_AVANT_NOUVELLE_TENTATIVE_S = 300;
 
 /**
+ * Statut renvoyé — exporté pour que l'intercepteur d'audit, qui s'exécute
+ * AVANT ce filtre, journalise 503 et non 500. Un incident de dépendance mal
+ * étiqueté « erreur serveur » dans un journal conservé cinq ans fausse le
+ * diagnostic autant que la statistique d'incidents.
+ */
+export const STATUT_SIGNATURE_INDISPONIBLE = HttpStatus.SERVICE_UNAVAILABLE;
+
+/**
  * Message utilisateur. Vrai pour tout point d'entrée couvert : aucune de ces
  * routes ne conserve d'état lorsque la signature échoue — l'acceptation joue sa
  * compensation et remet l'annonce en attente de réponse.
@@ -75,8 +83,8 @@ export class SignatureProviderExceptionFilter implements ExceptionFilter {
     Sentry.captureException(error);
 
     response.setHeader('Retry-After', String(DELAI_AVANT_NOUVELLE_TENTATIVE_S));
-    response.status(HttpStatus.SERVICE_UNAVAILABLE).json({
-      statusCode: HttpStatus.SERVICE_UNAVAILABLE,
+    response.status(STATUT_SIGNATURE_INDISPONIBLE).json({
+      statusCode: STATUT_SIGNATURE_INDISPONIBLE,
       code: SIGNATURE_PROVIDER_UNAVAILABLE,
       message: MESSAGE_SIGNATURE_INDISPONIBLE,
       retryAfterSeconds: DELAI_AVANT_NOUVELLE_TENTATIVE_S,

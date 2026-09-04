@@ -11,13 +11,26 @@ import {
 } from 'src/porteur-access/domains/errors/porteur-access.errors';
 
 /** Seule table qui connaît HTTP : le domaine ignore ces statuts. */
-const STATUS_BY_KIND: Record<PorteurAccessErrorKind, HttpStatus> = {
+export const STATUS_BY_KIND: Record<PorteurAccessErrorKind, HttpStatus> = {
   [PorteurAccessErrorKind.FORBIDDEN]: HttpStatus.FORBIDDEN,
   [PorteurAccessErrorKind.NOT_FOUND]: HttpStatus.NOT_FOUND,
   [PorteurAccessErrorKind.CONFLICT]: HttpStatus.CONFLICT,
   [PorteurAccessErrorKind.INVALID_INPUT]: HttpStatus.BAD_REQUEST,
   [PorteurAccessErrorKind.TOO_MANY_REQUESTS]: HttpStatus.TOO_MANY_REQUESTS,
 };
+
+/**
+ * Statut HTTP qu'une `PorteurAccessError` recevra — fonction PURE, exportée.
+ *
+ * Même raison que du côté IAM : l'intercepteur d'audit s'exécute AVANT ce
+ * filtre et doit journaliser le statut réellement envoyé. Sans cela, les 409
+ * de double soumission, le 403 de demande étrangère et le 429 de carence
+ * étaient tous écrits « 500 » dans un journal conservé cinq ans, alors que le
+ * client, lui, recevait les bons codes.
+ */
+export const statutHttpDePorteurAccessError = (
+  error: PorteurAccessError,
+): HttpStatus => STATUS_BY_KIND[error.kind];
 
 /** Libellé `error` que Nest ajoute quand on lui passe un message texte. */
 const ERROR_LABEL: Record<number, string> = {
@@ -41,7 +54,7 @@ const ERROR_LABEL: Record<number, string> = {
 export class PorteurAccessErrorFilter implements ExceptionFilter<PorteurAccessError> {
   catch(error: PorteurAccessError, host: ArgumentsHost): void {
     const response = host.switchToHttp().getResponse<Response>();
-    const status = STATUS_BY_KIND[error.kind];
+    const status = statutHttpDePorteurAccessError(error);
 
     response.status(status).json({
       message: error.message,

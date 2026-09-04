@@ -1,7 +1,14 @@
+import { ForbiddenException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { of, throwError, lastValueFrom } from 'rxjs';
 import { AuditInterceptor, sanitizeBody } from './audit.interceptor';
 import { AuditSansCorps } from './audit-sans-corps.decorator';
+import { EmailAlreadyRegisteredError } from 'src/iam/domains/errors';
+import {
+  DemandeAccesPorteurEnCoursError,
+  DemandeAccesPorteurEtrangereError,
+  DemandeTropRapprocheeError,
+} from 'src/porteur-access/domains/errors/porteur-access.errors';
 
 /** Cible de réflexion neutre : aucune métadonnée d'audit posée dessus. */
 class HandlerNu {
@@ -84,7 +91,8 @@ describe('AuditInterceptor', () => {
     await expect(
       lastValueFrom(
         interceptor.intercept(makeCtx('DELETE', { userId: 7, role: 'cio' }), {
-          handle: () => throwError(() => Object.assign(new Error('nope'), { status: 403 })),
+          handle: () =>
+            throwError(() => Object.assign(new Error('nope'), { status: 403 })),
         } as any),
       ),
     ).rejects.toThrow('nope');
@@ -185,7 +193,7 @@ describe('AuditInterceptor', () => {
         }),
       }) as any;
 
-    it("journalise la requête SANS recopier le corps", async () => {
+    it('journalise la requête SANS recopier le corps', async () => {
       await lastValueFrom(
         interceptor.intercept(ctxSansCorps(), {
           handle: () => of({ ok: true }),
@@ -232,6 +240,49 @@ describe('AuditInterceptor', () => {
 
       const metadata = auditLogService.create.mock.calls[0][7];
       expect(metadata.body).toEqual({ montant: 100, password: '[MASQUE]' });
+    });
+  });
+
+  /**
+   * Anomalie de recette (MAJEUR) : les erreurs métier ne sont pas des
+   * `HttpException` — elles ignorent HTTP par construction et sont traduites
+   * par un filtre qui s'exécute APRÈS cet intercepteur. `err?.status ?? 500`
+   * écrivait donc « 500 » pour des refus métier parfaitement normaux, dans un
+   * journal conservé cinq ans.
+   */
+  describe('statut journalisé pour une erreur métier', () => {
+    const interceptEnErreur = async (erreur: unknown) => {
+      auditLogService.create.mockClear();
+      await expect(
+        lastValueFrom(
+          interceptor.intercept(makeCtx('POST', { userId: 7, role: 'cio' }), {
+            handle: () => throwError(() => erreur),
+          } as any),
+        ),
+      ).rejects.toBeDefined();
+      await new Promise(process.nextTick);
+      return auditLogService.create.mock.calls[0][7].statusCode;
+    };
+
+    it.each([
+      ['409 double soumission', new DemandeAccesPorteurEnCoursError(), 409],
+      ['403 demande étrangère', new DemandeAccesPorteurEtrangereError(), 403],
+      ['429 délai de carence', new DemandeTropRapprocheeError(new Date()), 429],
+      ['409 conflit IAM', new EmailAlreadyRegisteredError(), 409],
+    ])('%s est journalisé %i, pas 500', async (_cas, erreur, attendu) => {
+      await expect(interceptEnErreur(erreur)).resolves.toBe(attendu);
+    });
+
+    it('CONTRE-ÉPREUVE : une vraie erreur serveur reste journalisée 500', async () => {
+      // Sans elle, un résolveur qui rendrait 409 partout passerait les tests
+      // ci-dessus tout en effaçant les incidents réels du journal.
+      await expect(interceptEnErreur(new Error('boom'))).resolves.toBe(500);
+    });
+
+    it('une HttpException conserve son propre statut', async () => {
+      await expect(interceptEnErreur(new ForbiddenException())).resolves.toBe(
+        403,
+      );
     });
   });
 

@@ -20,7 +20,7 @@ import {
  * Un code par statut, quelle que soit la route : le front peut brancher son
  * affichage sur `code` sans se soucier de l'endpoint appelé.
  */
-const HTTP_STATUS_BY_CODE: Record<PayoutMethodErrorCode, HttpStatus> = {
+export const HTTP_STATUS_BY_CODE: Record<PayoutMethodErrorCode, HttpStatus> = {
   CONNECT_NOT_READY: HttpStatus.CONFLICT,
   CANNOT_DELETE_DEFAULT: HttpStatus.CONFLICT,
   NO_PAYOUT_METHOD: HttpStatus.UNPROCESSABLE_ENTITY,
@@ -29,12 +29,21 @@ const HTTP_STATUS_BY_CODE: Record<PayoutMethodErrorCode, HttpStatus> = {
   AMOUNT_OUT_OF_RANGE: HttpStatus.UNPROCESSABLE_ENTITY,
 };
 
+/**
+ * Statut HTTP qu'une `PayoutMethodError` recevra — fonction PURE, exportée
+ * pour que l'intercepteur d'audit (qui s'exécute AVANT ce filtre) journalise
+ * le statut réellement envoyé au client plutôt qu'un 500 par défaut.
+ */
+export const statutHttpDePayoutMethodError = (
+  error: PayoutMethodError,
+): HttpStatus =>
+  HTTP_STATUS_BY_CODE[error.code] ?? HttpStatus.UNPROCESSABLE_ENTITY;
+
 @Catch(PayoutMethodError)
 export class PayoutMethodExceptionFilter implements ExceptionFilter {
   catch(error: PayoutMethodError, host: ArgumentsHost): void {
     const response = host.switchToHttp().getResponse<Response>();
-    const statusCode =
-      HTTP_STATUS_BY_CODE[error.code] ?? HttpStatus.UNPROCESSABLE_ENTITY;
+    const statusCode = statutHttpDePayoutMethodError(error);
 
     // `message` est rédigé pour l'utilisateur final (français, sans détail
     // technique) ; la cause Stripe brute reste dans les logs de l'adaptateur.

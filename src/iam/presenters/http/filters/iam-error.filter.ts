@@ -17,7 +17,7 @@ import {
 } from 'src/iam/domains/errors';
 
 /** Seule table qui connaît HTTP : le domaine ignore ces statuts. */
-const STATUS_BY_KIND: Record<IamErrorKind, HttpStatus> = {
+export const STATUS_BY_KIND: Record<IamErrorKind, HttpStatus> = {
   [IamErrorKind.UNAUTHENTICATED]: HttpStatus.UNAUTHORIZED,
   [IamErrorKind.FORBIDDEN]: HttpStatus.FORBIDDEN,
   [IamErrorKind.NOT_FOUND]: HttpStatus.NOT_FOUND,
@@ -25,6 +25,18 @@ const STATUS_BY_KIND: Record<IamErrorKind, HttpStatus> = {
   [IamErrorKind.INVALID_INPUT]: HttpStatus.BAD_REQUEST,
   [IamErrorKind.UNEXPECTED]: HttpStatus.INTERNAL_SERVER_ERROR,
 };
+
+/**
+ * Statut HTTP qu'une `IamError` recevra — fonction PURE, exportée.
+ *
+ * Exportée parce que ce filtre n'est plus le seul à devoir connaître la
+ * réponse : l'intercepteur d'audit, qui s'exécute EN AMONT de lui, doit
+ * journaliser le statut réellement envoyé au client et non un 500 par défaut.
+ * Une seule table, deux lecteurs — la divergence est structurellement
+ * impossible (cf. `src/common/audit/statut-erreur-metier.ts`).
+ */
+export const statutHttpDeIamError = (error: IamError): HttpStatus =>
+  STATUS_BY_KIND[error.kind];
 
 /** Libellé `error` que Nest ajoute quand on lui passe un message texte. */
 const ERROR_LABEL: Record<number, string> = {
@@ -77,7 +89,7 @@ export class IamErrorFilter implements ExceptionFilter<IamError> {
 
   catch(error: IamError, host: ArgumentsHost): void {
     const response = host.switchToHttp().getResponse<Response>();
-    const status = STATUS_BY_KIND[error.kind];
+    const status = statutHttpDeIamError(error);
 
     // Une UNEXPECTED signale une dépendance en panne, pas une faute de
     // l'appelant : c'est la seule catégorie qui mérite une trace serveur.

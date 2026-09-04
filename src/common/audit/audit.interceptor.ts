@@ -9,6 +9,7 @@ import { Reflector } from '@nestjs/core';
 import { Observable, tap } from 'rxjs';
 import { AuditLogService } from 'src/notifications/applications/audit-log.service';
 import { AUDIT_SANS_CORPS_KEY } from './audit-sans-corps.decorator';
+import { statutHttpDeLErreur } from './statut-erreur-metier';
 
 const MUTATING = ['POST', 'PUT', 'PATCH', 'DELETE'];
 const SENSITIVE = /password|token|secret|otp|iban|cvv|card/i;
@@ -99,7 +100,7 @@ export class AuditInterceptor implements NestInterceptor {
         (segments[0] === 'admin' ? segments[1] : segments[0]) ?? undefined;
       const params = request.params ?? {};
       const objetId =
-        (params.id ?? params.txId ?? Object.values(params)[0]) ?? undefined;
+        params.id ?? params.txId ?? Object.values(params)[0] ?? undefined;
 
       this.auditLogService
         .create(
@@ -130,7 +131,12 @@ export class AuditInterceptor implements NestInterceptor {
       tap({
         next: () =>
           write(context.switchToHttp().getResponse()?.statusCode ?? 200),
-        error: (err) => write(err?.status ?? 500),
+        // Le statut vient du RÉSOLVEUR et non de `err.status` : les erreurs
+        // métier du dépôt ne sont pas des HttpException — elles ignorent HTTP
+        // par construction et sont traduites par un filtre qui s'exécute APRÈS
+        // cet intercepteur. Sans cela, tout refus métier (409, 403, 429) était
+        // journalisé « 500 » pendant cinq ans.
+        error: (err) => write(statutHttpDeLErreur(err)),
       }),
     );
   }
