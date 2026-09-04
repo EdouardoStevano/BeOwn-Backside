@@ -6,14 +6,32 @@ const STATE_TTL_MS = 10 * 60 * 1000;
  * OAuth state bound to the browser that initiated the flow. This avoids the
  * default in-memory Passport session store while remaining safe when the API
  * is scaled horizontally.
+ *
+ * SECRET DÉDIÉ, SANS REPLI. Le repli silencieux sur `JWT_SECRET` faisait
+ * porter deux rôles au même secret :
+ *  1. sa rotation — geste normal d'exploitation, qui doit déconnecter les
+ *     sessions — invalidait AUSSI tous les états OAuth en vol, cassant les
+ *     connexions sociales en cours sans que personne ne fasse le lien ;
+ *  2. un secret qui signe des jetons d'accès n'a rien à faire dans une
+ *     signature de cookie anti-CSRF : le compromettre d'un côté le compromet
+ *     de l'autre.
+ *
+ * Le repli était de surcroît INVISIBLE : rien ne distinguait, au démarrage,
+ * un déploiement correctement configuré d'un déploiement qui retombait sur
+ * `JWT_SECRET`. Un secret manquant échoue désormais bruyamment.
+ *
+ * ⚠ DÉPLOIEMENT : `OAUTH_STATE_SECRET` devient OBLIGATOIRE dès qu'une
+ * stratégie OAuth est chargée — y compris en développement local. Voir
+ * `.env.example`.
  */
 export class CookieOAuthStateStore {
-  private readonly secret =
-    process.env.OAUTH_STATE_SECRET ?? process.env.JWT_SECRET ?? '';
+  private readonly secret = process.env.OAUTH_STATE_SECRET ?? '';
 
   constructor(private readonly provider: string) {
     if (!this.secret) {
-      throw new Error('OAUTH_STATE_SECRET must be configured for OAuth.');
+      throw new Error(
+        'OAUTH_STATE_SECRET must be configured for OAuth (no fallback on JWT_SECRET).',
+      );
     }
   }
 

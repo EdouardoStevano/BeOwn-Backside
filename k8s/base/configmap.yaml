@@ -80,7 +80,11 @@ data:
 
   # Payment providers
   FEDAPAY_ENV: 'sandbox'
-  CINETPAY_API_KEY: 'your-cinetpay-api-key'
+  # CINETPAY_API_KEY a été déplacée vers le Secret (secrets.example.yaml) :
+  # une clé d'API de prestataire de paiement n'a rien à faire dans un
+  # ConfigMap, lisible par quiconque a le droit `get configmaps` sur le
+  # namespace et versionné en clair. CINETPAY_SITE_ID reste ici : c'est un
+  # identifiant de compte marchand, pas un secret d'authentification.
   CINETPAY_SITE_ID: 'your-cinetpay-site-id'
 
   # Cloudinary
