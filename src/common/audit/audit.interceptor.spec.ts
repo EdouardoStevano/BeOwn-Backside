@@ -1,8 +1,17 @@
+import { Reflector } from '@nestjs/core';
 import { of, throwError, lastValueFrom } from 'rxjs';
 import { AuditInterceptor, sanitizeBody } from './audit.interceptor';
+import { AuditSansCorps } from './audit-sans-corps.decorator';
+
+/** Cible de réflexion neutre : aucune métadonnée d'audit posée dessus. */
+class HandlerNu {
+  action() {}
+}
 
 const makeCtx = (method: string, user?: { userId: number; role: string }) =>
   ({
+    getHandler: () => HandlerNu.prototype.action,
+    getClass: () => HandlerNu,
     switchToHttp: () => ({
       getRequest: () => ({
         method,
@@ -20,7 +29,10 @@ const makeCtx = (method: string, user?: { userId: number; role: string }) =>
 
 describe('AuditInterceptor', () => {
   const auditLogService = { create: jest.fn().mockResolvedValue({}) };
-  const interceptor = new AuditInterceptor(auditLogService as any);
+  const interceptor = new AuditInterceptor(
+    auditLogService as any,
+    new Reflector(),
+  );
   beforeEach(() => jest.clearAllMocks());
 
   it('loggue une mutation authentifiée', async () => {
@@ -88,6 +100,8 @@ describe('AuditInterceptor', () => {
   describe('exclusion des notifications', () => {
     const ctxForRoute = (path: string, method = 'POST') =>
       ({
+        getHandler: () => HandlerNu.prototype.action,
+        getClass: () => HandlerNu,
         switchToHttp: () => ({
           getRequest: () => ({
             method,
@@ -135,6 +149,89 @@ describe('AuditInterceptor', () => {
         } as any),
       );
       expect(result).toEqual({ ok: true });
+    });
+  });
+
+  /**
+   * `audit_log` est conservé cinq ans, échappe au barème de purge de la
+   * finalité concernée et n'entre dans aucun export de données personnelles :
+   * y recopier un champ de texte libre nominatif (motivation d'une demande
+   * d'accès porteur, note interne d'un instructeur) créerait une copie
+   * durable hors de tout contrôle. `@AuditSansCorps()` coupe la recopie SANS
+   * supprimer la trace.
+   */
+  describe('@AuditSansCorps — corps exclu de la trace', () => {
+    @AuditSansCorps()
+    class ControleurSansCorps {
+      action() {}
+    }
+
+    const ctxSansCorps = () =>
+      ({
+        getHandler: () => ControleurSansCorps.prototype.action,
+        getClass: () => ControleurSansCorps,
+        switchToHttp: () => ({
+          getRequest: () => ({
+            method: 'POST',
+            user: { userId: 7, role: 'investisseur' },
+            route: { path: '/porteur-access/demandes' },
+            url: '/porteur-access/demandes',
+            params: {},
+            ip: '10.0.0.1',
+            headers: { 'user-agent': 'jest' },
+            body: { motivation: 'Je porte un immeuble à Saint-Denis…' },
+          }),
+          getResponse: () => ({ statusCode: 201 }),
+        }),
+      }) as any;
+
+    it("journalise la requête SANS recopier le corps", async () => {
+      await lastValueFrom(
+        interceptor.intercept(ctxSansCorps(), {
+          handle: () => of({ ok: true }),
+        } as any),
+      );
+      await new Promise(process.nextTick);
+
+      expect(auditLogService.create).toHaveBeenCalled();
+      const metadata = auditLogService.create.mock.calls[0][7];
+      expect(metadata.body).toEqual({
+        _exclu: expect.stringContaining('non journalisé'),
+      });
+      // Contre-épreuve : le texte de la motivation n'apparaît NULLE PART.
+      expect(JSON.stringify(metadata)).not.toContain('Saint-Denis');
+    });
+
+    it('la trace reste complète pour tout le reste', async () => {
+      await lastValueFrom(
+        interceptor.intercept(ctxSansCorps(), {
+          handle: () => of({ ok: true }),
+        } as any),
+      );
+      await new Promise(process.nextTick);
+
+      expect(auditLogService.create).toHaveBeenCalledWith(
+        '7',
+        'investisseur',
+        'POST /porteur-access/demandes',
+        'porteur-access',
+        undefined,
+        '10.0.0.1',
+        'jest',
+        expect.objectContaining({ statusCode: 201 }),
+      );
+    });
+
+    it('une route non marquée conserve son corps (contre-épreuve)', async () => {
+      await lastValueFrom(
+        interceptor.intercept(makeCtx('POST', { userId: 7, role: 'cio' }), {
+          handle: () => of({ ok: true }),
+        } as any),
+      );
+      await new Promise(process.nextTick);
+
+      const metadata = auditLogService.create.mock.calls[0][7];
+      expect(metadata.body).toEqual({ montant: 100, password: '[MASQUE]' });
     });
   });
 

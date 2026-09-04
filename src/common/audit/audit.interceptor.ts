@@ -5,8 +5,10 @@ import {
   Logger,
   NestInterceptor,
 } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
 import { Observable, tap } from 'rxjs';
 import { AuditLogService } from 'src/notifications/applications/audit-log.service';
+import { AUDIT_SANS_CORPS_KEY } from './audit-sans-corps.decorator';
 
 const MUTATING = ['POST', 'PUT', 'PATCH', 'DELETE'];
 const SENSITIVE = /password|token|secret|otp|iban|cvv|card/i;
@@ -47,7 +49,29 @@ export function sanitizeBody(body: unknown): Record<string, unknown> | null {
 export class AuditInterceptor implements NestInterceptor {
   private readonly logger = new Logger(AuditInterceptor.name);
 
-  constructor(private readonly auditLogService: AuditLogService) {}
+  constructor(
+    private readonly auditLogService: AuditLogService,
+    private readonly reflector: Reflector,
+  ) {}
+
+  /**
+   * La route est-elle marquée `@AuditSansCorps()` ? Défensif sur l'absence de
+   * `getHandler`/`getClass` : certains contextes d'appel (tests, adaptateurs
+   * non HTTP) ne les exposent pas, et l'audit ne doit jamais faire échouer la
+   * requête qu'il observe.
+   */
+  private corpsExclu(context: ExecutionContext): boolean {
+    const cibles = [context.getHandler?.(), context.getClass?.()].filter(
+      Boolean,
+    );
+    if (cibles.length === 0) return false;
+    return (
+      this.reflector?.getAllAndOverride<boolean>(
+        AUDIT_SANS_CORPS_KEY,
+        cibles as Parameters<Reflector['getAllAndOverride']>[1],
+      ) === true
+    );
+  }
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
     const request = context.switchToHttp().getRequest();
@@ -67,6 +91,7 @@ export class AuditInterceptor implements NestInterceptor {
     }
 
     const started = Date.now();
+    const corpsExclu = this.corpsExclu(context);
     const write = (statusCode: number) => {
       const routePath: string = request.route?.path ?? request.url;
       const segments = routePath.split('/').filter(Boolean);
@@ -88,7 +113,12 @@ export class AuditInterceptor implements NestInterceptor {
           {
             statusCode,
             durationMs: Date.now() - started,
-            body: sanitizeBody(request.body),
+            // Le marqueur remplace le corps : la ligne d'audit dit qu'un corps
+            // a existé et pourquoi il n'est pas là, plutôt que de laisser
+            // croire à une requête sans données.
+            body: corpsExclu
+              ? { _exclu: 'corps non journalisé (texte libre nominatif)' }
+              : sanitizeBody(request.body),
           },
         )
         .catch((err) =>
