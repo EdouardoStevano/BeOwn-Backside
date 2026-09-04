@@ -66,6 +66,7 @@ import { MetricsPort } from 'src/observability/metrics/metrics.port';
 import { METRIC } from 'src/observability/metrics/metric-names';
 import { SIGNATURE_PROVIDER_UNAVAILABLE } from 'src/common/yousign/signature-provider.error';
 import { SignatureProviderExceptionFilter } from 'src/common/yousign/signature-provider-exception.filter';
+import { ConflitsInteretsErrorFilter } from 'src/projects/presenters/http/filters/conflits-interets-error.filter';
 
 @SkipThrottle()
 @ApiTags('Marché Secondaire')
@@ -73,7 +74,13 @@ import { SignatureProviderExceptionFilter } from 'src/common/yousign/signature-p
 // Une panne du prestataire de signature n'est pas un défaut de la plateforme :
 // déclaré ici, le filtre couvre toutes les routes du contrôleur — celles qui
 // déclenchent une signature aujourd'hui comme celles qui le feront demain.
-@UseFilters(SignatureProviderExceptionFilter)
+//
+// `ConflitsInteretsErrorFilter` est déclaré ICI, en portée contrôleur, et pas
+// seulement en `APP_FILTER` : le `SentryExceptionFilter` attrape-tout de
+// `main.ts` est enregistré après l'initialisation des modules et passe donc
+// avant tout filtre global de module (Nest inverse leur ordre). Sans cette
+// ligne, un refus de conflit d'intérêts sort en 500.
+@UseFilters(SignatureProviderExceptionFilter, ConflitsInteretsErrorFilter)
 @Controller('secondary-market')
 export class SecondaryMarketController {
   constructor(

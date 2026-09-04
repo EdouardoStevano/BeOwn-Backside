@@ -9,6 +9,7 @@ import {
   Param,
   ParseIntPipe,
   Post,
+  UseFilters,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
@@ -35,9 +36,15 @@ import { RequirePermission } from 'src/common/auth/require-permission.decorator'
 import { hasPermission } from 'src/common/auth/permissions.constants';
 import { Roles } from 'src/common/auth/roles.decorator';
 import { UserRole } from 'src/iam/domains/enums/user.enum';
+import { ConflitsInteretsErrorFilter } from 'src/projects/presenters/http/filters/conflits-interets-error.filter';
 
 @ApiTags('Reservations (Pré-investissement)')
 @ApiBearerAuth()
+// Portée contrôleur, obligatoire : le `SentryExceptionFilter` attrape-tout de
+// `main.ts` est enregistré après l'initialisation des modules et passe avant
+// tout `APP_FILTER` (Nest inverse l'ordre des filtres globaux). Sans cette
+// ligne, le refus de réservation pour conflit d'intérêts sort en 500.
+@UseFilters(ConflitsInteretsErrorFilter)
 @Controller('reservations')
 @UseGuards(JwtAuthGuard)
 export class ReservationController {
