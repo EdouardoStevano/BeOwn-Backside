@@ -89,6 +89,26 @@ export class CompteIntrouvableError extends PorteurAccessError {
 }
 
 /**
+ * Le compte visé n'est plus actif — suspendu, clos ou supprimé (409).
+ *
+ * Anomalie de recette : une demande restée `soumise` sur un compte SUPPRIMÉ et
+ * anonymisé pouvait encore être acceptée — `porteurAccess` s'écrivait sur un
+ * compte sans identité, avec une entrée d'audit dénuée de sens. Aucune décision
+ * ne se rend sur un compte qui n'est plus en relation d'affaires : le dossier
+ * est clos par caducité, pas tranché.
+ */
+export class CompteInactifError extends PorteurAccessError {
+  readonly kind = PorteurAccessErrorKind.CONFLICT;
+  readonly code = 'PORTEUR_ACCESS_COMPTE_INACTIF';
+
+  constructor() {
+    super(
+      "Le compte demandeur n'est plus actif (suspendu, clos ou supprimé) : aucune décision ne peut être rendue sur sa demande.",
+    );
+  }
+}
+
+/**
  * Transition non prévue par la machine à états (409).
  *
  * Porte les deux statuts : c'est ce qui permet au back-office d'expliquer un

@@ -40,14 +40,27 @@ const nouvelle = (utilisateurId: number, soumiseLe = new Date()) =>
     maintenant: soumiseLe,
   });
 
+/**
+ * Ce que toute implémentation doit fournir pour être éprouvée : le dépôt, et
+ * de quoi simuler un compte clos — la file d'instruction devant les exclure,
+ * le contrat ne peut pas se vérifier sans ce levier.
+ */
+export interface HarnaisDepot {
+  depot: DemandeAccesPorteurReader & DemandeAccesPorteurWriter;
+  marquerCompteClos: (utilisateurId: number) => void | Promise<void>;
+}
+
 export function executerContratDepot(
   nom: string,
-  fabrique: () => DemandeAccesPorteurReader & DemandeAccesPorteurWriter,
+  fabrique: () => HarnaisDepot,
 ): void {
   describe(`Contrat du dépôt de demandes — ${nom}`, () => {
     let depot: DemandeAccesPorteurReader & DemandeAccesPorteurWriter;
+    let marquerCompteClos: HarnaisDepot['marquerCompteClos'];
     beforeEach(() => {
-      depot = fabrique();
+      const harnais = fabrique();
+      depot = harnais.depot;
+      marquerCompteClos = harnais.marquerCompteClos;
     });
 
     it('creer attribue un identifiant et rend la demande relisible', async () => {
@@ -197,6 +210,48 @@ export function executerContratDepot(
       expect(absurde.page).toBe(1);
     });
 
+    it('lister EXCLUT les demandes des comptes clos ou supprimés', async () => {
+      // Anomalie de recette : le dossier d'un compte supprimé restait dans la
+      // file d'instruction et y vieillissait jusqu'à l'alerte J+25.
+      await depot.creer(nouvelle(USER_A));
+      await depot.creer(nouvelle(USER_B));
+      await marquerCompteClos(USER_A);
+
+      const page = await depot.lister({});
+      expect(page.total).toBe(1);
+      expect(page.items.map((d) => d.utilisateurId)).toEqual([USER_B]);
+    });
+
+    it("l'exclusion vaut aussi avec un filtre de statut", async () => {
+      await depot.creer(nouvelle(USER_A));
+      await marquerCompteClos(USER_A);
+
+      const page = await depot.lister({
+        statut: StatutDemandeAccesPorteur.SOUMISE,
+      });
+      expect(page.items).toEqual([]);
+      expect(page.total).toBe(0);
+    });
+
+    it("mais l'historique du compte, lui, reste lisible", async () => {
+      // La file d'instruction et le droit d'accès de la personne à ses propres
+      // données ne répondent pas à la même question.
+      const creee = await depot.creer(nouvelle(USER_A));
+      await marquerCompteClos(USER_A);
+
+      await expect(depot.historique(USER_A)).resolves.toHaveLength(1);
+      await expect(depot.findById(creee.id as string)).resolves.not.toBeNull();
+    });
+
+    it('caduque est terminal : il rouvre le droit de déposer', async () => {
+      const demande = await depot.creer(nouvelle(USER_A));
+      demande.constaterCaducite();
+      await depot.enregistrer(demande);
+
+      await expect(depot.findEnCours(USER_A)).resolves.toBeNull();
+      await expect(depot.creer(nouvelle(USER_A))).resolves.toBeDefined();
+    });
+
     it("le dépôt rend des COPIES : muter le résultat n'altère rien", async () => {
       const creee = await depot.creer(nouvelle(USER_A));
       creee.accepter(ADMIN);
@@ -207,7 +262,11 @@ export function executerContratDepot(
   });
 }
 
-executerContratDepot(
-  'implémentation en mémoire',
-  () => new InMemoryDemandeAccesPorteurRepository(),
-);
+executerContratDepot('implémentation en mémoire', () => {
+  const depot = new InMemoryDemandeAccesPorteurRepository();
+  return {
+    depot,
+    marquerCompteClos: (utilisateurId) =>
+      depot.marquerCompteClos(utilisateurId),
+  };
+});

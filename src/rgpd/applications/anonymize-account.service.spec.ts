@@ -10,6 +10,8 @@ import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/w
 import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entities/transaction.entity';
 import { DocumentEntity } from 'src/documents/infrastructure/persistences/entities/document.entity';
 import { DocumentType } from 'src/documents/domains/enums/document-type.enum';
+import { DemandeAccesPorteurEntity } from 'src/porteur-access/infrastructure/persistences/entities/demande-acces-porteur.entity';
+import { StatutDemandeAccesPorteur } from 'src/porteur-access/domains/demande-acces-porteur';
 
 /**
  * Les écritures passent par un EntityManager simulé (transaction mockée) et le
@@ -239,7 +241,9 @@ describe('AnonymizeAccountService', () => {
         .filter((c: any) => c[0] === DocumentEntity)
         .map((c: any) => c[1].id);
       expect(deletedIds).toEqual(['a1']);
-      const archived = updatesFor(DocumentEntity).map((u: any) => u.criteria.id);
+      const archived = updatesFor(DocumentEntity).map(
+        (u: any) => u.criteria.id,
+      );
       expect(archived).toEqual(['kyc1', 'kyc2']);
     });
 
@@ -270,6 +274,83 @@ describe('AnonymizeAccountService', () => {
     const rapport = await service.anonymiser(USER_ID);
     expect(rapport.documentsSupprimes).toBe(1);
     expect(stockage.delete).not.toHaveBeenCalled();
+  });
+
+  /**
+   * Anomalie de recette (MAJEUR) : un compte supprimé et anonymisé gardait sa
+   * demande d'accès porteur en `soumise`. Elle restait décidable — le drapeau
+   * `porteurAccess` s'écrivait alors sur un compte sans identité — et
+   * vieillissait dans la file jusqu'à déclencher l'alerte J+25.
+   *
+   * Première des trois ceintures : le dossier est CLOS au moment même où le
+   * compte disparaît.
+   */
+  describe("demandes d'accès porteur du compte", () => {
+    const updatesDemandes = () => updatesFor(DemandeAccesPorteurEntity);
+
+    it('ARCHIVAGE RESTREINT : les dossiers ouverts passent à « caduque »', async () => {
+      kycCount = 1;
+      await service.anonymiser(USER_ID);
+
+      const cloture = updatesDemandes().find(
+        (u: any) => u.patch.statut === StatutDemandeAccesPorteur.CADUQUE,
+      );
+      expect(cloture).toBeDefined();
+      // Ciblage strict : SEULS les dossiers non terminaux sont refermés — une
+      // décision déjà rendue ne se réécrit pas.
+      expect(cloture.criteria).toMatchObject({ utilisateurId: USER_ID });
+      expect(cloture.criteria.statut).toBeDefined();
+      expect(cloture.patch.decideeLe).toBeInstanceOf(Date);
+    });
+
+    it("« caduque » et non « retiree » : la personne ne s'est pas désistée", async () => {
+      kycCount = 1;
+      await service.anonymiser(USER_ID);
+
+      const statutsPoses = updatesDemandes().map((u: any) => u.patch.statut);
+      expect(statutsPoses).toContain(StatutDemandeAccesPorteur.CADUQUE);
+      expect(statutsPoses).not.toContain(StatutDemandeAccesPorteur.RETIREE);
+    });
+
+    it('la clôture précède l’effacement du texte libre', async () => {
+      // L'ordre compte : effacer d'abord laisserait, sur une panne entre les
+      // deux écritures, un dossier ouvert ET vidé de sa motivation —
+      // instruisible sans que l'instructeur ait quoi que ce soit à lire.
+      kycCount = 1;
+      await service.anonymiser(USER_ID);
+
+      const updates = updatesDemandes();
+      const iCloture = updates.findIndex(
+        (u: any) => u.patch.statut === StatutDemandeAccesPorteur.CADUQUE,
+      );
+      const iEffacement = updates.findIndex(
+        (u: any) => u.patch.motivation === '',
+      );
+      expect(iCloture).toBeGreaterThanOrEqual(0);
+      expect(iEffacement).toBeGreaterThan(iCloture);
+    });
+
+    it('le texte libre est effacé sur TOUS les dossiers du compte', async () => {
+      kycCount = 1;
+      await service.anonymiser(USER_ID);
+
+      const effacement = updatesDemandes().find(
+        (u: any) => u.patch.motivation === '',
+      );
+      expect(effacement.criteria).toEqual({ utilisateurId: USER_ID });
+      expect(effacement.patch.motifRefusComplement).toBeNull();
+    });
+
+    it('PURGE TOTALE : les dossiers sont supprimés, pas refermés', async () => {
+      // Aucune relation d'affaires n'est née : il n'y a aucun examen à
+      // justifier, la ligne part avec le reste.
+      await service.anonymiser(USER_ID);
+
+      expect(manager.delete).toHaveBeenCalledWith(DemandeAccesPorteurEntity, {
+        utilisateurId: USER_ID,
+      });
+      expect(updatesDemandes()).toEqual([]);
+    });
   });
 
   it('les écritures base vivent dans UNE transaction ; le stockage distant est appelé après', async () => {

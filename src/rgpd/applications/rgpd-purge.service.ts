@@ -472,7 +472,7 @@ export class RgpdPurgeService {
         `DELETE FROM demande_acces_porteur
           WHERE id IN (
             SELECT d.id FROM demande_acces_porteur d
-             WHERE d.statut IN ('acceptee','refusee','retiree')
+             WHERE d.statut IN ('acceptee','refusee','retiree','caduque')
                AND d."decideeLe" IS NOT NULL
                AND d."decideeLe" < $1
                AND (

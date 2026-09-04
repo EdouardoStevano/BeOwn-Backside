@@ -6,13 +6,14 @@
  */
 import { ExecutionContext, ForbiddenException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import { statutHttpDeLErreur } from 'src/common/audit/statut-erreur-metier';
 import { PermissionsGuard } from 'src/common/auth/permissions.guard';
 import { PorteurAccessGuard } from 'src/common/auth/porteur-access.guard';
 import { RolesGuard } from 'src/common/auth/roles.guard';
 import { PERMISSIONS_KEY } from 'src/common/auth/require-permission.decorator';
 import { ROLES_KEY } from 'src/common/auth/roles.decorator';
 import { IS_PUBLIC_KEY } from 'src/common/auth/public.decorator';
-import { UserRole } from 'src/iam/domains/enums/user.enum';
+import { UserRole, UserStatus } from 'src/iam/domains/enums/user.enum';
 import { buildUser } from 'src/iam/domains/models/user.fixture';
 import type {
   AccesPorteurEnBase,
@@ -46,6 +47,7 @@ import {
 import { MotifRefusAccesPorteur } from './domains/motif-refus';
 import {
   AccesPorteurDejaOuvertError,
+  CompteInactifError,
   DemandeAccesPorteurEnCoursError,
   DemandeAccesPorteurEtrangereError,
   DemandeAccesPorteurIntrouvableError,
@@ -82,6 +84,7 @@ interface Compte {
   email: string;
   role: UserRole;
   porteurAccess: boolean;
+  status: UserStatus;
 }
 
 /**
@@ -102,6 +105,7 @@ class InMemoryUserRepository implements Partial<UserRepository> {
             email: compte.email,
             emailVerified: true,
             role: compte.role,
+            status: compte.status,
           })
         : null,
     );
@@ -130,12 +134,14 @@ const makeHarness = () => {
       email: EMAIL,
       role: UserRole.INVESTISSEUR,
       porteurAccess: false,
+      status: UserStatus.ACTIF,
     },
     {
       userId: PORTEUR_PUR_ID,
       email: 'porteur@example.com',
       role: UserRole.PORTEUR,
       porteurAccess: false,
+      status: UserStatus.ACTIF,
     },
   ];
   const users = new InMemoryUserRepository(comptes);
@@ -704,6 +710,111 @@ describe('Retrait par le demandeur', () => {
         decideurRole: UserRole.COMPLIANCE,
       }),
     ).rejects.toBeInstanceOf(DemandeAccesPorteurIntrouvableError);
+  });
+});
+
+/**
+ * Anomalie de recette (MAJEUR) : un compte supprimé puis anonymisé gardait sa
+ * demande en `soumise`. La faire accepter renvoyait 200, écrivait
+ * `porteurAccess = true` sur un compte sans identité et produisait une entrée
+ * d'audit dénuée de sens.
+ *
+ * Deux ceintures indépendantes. Celle-ci est la seconde : le use case refuse.
+ * La première — la caducité posée au moment de l'anonymisation — est éprouvée
+ * dans `anonymize-account.service.spec.ts`.
+ */
+describe("Décision sur un compte qui n'est plus actif", () => {
+  const prepare = async (status: UserStatus) => {
+    const h = makeHarness();
+    const demande = await h.soumettre.execute({
+      utilisateurId: INVESTISSEUR_ID,
+      motivation: MOTIVATION,
+    });
+    const compte = h.comptes.find((c) => c.userId === INVESTISSEUR_ID);
+    if (compte) compte.status = status;
+    return { h, demande };
+  };
+
+  it.each([
+    ['supprimé', UserStatus.SUPPRIME],
+    ['clos', UserStatus.CLOS],
+    ['suspendu', UserStatus.SUSPENDU],
+  ])(
+    "refuse d'ACCEPTER la demande d'un compte %s (409)",
+    async (_cas, status) => {
+      const { h, demande } = await prepare(status);
+
+      await expect(
+        h.decider.execute({
+          demandeId: demande.id as string,
+          decision: StatutDemandeAccesPorteur.ACCEPTEE,
+          decideurAdminId: ADMIN_ID,
+          decideurRole: UserRole.COMPLIANCE,
+        }),
+      ).rejects.toBeInstanceOf(CompteInactifError);
+
+      // Rien n'a bougé : ni le drapeau, ni le dossier.
+      expect(
+        h.comptes.find((c) => c.userId === INVESTISSEUR_ID)?.porteurAccess,
+      ).toBe(false);
+      const relue = await h.demandes.findById(demande.id as string);
+      expect(relue?.statut).toBe(StatutDemandeAccesPorteur.SOUMISE);
+    },
+  );
+
+  it("refuse aussi de REFUSER : on ne clôt pas un dossier au nom d'un absent", async () => {
+    const { h, demande } = await prepare(UserStatus.SUPPRIME);
+
+    await expect(
+      h.decider.execute({
+        demandeId: demande.id as string,
+        decision: StatutDemandeAccesPorteur.REFUSEE,
+        motifRefus: MotifRefusAccesPorteur.HORS_CRITERES,
+        decideurAdminId: ADMIN_ID,
+        decideurRole: UserRole.COMPLIANCE,
+      }),
+    ).rejects.toBeInstanceOf(CompteInactifError);
+  });
+
+  it("l'erreur porte un code stable et se traduit en 409", async () => {
+    const { h, demande } = await prepare(UserStatus.SUPPRIME);
+    await h.decider
+      .execute({
+        demandeId: demande.id as string,
+        decision: StatutDemandeAccesPorteur.ACCEPTEE,
+        decideurAdminId: ADMIN_ID,
+        decideurRole: UserRole.COMPLIANCE,
+      })
+      .catch((erreur: CompteInactifError) => {
+        expect(erreur.code).toBe('PORTEUR_ACCESS_COMPTE_INACTIF');
+        expect(statutHttpDeLErreur(erreur)).toBe(409);
+      });
+    expect.assertions(2);
+  });
+
+  it('CONTRE-ÉPREUVE : un compte actif reste décidable', async () => {
+    const { h, demande } = await prepare(UserStatus.ACTIF);
+    const resultat = await h.decider.execute({
+      demandeId: demande.id as string,
+      decision: StatutDemandeAccesPorteur.ACCEPTEE,
+      decideurAdminId: ADMIN_ID,
+      decideurRole: UserRole.COMPLIANCE,
+    });
+    expect(resultat.porteurAccess).toBe(true);
+  });
+
+  it("la file d'instruction n'affiche plus le dossier d'un compte disparu", async () => {
+    // Troisième ceinture : même si un dossier survivait aux deux premières, il
+    // ne remonterait plus dans la file — donc plus d'alerte J+25 fantôme.
+    const { h, demande } = await prepare(UserStatus.SUPPRIME);
+    h.demandes.marquerCompteClos(INVESTISSEUR_ID);
+
+    const file = await h.demandes.lister({});
+    expect(file.total).toBe(0);
+    // …mais le dossier existe toujours pour qui le demande par son identifiant.
+    await expect(
+      h.demandes.findById(demande.id as string),
+    ).resolves.not.toBeNull();
   });
 });
 

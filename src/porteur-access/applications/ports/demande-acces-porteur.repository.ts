@@ -54,7 +54,14 @@ export abstract class DemandeAccesPorteurReader {
   /** Historique du compte, de la plus récente à la plus ancienne. */
   abstract historique(utilisateurId: number): Promise<DemandeAccesPorteur[]>;
 
-  /** File de traitement paginée du back-office. */
+  /**
+   * File de traitement paginée du back-office.
+   *
+   * EXCLUT les demandes des comptes CLOS ou SUPPRIMÉS — règle du contrat, pas
+   * option d'appel : instruire le dossier d'un compte qui n'existe plus n'a
+   * aucun sens, et ces dossiers fantômes vieillissaient dans la file jusqu'à
+   * déclencher l'alerte J+25. Toute implémentation doit l'honorer.
+   */
   abstract lister(
     filtre: FiltreDemandesAccesPorteur,
   ): Promise<PageDemandesAccesPorteur>;

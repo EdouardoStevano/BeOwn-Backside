@@ -310,6 +310,68 @@ describe('Retrait par le demandeur', () => {
   });
 });
 
+describe('Caducité — le compte demandeur a disparu', () => {
+  it('close le dossier depuis soumise comme depuis en_examen', () => {
+    const depuisSoumise = soumise();
+    depuisSoumise.constaterCaducite(T0);
+    expect(depuisSoumise.statut).toBe(StatutDemandeAccesPorteur.CADUQUE);
+    expect(depuisSoumise.decideeLe).toEqual(T0);
+
+    const depuisExamen = soumise();
+    depuisExamen.prendreEnExamen(ADMIN);
+    depuisExamen.constaterCaducite(T0);
+    expect(depuisExamen.statut).toBe(StatutDemandeAccesPorteur.CADUQUE);
+  });
+
+  it("n'est PAS une décision : aucun décideur n'est imputé", () => {
+    // Un constat de la plateforme, pas un acte d'instructeur. Poser un
+    // décideur ferait dire à la piste d'audit qu'un dossier a été instruit
+    // alors que personne ne l'a regardé.
+    const demande = soumise();
+    demande.constaterCaducite();
+    expect(demande.decideurAdminId).toBeNull();
+    expect(decisionEstImputable(demande.snapshot())).toBe(true);
+  });
+
+  it('est TERMINAL : plus aucune décision possible ensuite', () => {
+    const demande = soumise();
+    demande.constaterCaducite();
+    expect(estTerminal(StatutDemandeAccesPorteur.CADUQUE)).toBe(true);
+    expect(demande.estEnCours()).toBe(false);
+    expect(() => demande.accepter(ADMIN)).toThrow(
+      TransitionDemandeInterditeError,
+    );
+    expect(() =>
+      demande.refuser(ADMIN, MotifRefusAccesPorteur.HORS_CRITERES),
+    ).toThrow(TransitionDemandeInterditeError);
+    expect(() => demande.prendreEnExamen(ADMIN)).toThrow(
+      TransitionDemandeInterditeError,
+    );
+  });
+
+  it('un dossier déjà clos ne devient pas caduc', () => {
+    const demande = soumise();
+    demande.accepter(ADMIN);
+    expect(() => demande.constaterCaducite()).toThrow(
+      TransitionDemandeInterditeError,
+    );
+  });
+
+  it("se distingue d'un retrait : le demandeur ne s'est pas désisté", () => {
+    const caduque = soumise();
+    caduque.constaterCaducite();
+    const retiree = soumise();
+    retiree.retirer(USER);
+    expect(caduque.statut).not.toBe(retiree.statut);
+  });
+
+  it("n'ouvre aucun délai de carence", () => {
+    const demande = soumise();
+    demande.constaterCaducite(T0);
+    expect(finDeCarence(demande.snapshot())).toBeNull();
+  });
+});
+
 describe('Délai de carence après refus', () => {
   const refusee = (le: Date) => {
     const demande = soumise();

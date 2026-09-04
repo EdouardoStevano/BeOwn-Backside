@@ -14,6 +14,10 @@ import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entit
 import { DocumentEntity } from 'src/documents/infrastructure/persistences/entities/document.entity';
 import { DemandeAccesPorteurEntity } from 'src/porteur-access/infrastructure/persistences/entities/demande-acces-porteur.entity';
 import {
+  STATUTS_NON_TERMINAUX,
+  StatutDemandeAccesPorteur,
+} from 'src/porteur-access/domains/demande-acces-porteur';
+import {
   RegimeAnonymisation,
   SortDemandeAccesPorteur,
   SortDocument,
@@ -185,6 +189,19 @@ export class AnonymizeAccountService {
           utilisateurId: userId,
         });
       } else {
+        // CLÔTURE D'ABORD. Un dossier laissé `soumise` sur un compte anonymisé
+        // restait décidable — `porteurAccess` s'écrivait alors sur un compte
+        // sans identité — et vieillissait dans la file d'instruction jusqu'à
+        // l'alerte J+25. `caduque` et non `retiree` : la personne ne s'est pas
+        // désistée, son compte a disparu.
+        await manager.update(
+          DemandeAccesPorteurEntity,
+          { utilisateurId: userId, statut: In([...STATUTS_NON_TERMINAUX]) },
+          {
+            statut: StatutDemandeAccesPorteur.CADUQUE,
+            decideeLe: new Date(),
+          },
+        );
         await manager.update(
           DemandeAccesPorteurEntity,
           { utilisateurId: userId },

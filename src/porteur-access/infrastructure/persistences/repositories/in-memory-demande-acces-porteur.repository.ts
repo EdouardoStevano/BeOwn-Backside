@@ -32,6 +32,19 @@ export class InMemoryDemandeAccesPorteurRepository
   /** Copies d'état : rien ne sort par référence, comme avec une vraie base. */
   private readonly lignes: EtatDemandeAccesPorteur[] = [];
 
+  /**
+   * Comptes clos ou supprimés — équivalent en mémoire de la sous-requête sur
+   * `users.status` de l'adaptateur PostgreSQL. Sans cet état, `lister` ne
+   * pourrait pas honorer la clause « la file n'affiche pas les demandes des
+   * comptes disparus » et les deux implémentations divergeraient.
+   */
+  constructor(private readonly comptesClos: Set<number> = new Set()) {}
+
+  /** Fixture : marque un compte comme clos/supprimé. */
+  marquerCompteClos(utilisateurId: number): void {
+    this.comptesClos.add(utilisateurId);
+  }
+
   findById(id: string): Promise<DemandeAccesPorteur | null> {
     const ligne = this.lignes.find((l) => l.id === id);
     return Promise.resolve(ligne ? this.hydrater(ligne) : null);
@@ -76,6 +89,7 @@ export class InMemoryDemandeAccesPorteurRepository
       Math.max(1, Number(filtre.limit) || LIMITE_PAR_DEFAUT),
     );
     const filtrees = this.lignes
+      .filter((l) => !this.comptesClos.has(l.utilisateurId))
       .filter((l) => (filtre.statut ? l.statut === filtre.statut : true))
       .sort((a, b) => b.soumiseLe.getTime() - a.soumiseLe.getTime());
 

@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, IsNull, Not, Repository } from 'typeorm';
+import { UserStatus } from 'src/iam/domains/enums/user.enum';
 import {
   DemandeAccesPorteurReader,
   DemandeAccesPorteurWriter,
@@ -88,12 +89,28 @@ export class TypeOrmDemandeAccesPorteurRepository
       Math.max(1, Number(filtre.limit) || LIMITE_PAR_DEFAUT),
     );
 
-    const [rows, total] = await this.repo.findAndCount({
-      where: filtre.statut ? { statut: filtre.statut } : {},
-      order: { soumiseLe: 'DESC' },
-      skip: (page - 1) * limit,
-      take: limit,
-    });
+    const qb = this.repo
+      .createQueryBuilder('d')
+      // Comptes clos ou supprimés exclus de la file (contrat du port) : un
+      // dossier dont le titulaire n'existe plus n'est pas instruisible, et il
+      // déclencherait l'alerte J+25 sans que personne ne puisse rien en faire.
+      // Sous-requête plutôt que jointure : aucune colonne de `users` n'est lue,
+      // et l'absence de ligne compte (référence sans FK dure).
+      .where(
+        `NOT EXISTS (SELECT 1 FROM users u
+                      WHERE u."userId" = d."utilisateurId"
+                        AND u.status IN (:...statutsClos))`,
+        { statutsClos: [UserStatus.CLOS, UserStatus.SUPPRIME] },
+      )
+      .orderBy('d.soumiseLe', 'DESC')
+      .skip((page - 1) * limit)
+      .take(limit);
+
+    if (filtre.statut) {
+      qb.andWhere('d.statut = :statut', { statut: filtre.statut });
+    }
+
+    const [rows, total] = await qb.getManyAndCount();
 
     return {
       items: rows.map((r) => DemandeAccesPorteurMapper.toDomain(r)),

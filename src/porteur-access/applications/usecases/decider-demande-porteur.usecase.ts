@@ -16,6 +16,7 @@ import {
   libelleMotifRefus,
 } from 'src/porteur-access/domains/motif-refus';
 import {
+  CompteInactifError,
   CompteIntrouvableError,
   DemandeAccesPorteurIntrouvableError,
 } from 'src/porteur-access/domains/errors/porteur-access.errors';
@@ -92,6 +93,15 @@ export class DeciderDemandePorteurUseCase {
       demande.utilisateurId,
     );
     if (!cible || !accesActuel) throw new CompteIntrouvableError();
+
+    // Deuxième ceinture (la première est la caducité posée à l'anonymisation) :
+    // aucune décision ne se rend sur un compte hors relation d'affaires.
+    // `canOpenSession()` couvre les trois états concernés — suspendu, clos,
+    // supprimé. La suspension est incluse à dessein : accorder l'espace porteur
+    // à un compte suspendu n'a pas de sens, et le refuser reviendrait à clore
+    // un dossier au nom de quelqu'un qui ne peut pas réagir. Le dossier attend
+    // la réactivation — ou la caducité, si le compte finit par être supprimé.
+    if (!cible.canOpenSession()) throw new CompteInactifError();
 
     const accepte = commande.decision === StatutDemandeAccesPorteur.ACCEPTEE;
 

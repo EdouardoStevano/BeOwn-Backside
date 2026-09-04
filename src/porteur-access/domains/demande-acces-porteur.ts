@@ -37,6 +37,17 @@ export enum StatutDemandeAccesPorteur {
   REFUSEE = 'refusee',
   /** Retirée par le demandeur avant toute décision. */
   RETIREE = 'retiree',
+  /**
+   * Devenue SANS OBJET : le compte demandeur a été clos, supprimé et
+   * anonymisé avant qu'une décision ne soit rendue.
+   *
+   * État distinct de `retiree` — et c'est tout l'intérêt de l'avoir ajouté :
+   * un retrait est un ACTE du demandeur, la caducité est un CONSTAT de la
+   * plateforme. Les confondre écrirait dans le dossier que la personne s'est
+   * désistée, ce qui serait faux, et rendrait illisible a posteriori la raison
+   * pour laquelle un dossier n'a jamais été instruit.
+   */
+  CADUQUE = 'caduque',
 }
 
 /**
@@ -54,15 +65,18 @@ export const TRANSITIONS_LEGALES: Readonly<
     StatutDemandeAccesPorteur.ACCEPTEE,
     StatutDemandeAccesPorteur.REFUSEE,
     StatutDemandeAccesPorteur.RETIREE,
+    StatutDemandeAccesPorteur.CADUQUE,
   ]),
   [StatutDemandeAccesPorteur.EN_EXAMEN]: Object.freeze([
     StatutDemandeAccesPorteur.ACCEPTEE,
     StatutDemandeAccesPorteur.REFUSEE,
     StatutDemandeAccesPorteur.RETIREE,
+    StatutDemandeAccesPorteur.CADUQUE,
   ]),
   [StatutDemandeAccesPorteur.ACCEPTEE]: Object.freeze([]),
   [StatutDemandeAccesPorteur.REFUSEE]: Object.freeze([]),
   [StatutDemandeAccesPorteur.RETIREE]: Object.freeze([]),
+  [StatutDemandeAccesPorteur.CADUQUE]: Object.freeze([]),
 });
 
 /**
@@ -375,6 +389,25 @@ export class DemandeAccesPorteur {
    * contrôleur ne peut donc pas l'oublier. Aucun `decideurAdminId` n'est posé :
    * un retrait n'est pas une décision de BeOwn.
    */
+  /**
+   * Constat de caducité : le compte demandeur a disparu (clôture, suppression,
+   * anonymisation) avant toute décision.
+   *
+   * Ce n'est PAS une décision — aucun `decideurAdminId` n'est posé : personne
+   * n'a instruit ce dossier, et prétendre le contraire fausserait la piste
+   * d'audit. `decideeLe` sert ici de date de CLÔTURE, ce qui donne au barème de
+   * conservation son point de départ.
+   *
+   * Sans elle, un dossier de compte supprimé restait `soumise` : décidable par
+   * un instructeur (le drapeau `porteurAccess` s'écrivait sur un compte
+   * anonymisé) et vieillissant dans la file jusqu'à l'alerte J+25.
+   */
+  constaterCaducite(maintenant: Date = new Date()): void {
+    this.exigerTransition(StatutDemandeAccesPorteur.CADUQUE);
+    this.etat.statut = StatutDemandeAccesPorteur.CADUQUE;
+    this.etat.decideeLe = maintenant;
+  }
+
   retirer(parUtilisateurId: number, maintenant: Date = new Date()): void {
     if (parUtilisateurId !== this.etat.utilisateurId) {
       throw new DemandeAccesPorteurEtrangereError();
