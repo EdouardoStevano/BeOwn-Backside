@@ -20,9 +20,28 @@ import { ConflitsInteretsErrorFilter } from 'src/projects/presenters/http/filter
  * graphe de dépendances — de sorte qu'il puisse être importé partout sans
  * jamais créer de cycle.
  *
- * Il enregistre aussi le filtre d'erreurs en `APP_FILTER` (donc globalement) :
- * un `@UseFilters` à poser sur chaque contrôleur concerné aurait fait du
- * premier oubli un 500 sur un refus métier parfaitement normal.
+ * ## Le filtre d'erreurs : `APP_FILTER` ne suffit PAS
+ *
+ * Ce module enregistre `ConflitsInteretsErrorFilter` en `APP_FILTER`, mais
+ * c'est un FILET, pas la garantie. `main.ts` pose
+ * `app.useGlobalFilters(new SentryExceptionFilter(...))` — un `@Catch()`
+ * attrape-tout — APRÈS l'initialisation des modules ; Nest assemble les
+ * filtres `[globaux, contrôleur, méthode]`, inverse la liste, puis retient le
+ * premier dont le `@Catch()` accepte l'exception. L'attrape-tout enregistré en
+ * dernier passe donc AVANT cet `APP_FILTER`, et rend 500.
+ *
+ * Constaté en recette : les refus de conflit d'intérêts sortaient en 500 alors
+ * que la règle fonctionnait (refus journalisé, rien créé, `audit_log` à 403).
+ * Le module IAM avait rencontré le même piège et documenté sa parade.
+ *
+ * La traduction est donc garantie par un `@UseFilters(ConflitsInteretsErrorFilter)`
+ * de portée CONTRÔLEUR — les filtres de contrôleur passent toujours avant les
+ * globaux — sur les quatre contrôleurs qui exposent un flux gardé. Deux tests
+ * tiennent cette mécanique :
+ *  - `conflits-interets-statut-http.spec.ts` lit le statut réellement rendu par
+ *    l'application assemblée, filtre Sentry compris ;
+ *  - `conflits-interets-completude.spec.ts` échoue si un contrôleur consommant
+ *    un use case gardé oublie le filtre.
  */
 @Module({
   imports: [

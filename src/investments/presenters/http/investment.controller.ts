@@ -60,6 +60,7 @@ import {
   LIBELLE_DELAI_RETRACTATION,
 } from 'src/investments/domains/retractation';
 import { SignatureProviderExceptionFilter } from 'src/common/yousign/signature-provider-exception.filter';
+import { ConflitsInteretsErrorFilter } from 'src/projects/presenters/http/filters/conflits-interets-error.filter';
 
 class InitiateInvestmentDto {
   @ApiProperty({ description: 'UUID du projet' })
@@ -79,7 +80,15 @@ class InitiateInvestmentDto {
 // panne) doit se lire comme une indisponibilite temporaire et non comme un
 // defaut applicatif : le filtre traduit en 503 rejouable. Meme traitement que
 // le marche secondaire, ou la souscription passe par la meme chaine YouSign.
-@UseFilters(SignatureProviderExceptionFilter)
+//
+// PORTÉE CONTRÔLEUR, obligatoire — même raison que `IamErrorFilter` sur
+// `AuthenticationController` : `main.ts` enregistre un `SentryExceptionFilter`
+// attrape-tout (`@Catch()`) APRÈS l'initialisation des modules. Nest inverse
+// l'ordre des filtres globaux, si bien que cet attrape-tout passe AVANT tout
+// `APP_FILTER` de module et rend 500. Constaté en recette : les refus de
+// conflit d'intérêts sortaient en 500 alors que le refus, lui, fonctionnait.
+// Les filtres de contrôleur, eux, passent toujours avant les globaux.
+@UseFilters(SignatureProviderExceptionFilter, ConflitsInteretsErrorFilter)
 @Controller('investments')
 @UseGuards(JwtAuthGuard)
 export class InvestmentController {

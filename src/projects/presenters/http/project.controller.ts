@@ -11,6 +11,7 @@ import {
   Patch,
   Post,
   Query,
+  UseFilters,
   UseGuards,
 } from '@nestjs/common';
 import { createHash } from 'crypto';
@@ -57,9 +58,16 @@ import { NotificationType } from 'src/notifications/infrastructure/persistences/
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ProjectViewEntity } from '../../infrastructure/persistences/entities/project-view.entity';
+import { ConflitsInteretsErrorFilter } from './filters/conflits-interets-error.filter';
 
 @ApiTags('Projects')
 @ApiBearerAuth()
+// Portée contrôleur, obligatoire : `POST /projects/submit` peut refuser un
+// rattachement de porteur pour conflit d'intérêts (409). Le
+// `SentryExceptionFilter` attrape-tout de `main.ts` est enregistré après
+// l'initialisation des modules et passe avant tout `APP_FILTER` — sans cette
+// ligne, ce refus sort en 500.
+@UseFilters(ConflitsInteretsErrorFilter)
 @Controller('projects')
 export class ProjectController {
   constructor(
