@@ -6,7 +6,7 @@
  * client la fournissait, il choisirait ce qu'il est réputé avoir accepté — un
  * consentement qu'on ne peut pas opposer.
  *
- * Alignée sur le texte publié (« Version 1.0 — en vigueur au 29 août 2026 »,
+ * Alignée sur le texte publié (« Version 1.1 — en vigueur au 4 septembre 2026 »,
  * `src/core/config/cguVersion.ts` du dépôt Frontside) et sur le barème
  * `docs/conformite/2026-09-03-baremes-lot2.md` (§5). À incrémenter UNIQUEMENT
  * lors d'une révision réelle du texte.
@@ -15,4 +15,4 @@
  * la version dans le corps de la requête (`RegisterDto.cguVersion`). Cette
  * constante a vocation à devenir la source unique des deux chemins.
  */
-export const CGU_VERSION_COURANTE = '1.0';
+export const CGU_VERSION_COURANTE = '1.1';
