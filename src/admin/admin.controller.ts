@@ -32,6 +32,7 @@ import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
 import { RequirePermission } from 'src/common/auth/require-permission.decorator';
 import {
   hasPermission,
+  isBackOfficeRole,
   rolesWithPermission,
 } from 'src/common/auth/permissions.constants';
 import { CurrentUser } from 'src/common/auth/current-user.decorator';
@@ -132,6 +133,26 @@ export class AdminController {
     if (!user || !ADMIN_ROLES.includes(user.role)) {
       throw new ForbiddenException('Accès réservé aux administrateurs BeOwn.');
     }
+  }
+
+  /**
+   * Relit en base le rôle d'un acteur qui va MODIFIER un compte, et le rend.
+   *
+   * Distinct d'`assertAdmin`, qui contrôle `reports:read` — une permission de
+   * lecture. Sanctionner un compte demande `users:manage`, celle-là même que
+   * porte le décorateur de la route : le contrôle en base et le contrôle sur
+   * jeton visent enfin la même permission. Le rôle est RENDU parce que l'appel
+   * suivant en a besoin pour décider ce que l'acteur a le droit de suspendre.
+   */
+  private async assertUserManage(userId: number): Promise<UserRole> {
+    const user = await this.userRepo.findOne({
+      where: { userId },
+      select: ['userId', 'role'],
+    });
+    if (!user || !hasPermission(user.role, 'users:manage')) {
+      throw new ForbiddenException('Accès réservé aux administrateurs BeOwn.');
+    }
+    return user.role;
   }
 
   /**
@@ -275,9 +296,24 @@ export class AdminController {
           };
         }
 
-        const { password: _p, ...safe } = u as any;
+        // Projection par LISTE DE CHAMPS, jamais par spread de l'entité. Le
+        // `{ ...safe }` précédent ne retirait que `password` et publiait tout
+        // le reste de `users` : identifiant de compte Stripe Connect, note PEP
+        // interne, motif de gel des avoirs, taux d'imposition marginal, code
+        // et lien de parrainage, socialId, IP d'acceptation des CGU. Chaque
+        // colonne ajoutée à l'entité rejoignait la réponse sans que personne
+        // ne le décide — l'inverse d'une projection.
         return {
-          ...safe,
+          userId: u.userId,
+          firstname: u.firstname,
+          lastname: u.lastname,
+          role: u.role,
+          status: u.status,
+          userType: u.userType,
+          porteurAccess: u.porteurAccess,
+          createdAt: u.createdAt,
+          lastLoginAt: u.lastLoginAt,
+          avoirsGelesLe: u.avoirsGelesLe,
           email: u.userEmail?.email ?? '',
           kycStatus: kyc?.statut ?? 'non_demarre',
           kycMotifRefus: kyc?.motifRefus ?? null,
@@ -325,9 +361,25 @@ export class AdminController {
     @Body() body: UpdateUserStatusDto,
     @CurrentUser() currentUser: ActiveUser,
   ) {
-    await this.assertAdmin(currentUser.userId);
+    const roleActeur = await this.assertUserManage(currentUser.userId);
     const user = await this.userRepo.findOne({ where: { userId: id } });
     if (!user) throw new NotFoundException('Utilisateur introuvable.');
+
+    // Un compte de back-office ne se sanctionne pas depuis l'écran de
+    // modération des utilisateurs. Sans cette garde, un `compliance`
+    // — qui détient `users:manage` — pouvait suspendre le super_admin, le
+    // RCCI qui l'audite ou l'équipe financière : neutraliser un contrôle
+    // interne était à la portée d'un rôle de contrôle. Retirer des droits
+    // relève de la gouvernance des accès (`PATCH /admin/investors/:id/role`,
+    // permission `roles:assign`), pas de la modération.
+    if (
+      isBackOfficeRole(user.role) &&
+      roleActeur !== UserRole.SUPER_ADMIN
+    ) {
+      throw new ForbiddenException(
+        'Le statut d’un compte de back-office ne peut être modifié que par un super_admin.',
+      );
+    }
 
     // SUPPRIME est terminal : sans cette garde, un compte supprimé pouvait être
     // remis ACTIF ou SUSPENDU depuis le back-office — une résurrection qui

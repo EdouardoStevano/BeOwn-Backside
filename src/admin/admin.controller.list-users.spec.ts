@@ -92,6 +92,70 @@ describe('AdminController.listUsers — projection selon la permission', () => {
     expect(res.items[0]).not.toHaveProperty('password');
   });
 
+  /**
+   * La projection complète était un spread de l'entité (`{ ...safe }`) : tout
+   * ce que porte la table `users` partait dans la réponse, et chaque colonne
+   * ajoutée demain la rejoindrait sans décision de personne.
+   */
+  it('users:read : la projection est une LISTE DE CHAMPS, pas un spread d\'entité', async () => {
+    const { controller } = makeController(UserRole.COMPLIANCE, [
+      buildUser(1, {
+        socialId: 'google-oauth2|1234',
+        cguAcceptationIp: '203.0.113.7',
+        avoirsGelesMotif: 'gel judiciaire en cours',
+        codeParrainage: 'BEOWN-ABCDEF',
+        parrainePar: 12,
+        cgpReferralCode: 'CGP-DEADBEEF',
+      }),
+    ]);
+
+    const res: any = await controller.listUsers(caller);
+
+    for (const champ of [
+      'password',
+      'socialId',
+      'cguAcceptationIp',
+      'avoirsGelesMotif',
+      'codeParrainage',
+      'parrainePar',
+      'cgpReferralCode',
+      'cgpId',
+      'stripeConnectAccountId',
+      'pepNote',
+      'tauxBaremeMarginal',
+      'regimeFiscal',
+      'userEmail',
+    ]) {
+      expect(res.items[0]).not.toHaveProperty(champ);
+    }
+  });
+
+  it('users:read : les champs exposés sont exactement ceux du contrat back-office', async () => {
+    const { controller } = makeController(UserRole.COMPLIANCE);
+
+    const res: any = await controller.listUsers(caller);
+
+    expect(Object.keys(res.items[0]).sort()).toEqual(
+      [
+        'avoirsGelesLe',
+        'createdAt',
+        'email',
+        'firstname',
+        'kycId',
+        'kycMotifRefus',
+        'kycStatus',
+        'lastLoginAt',
+        'lastname',
+        'porteurAccess',
+        'role',
+        'status',
+        'totalInvested',
+        'userId',
+        'userType',
+      ].sort(),
+    );
+  });
+
   // ─── Projection restreinte (aml:manage sans users:read) ────────────────────
 
   it('rcci : aucun e-mail renvoyé', async () => {

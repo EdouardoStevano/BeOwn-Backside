@@ -23,6 +23,7 @@ import { UserRole } from 'src/iam/domains/enums/user.enum';
 import { SessionCacheService } from 'src/iam/applications/services/session-cache.service';
 import { AuditLogService } from 'src/notifications/applications/audit-log.service';
 import { RiskScoringService } from 'src/profiles/applications/risk-scoring.service';
+import type { ContactDu } from 'src/profiles/applications/models/contact-du';
 
 const ADMIN_ROLES: string[] = rolesWithPermission('users:read');
 const ROLE_ASSIGN_ROLES: string[] = rolesWithPermission('roles:assign');
@@ -55,9 +56,22 @@ export class AdminInvestorsController {
     }
   }
 
-  @ApiOperation({ summary: 'Liste des investisseurs à contacter (surveillance périodique PSFP)' })
+  /**
+   * Liste de suivi — identité, e-mail, date du dernier contact, et rien de
+   * plus. La route renvoyait l'entité `ProfilPPEntity` COMPLÈTE (NIF,
+   * patrimoine net, adresse, date et lieu de naissance, résidence fiscale,
+   * téléphone, statut PEP) à tout détenteur de `users:read`. La projection est
+   * faite dans la requête SQL elle-même (cf. `RiskScoringService`), de sorte
+   * qu'aucune surcouche ne puisse la contourner par mégarde.
+   */
+  @ApiOperation({
+    summary: 'Liste des investisseurs à contacter (surveillance périodique)',
+    description:
+      'Projection de suivi : identité, e-mail et date du dernier contact. ' +
+      'Le profil complet relève de la permission profiles:read_sensitive.',
+  })
   @Get('due-contacts')
-  async dueContacts(@CurrentUser() user: ActiveUser) {
+  async dueContacts(@CurrentUser() user: ActiveUser): Promise<ContactDu[]> {
     await this.assertAdmin(user.userId);
     return this.riskScoring.listDueContacts();
   }

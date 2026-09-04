@@ -105,14 +105,23 @@ function build(options: {
     }),
   };
   const txRepo: any = { createQueryBuilder: jest.fn(() => txQb.qb) };
+  const auditLog: any = { create: jest.fn().mockResolvedValue({}) };
 
   return {
-    controller: new AdminExportsController(userRepo, kycRepo, investmentRepo, txRepo),
+    controller: new AdminExportsController(
+      userRepo,
+      kycRepo,
+      investmentRepo,
+      txRepo,
+      auditLog,
+    ),
     userRepo,
     kycRepo,
     txQb,
     investQb,
     sommeQb,
+    userQb,
+    auditLog,
     investCallsCount: () => investCalls,
   };
 }
@@ -245,5 +254,103 @@ describe('AdminExportsController — investisseurs.csv', () => {
     // Deux résolutions EN LOT pour la page — pas une par investisseur.
     expect(h.kycRepo.find).toHaveBeenCalledTimes(1);
     expect(res.end).toHaveBeenCalledTimes(1);
+  });
+
+  // ─── Cloisonnement du fichier nominatif ──────────────────────────────────
+
+  it.each([UserRole.MARKETING, UserRole.DPO])(
+    'REFUSE %s : data:export ne donne plus le fichier nominatif',
+    async (role) => {
+      const h = build({ role });
+      const { res, chunks } = fakeResponse();
+
+      await expect(h.controller.investisseurs(ADMIN, res)).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
+      // Refus AVANT le moindre octet : pas de CSV partiel déjà parti.
+      expect(chunks).toHaveLength(0);
+      expect(res.setHeader).not.toHaveBeenCalled();
+    },
+  );
+
+  it('autorise compliance (profiles:read_sensitive)', async () => {
+    const h = build({ role: UserRole.COMPLIANCE, userPages: [[]] });
+    const { res } = fakeResponse();
+
+    await expect(h.controller.investisseurs(ADMIN, res)).resolves.toBeUndefined();
+  });
+
+  it('borne dure : limit hors plage → 400 franche, aucun octet parti', async () => {
+    const h = build({ userPages: [[]] });
+    const { res, chunks } = fakeResponse();
+
+    await expect(
+      h.controller.investisseurs(ADMIN, res, '999999'),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(chunks).toHaveLength(0);
+  });
+
+  it('limit non entier → 400', async () => {
+    const h = build({ userPages: [[]] });
+    const { res } = fakeResponse();
+
+    await expect(
+      h.controller.investisseurs(ADMIN, res, 'beaucoup'),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('la limite demandée est appliquée EN SQL, pas après coup', async () => {
+    const h = build({ userPages: [[]] });
+    const { res } = fakeResponse();
+
+    await h.controller.investisseurs(ADMIN, res, '3');
+
+    expect(h.userQb.appels.limit).toBe(3);
+  });
+
+  it('le curseur de reprise `after` est passé à la requête', async () => {
+    const h = build({ userPages: [[]] });
+    const { res } = fakeResponse();
+
+    await h.controller.investisseurs(ADMIN, res, undefined, '42');
+
+    const curseurWhere = h.userQb.appels.where.find(
+      ([clause]: any[]) =>
+        typeof clause === 'string' && clause.includes('u.userId > :curseur'),
+    );
+    expect(curseurWhere[1]).toEqual({ curseur: 42 });
+  });
+
+  it("laisse une entrée d'audit métier : qui, quoi, combien de lignes", async () => {
+    const h = build({
+      role: UserRole.COMPLIANCE,
+      userPages: [
+        [
+          {
+            userId: 7,
+            email: 'jean@example.com',
+            nom: 'Dupont',
+            prenom: 'Jean',
+            dateInscription: new Date('2026-01-15T00:00:00Z'),
+          },
+        ],
+      ],
+      kycs: [],
+      totaux: [],
+    });
+    const { res } = fakeResponse();
+
+    await h.controller.investisseurs(ADMIN, res);
+
+    expect(h.auditLog.create).toHaveBeenCalledWith(
+      '1',
+      UserRole.COMPLIANCE,
+      'export.investisseurs',
+      'export',
+      'investisseurs.csv',
+      undefined,
+      undefined,
+      expect.objectContaining({ lignes: 1, depart: 0, tronque: false }),
+    );
   });
 });

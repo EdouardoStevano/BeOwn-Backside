@@ -25,9 +25,29 @@ import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/w
 import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entities/transaction.entity';
 import { InvestmentStatus } from 'src/investments/domains/enums/investment-status.enum';
 import { KycStatus } from 'src/profiles/domains/enums/kyc-status.enum';
+import { AuditLogService } from 'src/notifications/applications/audit-log.service';
 import { BOM_UTF8, ligneCsv } from './csv-stream.util';
 
 const ROLES_EXPORT: string[] = rolesWithPermission('data:export');
+
+/**
+ * Rôles habilités au fichier NOMINATIF des investisseurs. Distincts des rôles
+ * d'export : `data:export` couvre le grand livre et les investissements, où
+ * les personnes n'apparaissent que par leur identifiant technique. Le CSV des
+ * investisseurs, lui, est un fichier de personnes (identité + e-mail + statut
+ * KYC + encours) — marketing et dpo le téléchargeaient intégralement.
+ */
+const ROLES_PROFILS_SENSIBLES: string[] = rolesWithPermission(
+  'profiles:read_sensitive',
+);
+
+/**
+ * Plafond DUR du fichier nominatif : au-delà, l'export est tronqué et le
+ * curseur de reprise est renvoyé en entête. Un export de personnes ne doit pas
+ * pouvoir aspirer la base entière en une requête — c'est la différence entre
+ * une extraction de travail et une exfiltration.
+ */
+const PLAFOND_LIGNES_INVESTISSEURS = 5_000;
 
 /**
  * Taille des pages lues en flux. Chaque page part sur la socket avant que la
@@ -71,14 +91,27 @@ export class AdminExportsController {
     private readonly investmentRepo: Repository<InvestmentEntity>,
     @InjectRepository(TransactionEntity)
     private readonly txRepo: Repository<TransactionEntity>,
+    private readonly auditLog: AuditLogService,
   ) {}
 
   /** Défense en profondeur : le rôle est relu EN BASE, pas seulement dans le jeton. */
-  private async assertExport(userId: number): Promise<void> {
+  private async assertExport(userId: number): Promise<string> {
     const user = await this.userRepo.findOne({ where: { userId } });
     if (!user || !ROLES_EXPORT.includes(user.role)) {
       throw new ForbiddenException('Accès réservé.');
     }
+    return user.role;
+  }
+
+  /** Idem, pour le fichier NOMINATIF : `profiles:read_sensitive` exigée. */
+  private async assertProfilsSensibles(userId: number): Promise<string> {
+    const user = await this.userRepo.findOne({ where: { userId } });
+    if (!user || !ROLES_PROFILS_SENSIBLES.includes(user.role)) {
+      throw new ForbiddenException(
+        "L'export nominatif des investisseurs est réservé à la conformité.",
+      );
+    }
+    return user.role;
   }
 
   /** Entêtes HTTP d'un export : CSV UTF-8 téléchargé, jamais mis en cache. */
@@ -280,13 +313,62 @@ export class AdminExportsController {
     });
   }
 
-  @ApiOperation({ summary: 'Export CSV des investisseurs (streaming)' })
+  /**
+   * Fichier NOMINATIF des investisseurs.
+   *
+   * Trois durcissements par rapport à la version précédente :
+   *  - permission `profiles:read_sensitive` (conformité) au lieu de la seule
+   *    `data:export`, qui donnait le fichier complet à marketing et dpo ;
+   *  - plafond DUR de lignes, avec curseur de reprise en entête : l'export ne
+   *    peut plus aspirer la base entière en un appel ;
+   *  - entrée d'AUDIT MÉTIER (qui, quand, combien de lignes, depuis quel
+   *    curseur) — le simple log applicatif ne survivait pas à la rotation et
+   *    n'était pas consultable depuis le back-office.
+   */
+  @ApiOperation({
+    summary: 'Export CSV nominatif des investisseurs (streaming, borné)',
+    description:
+      'Réservé à profiles:read_sensitive. Au plus 5000 lignes par appel. ' +
+      'Un fichier comptant exactement `limit` lignes est potentiellement ' +
+      'tronqué : reprendre avec after=<userId de la dernière ligne reçue>, ' +
+      "que le fichier porte lui-même en première colonne. Chaque appel laisse " +
+      "une entrée d'audit.",
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    description: 'Lignes maximum (1 à 5000, défaut 5000)',
+  })
+  @ApiQuery({
+    name: 'after',
+    required: false,
+    description: 'Curseur de reprise : userId de la dernière ligne reçue',
+  })
+  @RequirePermission('profiles:read_sensitive')
   @Get('investisseurs.csv')
   async investisseurs(
     @CurrentUser() admin: ActiveUser,
     @Res() res: Response,
+    @Query('limit') limitParam?: string,
+    @Query('after') afterParam?: string,
   ): Promise<void> {
-    await this.assertExport(admin.userId);
+    const role = await this.assertProfilsSensibles(admin.userId);
+
+    // Bornes validées AVANT le moindre entête : une 400 doit rester une 400,
+    // pas un CSV tronqué.
+    const plafond = this.parseBorne(
+      limitParam,
+      'limit',
+      PLAFOND_LIGNES_INVESTISSEURS,
+      PLAFOND_LIGNES_INVESTISSEURS,
+      1,
+    );
+    const depart = this.parseBorne(
+      afterParam,
+      'after',
+      0,
+      Number.MAX_SAFE_INTEGER,
+    );
 
     const debut = Date.now();
     this.ouvrirCsv(res, 'investisseurs.csv', [
@@ -300,8 +382,13 @@ export class AdminExportsController {
     ]);
 
     let lignes = 0;
-    let curseur = 0;
+    let curseur = depart;
     for (;;) {
+      // La dernière page est rognée pour ne jamais dépasser le plafond : la
+      // borne est appliquée EN SQL, pas après coup en mémoire.
+      const restant = plafond - lignes;
+      if (restant <= 0) break;
+
       const page: Array<{
         userId: number;
         email: string | null;
@@ -318,7 +405,7 @@ export class AdminExportsController {
         .addSelect('u.createdAt', 'dateInscription')
         .where('u.userId > :curseur', { curseur })
         .orderBy('u.userId', 'ASC')
-        .limit(TAILLE_PAGE)
+        .limit(Math.min(TAILLE_PAGE, restant))
         .getRawMany();
       if (page.length === 0) break;
 
@@ -365,11 +452,29 @@ export class AdminExportsController {
       );
       lignes += page.length;
       curseur = Number(page[page.length - 1].userId);
-      if (page.length < TAILLE_PAGE) break;
+      if (page.length < Math.min(TAILLE_PAGE, restant)) break;
     }
 
     res.end();
-    this.tracerExport('investisseurs', admin.userId, lignes, debut);
+    this.tracerExport('investisseurs', admin.userId, lignes, debut, {
+      depart,
+      plafond,
+    });
+
+    // Audit MÉTIER, en plus de la trace applicative : une extraction de
+    // données personnelles doit être opposable et consultable depuis le
+    // back-office (`GET /audit-logs`), pas seulement présente dans un fichier
+    // de logs soumis à rotation.
+    await this.auditLog.create(
+      String(admin.userId),
+      role,
+      'export.investisseurs',
+      'export',
+      'investisseurs.csv',
+      undefined,
+      undefined,
+      { lignes, depart, plafond, tronque: lignes === plafond },
+    );
   }
 
   /** Parse une borne de date optionnelle — 400 explicite si illisible. */
@@ -380,5 +485,27 @@ export class AdminExportsController {
       throw new BadRequestException(`${nom} doit être une date ISO valide.`);
     }
     return date;
+  }
+
+  /**
+   * Parse une borne entière optionnelle et la CONTRAINT — 400 explicite si
+   * illisible ou hors bornes. Pas de `Math.min` silencieux : une limite
+   * refusée doit se voir, sans quoi l'appelant croit avoir tout obtenu.
+   */
+  private parseBorne(
+    valeur: string | undefined,
+    nom: string,
+    defaut: number,
+    maximum: number,
+    minimum = 0,
+  ): number {
+    if (valeur === undefined || valeur === '') return defaut;
+    const n = Number(valeur);
+    if (!Number.isInteger(n) || n < minimum || n > maximum) {
+      throw new BadRequestException(
+        `${nom} doit être un entier entre ${minimum} et ${maximum}.`,
+      );
+    }
+    return n;
   }
 }

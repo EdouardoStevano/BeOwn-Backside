@@ -48,7 +48,25 @@ export type Permission =
    * rôle qui instruit déjà les dossiers d'entrée en relation ; `super_admin`
    * l'a par le joker.
    */
-  | 'porteur_access:review';
+  | 'porteur_access:review'
+  /**
+   * Lire les PROFILS COMPLETS d'investisseurs — NIF, patrimoine déclaré,
+   * adresse, date et lieu de naissance, résidence fiscale, statut PEP — et les
+   * exporter en masse.
+   *
+   * Permission DISTINCTE de `users:read`, qui ouvre l'annuaire (identité,
+   * rôle, statut) : l'annuaire sert à désigner une personne, le profil complet
+   * sert à instruire un dossier. `users:read` est détenue par support,
+   * marketing, chargé de relation investisseur, dpo et compliance — la liste
+   * « investisseurs à contacter » leur servait pourtant l'entité de profil
+   * ENTIÈRE, et l'export CSV des investisseurs sortait le fichier nominatif
+   * complet sous la seule permission `data:export` (marketing, dpo).
+   *
+   * Accordée à `compliance` SEUL (`super_admin` l'a par le joker) : c'est le
+   * rôle qui instruit les dossiers d'entrée en relation. Minimisation RGPD
+   * art. 5.1.c.
+   */
+  | 'profiles:read_sensitive';
 
 const WILDCARD = '*' as const;
 type Wildcard = typeof WILDCARD;
@@ -88,6 +106,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[] | [Wildcard]> = {
     'projects:read',
     'reports:read',
     'porteur_access:review',
+    'profiles:read_sensitive',
   ],
   [UserRole.MARKETING]: [
     'data:export',
@@ -159,4 +178,22 @@ export function rolesWithPermission(permission: Permission): UserRole[] {
   return (Object.keys(ROLE_PERMISSIONS) as UserRole[]).filter((r) =>
     hasPermission(r, permission),
   );
+}
+
+/**
+ * Un rôle de back-office est un rôle qui détient AU MOINS une permission —
+ * par opposition aux rôles de plateforme (investisseur, porteur, cgp), dont la
+ * liste de permissions est vide.
+ *
+ * Sert aux gardes « on ne sanctionne pas un pair » : suspendre un compte
+ * administrateur ne relève pas de la modération d'utilisateurs mais de la
+ * gouvernance des accès. Défini à partir de la MATRICE, pas d'une liste de
+ * rôles recopiée : un rôle de back-office ajouté demain y entre tout seul —
+ * une énumération manuelle, elle, l'aurait oublié (OCP).
+ */
+export function isBackOfficeRole(role: UserRole | string | undefined): boolean {
+  if (!role) return false;
+  const perms = ROLE_PERMISSIONS[role as UserRole];
+  if (!perms) return false;
+  return perms.length > 0;
 }

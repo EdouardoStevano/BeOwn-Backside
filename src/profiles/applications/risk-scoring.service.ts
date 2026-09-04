@@ -1,9 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, IsNull, LessThan } from 'typeorm';
+import { Repository } from 'typeorm';
 import { ProfilPPEntity } from '../infrastructure/persistences/entities/profil-pp.entity';
 import { QuestionnaireAdequationEntity } from '../infrastructure/persistences/entities/questionnaire-adequation.entity';
+import { ContactDu, PLAFOND_CONTACTS_DUS } from './models/contact-du';
 
 @Injectable()
 export class RiskScoringService {
@@ -44,15 +45,45 @@ export class RiskScoringService {
     return next;
   }
 
-  /** Liste les investisseurs dont le prochain contact est dû (export Excel/CSV). */
-  async listDueContacts(): Promise<ProfilPPEntity[]> {
-    return this.profilPPRepo.find({
-      where: [
-        { prochainContactDu: LessThan(new Date()) },
-        { prochainContactDu: IsNull(), niveauRisque: 'vulnerable' },
-      ],
-      take: 500,
-    });
+  /**
+   * Investisseurs dont le prochain contact de suivi est dû.
+   *
+   * Rend un {@link ContactDu} — identité, adresse e-mail, date du dernier
+   * contact — et NON l'entité de profil. Voir `models/contact-du.ts` pour ce
+   * que la version précédente faisait fuiter.
+   */
+  async listDueContacts(): Promise<ContactDu[]> {
+    const lignes = await this.profilPPRepo
+      .createQueryBuilder('p')
+      .leftJoin('p.utilisateur', 'u')
+      .leftJoin('u.userEmail', 'e')
+      .select('p.utilisateurId', 'utilisateurId')
+      .addSelect('p.nom', 'nom')
+      .addSelect('p.prenom', 'prenom')
+      .addSelect('e.email', 'email')
+      .addSelect('p.dernierContactAdmin', 'dernierContactAdmin')
+      .where('p.prochainContactDu < :maintenant', { maintenant: new Date() })
+      .orWhere(
+        'p.prochainContactDu IS NULL AND p.niveauRisque = :niveauVulnerable',
+        { niveauVulnerable: 'vulnerable' },
+      )
+      .orderBy('p.utilisateurId', 'ASC')
+      .limit(PLAFOND_CONTACTS_DUS)
+      .getRawMany<{
+        utilisateurId: number | string;
+        nom: string;
+        prenom: string;
+        email: string | null;
+        dernierContactAdmin: Date | null;
+      }>();
+
+    return lignes.map((l) => ({
+      utilisateurId: Number(l.utilisateurId),
+      nom: l.nom,
+      prenom: l.prenom,
+      email: l.email ?? null,
+      dernierContactAdmin: l.dernierContactAdmin ?? null,
+    }));
   }
 
   /** CRON quotidien : recalcule les contacts dus. */

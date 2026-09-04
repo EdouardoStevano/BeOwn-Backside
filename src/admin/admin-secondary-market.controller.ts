@@ -118,7 +118,93 @@ export class AdminSecondaryMarketController {
 
     const [orders, total] = await qb.getManyAndCount();
 
-    return { data: orders, total, page: Number(page), limit: Number(limit) };
+    return {
+      data: orders.map((o) => this.projeterOrdre(o)),
+      total,
+      page: Number(page),
+      limit: Number(limit),
+    };
+  }
+
+  /**
+   * Projection d'un ordre pour le back-office.
+   *
+   * La route renvoyait les ENTITÉS jointes telles quelles : `vendeur` et
+   * `acheteur` étaient des `UserEntity` complètes, ce qui publiait au carnet
+   * d'ordres l'identifiant de compte Stripe Connect, la note PEP interne, le
+   * motif de gel des avoirs, le taux d'imposition marginal, le code de
+   * parrainage et le socialId de chaque contrepartie — aucun de ces champs
+   * n'ayant de rapport avec la surveillance du marché. Pire : chaque colonne
+   * ajoutée demain à `users` ou à `investments` rejoindrait la réponse sans
+   * décision de personne.
+   *
+   * Les champs conservés sont exactement ceux que consomme le back-office
+   * (`market.mapper.ts`) : identité de la contrepartie — légitime ici, la
+   * route est gardée par `market:manage` —, caractéristiques de l'ordre et
+   * contexte du projet.
+   */
+  private projeterOrdre(o: OrdreMarcheEntity) {
+    const contrepartie = (u: UserEntity | null | undefined) =>
+      u
+        ? {
+            userId: u.userId,
+            firstname: u.firstname,
+            lastname: u.lastname,
+            role: u.role,
+            status: u.status,
+            createdAt: u.createdAt,
+          }
+        : null;
+
+    const inv = o.investissement as
+      | (InvestmentEntity & { projet?: ProjectEntity })
+      | undefined;
+
+    return {
+      id: o.id,
+      investissementId: o.investissementId,
+      vendeurId: o.vendeurId,
+      acheteurId: o.acheteurId,
+      sens: o.sens,
+      nbFractions: o.nbFractions,
+      montant: Number(o.montant),
+      prixUnitaire: Number(o.prixUnitaire),
+      statut: o.statut,
+      interetNbFractions: o.interetNbFractions,
+      interetExprimeLe: o.interetExprimeLe,
+      accepteLe: o.accepteLe,
+      valideJusquAu: o.valideJusquAu,
+      createdAt: o.createdAt,
+      vendeur: contrepartie(o.vendeur),
+      acheteur: contrepartie((o as unknown as { acheteur?: UserEntity }).acheteur),
+      investissement: inv
+        ? {
+            id: inv.id,
+            projetId: inv.projetId,
+            utilisateurId: inv.utilisateurId,
+            montant: Number(inv.montant),
+            nbTitres: inv.nbTitres,
+            valeurTitre: inv.valeurTitre != null ? Number(inv.valeurTitre) : null,
+            instrument: inv.instrument,
+            statut: inv.statut,
+            createdAt: inv.createdAt,
+            updatedAt: inv.updatedAt,
+            projet: inv.projet
+              ? {
+                  id: inv.projet.id,
+                  slug: inv.projet.slug,
+                  titre: inv.projet.titre,
+                  type: inv.projet.type,
+                  ville: inv.projet.ville,
+                  region: inv.projet.region,
+                  pays: inv.projet.pays,
+                  statut: inv.projet.statut,
+                  instrument: inv.projet.instrument,
+                }
+              : null,
+          }
+        : null,
+    };
   }
 
   // ── Annuler un ordre ─────────────────────────────────────────────────────────

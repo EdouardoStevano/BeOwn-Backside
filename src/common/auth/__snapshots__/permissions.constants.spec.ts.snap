@@ -41,6 +41,7 @@ exports[`permissions.constants la matrice couvre tous les rôles (snapshot anti-
     "projects:read",
     "reports:read",
     "porteur_access:review",
+    "profiles:read_sensitive",
   ],
   "dpo": [
     "users:read",

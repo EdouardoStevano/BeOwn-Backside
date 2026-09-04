@@ -1,6 +1,7 @@
 import { UserRole } from 'src/iam/domains/enums/user.enum';
 import {
   hasPermission,
+  isBackOfficeRole,
   rolesWithPermission,
   ROLE_PERMISSIONS,
   type Permission,
@@ -91,6 +92,64 @@ describe('permissions.constants', () => {
       ]) {
         expect(hasPermission(role, 'echeancier:manage')).toBe(false);
       }
+    });
+  });
+
+  describe('profiles:read_sensitive — profils complets et export nominatif', () => {
+    it('accordée à compliance et super_admin, et à eux seuls', () => {
+      expect(rolesWithPermission('profiles:read_sensitive').sort()).toEqual(
+        [UserRole.COMPLIANCE, UserRole.SUPER_ADMIN].sort(),
+      );
+    });
+
+    it("distincte de users:read : l'annuaire n'ouvre pas les dossiers", () => {
+      // support, marketing, chargé de relation et dpo consultent l'annuaire —
+      // ils n'ont plus le NIF, le patrimoine ni l'export nominatif.
+      for (const role of [
+        UserRole.SUPPORT,
+        UserRole.MARKETING,
+        UserRole.CHARGE_RELATION_INVESTISSEUR,
+        UserRole.DPO,
+      ]) {
+        expect(hasPermission(role, 'users:read')).toBe(true);
+        expect(hasPermission(role, 'profiles:read_sensitive')).toBe(false);
+      }
+    });
+
+    it("distincte de data:export : exporter le grand livre n'est pas exporter les personnes", () => {
+      for (const role of [UserRole.MARKETING, UserRole.DPO]) {
+        expect(hasPermission(role, 'data:export')).toBe(true);
+        expect(hasPermission(role, 'profiles:read_sensitive')).toBe(false);
+      }
+    });
+  });
+
+  describe('isBackOfficeRole', () => {
+    it.each([UserRole.INVESTISSEUR, UserRole.PORTEUR, UserRole.CGP])(
+      '%s : rôle de plateforme, pas de back-office',
+      (role) => {
+        expect(isBackOfficeRole(role)).toBe(false);
+      },
+    );
+
+    it.each([
+      UserRole.SUPER_ADMIN,
+      UserRole.CIO,
+      UserRole.COMPLIANCE,
+      UserRole.RCCI,
+      UserRole.DPO,
+      UserRole.MARKETING,
+      UserRole.SUPPORT,
+      UserRole.FINANCIER,
+      UserRole.ANALYSTE_FINANCIER,
+      UserRole.CHARGE_RELATION_INVESTISSEUR,
+    ])('%s : rôle de back-office', (role) => {
+      expect(isBackOfficeRole(role)).toBe(true);
+    });
+
+    it('rôle inconnu ou absent : non', () => {
+      expect(isBackOfficeRole('admin')).toBe(false);
+      expect(isBackOfficeRole(undefined)).toBe(false);
     });
   });
 

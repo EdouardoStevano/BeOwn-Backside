@@ -1,4 +1,8 @@
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { AdminController } from './admin.controller';
 import {
   UserStatus,
@@ -27,10 +31,10 @@ describe('AdminController — PATCH /admin/users/:id/status', () => {
 
   const admin = { userId: 1, role: UserRole.SUPER_ADMIN } as any;
 
-  /** assertAdmin lit l'admin courant, puis le handler lit la cible. */
-  const mockLookups = (target: any) => {
+  /** assertUserManage lit l'acteur courant, puis le handler lit la cible. */
+  const mockLookups = (target: any, roleActeur = UserRole.SUPER_ADMIN) => {
     userRepo.findOne
-      .mockResolvedValueOnce({ userId: 1, role: UserRole.SUPER_ADMIN })
+      .mockResolvedValueOnce({ userId: 1, role: roleActeur })
       .mockResolvedValueOnce(target);
   };
 
@@ -134,5 +138,89 @@ describe('AdminController — PATCH /admin/users/:id/status', () => {
     await expect(
       controller.updateUserStatus(999, { status: UserStatus.SUSPENDU } as any, admin),
     ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  /**
+   * Un rôle de back-office ne se sanctionne pas depuis l'écran de modération.
+   * `compliance` détient `users:manage` : sans cette garde, il pouvait
+   * suspendre le super_admin, le rcci qui l'audite ou l'équipe financière —
+   * neutraliser un contrôle interne était à la portée d'un rôle de contrôle.
+   */
+  describe('un compte de back-office ne se suspend que par un super_admin', () => {
+    const compliance = { userId: 2, role: UserRole.COMPLIANCE } as any;
+
+    it.each([
+      UserRole.SUPER_ADMIN,
+      UserRole.RCCI,
+      UserRole.CIO,
+      UserRole.DPO,
+      UserRole.SUPPORT,
+    ])('compliance ne peut pas suspendre un %s', async (roleCible) => {
+      mockLookups(
+        { userId: 42, status: UserStatus.ACTIF, role: roleCible },
+        UserRole.COMPLIANCE,
+      );
+
+      await expect(
+        controller.updateUserStatus(
+          42,
+          { status: UserStatus.SUSPENDU } as any,
+          compliance,
+        ),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+
+      expect(userRepo.update).not.toHaveBeenCalled();
+      expect(notificationEvents.accountSuspended).not.toHaveBeenCalled();
+    });
+
+    it('compliance suspend toujours un investisseur (cas nominal préservé)', async () => {
+      mockLookups(
+        { userId: 42, status: UserStatus.ACTIF, role: UserRole.INVESTISSEUR },
+        UserRole.COMPLIANCE,
+      );
+
+      await controller.updateUserStatus(
+        42,
+        { status: UserStatus.SUSPENDU } as any,
+        compliance,
+      );
+
+      expect(userRepo.update).toHaveBeenCalled();
+    });
+
+    it('super_admin conserve la main sur un compte de back-office', async () => {
+      mockLookups({
+        userId: 42,
+        status: UserStatus.ACTIF,
+        role: UserRole.SUPPORT,
+      });
+
+      await controller.updateUserStatus(
+        42,
+        { status: UserStatus.SUSPENDU } as any,
+        admin,
+      );
+
+      expect(userRepo.update).toHaveBeenCalled();
+    });
+  });
+
+  /**
+   * Le contrôle en base visait `reports:read` — une permission de LECTURE —
+   * alors que la route exige `users:manage`. Les deux visent enfin la même.
+   */
+  it('refuse un rôle qui lit les rapports mais ne gère pas les utilisateurs', async () => {
+    mockLookups(
+      { userId: 42, status: UserStatus.ACTIF, role: UserRole.INVESTISSEUR },
+      UserRole.CIO,
+    );
+
+    await expect(
+      controller.updateUserStatus(
+        42,
+        { status: UserStatus.SUSPENDU } as any,
+        { userId: 3, role: UserRole.CIO } as any,
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
   });
 });
