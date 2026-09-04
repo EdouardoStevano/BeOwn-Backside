@@ -23,11 +23,16 @@ export class CreateOrdreMarcheDto {
   @IsEnum(OrdreMarcheSens)
   sens: OrdreMarcheSens;
 
+  /**
+   * `@IsNumber()` acceptait 2.5 fraction — une quantité décimale sur un titre
+   * indivisible, qui se propageait en base et dans les calculs de solde de
+   * fractions. Une fraction est une unité : entier strictement positif.
+   */
   @ApiProperty({
     example: 50,
-    description: 'Nombre de fractions à vendre/acheter',
+    description: 'Nombre de fractions à vendre/acheter (entier > 0)',
   })
-  @IsNumber()
+  @IsInt()
   @IsPositive()
   nbFractions: number;
 

@@ -40,6 +40,9 @@ import {
   UpdateUserDto,
   UpdateUserAdminDto,
   UpdatePreferencesDto,
+  PreferenceBooleanDto,
+  PreferenceLangueDto,
+  SetUserTypeDto,
 } from 'src/iam/presenters/http/dto/user.dto';
 import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
 import { RequirePermission } from 'src/common/auth/require-permission.decorator';
@@ -288,11 +291,24 @@ export class UserController {
     return this.userRepository.savePreferences(user.userId, dto);
   }
 
+  // ─── Bascules de préférences ────────────────────────────────────────────
+  //
+  // Ces sept routes typaient leur corps par une INTERFACE INLINE
+  // (`{ value: boolean }`). TypeScript efface les interfaces à la compilation :
+  // le métadonnée de type vu à l'exécution était `Object`, que le
+  // `ValidationPipe` global ignore entièrement. Ni `whitelist`, ni
+  // `forbidNonWhitelisted`, ni le moindre décorateur ne s'appliquaient — un
+  // corps vide, une chaîne à la place d'un booléen ou des champs surnuméraires
+  // passaient jusqu'au repository. Les DTO existaient déjà dans `user.dto.ts`
+  // mais n'étaient câblés nulle part : les brancher rend la validation
+  // effective.
+
   @ApiOperation({ summary: 'Changer la langue' })
+  @ApiResponse({ status: 400, description: 'Corps invalide' })
   @Patch('me/preferences/langue')
   async updateLangue(
     @CurrentUser() user: ActiveUser,
-    @Body() body: { value: string },
+    @Body() body: PreferenceLangueDto,
   ) {
     return this.userRepository.savePreferences(user.userId, {
       langue: body.value,
@@ -300,10 +316,11 @@ export class UserController {
   }
 
   @ApiOperation({ summary: 'Basculer le masquage des montants sensibles' })
+  @ApiResponse({ status: 400, description: 'Corps invalide' })
   @Patch('me/preferences/masquer-montants')
   async toggleMasquerMontants(
     @CurrentUser() user: ActiveUser,
-    @Body() body: { value: boolean },
+    @Body() body: PreferenceBooleanDto,
   ) {
     return this.userRepository.savePreferences(user.userId, {
       masquerMontants: body.value,
@@ -311,10 +328,11 @@ export class UserController {
   }
 
   @ApiOperation({ summary: 'Basculer les notifications email' })
+  @ApiResponse({ status: 400, description: 'Corps invalide' })
   @Patch('me/preferences/notif-email')
   async toggleNotifEmail(
     @CurrentUser() user: ActiveUser,
-    @Body() body: { value: boolean },
+    @Body() body: PreferenceBooleanDto,
   ) {
     return this.userRepository.savePreferences(user.userId, {
       notifEmail: body.value,
@@ -322,10 +340,11 @@ export class UserController {
   }
 
   @ApiOperation({ summary: 'Basculer les notifications SMS' })
+  @ApiResponse({ status: 400, description: 'Corps invalide' })
   @Patch('me/preferences/notif-sms')
   async toggleNotifSms(
     @CurrentUser() user: ActiveUser,
-    @Body() body: { value: boolean },
+    @Body() body: PreferenceBooleanDto,
   ) {
     return this.userRepository.savePreferences(user.userId, {
       notifSms: body.value,
@@ -333,10 +352,11 @@ export class UserController {
   }
 
   @ApiOperation({ summary: 'Basculer les emails marketing' })
+  @ApiResponse({ status: 400, description: 'Corps invalide' })
   @Patch('me/preferences/notif-marketing')
   async toggleNotifMarketing(
     @CurrentUser() user: ActiveUser,
-    @Body() body: { value: boolean },
+    @Body() body: PreferenceBooleanDto,
   ) {
     return this.userRepository.savePreferences(user.userId, {
       notifMarketing: body.value,
@@ -347,10 +367,11 @@ export class UserController {
   // Deux chemins pour un seul handler : `mfa` est le nom retenu, `tfa` reste
   // servi parce que le front déployé l'appelle. Retirer l'ancien casserait les
   // clients en production — il partira quand ils auront basculé.
+  @ApiResponse({ status: 400, description: 'Corps invalide' })
   @Patch(['me/preferences/mfa', 'me/preferences/tfa'])
   async toggleMfa(
     @CurrentUser() user: ActiveUser,
-    @Body() body: { value: boolean },
+    @Body() body: PreferenceBooleanDto,
   ) {
     return this.userRepository.savePreferences(user.userId, {
       twoFactorEnabled: body.value,
@@ -363,14 +384,15 @@ export class UserController {
       "Enregistre la DÉCLARATION de type faite à la première étape de l'onboarding, avant la création du profil. La source de vérité du type de compte reste la présence d'un profil PP ou PM — c'est elle que `GET /users/me` expose dans `completionSteps`.",
   })
   @ApiResponse({ status: 200, description: 'Type mis à jour' })
+  @ApiResponse({ status: 400, description: 'Type invalide : PP ou PM attendu' })
   @Patch('me/type')
   async setUserType(
     @CurrentUser() user: ActiveUser,
-    @Body() body: { userType: UserType },
+    @Body() body: SetUserTypeDto,
   ) {
-    if (!Object.values(UserType).includes(body.userType)) {
-      throw new BadRequestException('Type invalide : PP ou PM attendu.');
-    }
+    // Le contrôle manuel qui vivait ici est désormais porté par le DTO
+    // (`@IsEnum(UserType)`) : la validation se lit sur le contrat, et le
+    // ValidationPipe rend une 400 normalisée au lieu d'un message maison.
     const found = await this.userRepository.findById(user.userId);
     if (!found) throw new NotFoundException('Utilisateur introuvable.');
 

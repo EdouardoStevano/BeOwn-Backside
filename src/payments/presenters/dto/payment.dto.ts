@@ -103,8 +103,10 @@ export class CreateRetraitDto {
     description:
       "ID du wallet source. Optionnel : si absent, le wallet INVESTISSEUR de l'utilisateur authentifié est utilisé (parcours Stripe Connect, le front n'envoie que le montant).",
   })
+  // `WalletEntity.id` est un UUID généré : `@IsString()` laissait passer
+  // n'importe quelle chaîne jusqu'à la requête de recherche du wallet.
   @IsOptional()
-  @IsString()
+  @IsUUID()
   walletId?: string;
 
   @ApiPropertyOptional({

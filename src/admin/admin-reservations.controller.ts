@@ -11,10 +11,21 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
-import { IsNumber, IsOptional, Min } from 'class-validator';
+import {
+  IsBoolean,
+  IsInt,
+  IsNumber,
+  IsOptional,
+  IsPositive,
+  IsUUID,
+  Min,
+} from 'class-validator';
+import { Type } from 'class-transformer';
 import {
   ApiBearerAuth,
   ApiOperation,
+  ApiProperty,
+  ApiPropertyOptional,
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
@@ -35,11 +46,41 @@ import { NotificationType } from 'src/notifications/infrastructure/persistences/
 
 const ADMIN_ROLES: string[] = rolesWithPermission('reservations:manage');
 
-class CreateReservationAdminDto {
+/**
+ * Corps de `POST /admin/reservations`.
+ *
+ * Le DTO ne portait AUCUN décorateur : le `ValidationPipe` global voyait bien
+ * une classe, mais sans métadonnée de validation il n'avait rien à vérifier —
+ * `whitelist` ne retire que ce qui n'est pas décoré, donc TOUS les champs
+ * étaient retirés… puis relus comme `undefined`. Un `montantReserve` négatif,
+ * absent ou textuel créait une réservation invalide, comptée dans la jauge de
+ * collecte du projet.
+ */
+export class CreateReservationAdminDto {
+  @ApiProperty({ format: 'uuid' })
+  @IsUUID()
   projectId: string;
-  userId: string | number;
+
+  @ApiProperty({ description: "userId de l'investisseur" })
+  @Type(() => Number)
+  @IsInt()
+  @IsPositive()
+  userId: number;
+
+  @ApiProperty({ description: 'Montant réservé en euros, strictement positif' })
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @IsPositive()
   montantReserve: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
   visibleInJauge?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
   sendEmail?: boolean;
 }
 

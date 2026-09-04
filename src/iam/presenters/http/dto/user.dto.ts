@@ -1,5 +1,5 @@
 import {
-  IsBoolean,
+  IsEnum,
   IsIn,
   IsOptional,
   IsString,
@@ -7,6 +7,8 @@ import {
   IsUUID,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsStrictBoolean } from 'src/common/validation/strict-boolean.decorator';
+import { UserStatus, UserType } from 'src/iam/domains/enums/user.enum';
 
 // `RegisterDto` a été supprimé avec `POST /users` : le DTO d'inscription est
 // désormais `SignUpDto` (iam/presenters/http/dto/password.dto.ts), seul point
@@ -33,29 +35,31 @@ export class UpdatePreferencesDto {
   @IsIn(['fr', 'en', 'ar'])
   langue?: string;
 
+  // Booléens STRICTS : la conversion implicite du ValidationPipe global
+  // transformait `"false"` en `true`, soit l'inverse d'un opt-out demandé.
   @ApiPropertyOptional()
   @IsOptional()
-  @IsBoolean()
+  @IsStrictBoolean()
   masquerMontants?: boolean;
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsBoolean()
+  @IsStrictBoolean()
   notifEmail?: boolean;
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsBoolean()
+  @IsStrictBoolean()
   notifSms?: boolean;
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsBoolean()
+  @IsStrictBoolean()
   notifMarketing?: boolean;
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsBoolean()
+  @IsStrictBoolean()
   twoFactorEnabled?: boolean;
 
   @ApiPropertyOptional({ example: 'EUR' })
@@ -68,7 +72,7 @@ export class UpdatePreferencesDto {
       'Réinvestir automatiquement les loyers nets en fractions entières du projet cible (toutes les gardes de souscription s’appliquent).',
   })
   @IsOptional()
-  @IsBoolean()
+  @IsStrictBoolean()
   reinvestLoyers?: boolean;
 
   @ApiPropertyOptional({
@@ -92,7 +96,7 @@ export class UpdatePreferencesDto {
  */
 export class PreferenceBooleanDto {
   @ApiProperty({ example: true })
-  @IsBoolean()
+  @IsStrictBoolean()
   value: boolean;
 }
 
@@ -104,10 +108,9 @@ export class PreferenceLangueDto {
 }
 
 export class SetUserTypeDto {
-  @ApiProperty({ example: 'PP', enum: ['PP', 'PM'] })
-  @IsString()
-  @IsIn(['PP', 'PM'])
-  userType: string;
+  @ApiProperty({ example: UserType.PP, enum: UserType })
+  @IsEnum(UserType)
+  userType: UserType;
 }
 
 export class UpdateUserAdminDto {
@@ -123,11 +126,15 @@ export class UpdateUserAdminDto {
   @MinLength(2)
   lastname?: string;
 
-  @ApiPropertyOptional({
-    example: 'actif',
-    enum: ['actif', 'suspendu', 'clos'],
-  })
+  /**
+   * `@IsString()` seul laissait passer N'IMPORTE QUELLE chaîne comme statut de
+   * compte : la valeur partait telle quelle en base, et aucune garde ne
+   * l'attrapait ensuite — `AccountStatusGuard` ne refuse que SUSPENDU, CLOS et
+   * SUPPRIME, si bien qu'un statut corrompu laissait le compte pleinement
+   * actif. Le vocabulaire du domaine est la seule liste admissible.
+   */
+  @ApiPropertyOptional({ example: UserStatus.ACTIF, enum: UserStatus })
   @IsOptional()
-  @IsString()
-  status?: string;
+  @IsIn(Object.values(UserStatus))
+  status?: UserStatus;
 }
