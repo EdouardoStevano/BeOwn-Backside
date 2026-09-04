@@ -55,6 +55,7 @@ import {
   PROJECT_REPOSITORY,
   type ProjectRepository,
 } from 'src/projects/applications/ports/repositories/project.repository';
+import { AuditSansCorps } from 'src/common/audit/audit-sans-corps.decorator';
 
 /**
  * Espace porteur — gestion locative.
@@ -74,6 +75,11 @@ import {
  */
 @ApiTags('Porteur — Gestion locative')
 @ApiBearerAuth()
+// Les baux portent l'identité NOMINATIVE d'un TIERS — le locataire — que ni
+// la plateforme ni le porteur n'ont de raison de conserver cinq ans dans un
+// journal d'audit ; les loyers et charges déclarés y ajoutent des montants et
+// des libellés en texte libre.
+@AuditSansCorps()
 @Controller('porteur')
 @UseGuards(JwtAuthGuard, PorteurAccessGuard)
 export class PorteurController {

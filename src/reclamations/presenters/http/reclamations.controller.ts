@@ -34,6 +34,7 @@ import {
   CreateReclamationDto,
   RepondreReclamationDto,
 } from '../dto/reclamation.dto';
+import { AuditSansCorps } from 'src/common/audit/audit-sans-corps.decorator';
 
 /**
  * Réclamations — art. 27 du règlement (UE) 2020/1503.
@@ -55,6 +56,10 @@ import {
  * service, qui la prend sur la ressource chargée.
  */
 @ApiTags('Réclamations')
+// Texte libre de bout en bout : l'exposé du réclamant, l'instruction interne
+// et la réponse. Rien de tout cela n'a vocation à vivre cinq ans dans
+// `audit_log`, hors du barème de conservation des réclamations.
+@AuditSansCorps()
 @Controller('reclamations')
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth()

@@ -61,6 +61,7 @@ import { PROFIL_REPOSITORY, type ProfilRepository } from 'src/profiles/applicati
 import { MetricsPort } from 'src/observability/metrics/metrics.port';
 import { METRIC } from 'src/observability/metrics/metric-names';
 import { TransactionalEmailNotifier } from 'src/shared/email/transactional-email.notifier';
+import { AuditSansCorps } from 'src/common/audit/audit-sans-corps.decorator';
 
 /** Rôles détenant `kyc:validate` — Compliance (+ super_admin via wildcard). */
 const KYC_REVIEWER_ROLES: string[] = rolesWithPermission('kyc:validate');
@@ -79,6 +80,19 @@ const KYC_MANUAL_REVIEW_REQUIRED_MESSAGE =
 
 @ApiTags('Profiles & KYC')
 @ApiBearerAuth()
+/**
+ * `@AuditSansCorps()` en portée CONTRÔLEUR : toute mutation servie ici porte
+ * des données personnelles au sens strict — identité complète, date et lieu de
+ * naissance, adresse, NIF, résidence fiscale, patrimoine net déclaré, réponses
+ * au questionnaire d'adéquation, motifs de décision KYC. `audit_log` est
+ * conservé cinq ans, échappe au barème de purge de la finalité concernée et
+ * n'entre dans aucun export de données personnelles : y recopier ces corps
+ * créait une seconde base de dossiers, hors de tout contrôle.
+ *
+ * La trace reste complète pour le reste — acteur, route, statut, durée, objet
+ * — et les use cases écrivent leur propre entrée métier, avec des états.
+ */
+@AuditSansCorps()
 @Controller('profiles')
 @UseGuards(JwtAuthGuard)
 export class ProfileController {

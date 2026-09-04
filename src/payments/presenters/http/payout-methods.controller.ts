@@ -25,6 +25,7 @@ import type { ActiveUser } from 'src/common/auth/current-user.decorator';
 import { ManagePayoutMethodsUseCase } from '../../applications/usecases/manage-payout-methods.usecase';
 import { AttachPayoutMethodDto } from '../dto/payment.dto';
 import { PayoutMethodExceptionFilter } from './payout-method-exception.filter';
+import { AuditSansCorps } from 'src/common/audit/audit-sans-corps.decorator';
 
 /**
  * Destinations de retrait de l'investisseur (Lot 4a).
@@ -45,6 +46,9 @@ import { PayoutMethodExceptionFilter } from './payout-method-exception.filter';
  */
 @ApiTags('Payments & KYC')
 @ApiBearerAuth()
+// Coordonnées de versement : le masquage par nom de champ ne suffit pas quand
+// le prestataire fait évoluer la forme de ses charges utiles.
+@AuditSansCorps()
 @Controller('payments/connect')
 @UseGuards(JwtAuthGuard, KycValidatedGuard)
 @UseFilters(PayoutMethodExceptionFilter)

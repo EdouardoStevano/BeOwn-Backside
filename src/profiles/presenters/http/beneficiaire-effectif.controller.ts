@@ -10,9 +10,13 @@ import type { ActiveUser } from 'src/common/auth/current-user.decorator';
 import { BeneficiaireEffectifEntity } from '../../infrastructure/persistences/entities/beneficiaire-effectif.entity';
 import { ProfilPMEntity } from '../../infrastructure/persistences/entities/profil-pm.entity';
 import { CreateBeneficiaireEffectifDto } from '../dto/beneficiaire-effectif.dto';
+import { AuditSansCorps } from 'src/common/audit/audit-sans-corps.decorator';
 
 @ApiTags('Profiles — Bénéficiaires Effectifs (DBE-S1)')
 @ApiBearerAuth()
+// Identité nominative de TIERS (bénéficiaires effectifs d'une personne
+// morale) : jamais recopiée dans le journal d'audit.
+@AuditSansCorps()
 @Controller('profiles/pm/:utilisateurId/beneficiaires')
 @UseGuards(JwtAuthGuard)
 export class BeneficiaireEffectifController {

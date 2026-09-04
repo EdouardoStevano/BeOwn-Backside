@@ -296,3 +296,112 @@ describe('AuditInterceptor', () => {
     expect(out).toEqual({ _truncated: expect.any(String) });
   });
 });
+
+/**
+ * Le masquage ne testait que les clés de PREMIER NIVEAU. Or les corps de la
+ * plateforme sont imbriqués : `{ locataire: { email, telephone } }` passait
+ * intégralement en clair, parce que `locataire` ne matche aucun motif sensible
+ * et que son contenu n'était jamais inspecté. `audit_log` est conservé cinq
+ * ans et n'entre dans aucun export de données personnelles.
+ */
+describe('sanitizeBody — sanitisation RÉCURSIVE', () => {
+  it("ne laisse RIEN en clair d'un corps imbriqué de bail et de profil", () => {
+    const corps = {
+      spvId: 'spv-1',
+      loyerMensuel: 800,
+      locataire: {
+        nom: 'Martin',
+        email: 'lea.martin@example.com',
+        telephone: '+262692000000',
+        adresse: '12 rue des Alizés, Saint-Denis',
+        dateNaissance: '1990-04-12',
+      },
+      profil: {
+        nif: '1234567890123',
+        patrimoineNetDeclare: 250000,
+        fiscal: { residenceFiscale: 'FR', revenuAnnuel: 48000 },
+      },
+    };
+
+    const out = sanitizeBody(corps)!;
+    const serialise = JSON.stringify(out);
+
+    for (const valeur of [
+      'lea.martin@example.com',
+      '+262692000000',
+      'Saint-Denis',
+      '1990-04-12',
+      '1234567890123',
+      '250000',
+      '48000',
+    ]) {
+      expect(serialise).not.toContain(valeur);
+    }
+    // Ce qui n'est pas personnel reste lisible : l'audit garde sa valeur.
+    expect(out).toMatchObject({ spvId: 'spv-1', loyerMensuel: 800 });
+  });
+
+  it('masque un champ sensible AVEC tout son contenu', () => {
+    const out = sanitizeBody({
+      locataire: { nom: 'Martin', prenom: 'Léa' },
+    })!;
+
+    // Masquer l'e-mail mais publier le nom ne protégerait rien.
+    expect(out.locataire).toBe('[MASQUE]');
+  });
+
+  it('descend aussi dans les tableaux', () => {
+    const out = sanitizeBody({
+      beneficiairesEffectifs: [{ nomComplet: 'Alice' }],
+      pieces: [{ reference: 'PJ-1' }],
+      lignes: [{ libelle: 'Charge', montant: 12, iban: 'FR7612345' }],
+    })!;
+    const serialise = JSON.stringify(out);
+
+    expect(serialise).not.toContain('Alice');
+    expect(serialise).not.toContain('FR7612345');
+    expect(serialise).toContain('Charge');
+  });
+
+  it('plafonne la profondeur au lieu de recopier une structure hostile', () => {
+    let profond: Record<string, unknown> = { fuite: 'secret-profond' };
+    for (let i = 0; i < 12; i++) profond = { niveau: profond };
+
+    const serialise = JSON.stringify(sanitizeBody(profond));
+
+    expect(serialise).toContain('[PROFONDEUR_MAX]');
+    expect(serialise).not.toContain('secret-profond');
+  });
+
+  it('résume une collection démesurée', () => {
+    const out = sanitizeBody({
+      lignes: Array.from({ length: 50 }, (_, i) => ({ n: i })),
+    })!;
+
+    expect((out.lignes as unknown[]).length).toBe(21);
+    expect((out.lignes as unknown[])[20]).toBe('[+30 éléments]');
+  });
+
+  it('tronque APRÈS masquage : la chaîne tronquée ne contient pas de secret', () => {
+    const out = sanitizeBody({
+      password: 'hunter2',
+      description: 'x'.repeat(3000),
+    })!;
+
+    expect(out._truncated).toEqual(expect.any(String));
+    expect(out._truncated as string).not.toContain('hunter2');
+    expect(out._truncated as string).toContain('[MASQUE]');
+  });
+
+  it('préserve les valeurs simples et les dates', () => {
+    const date = new Date('2026-09-01T00:00:00.000Z');
+    const out = sanitizeBody({ actif: true, quantite: 3, creeLe: date })!;
+
+    expect(out).toEqual({ actif: true, quantite: 3, creeLe: date });
+  });
+
+  it('rend null pour un corps absent ou non objet', () => {
+    expect(sanitizeBody(undefined)).toBeNull();
+    expect(sanitizeBody('texte')).toBeNull();
+  });
+});

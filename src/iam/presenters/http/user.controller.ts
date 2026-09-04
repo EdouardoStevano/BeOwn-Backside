@@ -62,6 +62,7 @@ import { WalletType } from 'src/wallets/domains/enums/wallet.enum';
 import { DeleteAccountUseCase } from 'src/iam/applications/usecases/account/delete-account.usecase';
 import { projeterAccesPorteur } from 'src/porteur-access/domains/acces-porteur';
 import { SkipThrottle, Throttle } from '@nestjs/throttler';
+import { AuditSansCorps } from 'src/common/audit/audit-sans-corps.decorator';
 
 /** Rôles détenant `users:read` — back-office consultation d'un profil tiers. */
 const READ_ROLES: string[] = rolesWithPermission('users:read');
@@ -265,6 +266,11 @@ export class UserController {
 
   @ApiOperation({ summary: 'Mettre à jour mon profil' })
   @ApiResponse({ status: 200, description: 'Profil mis à jour' })
+  // Nom et prénom sont des identifiants directs : les recopier dans
+  // `audit_log`, conservé cinq ans et hors barème de purge, en ferait une
+  // seconde source d'identité que l'anonymisation RGPD ne toucherait pas.
+  // L'entrée d'audit garde qui a modifié quoi et quand — pas les valeurs.
+  @AuditSansCorps()
   @Patch('me')
   async updateMe(@CurrentUser() user: ActiveUser, @Body() dto: UpdateUserDto) {
     const found = await this.userRepository.findById(user.userId);
@@ -443,6 +449,11 @@ export class UserController {
   @ApiResponse({ status: 200, description: 'Utilisateur mis à jour' })
   @ApiResponse({ status: 403, description: 'Accès refusé — rôle admin requis' })
   @ApiResponse({ status: 404, description: 'Utilisateur introuvable' })
+  // Même raison que `PATCH /users/me`, l'acte venant ici d'un tiers : la
+  // modification d'identité par un administrateur est tracée (acteur, cible,
+  // statut, champs modifiés via `profileUpdatedByAdmin`), sans recopier les
+  // valeurs nominatives.
+  @AuditSansCorps()
   @RequirePermission('users:manage')
   @Patch(':id')
   async updateById(

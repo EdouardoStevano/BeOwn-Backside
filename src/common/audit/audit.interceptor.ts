@@ -12,8 +12,41 @@ import { AUDIT_SANS_CORPS_KEY } from './audit-sans-corps.decorator';
 import { statutHttpDeLErreur } from './statut-erreur-metier';
 
 const MUTATING = ['POST', 'PUT', 'PATCH', 'DELETE'];
-const SENSITIVE = /password|token|secret|otp|iban|cvv|card/i;
+
+/**
+ * Noms de champs dont la VALEUR ne doit jamais atteindre `audit_log`.
+ *
+ * La liste couvre trois familles :
+ *  - les identifiants et facteurs (`password`, `token`, `secret`, `otp`, `code`,
+ *    `pin`, `mfa`, `totp`) ;
+ *  - les coordonnées bancaires (`iban`, `bic`, `swift`, `rib`, `cvv`, `cvc`,
+ *    `card`, `carte`) ;
+ *  - les données personnelles au sens du RGPD (`nif`, `patrimoine`, `revenu`,
+ *    `telephone`, `phone`, `adresse`, `address`, `naissance`, `birth`,
+ *    `nationalite`, `email`, `mail`, `locataire`, `beneficiaire`, `piece`,
+ *    `identite`).
+ *
+ * `audit_log` est conservé CINQ ANS, échappe au barème de purge de la finalité
+ * concernée et n'entre dans aucun export de données personnelles : tout champ
+ * personnel qui y entre devient une copie durable et hors contrôle.
+ */
+const SENSITIVE =
+  /password|passe|token|secret|otp|code|pin|mfa|totp|iban|bic|swift|rib|cvv|cvc|card|carte|nif|patrimoine|revenu|salaire|telephone|phone|mobile|adresse|address|naissance|birth|nationalite|email|mail|locataire|beneficiaire|piece|identite/i;
+
 const MAX_BODY_BYTES = 2048;
+
+/**
+ * Profondeur au-delà de laquelle un corps n'est plus parcouru.
+ *
+ * Deux raisons, et la seconde est la plus importante : un corps profondément
+ * imbriqué coûte cher à parcourir sur CHAQUE mutation (un appelant hostile
+ * peut le fabriquer), et surtout, au-delà de quelques niveaux, on ne sait plus
+ * ce qu'on journalise. Ce qui dépasse est REMPLACÉ, jamais recopié tel quel.
+ */
+const MAX_DEPTH = 6;
+
+/** Au-delà, une collection est résumée : un audit n'est pas un entrepôt. */
+const MAX_ARRAY_ITEMS = 20;
 
 /**
  * Ressources dont les mutations n'ont aucune valeur d'audit. Marquer une
@@ -27,14 +60,53 @@ const MAX_BODY_BYTES = 2048;
  */
 const AUDIT_EXCLUDED_RESOURCES = new Set(['notifications']);
 
+/**
+ * Masque récursif d'une valeur de corps de requête.
+ *
+ * La version précédente ne testait que les clés de PREMIER NIVEAU. Or les
+ * corps de la plateforme sont imbriqués : `{ locataire: { email, telephone },
+ * profil: { nif, patrimoineNet } }` passait intégralement en clair dans le
+ * journal, parce que `locataire` et `profil` ne matchent aucun motif sensible
+ * et que leur contenu n'était jamais inspecté. Le masquage descend désormais
+ * dans les objets ET les tableaux.
+ *
+ * Un champ sensible est masqué AVEC TOUT SON CONTENU : masquer
+ * `locataire.email` mais publier `locataire.nomComplet` ne protégerait rien.
+ */
+function masquer(valeur: unknown, profondeur: number): unknown {
+  if (profondeur > MAX_DEPTH) return '[PROFONDEUR_MAX]';
+  if (valeur === null || typeof valeur !== 'object') return valeur;
+
+  if (Array.isArray(valeur)) {
+    const items = valeur
+      .slice(0, MAX_ARRAY_ITEMS)
+      .map((v) => masquer(v, profondeur + 1));
+    return valeur.length > MAX_ARRAY_ITEMS
+      ? [...items, `[+${valeur.length - MAX_ARRAY_ITEMS} éléments]`]
+      : items;
+  }
+
+  // Les objets non sérialisables tels quels (Date, Buffer…) ne sont pas
+  // parcourus : leur représentation JSON ne porte pas de clés à inspecter.
+  if (valeur instanceof Date) return valeur;
+  if (Buffer.isBuffer(valeur)) return '[BINAIRE]';
+
+  const out: Record<string, unknown> = {};
+  for (const [cle, v] of Object.entries(valeur as Record<string, unknown>)) {
+    out[cle] = SENSITIVE.test(cle) ? '[MASQUE]' : masquer(v, profondeur + 1);
+  }
+  return out;
+}
+
 export function sanitizeBody(body: unknown): Record<string, unknown> | null {
   if (!body || typeof body !== 'object') return null;
-  const out: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(body as Record<string, unknown>)) {
-    out[k] = SENSITIVE.test(k) ? '[MASQUE]' : v;
-  }
+
+  const out = masquer(body, 0) as Record<string, unknown>;
   const raw = JSON.stringify(out);
-  return raw.length > MAX_BODY_BYTES
+  // Troncature APRÈS masquage : la chaîne tronquée ne peut donc plus contenir
+  // de valeur sensible. L'ordre inverse — tronquer un corps brut puis le
+  // stocker — publierait exactement ce que le masquage retire.
+  return raw && raw.length > MAX_BODY_BYTES
     ? { _truncated: raw.slice(0, MAX_BODY_BYTES) }
     : out;
 }
