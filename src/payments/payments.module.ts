@@ -11,6 +11,8 @@ import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.ent
 import { PAYMENT_SERVICE } from './applications/ports/payment.service';
 import { WalletsInfrastructureModule } from 'src/wallets/infrastructure/wallets-infrastructure.module';
 import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructure.module';
+import { UsersInfrastructureModule } from 'src/iam/infrastructure/users-infrastructure.module';
+import { PorteurAccessGuard } from 'src/common/auth/porteur-access.guard';
 import { ProfilesModule } from 'src/profiles/applications/profiles.module';
 import { CloudStorageModule } from 'src/shared/cloud-storage/cloud-storage.module';
 import { NotificationsModule } from 'src/notifications/notifications.module';
@@ -62,6 +64,9 @@ import {
     // projet. Le module wallets en est le propriétaire ; payments le consomme.
     WalletsModule,
     IamInfrastructureModule,
+    // `USER_REPOSITORY` : PorteurAccessGuard relit en base le couple
+    // rôle/porteurAccess sur la trésorerie porteur (lot 4, D1).
+    UsersInfrastructureModule,
     ProfilesModule,
     CloudStorageModule,
     NotificationsModule,
@@ -94,6 +99,7 @@ import {
     VerserPorteurUseCase,
     GetPorteurTresorerieUseCase,
     KycValidatedGuard,
+    PorteurAccessGuard,
     // ─── Lot 4a — destinations de retrait (DIP) ──────────────────────────
     // Un seul adaptateur Stripe branché derrière DEUX ports séparés (ISP) :
     // le chemin retrait n'injecte que le Reader et ne peut donc pas modifier

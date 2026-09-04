@@ -38,7 +38,17 @@ export type Permission =
   | 'audit:read'
   | 'reclamations:manage'
   | 'spv:manage'
-  | 'relations:manage';
+  | 'relations:manage'
+  /**
+   * Instruire et décider les demandes d'accès porteur (lot 4, décision D1).
+   *
+   * Permission DISTINCTE de `users:manage` : accorder l'espace porteur, c'est
+   * ouvrir la soumission de projets et la trésorerie d'un projet à un compte,
+   * pas éditer une fiche. Elle est accordée explicitement à `compliance` — le
+   * rôle qui instruit déjà les dossiers d'entrée en relation ; `super_admin`
+   * l'a par le joker.
+   */
+  | 'porteur_access:review';
 
 const WILDCARD = '*' as const;
 type Wildcard = typeof WILDCARD;
@@ -77,6 +87,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[] | [Wildcard]> = {
     'users:manage',
     'projects:read',
     'reports:read',
+    'porteur_access:review',
   ],
   [UserRole.MARKETING]: [
     'data:export',

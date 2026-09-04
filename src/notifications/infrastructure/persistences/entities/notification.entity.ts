@@ -37,6 +37,11 @@ export enum NotificationType {
   INVESTISSEUR_INACTIF = 'investisseur_inactif',
   PROJET_CONSULTE_2X = 'projet_consulte_2x',
   KYC_REVUE_MANUELLE = 'kyc_revue_manuelle',
+  // ── Accès porteur (lot 4) ────────────────────────────────────────
+  // Colonne `type` en varchar : ajouter des valeurs ne touche pas au schéma.
+  PORTEUR_ACCESS_DEMANDE = 'porteur_access_demande',
+  PORTEUR_ACCESS_ACCEPTE = 'porteur_access_accepte',
+  PORTEUR_ACCESS_REFUSE = 'porteur_access_refuse',
 }
 
 @Entity('notification')

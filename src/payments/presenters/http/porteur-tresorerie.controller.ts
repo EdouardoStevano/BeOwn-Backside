@@ -14,10 +14,9 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
-import { Roles } from 'src/common/auth/roles.decorator';
+import { PorteurAccessGuard } from 'src/common/auth/porteur-access.guard';
 import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
-import { UserRole } from 'src/iam/domains/enums/user.enum';
 import { GetPorteurTresorerieUseCase } from '../../applications/usecases/get-porteur-tresorerie.usecase';
 import { TresoreriePaginationDto } from '../dto/porteur-tresorerie.dto';
 
@@ -29,16 +28,20 @@ import { TresoreriePaginationDto } from '../dto/porteur-tresorerie.dto';
  * connaissance de leurs types et metadata, pas dans `locative-management`.
  *
  * Même patron de sécurité que le contrôleur porteur de la gestion locative :
- * rôle PORTEUR exigé (RolesGuard global) ET appartenance du projet vérifiée
- * par ressource — un porteur authentifié ne lit JAMAIS la trésorerie du
- * projet d'un autre (anti-IDOR, tranché dans le cas d'usage avant toute
- * lecture financière).
+ * accès à l'espace porteur exigé (`PorteurAccessGuard`, relu EN BASE) ET
+ * appartenance du projet vérifiée par ressource — un porteur authentifié ne
+ * lit JAMAIS la trésorerie du projet d'un autre (anti-IDOR, tranché dans le
+ * cas d'usage avant toute lecture financière).
+ *
+ * `@Roles(UserRole.PORTEUR)` a été remplacé par ce garde au lot 4 (décision
+ * fondateur D1) : un investisseur dont la demande d'accès porteur a été
+ * acceptée conserve son rôle et accède ici aussi. Le contrôle par ressource,
+ * lui, est inchangé.
  */
 @ApiTags('Porteur — Trésorerie')
 @ApiBearerAuth()
 @Controller('porteur')
-@UseGuards(JwtAuthGuard)
-@Roles(UserRole.PORTEUR)
+@UseGuards(JwtAuthGuard, PorteurAccessGuard)
 export class PorteurTresorerieController {
   constructor(private readonly getTresorerie: GetPorteurTresorerieUseCase) {}
 

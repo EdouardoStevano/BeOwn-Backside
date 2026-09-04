@@ -11,6 +11,7 @@ import {
   Patch,
   Post,
   Query,
+  UseGuards,
 } from '@nestjs/common';
 import { createHash } from 'crypto';
 import {
@@ -48,7 +49,7 @@ import { CreateAvisDto } from 'src/avis/presenters/dto/avis.dto';
 import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
 import { Public } from 'src/common/auth/public.decorator';
-import { Roles } from 'src/common/auth/roles.decorator';
+import { PorteurAccessGuard } from 'src/common/auth/porteur-access.guard';
 import { RequirePermission } from 'src/common/auth/require-permission.decorator';
 import { UserRole } from 'src/iam/domains/enums/user.enum';
 import { NotificationService } from 'src/notifications/applications/notification.service';
@@ -253,7 +254,12 @@ export class ProjectController {
       "Le porteur soumet son projet : il est créé en BROUILLON, rattaché à son compte, et les administrateurs sont notifiés pour due diligence avant publication. Le porteur ne peut pas auto-publier.",
   })
   @ApiResponse({ status: 201, description: 'Projet soumis pour revue' })
-  @Roles(UserRole.PORTEUR)
+  // `@Roles(UserRole.PORTEUR)` remplacé par `PorteurAccessGuard` (lot 4,
+  // décision fondateur D1) : un investisseur dont la demande d'accès porteur a
+  // été acceptée soumet des projets sans changer de rôle. L'accès est RELU EN
+  // BASE, jamais lu dans le jeton. Le porteur ne contrôle toujours ni le
+  // statut ni la visibilité — voir le corps de la méthode.
+  @UseGuards(PorteurAccessGuard)
   @Post('submit')
   async submitByPorteur(
     @Body() dto: CreateProjectDto,

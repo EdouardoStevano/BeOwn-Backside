@@ -16,10 +16,9 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
-import { Roles } from 'src/common/auth/roles.decorator';
+import { PorteurAccessGuard } from 'src/common/auth/porteur-access.guard';
 import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
-import { UserRole } from 'src/iam/domains/enums/user.enum';
 import { CloudStorageService } from 'src/shared/cloud-storage/cloud-storage.service';
 import { AddUniteLouableUseCase } from '../../applications/usecases/add-unite-louable.usecase';
 import { CreateBailUseCase } from '../../applications/usecases/create-bail.usecase';
@@ -52,11 +51,26 @@ import {
   type ProjectRepository,
 } from 'src/projects/applications/ports/repositories/project.repository';
 
+/**
+ * Espace porteur — gestion locative.
+ *
+ * `@Roles(UserRole.PORTEUR)` a été REMPLACÉ par `PorteurAccessGuard` (lot 4,
+ * décision fondateur D1) : l'espace porteur s'ouvre désormais aux porteurs
+ * « purs » ET aux investisseurs dont la demande d'accès a été acceptée
+ * (`users.porteurAccess = true`), qui conservent leur rôle. Les deux gardes ne
+ * se cumulent pas — le `RolesGuard` global refuserait l'investisseur avant que
+ * celui-ci ne s'exécute.
+ *
+ * Le verdict est relu EN BASE à chaque requête (jamais dans le jeton), et il
+ * ne dit QUE « ce compte a un espace porteur ». À quels projets il touche
+ * reste décidé, route par route, par les contrôles d'appartenance ci-dessous
+ * (`assertOwnsProject`, `assertOwnsBail`, `assertOwnsUnite`, `assertOwnsSpv`)
+ * — inchangés.
+ */
 @ApiTags('Porteur — Gestion locative')
 @ApiBearerAuth()
 @Controller('porteur')
-@UseGuards(JwtAuthGuard)
-@Roles(UserRole.PORTEUR)
+@UseGuards(JwtAuthGuard, PorteurAccessGuard)
 export class PorteurController {
   constructor(
     private readonly addUniteLouable: AddUniteLouableUseCase,

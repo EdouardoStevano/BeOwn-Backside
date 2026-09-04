@@ -39,6 +39,7 @@ import { DistributionsModule } from './distributions/applications/distributions.
 import { FiscaliteModule } from './fiscalite/applications/fiscalite.module';
 import { AmlModule } from './common/aml/aml.module';
 import { RgpdModule } from './rgpd/rgpd.module';
+import { PorteurAccessModule } from './porteur-access/porteur-access.module';
 import { PlatformFeesModule } from './common/platform-fees/platform-fees.module';
 import { PlatformSettingsModule } from './common/platform-settings/platform-settings.module';
 import { ContactModule } from './common/contact/contact.module';
@@ -154,6 +155,9 @@ function requireEnv(name: string): string {
     // Anonymisation à la suppression de compte + cron de purge du barème de
     // conservation (lot 2, mission 3).
     RgpdModule,
+    // Demande d'accès porteur instruite par BeOwn + drapeau `porteurAccess`
+    // (lot 4, décision fondateur D1 — double accès investisseur/porteur).
+    PorteurAccessModule,
     PlatformFeesModule,
     PlatformSettingsModule,
     ContactModule,

@@ -10,6 +10,8 @@ import { AvisInfrastructureModule } from 'src/avis/infrastructure/avis-infrastru
 import { NotificationsModule } from 'src/notifications/notifications.module';
 import { AmlModule } from 'src/common/aml/aml.module';
 import { IamInfrastructureModule } from 'src/iam/infrastructure/iam-infrastructure.module';
+import { UsersInfrastructureModule } from 'src/iam/infrastructure/users-infrastructure.module';
+import { PorteurAccessGuard } from 'src/common/auth/porteur-access.guard';
 import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/wallet.entity';
 import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entities/transaction.entity';
 import { ProjectEntity } from '../infrastructure/persistences/entities/project.entity';
@@ -40,6 +42,9 @@ import { ProjectTimelineCronService } from './project-timeline-cron.service';
     NotificationsModule,
     AmlModule,
     IamInfrastructureModule,
+    // `USER_REPOSITORY` : PorteurAccessGuard relit en base le couple
+    // rôle/porteurAccess sur POST /projects/submit (lot 4, D1).
+    UsersInfrastructureModule,
     TypeOrmModule.forFeature([
       WalletEntity,
       TransactionEntity,
@@ -50,6 +55,7 @@ import { ProjectTimelineCronService } from './project-timeline-cron.service';
     ]),
   ],
   providers: [
+    PorteurAccessGuard,
     CreateProjectUseCase,
     ConflitsInteretsService,
     UpdateProjectUseCase,
