@@ -1,8 +1,12 @@
 import { RefreshTokenUseCase } from './refresh-token.usecase';
-import { InvalidRefreshTokenError } from 'src/iam/domains/errors';
+import {
+  AccountClosedError,
+  AccountSuspendedError,
+  InvalidRefreshTokenError,
+} from 'src/iam/domains/errors';
 import { User } from 'src/iam/domains/models/user';
 import { buildUser as buildUserFixture } from 'src/iam/domains/models/user.fixture';
-import { UserStatus } from 'src/iam/domains/enums/user.enum';
+import { UserRole, UserStatus } from 'src/iam/domains/enums/user.enum';
 import { MfaMethodType } from 'src/iam/domains/enums/mfa-method.enum';
 
 const makeUsecase = (
@@ -10,14 +14,16 @@ const makeUsecase = (
   activeMfaMethod: MfaMethodType | null = null,
 ) => {
   const tokenService = {
-    refreshTokens: jest.fn().mockResolvedValue({
+    // Le token présenté ne rend plus que l'identité de la session : ni rôle,
+    // ni tokens. L'émission est faite APRÈS la relecture du compte.
+    consumeRefreshToken: jest
+      .fn()
+      .mockResolvedValue({ sub: 42, email: 'user@example.com' }),
+    generateTokens: jest.fn().mockResolvedValue({
       accessToken: 'new-access',
       refreshToken: 'new-refresh',
     }),
-    verifyAccessToken: jest
-      .fn()
-      .mockResolvedValue({ sub: 42, email: 'user@example.com' }),
-    generateTokens: jest.fn(),
+    verifyAccessToken: jest.fn(),
     generateEmailToken: jest.fn(),
     verifyEmailToken: jest.fn(),
     generateUnsubscribeToken: jest.fn(),
@@ -29,6 +35,7 @@ const makeUsecase = (
     findByEmail: jest.fn(),
     save: jest.fn(),
     update: jest.fn(),
+    updateUserType: jest.fn(),
     findOneBySocialId: jest.fn(),
     findPreferences: jest.fn(),
     savePreferences: jest.fn(),
@@ -63,20 +70,50 @@ describe('RefreshTokenUseCase', () => {
       userId: 42,
       status: UserStatus.ACTIF,
     });
-    // Le compte est relu à partir du `sub` du token fraîchement émis.
+    // Le compte est relu à partir du `sub` du token consommé.
     expect(userRepository.findById).toHaveBeenCalledWith(42);
     // Aucune empreinte de mot de passe ne transite dans la réponse.
     expect(JSON.stringify(session)).not.toMatch(/password/i);
   });
 
+  it('émet les tokens à partir du rôle EN BASE, jamais du claim entrant', async () => {
+    // Cœur du correctif de sécurité : le token présenté ne sert qu'à désigner
+    // `sub`. Le rôle qui fera autorité vient du dépôt utilisateur.
+    const { usecase, tokenService } = makeUsecase(
+      buildUserFixture({ status: UserStatus.ACTIF, role: UserRole.PORTEUR }),
+    );
+
+    await usecase.execute('old-refresh');
+
+    expect(tokenService.generateTokens).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sub: 42,
+        email: 'user@example.com',
+        role: UserRole.PORTEUR,
+      }),
+    );
+  });
+
+  it('relit le compte AVANT d’émettre les nouveaux tokens', async () => {
+    // L'ordre est le correctif : émettre puis relire laisserait le rôle du
+    // claim entrant se recopier dans le token émis.
+    const { usecase, tokenService, userRepository } = makeUsecase();
+
+    await usecase.execute('old-refresh');
+
+    expect(userRepository.findById.mock.invocationCallOrder[0]).toBeLessThan(
+      tokenService.generateTokens.mock.invocationCallOrder[0],
+    );
+  });
+
   it('reflète l’état à jour du compte, pas celui figé dans l’ancien token', async () => {
     const { usecase } = makeUsecase(
-      buildUserFixture({ status: UserStatus.SUSPENDU }),
+      buildUserFixture({ status: UserStatus.ACTIF, role: UserRole.CGP }),
     );
 
     const session = await usecase.execute('old-refresh');
 
-    expect(session.user.status).toBe(UserStatus.SUSPENDU);
+    expect(session.user.role).toBe(UserRole.CGP);
   });
 
   it('publie l’état MFA du compte, relu à chaque rafraîchissement', async () => {
@@ -108,7 +145,7 @@ describe('RefreshTokenUseCase', () => {
 
   it('refresh token invalide ou révoqué : 401, sans lecture en base', async () => {
     const { usecase, tokenService, userRepository } = makeUsecase();
-    tokenService.refreshTokens.mockRejectedValue(new Error('revoked'));
+    tokenService.consumeRefreshToken.mockRejectedValue(new Error('revoked'));
 
     await expect(usecase.execute('old-refresh')).rejects.toBeInstanceOf(
       InvalidRefreshTokenError,
@@ -122,6 +159,31 @@ describe('RefreshTokenUseCase', () => {
     await expect(usecase.execute('old-refresh')).rejects.toBeInstanceOf(
       InvalidRefreshTokenError,
     );
+  });
+
+  it('compte suspendu : aucun token émis', async () => {
+    // `POST /auth/refresh-tokens` étant public, AccountStatusGuard ne le
+    // protège pas : sans ce contrôle, un compte sanctionné continuerait
+    // d'obtenir des tokens valides.
+    const { usecase, tokenService } = makeUsecase(
+      buildUserFixture({ status: UserStatus.SUSPENDU }),
+    );
+
+    await expect(usecase.execute('old-refresh')).rejects.toBeInstanceOf(
+      AccountSuspendedError,
+    );
+    expect(tokenService.generateTokens).not.toHaveBeenCalled();
+  });
+
+  it('compte clos : aucun token émis', async () => {
+    const { usecase, tokenService } = makeUsecase(
+      buildUserFixture({ status: UserStatus.CLOS }),
+    );
+
+    await expect(usecase.execute('old-refresh')).rejects.toBeInstanceOf(
+      AccountClosedError,
+    );
+    expect(tokenService.generateTokens).not.toHaveBeenCalled();
   });
 
   it('une panne de base ne se déguise pas en token invalide', async () => {

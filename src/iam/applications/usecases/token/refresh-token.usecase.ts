@@ -1,14 +1,19 @@
 import { Inject, Injectable } from '@nestjs/common';
 import {
   type AuthSession,
-  type AuthTokens,
+  type RefreshSessionIdentity,
+  type TokenPayload,
 } from 'src/iam/applications/models/auth-token';
 import { TokenService } from '../../services/token/token.service';
 import {
   USER_REPOSITORY,
   type UserRepository,
 } from 'src/iam/domains/ports/user.repository';
-import { InvalidRefreshTokenError } from 'src/iam/domains/errors';
+import {
+  AccountClosedError,
+  AccountSuspendedError,
+  InvalidRefreshTokenError,
+} from 'src/iam/domains/errors';
 import { MfaFactorService } from '../../services/mfa/mfa-factor.service';
 
 /**
@@ -17,6 +22,13 @@ import { MfaFactorService } from '../../services/mfa/mfa-factor.service';
  * qui reprend une session au démarrage (refresh token en stockage) obtient
  * ainsi le profil à jour sans enchaîner un `GET /users/me` — et voit tout de
  * suite un statut ou un rôle modifiés côté serveur depuis la connexion.
+ *
+ * ORDRE CRITIQUE (correctif de sécurité) : le compte est relu AVANT l'émission
+ * des tokens. Le token entrant ne sert plus qu'à désigner *qui* rafraîchit
+ * (`sub`) ; le rôle et le statut qui feront autorité viennent de la base. Sans
+ * cela, le rôle du claim était recopié dans le nouveau couple et une
+ * rétrogradation d'administrateur ne prenait jamais effet — l'utilisateur
+ * conservait ses droits en faisant simplement tourner son refresh token.
  */
 @Injectable()
 export class RefreshTokenUseCase {
@@ -27,34 +39,54 @@ export class RefreshTokenUseCase {
   ) {}
 
   async execute(refreshToken: string): Promise<AuthSession> {
-    let tokens: AuthTokens;
+    let identity: RefreshSessionIdentity;
     try {
-      tokens = await this.tokenService.refreshTokens(refreshToken);
+      // Consomme le tour de rotation : le token présenté ne vaut plus rien au
+      // retour, qu'on émette ensuite de nouveaux tokens ou non.
+      identity = await this.tokenService.consumeRefreshToken(refreshToken);
     } catch {
       // Périmètre volontairement étroit : seul l'échec de rotation devient un
-      // 401. Une panne de base sur la relecture du compte, plus bas, doit
-      // rester une vraie erreur serveur et non se déguiser en token invalide.
+      // 401 « token invalide ». Une panne de base sur la relecture du compte,
+      // plus bas, doit rester une vraie erreur serveur.
       throw new InvalidRefreshTokenError();
     }
 
-    // L'identité est relue depuis le token qui vient d'être émis, pas depuis
-    // celui reçu : c'est la session effectivement ouverte qui fait foi.
-    const { sub } = await this.tokenService.verifyAccessToken(
-      tokens.accessToken,
-    );
-
-    const user = await this.userRepository.findById(sub);
+    const user = await this.userRepository.findById(identity.sub);
     if (!user) {
       // Compte supprimé depuis l'émission du refresh token : même réponse
       // qu'un token invalide, pas de session à rouvrir.
       throw new InvalidRefreshTokenError();
     }
 
+    // `POST /auth/refresh-tokens` est public : AccountStatusGuard, qui coupe
+    // l'accès des comptes sanctionnés à chaque requête, ne s'y applique pas.
+    // Le contrôle est donc fait ici, avec le MÊME contrat d'erreur que le
+    // sign-in (codes stables ACCOUNT_SUSPENDED / ACCOUNT_CLOSED) : un compte
+    // suspendu, clos ou supprimé n'obtient aucun nouveau token.
+    if (user.isSuspended()) {
+      throw new AccountSuspendedError();
+    }
+    if (user.isClosed()) {
+      throw new AccountClosedError();
+    }
+
     // Relu à chaque rafraîchissement, au même titre que le statut et le rôle :
     // un facteur armé ou retiré depuis la connexion doit se voir sur la session
     // reprise, sans quoi le front garderait l'état du jour où elle a été
     // ouverte.
-    const activeMfaMethod = await this.mfaFactors.findActiveMethod(sub);
+    const activeMfaMethod = await this.mfaFactors.findActiveMethod(
+      user.userId,
+    );
+
+    // Le nouveau couple porte le rôle EN BASE, jamais celui du claim entrant.
+    // L'adresse suit la même règle ; le repli sur celle du token ne couvre que
+    // le cas limite d'un compte sans ligne `user_emails` (le getter rend alors
+    // une chaîne vide), qui produirait une clé de session ambiguë en cache.
+    const tokens = await this.tokenService.generateTokens({
+      sub: user.userId,
+      email: user.email || identity.email,
+      role: user.role,
+    } as TokenPayload);
 
     // `toJSON()` est la seule projection publiable — l'empreinte du mot de
     // passe en est exclue par construction (PublicUser).

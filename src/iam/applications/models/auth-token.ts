@@ -13,6 +13,26 @@ export interface AuthTokens {
 }
 
 /**
+ * Ce qu'un refresh token consommé permet d'affirmer : **l'identité de la
+ * session**, rien d'autre.
+ *
+ * Volontairement dépourvu de `role` : le rôle porté par l'ancien token était
+ * recopié tel quel dans le nouveau couple, si bien qu'un changement de rôle
+ * décidé par un administrateur restait sans effet tant que l'utilisateur
+ * faisait tourner son refresh token — une rétrogradation d'administrateur
+ * était contournable indéfiniment. Le rôle est désormais RELU en base par
+ * l'appelant ({@link RefreshTokenUseCase}) ; ce type est la garantie de type
+ * qu'aucun claim entrant ne peut plus resservir d'autorisation.
+ *
+ * `email` sert à l'identification de la session côté cache (la clé de rotation
+ * en dépend), pas à autoriser quoi que ce soit.
+ */
+export interface RefreshSessionIdentity {
+  sub: number;
+  email: string;
+}
+
+/**
  * Ce que renvoie une **ouverture de session** : les tokens et l'état du compte.
  * Forme commune au sign-in et au rafraîchissement, pour que le front traite les
  * deux réponses avec le même code.

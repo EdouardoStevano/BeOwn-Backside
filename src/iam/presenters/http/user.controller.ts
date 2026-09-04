@@ -340,7 +340,11 @@ export class UserController {
     });
   }
 
-  @ApiOperation({ summary: "Définir le type d'investisseur (PP ou PM)" })
+  @ApiOperation({
+    summary: "Définir le type d'investisseur (PP ou PM)",
+    description:
+      "Enregistre la DÉCLARATION de type faite à la première étape de l'onboarding, avant la création du profil. La source de vérité du type de compte reste la présence d'un profil PP ou PM — c'est elle que `GET /users/me` expose dans `completionSteps`.",
+  })
   @ApiResponse({ status: 200, description: 'Type mis à jour' })
   @Patch('me/type')
   async setUserType(
@@ -352,9 +356,14 @@ export class UserController {
     }
     const found = await this.userRepository.findById(user.userId);
     if (!found) throw new NotFoundException('Utilisateur introuvable.');
-    (found as any).userType = body.userType;
-    const updated = await this.userRepository.update(found);
-    return updated.toJSON();
+
+    // Écriture directe et assumée de la colonne : `userType` n'appartient pas
+    // à l'agrégat `User`. La ligne précédente posait `(found as any).userType`
+    // sur le modèle de domaine puis appelait `update()` — le mapper de
+    // persistance ne connaissant pas ce champ, l'endpoint ne faisait RIEN.
+    await this.userRepository.updateUserType(user.userId, body.userType);
+
+    return { ...found.toJSON(), userType: body.userType };
   }
 
   @ApiOperation({

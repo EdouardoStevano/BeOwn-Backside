@@ -5,6 +5,7 @@ import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.ent
 import { UserPreferencesEntity } from 'src/iam/infrastructure/persistence/entities/user-preferences.entity';
 import { Repository } from 'typeorm';
 import { User } from 'src/iam/domains/models/user';
+import { UserType } from 'src/iam/domains/enums/user.enum';
 import { UserPreferences } from 'src/iam/domains/models/user-preferences';
 import { UserMapper } from 'src/iam/infrastructure/persistence/mappers/user.mapper';
 
@@ -81,6 +82,16 @@ export class UserTypeOrmRepository implements UserRepository {
 
     const updated = await this.usersRepository.save(entity);
     return UserMapper.toDomain(updated);
+  }
+
+  /**
+   * Écriture ciblée d'une seule colonne, hors agrégat (voir le contrat du
+   * port). `update` partiel de TypeORM plutôt qu'un `save()` d'entité : rien
+   * d'autre que `userType` ne doit bouger, et surtout pas la ligne
+   * `user_emails` liée en cascade.
+   */
+  async updateUserType(userId: number, userType: UserType): Promise<void> {
+    await this.usersRepository.update({ userId }, { userType });
   }
 
   async findOneBySocialId(socialId: string): Promise<User | null> {

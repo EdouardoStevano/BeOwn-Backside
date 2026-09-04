@@ -51,6 +51,25 @@ export class UserMapper {
     // save(). Undefined reste ignoré par TypeORM (insert → défaut CREE).
     if (snapshot.status) entity.status = snapshot.status;
 
+    // Le rôle voyage désormais avec le compte. Il ne l'était PAS : toute
+    // écriture passant par `UserRepository.update()` (renommage, vérification
+    // d'email, réinitialisation de mot de passe…) reconstruisait une entité
+    // sans `role`. TypeORM ignore les colonnes `undefined`, donc la valeur en
+    // base survivait par accident — mais rien ne le garantissait, et l'agrégat
+    // et sa ligne divergeaient silencieusement. Aucun setter de domaine ne
+    // touche au rôle : ce mapping réécrit la valeur relue, il ne peut pas en
+    // inventer une (l'attribution reste le seul fait de l'endpoint admin).
+    if (snapshot.role) entity.role = snapshot.role;
+
+    // `userType` (colonne `users.userType`) n'est délibérément PAS mappé : il
+    // n'appartient pas à l'agrégat. La source de vérité du type de compte est
+    // la présence d'un profil PP ou PM — c'est ce que `GET /users/me` déduit
+    // pour construire les étapes d'onboarding. La colonne ne conserve que la
+    // déclaration d'intention faite à l'étape 1 du parcours, et elle est écrite
+    // explicitement par `UserRepository.updateUserType()`. La porter ici
+    // obligerait le domaine à héberger un champ qu'aucune règle métier n'oppose
+    // jamais.
+
     // Preuve de consentement CGU (lot 2 RGPD). `cguAccepteesLe` existait dans
     // le domaine mais n'était PAS mappé ici : la valeur posée par
     // `User.register` était perdue au save(). Les trois champs voyagent

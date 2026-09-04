@@ -12,6 +12,7 @@ import {
   EmailTokenPayload,
   EmailTokenPurpose,
   NOTIF_UNSUBSCRIBE_TYPE,
+  RefreshSessionIdentity,
   TokenPayload,
   UNSUBSCRIBE_TOKEN_AUDIENCE,
   UnsubscribeTokenPayload,
@@ -71,8 +72,26 @@ export class TokenService {
     return this.tokenSigner.sign({ sub: userId, ...payload }, { expiresIn });
   }
 
-  async refreshTokens(token: string): Promise<AuthTokens> {
-    const { sub, email, role, refreshTokenId } =
+  /**
+   * Éprouve un refresh token et **consomme** son tour de rotation : au retour,
+   * l'identifiant présenté ne vaut plus rien.
+   *
+   * Ne rend QUE l'identité de la session ({@link RefreshSessionIdentity}), et
+   * n'émet aucun token. C'est le correctif d'une faille : la méthode
+   * `refreshTokens` qu'elle remplace re-signait le claim `role` de l'ancien
+   * token sans jamais relire la base. Comme `JwtAuthGuard` et
+   * `PermissionsGuard` prennent le rôle dans le token, un changement de rôle
+   * par un administrateur (`PATCH /admin/investors/:userId/role`) n'avait aucun
+   * effet tant que l'utilisateur rafraîchissait sa session : une rétrogradation
+   * ou une révocation d'administrateur était contournable indéfiniment.
+   *
+   * L'émission du nouveau couple appartient donc à l'appelant, seul à connaître
+   * le dépôt utilisateur — c'est lui qui relit le rôle et le statut réels avant
+   * d'appeler `generateTokens` (§SRP : ce service tient la politique de tokens,
+   * pas l'état des comptes).
+   */
+  async consumeRefreshToken(token: string): Promise<RefreshSessionIdentity> {
+    const { sub, email, refreshTokenId } =
       await this.tokenSigner.verify<TokenPayload>(token);
 
     // Un access token ne porte pas d'identifiant de rotation : présenté ici, il
@@ -83,17 +102,16 @@ export class TokenService {
       typeof refreshTokenId === 'string' &&
       (await this.sessionCache.validateRefreshToken(email, refreshTokenId));
 
-    if (isValidToken) {
-      await this.sessionCache.invalidateRefreshTokenId(email);
-    } else {
+    if (!isValidToken) {
       throw new Error('Refresh token is no longer available!');
     }
 
-    return this.generateTokens({
-      sub,
-      email,
-      role,
-    } as TokenPayload);
+    // Rotation : l'identifiant courant est retiré du cache AVANT toute
+    // relecture de compte, de sorte qu'un refresh token présenté deux fois ne
+    // soit honoré qu'une fois, même si la suite du parcours échoue.
+    await this.sessionCache.invalidateRefreshTokenId(email);
+
+    return { sub, email };
   }
 
   async verifyAccessToken(token: string): Promise<TokenPayload> {

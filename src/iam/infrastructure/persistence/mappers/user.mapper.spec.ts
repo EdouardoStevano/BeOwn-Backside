@@ -1,4 +1,4 @@
-import { UserRole, UserStatus } from 'src/iam/domains/enums/user.enum';
+import { UserRole, UserStatus, UserType } from 'src/iam/domains/enums/user.enum';
 import { User } from 'src/iam/domains/models/user';
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 import { UserEmailEntity } from 'src/iam/infrastructure/persistence/entities/user-email.entity';
@@ -86,5 +86,72 @@ describe('UserMapper (persistance) — couture user_emails ↔ agrégat', () => 
     expect(domain.email).toBe('');
     expect(domain.isEmailVerified()).toBe(false);
     expect(UserMapper.toEntity(domain).userEmail).toBeUndefined();
+  });
+});
+
+/**
+ * `role` n'était PAS mappé vers l'entité : toute écriture passant par
+ * `UserRepository.update()` reconstruisait une ligne sans rôle. La valeur en
+ * base survivait par accident (TypeORM ignore les colonnes `undefined`), mais
+ * rien ne le garantissait — et un porteur ou un administrateur pouvait, sur un
+ * simple changement du comportement de l'ORM, retomber au rôle par défaut.
+ */
+describe('UserMapper (persistance) — rôle et type de compte', () => {
+  const buildEntityWithRole = (role: UserRole): UserEntity => {
+    const entity = buildEntity();
+    entity.role = role;
+    return entity;
+  };
+
+  it('relit le rôle depuis la ligne', () => {
+    const domain = UserMapper.toDomain(buildEntityWithRole(UserRole.PORTEUR));
+
+    expect(domain.role).toBe(UserRole.PORTEUR);
+  });
+
+  it('réécrit le rôle dans la ligne (aller-retour sans perte)', () => {
+    const domain = UserMapper.toDomain(
+      buildEntityWithRole(UserRole.SUPER_ADMIN),
+    );
+
+    const entity = UserMapper.toEntity(domain);
+
+    expect(entity.role).toBe(UserRole.SUPER_ADMIN);
+  });
+
+  it('ne laisse jamais le rôle indéfini au save()', () => {
+    // La régression exacte : `entity.role` valait `undefined`, donc la colonne
+    // était absente de l'UPDATE et le rôle de l'agrégat n'atteignait pas la base.
+    const entity = UserMapper.toEntity(
+      UserMapper.toDomain(buildEntityWithRole(UserRole.CGP)),
+    );
+
+    expect(entity.role).toBeDefined();
+    expect(entity.role).not.toBe(UserRole.INVESTISSEUR);
+  });
+
+  it('conserve le rôle à travers une transition métier du compte', () => {
+    const domain = UserMapper.toDomain(buildEntityWithRole(UserRole.PORTEUR));
+
+    domain.markEmailAsVerified();
+    const entity = UserMapper.toEntity(domain);
+
+    expect(entity.role).toBe(UserRole.PORTEUR);
+    expect(entity.status).toBe(UserStatus.ACTIF);
+  });
+
+  it("n'écrit PAS `userType` : le champ n'appartient pas à l'agrégat", () => {
+    // Décision assumée : la source de vérité du type de compte est la présence
+    // d'un profil PP ou PM ; la colonne ne garde que la déclaration faite à
+    // l'onboarding, écrite par `UserRepository.updateUserType()`. Un mapping
+    // ici reposerait une propriété fantôme sur le modèle de domaine.
+    const source = buildEntity();
+    source.userType = UserType.PM;
+
+    const entity = UserMapper.toEntity(UserMapper.toDomain(source));
+
+    // `undefined` et non `null` : TypeORM ignore la colonne, donc la valeur
+    // déjà en base est laissée intacte au lieu d'être écrasée.
+    expect(entity.userType).toBeUndefined();
   });
 });
