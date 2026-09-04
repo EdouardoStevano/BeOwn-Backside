@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import type { AccesPorteurEnBase } from 'src/iam/domains/ports/user.repository';
 import { UserRepository } from 'src/iam/domains/ports/user.repository';
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 import { UserPreferencesEntity } from 'src/iam/infrastructure/persistence/entities/user-preferences.entity';
@@ -92,6 +93,30 @@ export class UserTypeOrmRepository implements UserRepository {
    */
   async updateUserType(userId: number, userType: UserType): Promise<void> {
     await this.usersRepository.update({ userId }, { userType });
+  }
+
+  /**
+   * Projection à deux colonnes, appelée à chaque requête gardée « espace
+   * porteur » : `select` explicite pour ne pas charger — ni faire transiter —
+   * le reste de la ligne compte.
+   */
+  async findAccesPorteur(userId: number): Promise<AccesPorteurEnBase | null> {
+    const row = await this.usersRepository.findOne({
+      where: { userId },
+      select: ['userId', 'role', 'porteurAccess'],
+    });
+    if (!row) return null;
+    // `porteurAccess` a un défaut en base ; le `?? false` couvre les lignes
+    // écrites avant la pose de la colonne sur un environnement déployé.
+    return { role: row.role, porteurAccess: row.porteurAccess ?? false };
+  }
+
+  /** Écriture ciblée d'une seule colonne, hors agrégat (voir le port). */
+  async updatePorteurAccess(
+    userId: number,
+    porteurAccess: boolean,
+  ): Promise<void> {
+    await this.usersRepository.update({ userId }, { porteurAccess });
   }
 
   async findOneBySocialId(socialId: string): Promise<User | null> {

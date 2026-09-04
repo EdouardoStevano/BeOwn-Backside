@@ -1,8 +1,22 @@
-import { UserType } from 'src/iam/domains/enums/user.enum';
+import { UserRole, UserType } from 'src/iam/domains/enums/user.enum';
 import { User } from 'src/iam/domains/models/user';
 import { UserPreferences } from 'src/iam/domains/models/user-preferences';
 
 export const USER_REPOSITORY = Symbol('USER_REPOSITORY');
+
+/**
+ * Le couple qui décide de l'accès à l'espace porteur, tel qu'il est EN BASE.
+ *
+ * Renvoyé par une lecture ciblée et non par l'agrégat : `porteurAccess`, comme
+ * `userType`, n'entre pas dans le modèle de domaine `User` (cf.
+ * docs/adr/ADR-role-relu-en-base-et-usertype.md § 3). Les deux champs voyagent
+ * ENSEMBLE parce que la règle du double accès (D1) les lit ensemble : les
+ * séparer imposerait deux allers-retours par requête gardée.
+ */
+export interface AccesPorteurEnBase {
+  role: UserRole;
+  porteurAccess: boolean;
+}
 
 export interface UserRepository {
   save(user: User): Promise<User>;
@@ -29,6 +43,23 @@ export interface UserRepository {
    * n'écrivait rien.
    */
   updateUserType(userId: number, userType: UserType): Promise<void>;
+  /**
+   * Lit `users.role` ET `users.porteurAccess` en une seule requête.
+   *
+   * C'est la lecture qu'exécute `PorteurAccessGuard` à CHAQUE requête sur une
+   * route de l'espace porteur : l'accès porteur est une autorisation à état,
+   * donc révocable, et le claim du jeton ne peut pas en tenir lieu (même
+   * raisonnement que pour `role` — ADR § 1, « le claim entrant identifie, il
+   * n'autorise jamais »). Modèle : `KycValidatedGuard`.
+   */
+  findAccesPorteur(userId: number): Promise<AccesPorteurEnBase | null>;
+  /**
+   * Écrit la colonne `users.porteurAccess`, et elle seule — même motif que
+   * `updateUserType` : le drapeau n'appartient pas à l'agrégat `User`, il est
+   * posé par la DÉCISION d'un instructeur sur une demande d'accès porteur
+   * (module `porteur-access`), jamais par une édition de profil.
+   */
+  updatePorteurAccess(userId: number, porteurAccess: boolean): Promise<void>;
   findOneBySocialId(socialId: string): Promise<User | null>;
   findPreferences(userId: number): Promise<UserPreferences>;
   savePreferences(

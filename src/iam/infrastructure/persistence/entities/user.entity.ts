@@ -92,6 +92,21 @@ export class UserEntity {
   @Column({ type: 'varchar', nullable: true })
   userType: UserType | null;
 
+  // ─── Accès porteur cumulé (lot 4 — décision fondateur D1) ────────────────
+  // Un investisseur dont la demande d'accès porteur a été ACCEPTÉE conserve
+  // son rôle `investisseur` et gagne ce drapeau : il entre dans l'espace
+  // porteur SANS perdre son espace investisseur. Le rôle `porteur` reste,
+  // lui, celui des comptes porteurs « purs » (seed, attribution directe).
+  //
+  // Posé/retiré UNIQUEMENT par la décision d'un instructeur sur une demande
+  // (`DeciderDemandePorteurUseCase`, permission `porteur_access:review`),
+  // jamais par une édition de profil. LU EN BASE à chaque requête par
+  // `PorteurAccessGuard` : c'est une autorisation à état, donc révocable, et
+  // le claim du JWT ne peut pas en tenir lieu (ADR rôle relu en base, § 1).
+  // Colonne ajoutée via décorateur + SQL manuel (ADR migrations).
+  @Column({ type: 'boolean', default: false })
+  porteurAccess: boolean;
+
   @Column({ type: 'varchar', default: RegimeFiscal.PFU })
   regimeFiscal: RegimeFiscal;
 
