@@ -65,7 +65,7 @@ describe('RgpdPurgeService', () => {
       // données cohabitent dans la même table.
       FinalitePurge.DEMANDE_PORTEUR_TEXTE_LIBRE,
       FinalitePurge.DEMANDE_PORTEUR_DECISION,
-      FinalitePurge.DEMANDE_PORTEUR_CADUQUE,
+      FinalitePurge.DEMANDE_PORTEUR_JAMAIS_INSTRUITE,
     ]);
     expect(rapport.totalTraites).toBe(0);
   });
@@ -92,11 +92,51 @@ describe('RgpdPurgeService', () => {
     await service.purger(MAINTENANT);
     const sqlDecision = dataSource.query.mock.calls
       .map((c: any[]) => String(c[0]))
-      .find((sql: string) => /DELETE FROM demande_acces_porteur/.test(sql));
+      .find((sql: string) => /statut IN \('acceptee'/.test(sql));
 
     expect(sqlDecision).toBeDefined();
-    expect(sqlDecision).toMatch(/NOT EXISTS/);
-    expect(sqlDecision).toMatch(/u\."porteurAccess"/);
+    expect(sqlDecision).toMatch(/DELETE FROM demande_acces_porteur/);
+    // `COALESCE(..., false)` et non `NOT EXISTS` : la sélection joint `users`
+    // pour LIRE des colonnes ; un compte définitivement supprimé (pas de ligne)
+    // doit rester purgeable.
+    expect(sqlDecision).toMatch(/NOT COALESCE\(u\."porteurAccess", false\)/);
+  });
+
+  /**
+   * Anomalie de validation (lot 4b) : le barème dit « durée de l'accès, puis
+   * 5 ans ». Faute de fin d'accès horodatée, la purge repartait de la date de
+   * DÉCISION — une ligne devenait purgeable dès la fermeture de l'accès au lieu
+   * de fermeture + 5 ans.
+   */
+  it("le point de départ d'une demande ACCEPTÉE est la fin de l'accès, pas la décision", async () => {
+    await service.purger(MAINTENANT);
+    const sqlDecision = dataSource.query.mock.calls
+      .map((c: any[]) => String(c[0]))
+      .find((sql: string) => /statut IN \('acceptee'/.test(sql));
+
+    // Ordre imposé : retrait horodaté, à défaut clôture du compte, à défaut la
+    // date de décision (stock antérieur, ou ligne `users` disparue).
+    expect(sqlDecision).toMatch(
+      /COALESCE\(u\."accesRevoqueLe", u\."anonymiseLe", d\."decideeLe"\)/,
+    );
+    // …et ce point de départ ne vaut QUE pour les demandes acceptées : les
+    // autres statuts terminaux n'ouvrent aucun accès.
+    expect(sqlDecision).toMatch(/WHEN d\.statut = 'acceptee'/);
+    expect(sqlDecision).toMatch(/ELSE d\."decideeLe"/);
+    expect(sqlDecision).toMatch(/LEFT JOIN users u/);
+  });
+
+  it('la demande JAMAIS INSTRUITE part sur `soumiseLe`, sans toucher aux statuts terminaux', async () => {
+    await service.purger(MAINTENANT);
+    const sql = dataSource.query.mock.calls
+      .map((c: any[]) => String(c[0]))
+      .find((s: string) => /statut IN \('soumise','en_examen'\)/.test(s));
+
+    expect(sql).toMatch(/DELETE FROM demande_acces_porteur/);
+    expect(sql).toMatch(/"soumiseLe" < \$1/);
+    // Le statut `caduque` est TERMINAL et horodaté : il relève de la finalité
+    // « décision », pas de celle-ci — malgré son nom d'origine.
+    expect(sql).not.toMatch(/caduque/);
   });
 
   it('la suppression définitive d’un compte purge d’abord ses demandes', async () => {
@@ -112,9 +152,7 @@ describe('RgpdPurgeService', () => {
     const indexDemandes = ordres.findIndex((sql) =>
       /DELETE FROM demande_acces_porteur/.test(sql),
     );
-    const indexUsers = ordres.findIndex((sql) =>
-      /DELETE FROM users/.test(sql),
-    );
+    const indexUsers = ordres.findIndex((sql) => /DELETE FROM users/.test(sql));
     expect(indexDemandes).toBeGreaterThanOrEqual(0);
     expect(indexDemandes).toBeLessThan(indexUsers);
   });
@@ -133,7 +171,7 @@ describe('RgpdPurgeService', () => {
     ).toBe(2);
   });
 
-  it("chaque sélection de compte exclut les réclamations ouvertes (suspension litige, NOT EXISTS)", async () => {
+  it('chaque sélection de compte exclut les réclamations ouvertes (suspension litige, NOT EXISTS)', async () => {
     await service.purger(MAINTENANT);
     const selects = dataSource.query.mock.calls
       .map((c: any) => c[0] as string)
@@ -159,12 +197,14 @@ describe('RgpdPurgeService', () => {
 
   it('les éligibles suspendus pour gel des avoirs sont comptés, journalisés, et JAMAIS traités', async () => {
     reponses.push({
-      motif: /COUNT\(\*\)[\s\S]*status = 'supprime'[\s\S]*"avoirsGelesLe" IS NOT NULL/,
+      motif:
+        /COUNT\(\*\)[\s\S]*status = 'supprime'[\s\S]*"avoirsGelesLe" IS NOT NULL/,
       resultat: [{ n: 2 }],
     });
     const rapport = await service.purger(MAINTENANT);
     expect(
-      compteur(rapport, FinalitePurge.COMPTE_SUPPRIME_A_ANONYMISER).suspendusGel,
+      compteur(rapport, FinalitePurge.COMPTE_SUPPRIME_A_ANONYMISER)
+        .suspendusGel,
     ).toBe(2);
     // Suspendu ≠ traité : rien n'est anonymisé.
     expect(anonymize.anonymiser).not.toHaveBeenCalled();
@@ -220,7 +260,9 @@ describe('RgpdPurgeService', () => {
     await service.purger(MAINTENANT);
     const sql = dataSource.query.mock.calls
       .map((c: any) => c[0] as string)
-      .find((s: string) => /email_verifie/.test(s) && /SELECT u\."userId"/.test(s));
+      .find(
+        (s: string) => /email_verifie/.test(s) && /SELECT u\."userId"/.test(s),
+      );
     expect(sql).toBeDefined();
     for (const table of [
       'kyc',
@@ -268,7 +310,9 @@ describe('RgpdPurgeService', () => {
       txSql.some((s: string) => s.includes('UPDATE profil_personne_physique')),
     ).toBe(true);
     expect(
-      txSql.some((s: string) => s.includes('DELETE FROM beneficiaire_effectif')),
+      txSql.some((s: string) =>
+        s.includes('DELETE FROM beneficiaire_effectif'),
+      ),
     ).toBe(true);
     expect(
       txSql.some((s: string) =>
@@ -315,9 +359,7 @@ describe('RgpdPurgeService', () => {
     );
     expect(call[0]).toContain('LIMIT');
     // Seuil : 5 ans avant « maintenant » (calendaire).
-    expect((call[1][0] as Date).toISOString()).toBe(
-      '2021-09-03T12:00:00.000Z',
-    );
+    expect((call[1][0] as Date).toISOString()).toBe('2021-09-03T12:00:00.000Z');
   });
 
   it('IDEMPOTENCE de sélection : un second run sans nouvel éligible traite 0', async () => {

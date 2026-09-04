@@ -1,6 +1,4 @@
-import {
-  DocumentType,
-} from 'src/documents/domains/enums/document-type.enum';
+import { DocumentType } from 'src/documents/domains/enums/document-type.enum';
 
 /**
  * Barème de conservation RGPD — transcription EN CODE du barème validé par la
@@ -52,10 +50,25 @@ export enum FinalitePurge {
   //    aucune décision à justifier — la ligne part entièrement.
   /** Texte libre d'une demande REFUSÉE, purgé 2 ans après la décision. */
   DEMANDE_PORTEUR_TEXTE_LIBRE = 'demande_porteur_texte_libre',
-  /** Ligne de décision (acceptée ou refusée), supprimée à 5 ans. */
+  /**
+   * Ligne d'une demande CLOSE (acceptée, refusée, retirée, caduque),
+   * supprimée 5 ans après la clôture. Le statut `caduque` relève de CETTE
+   * finalité : il est terminal, et sa date de clôture est renseignée.
+   */
   DEMANDE_PORTEUR_DECISION = 'demande_porteur_decision',
-  /** Demande sans décision : caducité à 12 mois, ligne supprimée. */
-  DEMANDE_PORTEUR_CADUQUE = 'demande_porteur_caduque',
+  /**
+   * Demande JAMAIS INSTRUITE (`soumise`, `en_examen`), supprimée 12 mois après
+   * son dépôt — il n'y a aucune décision à justifier, et la conserver
+   * bloquerait indéfiniment l'index unique partiel.
+   *
+   * Nom rectifié (lot 4b) : cette finalité s'appelait
+   * `DEMANDE_PORTEUR_CADUQUE`, ce qui laissait croire qu'elle purgeait le
+   * STATUT `caduque` — lequel relève en réalité de
+   * `DEMANDE_PORTEUR_DECISION`, étant terminal et horodaté. Aucune valeur
+   * n'est persistée en base : l'énumération ne sert qu'aux rapports et aux
+   * journaux du cron.
+   */
+  DEMANDE_PORTEUR_JAMAIS_INSTRUITE = 'demande_porteur_jamais_instruite',
 }
 
 /** Durée de conservation d'une finalité, en unités CALENDAIRES (pas en ms). */
@@ -76,22 +89,22 @@ export const DUREES_RETENTION: Readonly<
   [FinalitePurge.JOURNAUX_AUDIT]: Object.freeze({ annees: 5 }),
   [FinalitePurge.DEMANDE_PORTEUR_TEXTE_LIBRE]: Object.freeze({ annees: 2 }),
   [FinalitePurge.DEMANDE_PORTEUR_DECISION]: Object.freeze({ annees: 5 }),
-  [FinalitePurge.DEMANDE_PORTEUR_CADUQUE]: Object.freeze({ mois: 12 }),
+  [FinalitePurge.DEMANDE_PORTEUR_JAMAIS_INSTRUITE]: Object.freeze({ mois: 12 }),
 });
 
 /**
- * LIMITE CONNUE — point de départ des demandes ACCEPTÉES.
+ * Point de départ des demandes ACCEPTÉES — « durée de l'accès, puis 5 ans ».
  *
- * Le barème dit « durée de l'accès, puis 5 ans ». La fin d'accès n'est pas
- * horodatée : aucun chemin de RÉVOCATION de `users.porteurAccess` n'existe à
- * ce jour (hors périmètre du lot 4). La purge prend donc pour point de départ
- * `decideeLe`, et n'agit QUE sur les comptes dont l'accès est refermé
- * (`porteurAccess = false`) — tant que l'accès court, rien n'est purgé.
+ * La fin d'accès est désormais HORODATÉE (`users.accesRevoqueLe`, lot 4b) : la
+ * purge repart de cette date, à défaut de la clôture du compte
+ * (`users.anonymiseLe`), à défaut de la date de décision — dans cet ordre,
+ * exprimé par un `COALESCE` dans `RgpdPurgeService`. La sélection reste par
+ * ailleurs bornée aux comptes dont l'accès est refermé (`porteurAccess =
+ * false`) : tant qu'il court, la pièce qui justifie son octroi doit rester.
  *
- * Conséquence assumée : pour un accès qui aurait duré plus de cinq ans, la
- * ligne devient purgeable dès sa fermeture au lieu de fermeture + 5 ans. Le
- * jour où une révocation sera horodatée (`accesRevoqueLe`), le point de départ
- * devra basculer dessus — et cette note disparaître.
+ * Le repli sur `decideeLe` ne concerne que le stock antérieur au lot 4b — une
+ * demande acceptée puis fermée sans que la fermeture ait été horodatée — et
+ * les comptes dont la ligne `users` a disparu (suppression définitive).
  */
 
 /**

@@ -111,11 +111,11 @@ export class RgpdPurgeService {
       await this.purgerNotifications(maintenant),
       await this.purgerJournauxAudit(maintenant),
       // Lot 4 — trois passes sur `demande_acces_porteur`, dans cet ordre :
-      // le texte libre part à 2 ans, la ligne de décision à 5 ans, la demande
-      // jamais instruite à 12 mois.
+      // le texte libre part à 2 ans, la ligne d'une demande close à 5 ans après
+      // la fin de l'accès, la demande jamais instruite à 12 mois.
       await this.purgerTexteLibreDemandesPorteur(maintenant),
       await this.purgerDecisionsDemandesPorteur(maintenant),
-      await this.purgerDemandesPorteurCaduques(maintenant),
+      await this.purgerDemandesPorteurJamaisInstruites(maintenant),
     ];
 
     const totalTraites = compteurs.reduce((s, c) => s + c.traites, 0);
@@ -456,31 +456,44 @@ export class RgpdPurgeService {
   }
 
   /**
-   * Ligne de décision, 5 ans après la décision.
+   * Ligne d'une demande CLOSE, 5 ans après la fin de ce qu'elle justifie.
    *
    * Une demande ACCEPTÉE n'est éligible que si l'accès est REFERMÉ
    * (`users.porteurAccess = false`) : tant qu'il court, la pièce justifiant
-   * son octroi doit rester. Le point de départ reste `decideeLe` faute de
-   * date de révocation — limite documentée dans `retention-policy.ts`.
+   * son octroi doit rester. Son POINT DE DÉPART n'est pas la date de décision
+   * mais la FIN DE L'ACCÈS — le barème dit « durée de l'accès, puis 5 ans » :
+   * `accesRevoqueLe` (retrait horodaté, lot 4b), à défaut `anonymiseLe`
+   * (clôture de la relation d'affaires), à défaut `decideeLe` (stock antérieur
+   * au lot 4b, ou ligne `users` disparue).
+   *
+   * Les autres statuts terminaux (refusée, retirée, caduque) n'ouvrent aucun
+   * accès : leur point de départ reste la date de clôture du dossier.
+   *
+   * `LEFT JOIN` et non `EXISTS` : la sélection doit LIRE des colonnes de
+   * `users`, et une demande dont le compte a été définitivement supprimé doit
+   * rester purgeable (référence sans FK dure).
    */
   private async purgerDecisionsDemandesPorteur(
     maintenant: Date,
   ): Promise<CompteurFinalite> {
-    const seuil = seuilPurge(FinalitePurge.DEMANDE_PORTEUR_DECISION, maintenant);
+    const seuil = seuilPurge(
+      FinalitePurge.DEMANDE_PORTEUR_DECISION,
+      maintenant,
+    );
     const traites = await this.parLots(async (limit) => {
       const resultat = await this.dataSource.query(
         `DELETE FROM demande_acces_porteur
           WHERE id IN (
             SELECT d.id FROM demande_acces_porteur d
+             LEFT JOIN users u ON u."userId" = d."utilisateurId"
              WHERE d.statut IN ('acceptee','refusee','retiree','caduque')
                AND d."decideeLe" IS NOT NULL
-               AND d."decideeLe" < $1
-               AND (
-                 d.statut <> 'acceptee'
-                 OR NOT EXISTS (SELECT 1 FROM users u
-                                 WHERE u."userId" = d."utilisateurId"
-                                   AND u."porteurAccess")
-               )
+               AND (d.statut <> 'acceptee' OR NOT COALESCE(u."porteurAccess", false))
+               AND CASE
+                     WHEN d.statut = 'acceptee'
+                       THEN COALESCE(u."accesRevoqueLe", u."anonymiseLe", d."decideeLe")
+                     ELSE d."decideeLe"
+                   END < $1
              LIMIT $2)`,
         [seuil, limit],
       );
@@ -495,16 +508,21 @@ export class RgpdPurgeService {
   }
 
   /**
-   * Caducité à 12 mois d'une demande JAMAIS instruite.
+   * Demande JAMAIS INSTRUITE, 12 mois après son dépôt.
    *
    * La ligne part entièrement : il n'y a aucune décision à justifier, et la
    * conserver bloquerait indéfiniment l'index unique partiel — le demandeur ne
-   * pourrait plus jamais redéposer. La caducité lui rend ce droit.
+   * pourrait plus jamais redéposer. Ce n'est PAS le statut `caduque` (terminal
+   * et horodaté, purgé par la finalité précédente) : ce sont les dossiers
+   * restés `soumise` ou `en_examen`.
    */
-  private async purgerDemandesPorteurCaduques(
+  private async purgerDemandesPorteurJamaisInstruites(
     maintenant: Date,
   ): Promise<CompteurFinalite> {
-    const seuil = seuilPurge(FinalitePurge.DEMANDE_PORTEUR_CADUQUE, maintenant);
+    const seuil = seuilPurge(
+      FinalitePurge.DEMANDE_PORTEUR_JAMAIS_INSTRUITE,
+      maintenant,
+    );
     const traites = await this.parLots(async (limit) => {
       const resultat = await this.dataSource.query(
         `DELETE FROM demande_acces_porteur
@@ -518,7 +536,7 @@ export class RgpdPurgeService {
       return lignesAffectees(resultat);
     });
     return {
-      finalite: FinalitePurge.DEMANDE_PORTEUR_CADUQUE,
+      finalite: FinalitePurge.DEMANDE_PORTEUR_JAMAIS_INSTRUITE,
       traites,
       suspendusLitige: 0,
       suspendusGel: 0,
