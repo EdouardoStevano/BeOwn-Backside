@@ -39,6 +39,23 @@ export enum FinalitePurge {
   NOTIFICATIONS = 'notifications',
   /** Ligne 9 : journaux d'audit, 5 ans après l'événement. */
   JOURNAUX_AUDIT = 'journaux_audit',
+
+  // ─── Demandes d'accès porteur (lot 4) ────────────────────────────────────
+  // Trois finalités DISTINCTES sur la même table, parce que trois données de
+  // nature différente y cohabitent :
+  //  - le TEXTE LIBRE (motivation du demandeur, complément interne de
+  //    l'instructeur) : donnée personnelle sans obligation de conservation
+  //    propre — purgée tôt, SANS supprimer la ligne ;
+  //  - le SQUELETTE DE DÉCISION (statut, dates, administrateur, motif codé) :
+  //    preuve que l'examen imposé par les CGU a eu lieu — conservé 5 ans ;
+  //  - la demande JAMAIS DÉCIDÉE : caduque au bout de 12 mois, il n'y a
+  //    aucune décision à justifier — la ligne part entièrement.
+  /** Texte libre d'une demande REFUSÉE, purgé 2 ans après la décision. */
+  DEMANDE_PORTEUR_TEXTE_LIBRE = 'demande_porteur_texte_libre',
+  /** Ligne de décision (acceptée ou refusée), supprimée à 5 ans. */
+  DEMANDE_PORTEUR_DECISION = 'demande_porteur_decision',
+  /** Demande sans décision : caducité à 12 mois, ligne supprimée. */
+  DEMANDE_PORTEUR_CADUQUE = 'demande_porteur_caduque',
 }
 
 /** Durée de conservation d'une finalité, en unités CALENDAIRES (pas en ms). */
@@ -57,7 +74,25 @@ export const DUREES_RETENTION: Readonly<
   [FinalitePurge.KYC_ECHEANCE_POST_CLOTURE]: Object.freeze({ annees: 5 }),
   [FinalitePurge.NOTIFICATIONS]: Object.freeze({ mois: 12 }),
   [FinalitePurge.JOURNAUX_AUDIT]: Object.freeze({ annees: 5 }),
+  [FinalitePurge.DEMANDE_PORTEUR_TEXTE_LIBRE]: Object.freeze({ annees: 2 }),
+  [FinalitePurge.DEMANDE_PORTEUR_DECISION]: Object.freeze({ annees: 5 }),
+  [FinalitePurge.DEMANDE_PORTEUR_CADUQUE]: Object.freeze({ mois: 12 }),
 });
+
+/**
+ * LIMITE CONNUE — point de départ des demandes ACCEPTÉES.
+ *
+ * Le barème dit « durée de l'accès, puis 5 ans ». La fin d'accès n'est pas
+ * horodatée : aucun chemin de RÉVOCATION de `users.porteurAccess` n'existe à
+ * ce jour (hors périmètre du lot 4). La purge prend donc pour point de départ
+ * `decideeLe`, et n'agit QUE sur les comptes dont l'accès est refermé
+ * (`porteurAccess = false`) — tant que l'accès court, rien n'est purgé.
+ *
+ * Conséquence assumée : pour un accès qui aurait duré plus de cinq ans, la
+ * ligne devient purgeable dès sa fermeture au lieu de fermeture + 5 ans. Le
+ * jour où une révocation sera horodatée (`accesRevoqueLe`), le point de départ
+ * devra basculer dessus — et cette note disparaître.
+ */
 
 /**
  * Date limite de conservation pour un point de départ donné : au-delà de
@@ -185,6 +220,37 @@ export function sortDocumentUtilisateur(type: DocumentType): SortDocument {
     return SortDocument.SUPPRIMER;
   }
   return SortDocument.CONSERVER;
+}
+
+// ─── Demande d'accès porteur à l'anonymisation d'un compte (lot 4) ─────────
+
+export enum SortDemandeAccesPorteur {
+  /** Ligne détruite : aucune décision à justifier, aucune obligation. */
+  SUPPRIMER = 'supprimer',
+  /**
+   * Ligne conservée mais VIDÉE de son texte libre (motivation, complément
+   * interne) : le squelette de décision — statut, dates, administrateur, motif
+   * codé, version des CGU — prouve que l'examen exigé par les CGU a eu lieu,
+   * et il tient sans une seule phrase écrite par ou sur la personne.
+   */
+  EFFACER_TEXTE_LIBRE = 'effacer_texte_libre',
+}
+
+/**
+ * Sort des demandes d'accès porteur quand le compte est anonymisé.
+ *
+ * Aligné sur le régime d'anonymisation, pour la même raison : sans relation
+ * d'affaires (purge totale), il n'y a rien à justifier — la demande part avec
+ * le reste. Avec obligations (archivage restreint), la trace de l'examen
+ * survit, dépouillée de son texte libre. Le cron la supprimera ensuite à
+ * l'échéance de `DEMANDE_PORTEUR_DECISION`.
+ */
+export function sortDemandeAccesPorteur(
+  regime: RegimeAnonymisation,
+): SortDemandeAccesPorteur {
+  return regime === RegimeAnonymisation.PURGE_TOTALE
+    ? SortDemandeAccesPorteur.SUPPRIMER
+    : SortDemandeAccesPorteur.EFFACER_TEXTE_LIBRE;
 }
 
 // ─── Bornes d'exécution du cron (règle « lots bornés » du plan de lot) ──────

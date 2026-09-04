@@ -12,11 +12,14 @@ import { InvestmentEntity } from 'src/investments/infrastructure/persistences/en
 import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/wallet.entity';
 import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entities/transaction.entity';
 import { DocumentEntity } from 'src/documents/infrastructure/persistences/entities/document.entity';
+import { DemandeAccesPorteurEntity } from 'src/porteur-access/infrastructure/persistences/entities/demande-acces-porteur.entity';
 import {
   RegimeAnonymisation,
+  SortDemandeAccesPorteur,
   SortDocument,
   emailAnonymise,
   regimeAnonymisation,
+  sortDemandeAccesPorteur,
   sortDocumentUtilisateur,
 } from 'src/rgpd/domains/retention-policy';
 import { StockageFichiersPort } from 'src/rgpd/applications/ports/stockage-fichiers.port';
@@ -166,6 +169,28 @@ export class AnonymizeAccountService {
           ...(purgeTotale ? { firstname: '', lastname: null } : {}),
         },
       );
+
+      // ── Demandes d'accès porteur (lot 4) ─────────────────────────────────
+      // Sans relation d'affaires (purge totale), il n'y a aucun examen à
+      // justifier : la demande part avec le reste. Avec obligations, la TRACE
+      // de l'examen exigé par les CGU survit — statut, dates, administrateur,
+      // motif CODÉ, version des CGU — mais vidée de son TEXTE LIBRE
+      // (motivation du demandeur, complément interne de l'instructeur), qui
+      // n'a, lui, aucune obligation de conservation propre. Le cron de purge
+      // supprimera ensuite la ligne à l'échéance des cinq ans.
+      if (
+        sortDemandeAccesPorteur(regime) === SortDemandeAccesPorteur.SUPPRIMER
+      ) {
+        await manager.delete(DemandeAccesPorteurEntity, {
+          utilisateurId: userId,
+        });
+      } else {
+        await manager.update(
+          DemandeAccesPorteurEntity,
+          { utilisateurId: userId },
+          { motivation: '', motifRefusComplement: null },
+        );
+      }
 
       // ── Profil personne physique ─────────────────────────────────────────
       await manager.update(

@@ -13,6 +13,8 @@ import { OrdreMarcheEntity } from 'src/secondarymarket/infrastructure/persistenc
 import { DistributionPartEntity } from 'src/distributions/infrastructure/persistences/entities/distribution-part.entity';
 import { ReclamationEntity } from 'src/reclamations/infrastructure/persistences/entities/reclamation.entity';
 import { ParrainageAttributionEntity } from 'src/parrainage/infrastructure/persistences/entities/parrainage-attribution.entity';
+import { DemandeAccesPorteurEntity } from 'src/porteur-access/infrastructure/persistences/entities/demande-acces-porteur.entity';
+import { LIBELLES_MOTIF_REFUS } from 'src/porteur-access/domains/motif-refus';
 
 /**
  * Taille des pages internes : chaque table est lue par lots bornés (keyset sur
@@ -45,6 +47,8 @@ export interface ExportDonneesPersonnelles {
   preferences: Record<string, unknown> | null;
   reclamations: Record<string, unknown>[];
   parrainage: Record<string, unknown>;
+  /** Demandes d'accès porteur déposées par la personne (lot 4). */
+  demandesAccesPorteur: Record<string, unknown>[];
 }
 
 /**
@@ -96,6 +100,7 @@ export class PersonalDataExportService {
       preferences,
       reclamations,
       parrainage,
+      demandesAccesPorteur,
     ] = await Promise.all([
       this.identite(userId),
       this.profilPP(userId),
@@ -108,6 +113,7 @@ export class PersonalDataExportService {
       this.preferences(userId),
       this.reclamations(userId),
       this.parrainage(userId),
+      this.demandesAccesPorteur(userId),
     ]);
 
     // Les transactions se filtrent par les wallets du compte, les
@@ -139,6 +145,7 @@ export class PersonalDataExportService {
       preferences,
       reclamations,
       parrainage,
+      demandesAccesPorteur,
     };
   }
 
@@ -447,6 +454,48 @@ export class PersonalDataExportService {
         reponduLe: r.reponduLe,
         echeanceReponse: r.echeanceReponse,
         creeLe: r.createdAt,
+      }));
+    });
+  }
+
+  /**
+   * Demandes d'accès porteur de la personne (lot 4).
+   *
+   * Restitué : sa motivation, la décision, ses dates, le motif CODÉ et son
+   * libellé, la version des CGU acceptée. MASQUÉ :
+   *  - `decideurAdminId` — un tiers, même raison que `traiteParUserId` d'une
+   *    réclamation ;
+   *  - `motifRefusComplement` — note interne d'instruction, exclue au même
+   *    titre que les évaluations LCB-FT (voir l'en-tête de classe). Point
+   *    signalé à la conformité : si l'analyse retient qu'elle constitue une
+   *    donnée personnelle communicable (art. 15), c'est ici qu'elle s'ajoute.
+   * Pagination keyset, comme le reste du service.
+   */
+  private demandesAccesPorteur(
+    userId: number,
+  ): Promise<Record<string, unknown>[]> {
+    return this.lirePages(async (apresId) => {
+      const page = await this.dataSource
+        .getRepository(DemandeAccesPorteurEntity)
+        .find({
+          where: this.keyset<DemandeAccesPorteurEntity>(
+            { utilisateurId: userId },
+            apresId,
+          ),
+          order: { id: 'ASC' },
+          take: TAILLE_PAGE,
+        });
+      return page.map((d) => ({
+        id: d.id,
+        statut: d.statut,
+        motivation: d.motivation,
+        cguVersionAcceptee: d.cguVersionAcceptee,
+        soumiseLe: d.soumiseLe,
+        decideeLe: d.decideeLe,
+        motifRefus: d.motifRefus,
+        motifRefusLibelle: d.motifRefus
+          ? LIBELLES_MOTIF_REFUS[d.motifRefus]
+          : null,
       }));
     });
   }

@@ -110,6 +110,12 @@ export class RgpdPurgeService {
       await this.purgerKycEchusPostCloture(maintenant),
       await this.purgerNotifications(maintenant),
       await this.purgerJournauxAudit(maintenant),
+      // Lot 4 — trois passes sur `demande_acces_porteur`, dans cet ordre :
+      // le texte libre part à 2 ans, la ligne de décision à 5 ans, la demande
+      // jamais instruite à 12 mois.
+      await this.purgerTexteLibreDemandesPorteur(maintenant),
+      await this.purgerDecisionsDemandesPorteur(maintenant),
+      await this.purgerDemandesPorteurCaduques(maintenant),
     ];
 
     const totalTraites = compteurs.reduce((s, c) => s + c.traites, 0);
@@ -404,6 +410,121 @@ export class RgpdPurgeService {
     };
   }
 
+  // ── Lot 4 : demandes d'accès porteur ──────────────────────────────────────
+
+  /**
+   * Texte libre d'une demande REFUSÉE, 2 ans après la décision.
+   *
+   * UPDATE et non DELETE : la motivation du demandeur et le complément interne
+   * de l'instructeur sont des données personnelles sans obligation de
+   * conservation propre, alors que le squelette de la décision (statut, dates,
+   * administrateur, motif CODÉ) prouve l'examen exigé par les CGU et vit cinq
+   * ans. Purger le texte SANS toucher à la décision est précisément ce que la
+   * séparation motif codé / complément libre rend possible.
+   *
+   * Sélection auto-extinctive (idempotence sans colonne supplémentaire) : une
+   * ligne déjà vidée ne matche plus.
+   */
+  private async purgerTexteLibreDemandesPorteur(
+    maintenant: Date,
+  ): Promise<CompteurFinalite> {
+    const seuil = seuilPurge(
+      FinalitePurge.DEMANDE_PORTEUR_TEXTE_LIBRE,
+      maintenant,
+    );
+    const traites = await this.parLots(async (limit) => {
+      const resultat = await this.dataSource.query(
+        `UPDATE demande_acces_porteur
+            SET motivation = '', "motifRefusComplement" = NULL
+          WHERE id IN (
+            SELECT id FROM demande_acces_porteur
+             WHERE statut = 'refusee'
+               AND "decideeLe" IS NOT NULL
+               AND "decideeLe" < $1
+               AND (motivation <> '' OR "motifRefusComplement" IS NOT NULL)
+             LIMIT $2)`,
+        [seuil, limit],
+      );
+      return lignesAffectees(resultat);
+    });
+    return {
+      finalite: FinalitePurge.DEMANDE_PORTEUR_TEXTE_LIBRE,
+      traites,
+      suspendusLitige: 0,
+      suspendusGel: 0,
+    };
+  }
+
+  /**
+   * Ligne de décision, 5 ans après la décision.
+   *
+   * Une demande ACCEPTÉE n'est éligible que si l'accès est REFERMÉ
+   * (`users.porteurAccess = false`) : tant qu'il court, la pièce justifiant
+   * son octroi doit rester. Le point de départ reste `decideeLe` faute de
+   * date de révocation — limite documentée dans `retention-policy.ts`.
+   */
+  private async purgerDecisionsDemandesPorteur(
+    maintenant: Date,
+  ): Promise<CompteurFinalite> {
+    const seuil = seuilPurge(FinalitePurge.DEMANDE_PORTEUR_DECISION, maintenant);
+    const traites = await this.parLots(async (limit) => {
+      const resultat = await this.dataSource.query(
+        `DELETE FROM demande_acces_porteur
+          WHERE id IN (
+            SELECT d.id FROM demande_acces_porteur d
+             WHERE d.statut IN ('acceptee','refusee','retiree')
+               AND d."decideeLe" IS NOT NULL
+               AND d."decideeLe" < $1
+               AND (
+                 d.statut <> 'acceptee'
+                 OR NOT EXISTS (SELECT 1 FROM users u
+                                 WHERE u."userId" = d."utilisateurId"
+                                   AND u."porteurAccess")
+               )
+             LIMIT $2)`,
+        [seuil, limit],
+      );
+      return lignesAffectees(resultat);
+    });
+    return {
+      finalite: FinalitePurge.DEMANDE_PORTEUR_DECISION,
+      traites,
+      suspendusLitige: 0,
+      suspendusGel: 0,
+    };
+  }
+
+  /**
+   * Caducité à 12 mois d'une demande JAMAIS instruite.
+   *
+   * La ligne part entièrement : il n'y a aucune décision à justifier, et la
+   * conserver bloquerait indéfiniment l'index unique partiel — le demandeur ne
+   * pourrait plus jamais redéposer. La caducité lui rend ce droit.
+   */
+  private async purgerDemandesPorteurCaduques(
+    maintenant: Date,
+  ): Promise<CompteurFinalite> {
+    const seuil = seuilPurge(FinalitePurge.DEMANDE_PORTEUR_CADUQUE, maintenant);
+    const traites = await this.parLots(async (limit) => {
+      const resultat = await this.dataSource.query(
+        `DELETE FROM demande_acces_porteur
+          WHERE id IN (
+            SELECT id FROM demande_acces_porteur
+             WHERE statut IN ('soumise','en_examen')
+               AND "soumiseLe" < $1
+             LIMIT $2)`,
+        [seuil, limit],
+      );
+      return lignesAffectees(resultat);
+    });
+    return {
+      finalite: FinalitePurge.DEMANDE_PORTEUR_CADUQUE,
+      traites,
+      suspendusLitige: 0,
+      suspendusGel: 0,
+    };
+  }
+
   // ── Outillage ─────────────────────────────────────────────────────────────
 
   /** Clause de suspension sur litige (réclamation ouverte). */
@@ -473,6 +594,13 @@ export class RgpdPurgeService {
       );
       await manager.query(
         `DELETE FROM profil_personne_physique WHERE "utilisateurId" = ANY($1)`,
+        [ids],
+      );
+      // Demandes d'accès porteur (lot 4) : lignes enfants sans FK dure, mais
+      // orphelines si le compte disparaît — et elles portent du texte libre
+      // nominatif. Supprimées AVANT `users`, comme le reste.
+      await manager.query(
+        `DELETE FROM demande_acces_porteur WHERE "utilisateurId" = ANY($1)`,
         [ids],
       );
       await manager.query(`DELETE FROM user_emails WHERE user_id = ANY($1)`, [

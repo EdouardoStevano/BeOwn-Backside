@@ -49,7 +49,7 @@ describe('RgpdPurgeService', () => {
   const compteur = (rapport: any, finalite: FinalitePurge) =>
     rapport.compteurs.find((c: any) => c.finalite === finalite);
 
-  it('run à vide : les 6 finalités du barème sont couvertes, 0 traité partout', async () => {
+  it('run à vide : les 9 finalités du barème sont couvertes, 0 traité partout', async () => {
     const rapport = await service.purger(MAINTENANT);
     expect(rapport.executeLe).toBe(MAINTENANT.toISOString());
     expect(rapport.compteurs.map((c: any) => c.finalite)).toEqual([
@@ -59,8 +59,64 @@ describe('RgpdPurgeService', () => {
       FinalitePurge.KYC_ECHEANCE_POST_CLOTURE,
       FinalitePurge.NOTIFICATIONS,
       FinalitePurge.JOURNAUX_AUDIT,
+      // Lot 4 — trois passes sur `demande_acces_porteur` : le texte libre part
+      // à 2 ans, la ligne de décision à 5 ans, la demande jamais instruite à
+      // 12 mois. Trois finalités et non une seule parce que trois natures de
+      // données cohabitent dans la même table.
+      FinalitePurge.DEMANDE_PORTEUR_TEXTE_LIBRE,
+      FinalitePurge.DEMANDE_PORTEUR_DECISION,
+      FinalitePurge.DEMANDE_PORTEUR_CADUQUE,
     ]);
     expect(rapport.totalTraites).toBe(0);
+  });
+
+  /**
+   * La purge du TEXTE LIBRE ne doit pas emporter la décision : c'est
+   * précisément ce que permet la séparation motif codé / complément libre.
+   */
+  it('le texte libre d’une demande refusée est VIDÉ, pas supprimé', async () => {
+    await service.purger(MAINTENANT);
+    const sqlTexteLibre = dataSource.query.mock.calls
+      .map((c: any[]) => String(c[0]))
+      .find((sql: string) => /UPDATE demande_acces_porteur/.test(sql));
+
+    expect(sqlTexteLibre).toBeDefined();
+    expect(sqlTexteLibre).toMatch(/SET motivation = ''/);
+    expect(sqlTexteLibre).toMatch(/"motifRefusComplement" = NULL/);
+    expect(sqlTexteLibre).toMatch(/statut = 'refusee'/);
+    // Sélection auto-extinctive : une ligne déjà vidée ne matche plus.
+    expect(sqlTexteLibre).toMatch(/motivation <> ''/);
+  });
+
+  it("une demande acceptée n'est purgée que si l'accès est refermé", async () => {
+    await service.purger(MAINTENANT);
+    const sqlDecision = dataSource.query.mock.calls
+      .map((c: any[]) => String(c[0]))
+      .find((sql: string) => /DELETE FROM demande_acces_porteur/.test(sql));
+
+    expect(sqlDecision).toBeDefined();
+    expect(sqlDecision).toMatch(/NOT EXISTS/);
+    expect(sqlDecision).toMatch(/u\."porteurAccess"/);
+  });
+
+  it('la suppression définitive d’un compte purge d’abord ses demandes', async () => {
+    // Sans ce DELETE, la ligne enfant resterait orpheline (et porte du texte
+    // libre nominatif).
+    reponses.push({
+      motif: /status = 'cree'[\s\S]*ORDER BY/,
+      resultat: [{ userId: 8 }],
+    });
+    await service.purger(MAINTENANT);
+
+    const ordres = manager.query.mock.calls.map((c: any[]) => String(c[0]));
+    const indexDemandes = ordres.findIndex((sql) =>
+      /DELETE FROM demande_acces_porteur/.test(sql),
+    );
+    const indexUsers = ordres.findIndex((sql) =>
+      /DELETE FROM users/.test(sql),
+    );
+    expect(indexDemandes).toBeGreaterThanOrEqual(0);
+    expect(indexDemandes).toBeLessThan(indexUsers);
   });
 
   it('comptes SUPPRIME non anonymisés → délègue à AnonymizeAccountService', async () => {
