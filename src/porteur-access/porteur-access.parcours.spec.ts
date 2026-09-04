@@ -50,7 +50,10 @@ import {
   LIBELLES_MOTIF_RETRAIT,
   MotifRetraitAccesPorteur,
 } from './domains/motif-retrait';
-import { versLigneFile } from './presenters/http/demande-acces-porteur.presenter';
+import {
+  versLigneFile,
+  versVueDemandeur,
+} from './presenters/http/demande-acces-porteur.presenter';
 import {
   AccesPorteurDejaOuvertError,
   AccesPorteurEtatInchangeError,
@@ -412,6 +415,22 @@ describe('Octroi : session invalidée, notification, audit', () => {
     expect(JSON.stringify(notif)).not.toContain('immeuble');
   });
 
+  it("la notification n'exige AUCUNE reconnexion — elle serait fausse", async () => {
+    // Constaté en recette : l'accès est relu en base à chaque requête et le
+    // front rafraîchit le profil de lui-même. Demander une reconnexion
+    // ajoutait une friction inutile, à l'instant même où l'on annonce une
+    // bonne nouvelle — et décrivait un produit qui n'existe pas.
+    const { h } = await accepter();
+    const notif = h.notificationsPoussees.find(
+      (n) => n.type === 'porteur_access_accepte',
+    );
+
+    expect(notif?.message).not.toMatch(/reconnect/i);
+    // Ce que la personne doit savoir : c'est ouvert, et où le trouver.
+    expect(notif?.message).toContain('votre menu');
+    expect(notif?.message).toContain('espace investisseur reste inchangé');
+  });
+
   it("l'audit métier porte l'état AVANT et APRÈS, sans aucun texte libre", async () => {
     const { h } = await accepter();
     const entree = h.entreesAudit.find(
@@ -656,6 +675,112 @@ describe('Double soumission et carence', () => {
       maintenant: new Date(t0.getTime() + 60_000),
     });
     expect(seconde.statut).toBe(StatutDemandeAccesPorteur.SOUMISE);
+  });
+
+  // ── La date de réintroduction est SERVIE, pas seulement opposée ──────────
+  //
+  // Elle ne vivait que dans le corps du 429 : le demandeur éconduit devait
+  // RETENTER pour apprendre quand il pourrait retenter. Le front avait
+  // l'affichage prêt, le champ n'existait pas.
+
+  it('après un refus, la vue du demandeur porte la date de réintroduction', async () => {
+    const h = makeHarness();
+    const t0 = new Date('2026-09-01T10:00:00.000Z');
+    const demande = await h.soumettre.execute({
+      utilisateurId: INVESTISSEUR_ID,
+      motivation: MOTIVATION,
+      maintenant: t0,
+    });
+    const { demande: refusee } = await h.decider.execute({
+      demandeId: demande.id as string,
+      decision: StatutDemandeAccesPorteur.REFUSEE,
+      motifRefus: MotifRefusAccesPorteur.HORS_CRITERES,
+      decideurAdminId: ADMIN_ID,
+      decideurRole: UserRole.COMPLIANCE,
+      maintenant: t0,
+    });
+
+    // Exactement ce que rend `GET /porteur-access/demandes/me`.
+    const vue = versVueDemandeur(refusee);
+
+    expect(vue.reintroductibleLe).toBe(
+      new Date(
+        t0.getTime() + DELAI_CARENCE_APRES_REFUS_JOURS * 86_400_000,
+      ).toISOString(),
+    );
+  });
+
+  it('la date servie est EXACTEMENT celle que le refus 429 oppose', async () => {
+    // Non-divergence : la vue et la garde lisent la même fonction de domaine.
+    // Deux calculs séparés auraient fini par annoncer une date et en opposer
+    // une autre — le pire des deux mondes pour le demandeur.
+    const h = makeHarness();
+    const t0 = new Date('2026-09-01T10:00:00.000Z');
+    const demande = await h.soumettre.execute({
+      utilisateurId: INVESTISSEUR_ID,
+      motivation: MOTIVATION,
+      maintenant: t0,
+    });
+    const { demande: refusee } = await h.decider.execute({
+      demandeId: demande.id as string,
+      decision: StatutDemandeAccesPorteur.REFUSEE,
+      motifRefus: MotifRefusAccesPorteur.HORS_CRITERES,
+      decideurAdminId: ADMIN_ID,
+      decideurRole: UserRole.COMPLIANCE,
+      maintenant: t0,
+    });
+
+    const erreur = await h.soumettre
+      .execute({
+        utilisateurId: INVESTISSEUR_ID,
+        motivation: MOTIVATION,
+        maintenant: new Date(t0.getTime() + 86_400_000),
+      })
+      .catch((e: unknown) => e as DemandeTropRapprocheeError);
+
+    expect(erreur).toBeInstanceOf(DemandeTropRapprocheeError);
+    expect((erreur as DemandeTropRapprocheeError).details).toMatchObject({
+      reintroductibleLe: versVueDemandeur(refusee).reintroductibleLe,
+    });
+  });
+
+  it.each([
+    ['une demande en cours', StatutDemandeAccesPorteur.SOUMISE],
+    ['une demande acceptée', StatutDemandeAccesPorteur.ACCEPTEE],
+  ])('%s ne porte AUCUNE date de réintroduction', async (_nom, decision) => {
+    const h = makeHarness();
+    const demande = await h.soumettre.execute({
+      utilisateurId: INVESTISSEUR_ID,
+      motivation: MOTIVATION,
+    });
+
+    if (decision === StatutDemandeAccesPorteur.SOUMISE) {
+      expect(versVueDemandeur(demande).reintroductibleLe).toBeNull();
+      return;
+    }
+
+    const { demande: acceptee } = await h.decider.execute({
+      demandeId: demande.id as string,
+      decision: StatutDemandeAccesPorteur.ACCEPTEE,
+      decideurAdminId: ADMIN_ID,
+      decideurRole: UserRole.COMPLIANCE,
+    });
+    expect(versVueDemandeur(acceptee).reintroductibleLe).toBeNull();
+  });
+
+  it('un retrait volontaire ne porte pas non plus de date de réintroduction', async () => {
+    // Cohérent avec la règle : se retirer soi-même n'ouvre aucune carence.
+    const h = makeHarness();
+    const demande = await h.soumettre.execute({
+      utilisateurId: INVESTISSEUR_ID,
+      motivation: MOTIVATION,
+    });
+    const retiree = await h.retirer.execute({
+      demandeId: demande.id as string,
+      utilisateurId: INVESTISSEUR_ID,
+    });
+
+    expect(versVueDemandeur(retiree).reintroductibleLe).toBeNull();
   });
 
   it('un compte qui a DÉJÀ l’accès ne peut pas redemander (409)', async () => {
@@ -1104,9 +1229,14 @@ describe("Retrait et rétablissement de l'accès porteur", () => {
     });
     await new Promise(process.nextTick);
 
-    expect(
-      h.notificationsPoussees.find((n) => n.type === 'porteur_access_retabli'),
-    ).toBeDefined();
+    const notif = h.notificationsPoussees.find(
+      (n) => n.type === 'porteur_access_retabli',
+    );
+    expect(notif).toBeDefined();
+    // Même correction qu'à l'octroi : aucune reconnexion n'est nécessaire,
+    // l'accès étant relu en base à chaque requête.
+    expect(notif?.message).not.toMatch(/reconnect/i);
+    expect(notif?.message).toContain('votre menu');
   });
 
   it("l'audit porte l'état AVANT et APRÈS, et le motif CODÉ", async () => {

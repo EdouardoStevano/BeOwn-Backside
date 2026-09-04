@@ -5,6 +5,7 @@ import {
   DemandeAccesPorteur,
   alerteInstructionLe,
   echeanceReponseIndicative,
+  finDeCarence,
   instructionEnAlerte,
 } from 'src/porteur-access/domains/demande-acces-porteur';
 import { libelleMotifRefus } from 'src/porteur-access/domains/motif-refus';
@@ -39,6 +40,21 @@ export interface DemandeAccesPorteurVueDemandeur {
   motifRefusLibelle: string | null;
   /** Échéance indicative annoncée par les CGU (J+30). */
   reponseAttendueAvant: string;
+  /**
+   * Date à partir de laquelle une nouvelle demande redevient recevable après
+   * un refus — `null` hors refus, aucune carence n'étant alors ouverte.
+   *
+   * Le demandeur éconduit ne l'apprenait qu'en RETENTANT : la date ne vivait
+   * que dans le corps du 429 `PORTEUR_ACCESS_DELAI_CARENCE`. Autant dire qu'on
+   * lui demandait de se cogner à la porte pour savoir quand elle ouvre.
+   *
+   * La valeur vient de `finDeCarence`, la MÊME fonction de domaine que le use
+   * case oppose pour lever ce 429 : il ne peut pas exister d'écart entre ce
+   * qu'on annonce ici et ce qu'on refusera là-bas. Elle reste servie une fois
+   * la carence écoulée — c'est alors la date depuis laquelle le dépôt est de
+   * nouveau ouvert, information tout aussi utile à l'affichage.
+   */
+  reintroductibleLe: string | null;
 }
 
 /** Vue rendue au BACK-OFFICE sur UN dossier. */
@@ -97,6 +113,7 @@ export const versVueDemandeur = (
   reponseAttendueAvant: echeanceReponseIndicative(
     demande.soumiseLe,
   ).toISOString(),
+  reintroductibleLe: finDeCarence(demande)?.toISOString() ?? null,
 });
 
 export const versVueInstructeur = (

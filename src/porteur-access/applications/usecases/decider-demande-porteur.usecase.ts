@@ -162,8 +162,13 @@ export class DeciderDemandePorteurUseCase {
               utilisateurId: demande.utilisateurId,
               type: NotificationType.PORTEUR_ACCESS_ACCEPTE,
               titre: 'Espace porteur ouvert',
+              // Ne demande PAS de se reconnecter : l'accès est relu en base à
+              // chaque requête (voir la révocation ci-dessus) et le front
+              // rafraîchit le profil de lui-même — constaté en recette.
+              // Réclamer une reconnexion inutile, c'est ajouter une friction
+              // au moment précis où l'on annonce une bonne nouvelle.
               message:
-                "Votre demande d'accès porteur a été acceptée. Reconnectez-vous pour accéder à votre espace porteur ; votre espace investisseur reste inchangé.",
+                "Votre demande d'accès porteur a été acceptée : votre espace porteur est ouvert, retrouvez-le dans votre menu. Votre espace investisseur reste inchangé.",
               metadata: { demandeId: enregistree.id },
             }
           : {

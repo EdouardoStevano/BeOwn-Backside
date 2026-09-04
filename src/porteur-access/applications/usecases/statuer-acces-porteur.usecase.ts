@@ -134,8 +134,10 @@ export class StatuerAccesPorteurUseCase {
               utilisateurId: commande.utilisateurId,
               type: NotificationType.PORTEUR_ACCESS_RETABLI,
               titre: 'Espace porteur rétabli',
+              // Même correction qu'à l'octroi : aucune reconnexion n'est
+              // nécessaire, l'accès étant relu en base à chaque requête.
               message:
-                "L'accès à votre espace porteur a été rétabli. Reconnectez-vous pour y accéder ; votre espace investisseur reste inchangé.",
+                "L'accès à votre espace porteur a été rétabli : retrouvez-le dans votre menu. Votre espace investisseur reste inchangé.",
               metadata: {},
             },
       )
