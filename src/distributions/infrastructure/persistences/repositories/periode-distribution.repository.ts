@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { EntityManager, Repository } from 'typeorm';
 import { PeriodeDistribution } from '../../../domains/periode-distribution';
 import { PeriodeDistributionRepository } from '../../../applications/ports/repositories/periode-distribution.repository';
 import { PeriodeDistributionEntity } from '../entities/periode-distribution.entity';
@@ -14,9 +14,15 @@ export class PeriodeDistributionTypeOrmRepository implements PeriodeDistribution
     private readonly repo: Repository<PeriodeDistributionEntity>,
   ) {}
 
-  async save(p: PeriodeDistribution): Promise<PeriodeDistribution> {
+  async save(
+    p: PeriodeDistribution,
+    manager?: EntityManager,
+  ): Promise<PeriodeDistribution> {
+    const cible = manager
+      ? manager.getRepository(PeriodeDistributionEntity)
+      : this.repo;
     return PeriodeDistributionMapper.toDomain(
-      await this.repo.save(PeriodeDistributionMapper.toEntity(p)),
+      await cible.save(PeriodeDistributionMapper.toEntity(p)),
     );
   }
 

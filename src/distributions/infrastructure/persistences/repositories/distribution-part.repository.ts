@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, IsNull, Repository } from 'typeorm';
+import { EntityManager, In, IsNull, Repository } from 'typeorm';
 import { DistributionPart } from '../../../domains/distribution-part';
 import { DistributionPartRepository } from '../../../applications/ports/repositories/distribution-part.repository';
 import { DistributionPartEntity } from '../entities/distribution-part.entity';
@@ -55,8 +55,13 @@ export class DistributionPartTypeOrmRepository implements DistributionPartReposi
     return list.map(DistributionPartMapper.toDomain);
   }
 
-  async markPaid(id: string, payeLe: Date): Promise<void> {
-    await this.repo.update({ id }, { payeLe });
+  async markPaid(
+    id: string,
+    payeLe: Date,
+    manager?: EntityManager,
+  ): Promise<void> {
+    const cible = manager ? manager.getRepository(DistributionPartEntity) : this.repo;
+    await cible.update({ id }, { payeLe });
   }
 
   async findUtilisateurIdsAvecPartPayeeSurAnnee(

@@ -144,7 +144,13 @@ describe('ExecuteDistributionUseCase — compte gelé : les crédits entrants re
     expect(resultat.totalNetVerse).toBe(250);
     // Le wallet de l'investisseur gelé est bien CRÉDITÉ.
     expect(incrementsParWallet.get('w-gele')).toBe(250);
-    expect(partRepo.markPaid).toHaveBeenCalledWith('part1', expect.any(Date));
+    // Le manager transactionnel est passé (B4) : la part n'est marquée payée
+    // que si toute la distribution aboutit.
+    expect(partRepo.markPaid).toHaveBeenCalledWith(
+      'part1',
+      expect.any(Date),
+      expect.anything(),
+    );
   });
 
   it("le usecase n'a AUCUNE dépendance de gel : pas de GelDesAvoirsPort dans sa construction", () => {

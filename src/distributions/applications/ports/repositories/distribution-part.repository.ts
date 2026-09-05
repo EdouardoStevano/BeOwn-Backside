@@ -1,3 +1,4 @@
+import type { EntityManager } from 'typeorm';
 import { DistributionPart } from '../../../domains/distribution-part';
 
 export const DISTRIBUTION_PART_REPOSITORY = Symbol(
@@ -12,7 +13,15 @@ export interface DistributionPartRepository {
     investissementIds: string[],
   ): Promise<DistributionPart[]>;
   findUnpaid(): Promise<DistributionPart[]>;
-  markPaid(id: string, payeLe: Date): Promise<void>;
+  /**
+   * `manager` optionnel : quand il est fourni, l'écriture PARTICIPE à la
+   * transaction de l'appelant. Sans lui, `markPaid` s'exécutait sur la
+   * connexion par défaut, donc HORS de la transaction de distribution : une
+   * panne au milieu du parcours laissait des parts marquées payées alors que
+   * les crédits correspondants venaient d'être annulés — le rejeu les sautait,
+   * et l'investisseur n'était jamais payé.
+   */
+  markPaid(id: string, payeLe: Date, manager?: EntityManager): Promise<void>;
 
   /**
    * Identifiants des investisseurs ayant perçu au moins une part de

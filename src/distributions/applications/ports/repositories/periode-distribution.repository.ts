@@ -1,3 +1,4 @@
+import type { EntityManager } from 'typeorm';
 import { PeriodeDistribution } from '../../../domains/periode-distribution';
 import { StatutPeriodeDistribution } from '../../../domains/enums/statut-periode-distribution.enum';
 
@@ -6,7 +7,11 @@ export const PERIODE_DISTRIBUTION_REPOSITORY = Symbol(
 );
 
 export interface PeriodeDistributionRepository {
-  save(p: PeriodeDistribution): Promise<PeriodeDistribution>;
+  /** `manager` optionnel : participe à la transaction de l'appelant. */
+  save(
+    p: PeriodeDistribution,
+    manager?: EntityManager,
+  ): Promise<PeriodeDistribution>;
   findById(id: string): Promise<PeriodeDistribution | null>;
   findByProjetEtPeriode(
     projetId: string,

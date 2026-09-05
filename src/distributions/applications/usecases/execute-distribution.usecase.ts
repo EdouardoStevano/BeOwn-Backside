@@ -471,8 +471,12 @@ export class ExecuteDistributionUseCase {
           );
         }
 
-        // Marquer la part payée
-        await this.partRepo.markPaid(part.id, new Date());
+        // Marquer la part payée — DANS la transaction (B4). Sans le manager,
+        // cette écriture partait sur la connexion par défaut : une panne plus
+        // loin dans le parcours annulait les crédits mais LAISSAIT la part
+        // marquée payée. Le rejeu la sautait alors, et l'investisseur n'était
+        // jamais payé — un manquant silencieux, invisible de tous les écrans.
+        await this.partRepo.markPaid(part.id, new Date(), em);
 
         // AML check sur ce versement individuel
         await this.amlMonitor
@@ -515,7 +519,11 @@ export class ExecuteDistributionUseCase {
       // Marquer la période DISTRIBUEE
       periode.statut = StatutPeriodeDistribution.DISTRIBUEE;
       periode.distribueeLe = new Date();
-      await this.periodeRepo.save(periode);
+      // Idem : la période ne bascule DISTRIBUEE que si toute la transaction
+      // aboutit. Hors transaction, une panne laissait une période marquée
+      // distribuée dont les versements avaient été annules — periode close,
+      // argent jamais verse, et aucun rejeu possible.
+      await this.periodeRepo.save(periode, em);
     });
 
     const result: ExecuteDistributionResult = {
