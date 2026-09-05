@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
-import { randomUUID } from 'crypto';
+import { deriverCleIdempotence } from 'src/common/idempotence/cle-derivee';
 import { ProjectEntity } from 'src/projects/infrastructure/persistences/entities/project.entity';
 import { STATUTS_PROJET_VERSABLES } from 'src/projects/domains/enums/project-status.enum';
 import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/wallet.entity';
@@ -111,16 +111,25 @@ export class VerserPorteurUseCase {
   ) {}
 
   async execute(input: VerserPorteurInput): Promise<VerserPorteurResultat> {
+    // Idem retrait : sans clé fournie, une clé DÉRIVÉE du contenu, valable
+    // sur une fenêtre courte. Le hasard n'idempotait rien — une double
+    // soumission du back-office versait deux fois au porteur.
     const cleIdempotence = input.idempotencyKey
       ? `versement-porteur-stripe:${input.projetId}:${input.idempotencyKey}`
-      : `versement-porteur-stripe:${input.projetId}:${randomUUID()}`;
+      : deriverCleIdempotence({
+          userId: input.declareParUserId,
+          type: 'versement-porteur-stripe',
+          cible: input.projetId,
+          montant: Number(input.montant ?? 0),
+        });
 
-    if (input.idempotencyKey) {
-      const existant = await this.txRepo.findOne({
-        where: { idempotencyKey: cleIdempotence },
-      });
-      if (existant) return this.resultatDejaTraite(existant);
-    }
+    // Le pré-check vaut pour les DEUX origines de clé : une clé dérivée qui
+    // n'était pas relue ne protégerait que par la contrainte d'unicité, donc
+    // en rendant une 500 au lieu d'une réponse idempotente.
+    const existant = await this.txRepo.findOne({
+      where: { idempotencyKey: cleIdempotence },
+    });
+    if (existant) return this.resultatDejaTraite(existant);
 
     const { projet, porteurId } = await this.chargerProjetEtPorteur(input.projetId);
 
@@ -154,7 +163,7 @@ export class VerserPorteurUseCase {
       // aussi sous concurrence, pas seulement en resoumission séquentielle.
       const estDoublon =
         err?.code === '23505' || err?.driverError?.code === '23505';
-      if (estDoublon && input.idempotencyKey) {
+      if (estDoublon) {
         const gagnant = await this.txRepo.findOne({
           where: { idempotencyKey: cleIdempotence },
         });

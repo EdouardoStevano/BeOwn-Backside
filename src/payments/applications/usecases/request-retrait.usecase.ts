@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository, InjectDataSource } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
-import { randomUUID } from 'crypto';
+import { deriverCleIdempotence } from 'src/common/idempotence/cle-derivee';
 import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/wallet.entity';
 import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entities/transaction.entity';
 import {
@@ -187,9 +187,19 @@ export class RequestRetraitUseCase {
         return { ok: false as const, message: 'Solde insuffisant' };
       }
 
+      // Sans clé fournie, la clé est DÉRIVÉE du contenu et non tirée au
+      // hasard : `randomUUID()` produisait une clé neuve à chaque appel, donc
+      // aucune idempotence — un double-clic ou une reprise réseau du
+      // navigateur créait DEUX retraits, et la contrainte d'unicité ne pouvait
+      // rien puisqu'on lui donnait deux valeurs pour la même intention.
       const idempotencyKey = dto.idempotencyKey
         ? `retrait:${user.userId}:${dto.idempotencyKey}`
-        : `retrait:${user.userId}:${randomUUID()}`;
+        : deriverCleIdempotence({
+            userId: user.userId,
+            type: 'retrait',
+            cible: walletRow.id,
+            montant: Number(dto.amount),
+          });
 
       // ANO-02 : le portefeuille est DÉBITÉ → `walletSource`. La destination
       // est le compte bancaire du bénéficiaire, hors plateforme, donc NULL.
