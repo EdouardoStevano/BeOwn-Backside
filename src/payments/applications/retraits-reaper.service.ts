@@ -224,14 +224,29 @@ export class RetraitsReaperService {
     tx: TransactionEntity,
     meta: Record<string, unknown>,
   ): Promise<void> {
-    tx.metadata = {
-      ...meta,
-      alerteReaper: {
-        raison: 'payout_absent',
-        detecteLe: new Date().toISOString(),
-      },
-    };
-    await this.txRepo.save(tx);
+    // Fusion CIBLÉE dans `metadata`, calculée par la base. Un `save` de
+    // l'entière ligne, construit depuis une lecture antérieure et hors verrou,
+    // écrasait tout ce qu'un autre processus avait posé entre-temps — au
+    // premier chef `recredited`, le drapeau qui empêche un second crédit. Le
+    // balayeur tourne précisément sur des retraits qu'un webhook peut être en
+    // train de dénouer : c'est le pire endroit pour réécrire une ligne entière.
+    await this.txRepo
+      .createQueryBuilder()
+      .update(TransactionEntity)
+      .set({
+        metadata: () => `COALESCE(metadata, '{}'::jsonb) || :ajout::jsonb`,
+      })
+      .setParameter(
+        'ajout',
+        JSON.stringify({
+          alerteReaper: {
+            raison: 'payout_absent',
+            detecteLe: new Date().toISOString(),
+          },
+        }),
+      )
+      .where('id = :id', { id: tx.id })
+      .execute();
 
     this.logger.error(
       `Retrait ${tx.id} en cours depuis plus de ${DELAI_ALERTE_SANS_PAYOUT_JOURS} jours ` +

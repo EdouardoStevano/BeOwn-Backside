@@ -92,8 +92,36 @@ export class RetraitSettlementService {
       return 'noop'; // idempotent / retrait déjà finalisé ou recrédité
     }
 
-    tx.statut = TransactionStatus.REUSSI;
-    await this.txRepo.save(tx);
+    // Transition CIBLÉE et CONDITIONNELLE, jamais un `save` d'entité complète.
+    //
+    // `save(tx)` réécrivait TOUTE la ligne à partir d'un objet lu plus haut,
+    // hors verrou : un recrédit concurrent ayant posé `metadata.recredited`
+    // entre la lecture et l'écriture était écrasé sans bruit. Le drapeau qui
+    // protège contre le double crédit disparaissait, et rien ne le signalait.
+    //
+    // Un UPDATE ciblé n'écrit que la colonne voulue, et la clause refuse la
+    // transition si le retrait a été finalisé ou recrédité entre-temps.
+    const cloture = await this.txRepo
+      .createQueryBuilder()
+      .update(TransactionEntity)
+      .set({ statut: TransactionStatus.REUSSI })
+      .where(
+        `id = :id AND statut NOT IN (:...finaux) AND (metadata->>'recredited') IS DISTINCT FROM 'true'`,
+        {
+          id: tx.id,
+          finaux: [TransactionStatus.REUSSI, TransactionStatus.ECHOUE],
+        },
+      )
+      .execute();
+
+    if (!cloture.affected) {
+      this.logger.warn(
+        `payout.paid: retrait ${tx.id} déjà finalisé ou recrédité entre la ` +
+          'lecture et la clôture — aucune écriture.',
+      );
+      return 'noop';
+    }
+
     this.metrics.incrementCounter(METRIC.WITHDRAWAL_PAYOUT_TOTAL, {
       outcome: 'paid',
       reversal: 'false',
@@ -263,6 +291,32 @@ export class RetraitSettlementService {
    *          était attendu mais reste introuvable — l'appelant doit alors
    *          s'arrêter net.
    */
+  /**
+   * Fusionne des clés dans `metadata` SANS réécrire le reste de la ligne.
+   *
+   * La fusion est faite PAR LA BASE (`metadata || :ajout`) : ce qu'un autre
+   * processus a écrit entre-temps — au premier chef `recredited`, le drapeau
+   * qui empêche un second crédit — survit. Un `save(entité)` construit à
+   * partir d'une lecture antérieure l'aurait effacé sans bruit, et le retrait
+   * aurait pu être recrédité deux fois.
+   *
+   * `COALESCE` : la colonne est nullable, et `NULL || '{...}'` vaut NULL.
+   */
+  private async fusionnerMetadata(
+    transactionId: string,
+    ajout: Record<string, unknown>,
+  ): Promise<void> {
+    await this.txRepo
+      .createQueryBuilder()
+      .update(TransactionEntity)
+      .set({
+        metadata: () => `COALESCE(metadata, '{}'::jsonb) || :ajout::jsonb`,
+      })
+      .setParameter('ajout', JSON.stringify(ajout))
+      .where('id = :id', { id: transactionId })
+      .execute();
+  }
+
   private async resoudreTransfertDuRetrait(
     tx: TransactionEntity,
     meta: Record<string, unknown>,
@@ -280,8 +334,13 @@ export class RetraitSettlementService {
 
     if (retrouve) {
       // Réparation de la trace locale : le transfert existe, la base l'ignorait.
-      tx.metadata = { ...meta, transferId: retrouve, transferIdRetrouveLe: new Date().toISOString() };
-      await this.txRepo.save(tx);
+      // Fusion CIBLÉE dans `metadata`, calculée par la base : un `save` de
+      // l'entière ligne écraserait tout champ posé entre-temps — à commencer
+      // par `recredited`.
+      await this.fusionnerMetadata(tx.id, {
+        transferId: retrouve,
+        transferIdRetrouveLe: new Date().toISOString(),
+      });
       this.logger.warn(
         `${evenement}: transferId absent en base mais retrouvé chez Stripe pour tx=${tx.id} (transfer=${retrouve}) — trace réparée.`,
       );
@@ -296,16 +355,14 @@ export class RetraitSettlementService {
       `${evenement}: retrait Connect ${tx.id} sans transferId et transfert introuvable chez Stripe ` +
       `(compte=${connectedAccountId ?? 'inconnu'}) — AUCUN recrédit, revue manuelle.`,
     );
-    tx.metadata = {
-      ...meta,
+    await this.fusionnerMetadata(tx.id, {
       revueManuelle: {
         raison: 'transfert_introuvable',
         evenement,
         connectedAccountId: connectedAccountId ?? null,
         detecteLe: new Date().toISOString(),
       },
-    };
-    await this.txRepo.save(tx);
+    });
 
     this.notificationService
       .pushToAdmins({

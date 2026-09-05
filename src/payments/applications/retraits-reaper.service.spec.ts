@@ -41,9 +41,33 @@ function build(options: {
   clotureIssue?: 'clos' | 'noop';
   denouementIssue?: 'compense' | 'noop';
 } = {}) {
+  /** Fusions de `metadata` appliquées par UPDATE ciblé (jamais un save). */
+  const fusionsMetadata: Array<{ id: string; ajout: any }> = [];
   const txRepo: any = {
     find: jest.fn().mockResolvedValue(options.candidats ?? []),
     save: jest.fn().mockImplementation(async (tx: any) => tx),
+    createQueryBuilder: jest.fn(() => {
+      const qb: any = {};
+      const params: Record<string, any> = {};
+      qb.update = () => qb;
+      qb.set = () => qb;
+      qb.setParameter = (nom: string, valeur: any) => {
+        params[nom] = valeur;
+        return qb;
+      };
+      qb.where = (_c: string, p: any) => {
+        Object.assign(params, p ?? {});
+        return qb;
+      };
+      qb.execute = async () => {
+        fusionsMetadata.push({
+          id: params.id,
+          ajout: JSON.parse(String(params.ajout ?? '{}')),
+        });
+        return { affected: 1 };
+      };
+      return qb;
+    }),
   };
   const stripeConnect: any = {
     retrievePayout: jest.fn().mockResolvedValue(options.payout ?? null),
@@ -68,6 +92,7 @@ function build(options: {
       notifications,
     ),
     txRepo,
+    fusionsMetadata,
     stripeConnect,
     settlement,
     notifications,
@@ -214,13 +239,18 @@ describe('RetraitsReaperService — retrait sans identifiant de payout', () => {
     expect(h.settlement.denouerPayoutNonAbouti).not.toHaveBeenCalled();
     // L'alerte est adressée aux rôles financiers et marquée sur la ligne.
     expect(h.notifications.pushToAdmins).toHaveBeenCalledTimes(1);
-    expect(h.txRepo.save).toHaveBeenCalledWith(
+    // Marquage par UPDATE CIBLÉ, jamais par `save` de la ligne entière : un
+    // `save` construit depuis une lecture antérieure écraserait ce qu'un
+    // webhook concurrent vient d'écrire — à commencer par `recredited`.
+    expect(h.txRepo.save).not.toHaveBeenCalled();
+    expect(h.fusionsMetadata).toHaveLength(1);
+    expect(h.fusionsMetadata[0].ajout).toEqual(
       expect.objectContaining({
-        metadata: expect.objectContaining({
-          alerteReaper: expect.objectContaining({ raison: 'payout_absent' }),
-        }),
+        alerteReaper: expect.objectContaining({ raison: 'payout_absent' }),
       }),
     );
+    // La fusion ne porte QUE l'ajout : rien d'autre n'est réécrit.
+    expect(Object.keys(h.fusionsMetadata[0].ajout)).toEqual(['alerteReaper']);
   });
 
   it('alerte UNIQUE : un retrait déjà escaladé n’est pas réalerté au balayage suivant', async () => {

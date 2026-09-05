@@ -36,6 +36,8 @@ describe('PaymentController — branches argent du webhook Stripe', () => {
 
   /** Écritures insérées via `txRepo.insert` / `em.insert`. */
   let inserees: any[];
+  /** Mises à jour ciblées émises sur `transaction_paiement`. */
+  let majCiblees: Array<{ set: any; params: Record<string, any> }>;
   /** Résultat que renvoie l'UPDATE conditionnel du solde. */
   let updateAffected: number;
   /** Erreur à lever à la prochaine insertion (simulation d'unicité). */
@@ -62,6 +64,7 @@ describe('PaymentController — branches argent du webhook Stripe', () => {
 
   beforeEach(() => {
     inserees = [];
+    majCiblees = [];
     updateAffected = 1;
     prochaineInsertionEnDoublon = false;
 
@@ -86,6 +89,31 @@ describe('PaymentController — branches argent du webhook Stripe', () => {
         if (prochaineInsertionEnDoublon) throw violationUnicite();
         inserees.push(obj);
         return { identifiers: [] };
+      }),
+      // Écritures CIBLÉES sur la transaction (transitions de statut, fusion de
+      // `metadata`) : elles ont remplacé les `save` d'entité complète, qui
+      // pouvaient écraser le drapeau `recredited` posé par un autre processus.
+      createQueryBuilder: jest.fn(() => {
+        const qb: any = {};
+        const params: Record<string, any> = {};
+        qb.update = () => qb;
+        qb.set = (v: any) => {
+          qb._set = v;
+          return qb;
+        };
+        qb.setParameter = (nom: string, valeur: any) => {
+          params[nom] = valeur;
+          return qb;
+        };
+        qb.where = (_c: string, p?: any) => {
+          Object.assign(params, p ?? {});
+          return qb;
+        };
+        qb.execute = async () => {
+          majCiblees.push({ set: qb._set, params });
+          return { affected: 1 };
+        };
+        return qb;
       }),
     };
     dataSource = {
@@ -477,9 +505,14 @@ describe('PaymentController — branches argent du webhook Stripe', () => {
 
       expect(requestRetrait.recreditRetrait).not.toHaveBeenCalled();
       expect(stripeConnect.reverseTransfer).not.toHaveBeenCalled();
-      expect((tx.metadata as any).revueManuelle).toMatchObject({
-        raison: 'transfert_introuvable',
-      });
+      // Marquage par fusion CIBLÉE dans `metadata` (jamais un `save` de la
+      // ligne entière, qui écraserait `recredited`).
+      const fusion = majCiblees.find((m) =>
+        String(m.params.ajout ?? '').includes('revueManuelle'),
+      );
+      expect(JSON.parse(String(fusion!.params.ajout)).revueManuelle).toMatchObject(
+        { raison: 'transfert_introuvable' },
+      );
       expect(notificationService.pushToAdmins).toHaveBeenCalledTimes(1);
     });
 
@@ -494,7 +527,10 @@ describe('PaymentController — branches argent du webhook Stripe', () => {
 
       await declencher(evenementPayout('payout.failed'));
 
-      expect((tx.metadata as any).transferId).toBe('tr_9');
+      const reparation = majCiblees.find((m) =>
+        String(m.params.ajout ?? '').includes('transferId'),
+      );
+      expect(JSON.parse(String(reparation!.params.ajout)).transferId).toBe('tr_9');
       expect(stripeConnect.reverseTransfer).toHaveBeenCalledWith(
         'tr_9',
         'retrait-reverse:tx-retrait',
