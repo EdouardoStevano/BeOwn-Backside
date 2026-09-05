@@ -11,6 +11,8 @@ describe('SignaturesExpiryCronService', () => {
   const build = (
     echues: any[],
     resultats: Record<string, 'expiree' | 'noop' | Error> = {},
+    /** État que le prestataire renvoie pour ces signatures. */
+    statutFournisseur: string | Error = 'pending',
   ) => {
     const criteres: any[] = [];
     const signatureRepo = {
@@ -27,14 +29,29 @@ describe('SignaturesExpiryCronService', () => {
       }),
     };
 
+    const provider = {
+      getSignatureRequestStatus: jest.fn(async () => {
+        if (statutFournisseur instanceof Error) throw statutFournisseur;
+        return statutFournisseur;
+      }),
+    };
+    const finalize = { execute: jest.fn().mockResolvedValue(undefined) };
+
     const service = new SignaturesExpiryCronService(
       signatureRepo as any,
       expirerSignature as any,
+      provider as any,
+      finalize as any,
     );
-    return { service, signatureRepo, expirerSignature, criteres };
+    return { service, signatureRepo, expirerSignature, criteres, provider, finalize };
   };
 
-  const signature = (id: string) => ({ id, ordreId: 'ordre-1', userId: 42 });
+  const signature = (id: string) => ({
+    id,
+    ordreId: 'ordre-1',
+    userId: 42,
+    youSignRequestId: `ys-${id}`,
+  });
 
   it('ne cible que les signatures PENDING échues portant un ordre', async () => {
     const { service, criteres } = build([]);
@@ -78,5 +95,46 @@ describe('SignaturesExpiryCronService', () => {
 
     await expect(service.expirerSignaturesEchues()).resolves.toBe(0);
     expect(expirerSignature.execute).not.toHaveBeenCalled();
+  });
+
+  /**
+   * I(c) — EXPIRER SANS DEMANDER, C'EST ANNULER UNE CESSION CONCLUE.
+   *
+   * Ce balayage se déclenche sur une échéance LOCALE, sans événement externe —
+   * précisément parce qu'un webhook peut ne jamais arriver. Mais l'inverse est
+   * tout aussi possible : la signature a bien été recueillie et c'est le
+   * `signature_request.done` qui s'est perdu. On demande donc l'état réel.
+   */
+  describe('état réel demandé au prestataire', () => {
+    it.each(['done', 'signed', 'completed', 'DONE'])(
+      'statut « %s » : la cession est FINALISÉE, pas annulée',
+      async (statut) => {
+        const h = build([signature('s-1')], {}, statut);
+
+        await expect(h.service.expirerSignaturesEchues()).resolves.toBe(0);
+
+        expect(h.finalize.execute).toHaveBeenCalledWith('ys-s-1');
+        expect(h.expirerSignature.execute).not.toHaveBeenCalled();
+      },
+    );
+
+    it('statut encore en attente : expiration normale', async () => {
+      const h = build([signature('s-1')], {}, 'pending');
+
+      await expect(h.service.expirerSignaturesEchues()).resolves.toBe(1);
+
+      expect(h.finalize.execute).not.toHaveBeenCalled();
+      expect(h.expirerSignature.execute).toHaveBeenCalled();
+    });
+
+    it('prestataire injoignable : on expire, comme avant', async () => {
+      // Ne pas savoir n'est pas « signée » : le repli reste l'expiration, qui
+      // libère l'annonce et les fonds.
+      const h = build([signature('s-1')], {}, new Error('API indisponible'));
+
+      await expect(h.service.expirerSignaturesEchues()).resolves.toBe(1);
+
+      expect(h.expirerSignature.execute).toHaveBeenCalled();
+    });
   });
 });

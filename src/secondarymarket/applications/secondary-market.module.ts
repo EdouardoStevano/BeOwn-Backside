@@ -18,6 +18,8 @@ import { CessionCompensationService } from './cession-compensation.service';
 import { AnnoncesExpiryCronService } from './annonces-expiry-cron.service';
 import { SignaturesExpiryCronService } from './signatures-expiry-cron.service';
 import { OrdresOrphelinsCronService } from './ordres-orphelins-cron.service';
+import { InteretsExpiryCronService } from './interets-expiry-cron.service';
+import { VerrouCronService } from 'src/common/cron/verrou-cron.service';
 import { DevisCessionService } from './devis-cession.service';
 import { KycEntity } from 'src/profiles/infrastructure/persistences/entities/kyc.entity';
 import { KycValidatedGuard } from 'src/common/auth/kyc-validated.guard';
@@ -77,6 +79,10 @@ import { ConflitsInteretsModule } from 'src/projects/applications/conflits-inter
     // signature vivante (mort du processus en pleine acceptation, compensation
     // échouée) — le balayage des signatures ne peut pas les voir.
     OrdresOrphelinsCronService,
+    // Expiration des marques d'intérêt sans réponse (72 h configurables), et
+    // le verrou distribué qu'elle consomme.
+    InteretsExpiryCronService,
+    VerrouCronService,
     KycValidatedGuard,
   ],
   controllers: [SecondaryMarketController, YouSignWebhookController],
