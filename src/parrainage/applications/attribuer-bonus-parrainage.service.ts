@@ -213,6 +213,31 @@ export class AttribuerBonusParrainageService {
       );
     }
 
+    // CONTREPARTIE DU BONUS — le portefeuille de frais de la plateforme.
+    //
+    // L'écriture portait `walletSource: null`, c'est-à-dire une contrepartie
+    // EXTERNE : la convention du registre réserve cette forme aux mouvements
+    // qui franchissent réellement la frontière de la plateforme (dépôt par
+    // carte, retrait bancaire). Un bonus de parrainage ne franchit rien : il
+    // est offert PAR la plateforme, sur ses propres deniers. En le déclarant
+    // externe, le registre créait des euros — « Σ crédits − Σ débits » ne se
+    // rapprochait plus, et le passif né du bonus n'avait aucune contrepartie.
+    //
+    // Le portefeuille FRAIS_PLATEFORME est la poche qui l'assume : c'est là
+    // que la plateforme encaisse ses commissions, donc là qu'elle finance ce
+    // qu'elle offre. Son solde peut passer en négatif si les bonus dépassent
+    // les commissions encaissées — c'est une information de gestion, pas une
+    // erreur, et elle devient enfin visible.
+    const walletPlateforme = await this.resoudreWalletFraisPlateforme(em);
+
+    await em
+      .createQueryBuilder()
+      .update(WalletEntity)
+      .set({ solde: () => 'solde - :montant' })
+      .where('id = :id', { id: walletPlateforme.id })
+      .setParameter('montant', montantEur)
+      .execute();
+
     // Crédit ATOMIQUE (jamais lire-modifier-écrire : un retrait concurrent ne
     // doit pas être écrasé). Montant paramétré, jamais interpolé dans le SQL.
     await em
@@ -226,7 +251,7 @@ export class AttribuerBonusParrainageService {
     await em.save(
       TransactionEntity,
       em.create(TransactionEntity, {
-        walletSource: null,
+        walletSource: walletPlateforme.id,
         walletDestination: wallet.id,
         type: TransactionType.INTERNE,
         montant: montantEur,
@@ -237,6 +262,32 @@ export class AttribuerBonusParrainageService {
         fraisPsp: 0,
         fraisPlateforme: 0,
         metadata: { kind: 'bonus_parrainage', attributionId, role },
+      }),
+    );
+  }
+
+  /**
+   * Portefeuille de frais de la plateforme, créé s'il n'existe pas encore.
+   * Même patron que les portefeuilles techniques créés à la demande par la
+   * distribution et par la sortie de projet.
+   */
+  private async resoudreWalletFraisPlateforme(
+    em: EntityManager,
+  ): Promise<WalletEntity> {
+    const existant = await em.findOne(WalletEntity, {
+      where: { type: WalletType.FRAIS_PLATEFORME },
+    });
+    if (existant) return existant;
+
+    return em.save(
+      WalletEntity,
+      em.create(WalletEntity, {
+        type: WalletType.FRAIS_PLATEFORME,
+        proprietaireUserId: null,
+        fournisseurRef: 'PLAT-FEES-001',
+        devise: 'EUR',
+        solde: 0,
+        soldeBloque: 0,
       }),
     );
   }

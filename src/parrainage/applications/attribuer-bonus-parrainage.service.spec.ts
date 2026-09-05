@@ -131,12 +131,54 @@ describe('AttribuerBonusParrainageService', () => {
       'parrainage:parrain:attr-1',
     ]);
     for (const e of ecritures) {
-      expect(e.valeur.walletSource).toBeNull();
+      // Le bonus a une CONTREPARTIE : il est offert par la plateforme, sur ses
+      // propres deniers. `walletSource: null` déclarait un mouvement EXTERNE —
+      // une forme réservée à ce qui franchit vraiment la frontière (dépôt
+      // carte, retrait bancaire) — et créait donc des euros au registre.
+      expect(e.valeur.walletSource).toBeTruthy();
       expect(e.valeur.montant).toBe(50);
       expect(e.valeur.metadata).toMatchObject({ kind: 'bonus_parrainage' });
     }
 
     expect(h.notifications.push).toHaveBeenCalledTimes(2);
+  });
+
+  /**
+   * « Aucune opération interne ne crée ni ne détruit d'argent. »
+   *
+   * Le bonus est offert PAR la plateforme : chaque euro credité à un
+   * bénéficiaire doit être débité du portefeuille de frais. Sans contrepartie,
+   * le registre fabriquait des euros et le passif né du bonus n'était porté
+   * par personne.
+   */
+  it('INVARIANT : chaque euro crédité est débité de la plateforme', async () => {
+    const h = build({ parrainePar: 3 });
+
+    await h.service.surInvestissementDefinitif(inv);
+
+    const ecritures = h.saves
+      .filter((s) => s.cible === TransactionEntity)
+      .map((s) => s.valeur);
+
+    // Σ crédits − Σ débits, par portefeuille : la somme algébrique est nulle.
+    const positions = new Map<string, number>();
+    for (const e of ecritures) {
+      const montant = Number(e.montant);
+      if (e.walletDestination) {
+        positions.set(
+          e.walletDestination,
+          (positions.get(e.walletDestination) ?? 0) + montant,
+        );
+      }
+      if (e.walletSource) {
+        positions.set(
+          e.walletSource,
+          (positions.get(e.walletSource) ?? 0) - montant,
+        );
+      }
+    }
+    const variationTotale = [...positions.values()].reduce((t, v) => t + v, 0);
+    expect(variationTotale).toBe(0);
   });
 
   it("une panne de notification n'échoue jamais chez l'appelant", async () => {
