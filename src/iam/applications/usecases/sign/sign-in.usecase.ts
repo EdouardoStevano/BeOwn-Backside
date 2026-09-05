@@ -1,4 +1,4 @@
-﻿import { Inject, Injectable } from '@nestjs/common';
+﻿import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
   HASHING_SERVICE,
   type HashingService,
@@ -34,6 +34,8 @@ export interface SignInCommand {
 
 @Injectable()
 export class SignInUsecase {
+  private readonly logger = new Logger(SignInUsecase.name);
+
   constructor(
     @Inject(HASHING_SERVICE) private readonly hashingService: HashingService,
     private readonly tokenService: TokenService,
@@ -140,6 +142,13 @@ export class SignInUsecase {
     user: User,
     activeMfaMethod: MfaMethodType | null,
   ): Promise<AuthSession> {
+    // Dernier contact émanant de la personne (barème RGPD ligne 2) : posé ICI
+    // et non dans `execute`, pour que les deux chemins qui ouvrent une session
+    // — mot de passe seul et second facteur éprouvé — le posent une fois et une
+    // seule. Une tentative refusée n'est pas un contact : rien n'est écrit tant
+    // que la session n'est pas réellement ouverte.
+    await this.marquerConnexion(user.userId);
+
     const tokens = await this.tokenService.generateTokens({
       sub: user.userId,
       email: user.email,
@@ -167,5 +176,26 @@ export class SignInUsecase {
       ),
       ...tokens,
     };
+  }
+
+  /**
+   * Horodate la connexion — sans jamais la faire échouer.
+   *
+   * L'écriture est une TRACE, pas une étape de l'authentification : refuser une
+   * session parce qu'un UPDATE d'une colonne a échoué serait échanger une
+   * indisponibilité contre une commodité. L'échec est journalisé en
+   * avertissement, ce qui le rend visible sans le rendre bloquant — et le
+   * `COALESCE` de la purge continue de couvrir la ligne en attendant.
+   */
+  private async marquerConnexion(userId: number): Promise<void> {
+    try {
+      await this.usersRepository.touchLastLogin(userId, new Date());
+    } catch (error) {
+      this.logger.warn(
+        `lastLoginAt non écrit pour le compte #${userId} : ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
   }
 }

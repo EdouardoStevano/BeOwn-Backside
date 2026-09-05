@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
   type AuthSession,
   type RefreshSessionIdentity,
@@ -33,6 +33,8 @@ import { MfaFactorService } from '../../services/mfa/mfa-factor.service';
  */
 @Injectable()
 export class RefreshTokenUseCase {
+  private readonly logger = new Logger(RefreshTokenUseCase.name);
+
   constructor(
     private readonly tokenService: TokenService,
     @Inject(USER_REPOSITORY) private readonly userRepository: UserRepository,
@@ -71,6 +73,14 @@ export class RefreshTokenUseCase {
       throw new AccountClosedError();
     }
 
+    // Un rafraîchissement réussi est un contact émanant de la personne (barème
+    // RGPD ligne 2 : « dernier contact émanant du prospect ») : c'est même le
+    // seul signe de vie d'une session longue, où l'on ne repasse jamais par le
+    // mot de passe. Posé APRÈS les contrôles de statut — un compte suspendu qui
+    // se voit refuser des tokens n'a pas rouvert de session — et sans jamais
+    // faire échouer le rafraîchissement (voir `marquerConnexion`).
+    await this.marquerConnexion(user.userId);
+
     // Relu à chaque rafraîchissement, au même titre que le statut et le rôle :
     // un facteur armé ou retiré depuis la connexion doit se voir sur la session
     // reprise, sans quoi le front garderait l'état du jour où elle a été
@@ -107,5 +117,22 @@ export class RefreshTokenUseCase {
       ),
       ...tokens,
     };
+  }
+
+  /**
+   * Horodate le rafraîchissement — sans jamais le faire échouer. Même contrat
+   * que `SignInUsecase.marquerConnexion` : une trace ne prend pas une session
+   * en otage.
+   */
+  private async marquerConnexion(userId: number): Promise<void> {
+    try {
+      await this.userRepository.touchLastLogin(userId, new Date());
+    } catch (error) {
+      this.logger.warn(
+        `lastLoginAt non écrit pour le compte #${userId} : ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
   }
 }

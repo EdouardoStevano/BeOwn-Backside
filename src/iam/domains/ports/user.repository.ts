@@ -80,6 +80,26 @@ export interface UserRepository {
     porteurAccess: boolean,
     accesRevoqueLe: Date | null,
   ): Promise<void>;
+  /**
+   * Écrit `users.lastLoginAt`, et elle seule.
+   *
+   * Même motif que `updateUserType` et `updatePorteurAccess` : la date de
+   * dernière connexion n'est pas une propriété que le métier décide, c'est une
+   * trace d'usage posée par l'ouverture de session. La faire transiter par
+   * l'agrégat imposerait un `save()` complet de la ligne compte — et de la
+   * ligne `user_emails` liée en cascade — à chaque connexion, alors qu'un
+   * UPDATE d'une colonne sur la clé primaire suffit.
+   *
+   * Cette colonne n'était JAMAIS écrite : la purge des prospects inactifs
+   * (ligne 2 du barème) retombait sur `COALESCE(lastLoginAt, createdAt)`,
+   * c'est-à-dire sur la date d'INSCRIPTION. Un compte activé, connecté chaque
+   * semaine mais inscrit il y a plus de trois ans, et n'ayant ni KYC, ni
+   * wallet, ni investissement, ni document, ni ordre — le profil exact d'un
+   * lecteur assidu jamais passé à l'acte — était supprimé sans préavis. Le
+   * `COALESCE` reste en repli pour le stock antérieur, qui n'a pas de date de
+   * connaissance.
+   */
+  touchLastLogin(userId: number, at: Date): Promise<void>;
   findOneBySocialId(socialId: string): Promise<User | null>;
   findPreferences(userId: number): Promise<UserPreferences>;
   savePreferences(

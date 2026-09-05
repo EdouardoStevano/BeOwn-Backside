@@ -39,6 +39,7 @@ const makeUsecase = (
     findOneBySocialId: jest.fn(),
     findPreferences: jest.fn(),
     savePreferences: jest.fn(),
+    touchLastLogin: jest.fn().mockResolvedValue(undefined),
     // Relu à chaque rafraîchissement, comme le statut et le rôle : un accès
     // porteur accordé ou RETIRÉ depuis la connexion doit se voir sur la
     // session reprise.
@@ -245,5 +246,48 @@ describe('RefreshTokenUseCase', () => {
     await expect(usecase.execute('old-refresh')).rejects.not.toBeInstanceOf(
       InvalidRefreshTokenError,
     );
+  });
+
+  /**
+   * Sur une session longue, on ne repasse jamais par le mot de passe : le
+   * rafraîchissement est alors le SEUL signe de vie du compte. S'il n'était
+   * pas horodaté, un utilisateur actif depuis des années resterait indistinct
+   * d'un prospect abandonné pour la purge du barème (ligne 2).
+   */
+  describe('trace du dernier contact (lastLoginAt)', () => {
+    it('un rafraîchissement réussi horodate le compte', async () => {
+      const { usecase, userRepository } = makeUsecase(
+        buildUserFixture({ status: UserStatus.ACTIF, emailVerified: true }),
+      );
+
+      await usecase.execute('old-refresh');
+
+      expect(userRepository.touchLastLogin).toHaveBeenCalledWith(
+        42,
+        expect.any(Date),
+      );
+    });
+
+    it.each([[UserStatus.SUSPENDU], [UserStatus.CLOS]])(
+      'un compte %s ne rouvre aucune session : rien n’est écrit',
+      async (status) => {
+        const { usecase, userRepository } = makeUsecase(
+          buildUserFixture({ status }),
+        );
+
+        await expect(usecase.execute('old-refresh')).rejects.toBeDefined();
+        expect(userRepository.touchLastLogin).not.toHaveBeenCalled();
+      },
+    );
+
+    it('un échec d’écriture ne fait pas échouer le rafraîchissement', async () => {
+      const { usecase, userRepository } = makeUsecase(
+        buildUserFixture({ status: UserStatus.ACTIF, emailVerified: true }),
+      );
+      userRepository.touchLastLogin.mockRejectedValue(new Error('db down'));
+
+      const session = await usecase.execute('old-refresh');
+      expect(session.accessToken).toBe('new-access');
+    });
   });
 });

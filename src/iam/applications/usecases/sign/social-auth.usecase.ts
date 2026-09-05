@@ -1,4 +1,4 @@
-﻿import { Inject, Injectable } from '@nestjs/common';
+﻿import { Inject, Injectable, Logger } from '@nestjs/common';
 import { type AuthSession } from 'src/iam/applications/models/auth-token';
 import { TokenService } from '../../services/token/token.service';
 import {
@@ -16,6 +16,8 @@ import { MfaFactorService } from '../../services/mfa/mfa-factor.service';
 
 @Injectable()
 export class SocialAuthUseCase {
+  private readonly logger = new Logger(SocialAuthUseCase.name);
+
   constructor(
     private readonly tokenService: TokenService,
     @Inject(USER_REPOSITORY) private readonly usersRepository: UserRepository,
@@ -37,6 +39,25 @@ export class SocialAuthUseCase {
           existing.markEmailAsVerified();
           await this.usersRepository.update(existing);
         }
+        // Une connexion OAuth est une connexion : elle compte au même titre
+        // qu'un sign-in par mot de passe pour le « dernier contact émanant du
+        // prospect » (barème RGPD ligne 2). L'écriture est volontairement
+        // enveloppée : le `catch` global de cette méthode transforme TOUTE
+        // exception en `SocialAuthFailedError` — une trace en échec ferait
+        // rater la connexion, ce qui est hors de question.
+        try {
+          await this.usersRepository.touchLastLogin(
+            existing.userId,
+            new Date(),
+          );
+        } catch (error) {
+          this.logger.warn(
+            `lastLoginAt non écrit pour le compte #${existing.userId} : ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          );
+        }
+
         const tokens = await this.tokenService.generateTokens({
           email: existing.email,
           sub: existing.userId,

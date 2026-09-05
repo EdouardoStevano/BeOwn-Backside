@@ -132,6 +132,17 @@ export class UserTypeOrmRepository implements UserRepository {
     );
   }
 
+  /**
+   * Écriture ciblée d'une seule colonne, hors agrégat (voir le contrat du
+   * port). Un `update` partiel sur la clé primaire : rien d'autre que
+   * `lastLoginAt` ne bouge, et surtout pas la ligne `user_emails` liée en
+   * cascade — c'est ce qu'aurait déclenché un `save()` d'entité, à chaque
+   * connexion.
+   */
+  async touchLastLogin(userId: number, at: Date): Promise<void> {
+    await this.usersRepository.update({ userId }, { lastLoginAt: at });
+  }
+
   async findOneBySocialId(socialId: string): Promise<User | null> {
     const userEntity = await this.usersRepository.findOne({
       where: { socialId },

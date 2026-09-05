@@ -45,6 +45,8 @@ const makeUsecase = (user: User | null, passwordValid = true) => {
     findOneBySocialId: jest.fn(),
     findPreferences: jest.fn(),
     savePreferences: jest.fn(),
+    // Trace du dernier contact émanant de la personne (barème RGPD ligne 2).
+    touchLastLogin: jest.fn().mockResolvedValue(undefined),
     // Accès porteur : lecture ciblée hors agrégat, jointe au profil de session
     // pour que le front connaisse l'état de l'espace porteur dès la connexion.
     findAccesPorteur: jest
@@ -143,6 +145,94 @@ describe('SignInUsecase', () => {
     expect(session.user.mfa).toEqual({
       enabled: true,
       method: MfaMethodType.SMS,
+    });
+  });
+
+  /**
+   * `users.lastLoginAt` n'était écrit NULLE PART. La purge des prospects
+   * inactifs (barème ligne 2, 3 ans depuis le dernier contact émanant du
+   * prospect) retombait donc systématiquement sur `createdAt` par son
+   * `COALESCE` : un compte activé, connecté régulièrement, mais inscrit depuis
+   * plus de trois ans et sans KYC ni investissement était supprimé sur sa date
+   * d'INSCRIPTION.
+   */
+  describe('trace du dernier contact (lastLoginAt)', () => {
+    it('une connexion réussie horodate le compte', async () => {
+      const { usecase, usersRepository } = makeUsecase(
+        buildUser(UserStatus.ACTIF),
+      );
+
+      await usecase.execute({ email: 'user@example.com', password: 'pw' });
+
+      expect(usersRepository.touchLastLogin).toHaveBeenCalledWith(
+        42,
+        expect.any(Date),
+      );
+    });
+
+    it('posée dans openSession : le second facteur horodate la même connexion, une seule fois', async () => {
+      const { usecase, usersRepository } = makeUsecase(
+        buildUser(UserStatus.ACTIF),
+      );
+
+      await usecase.openSession(buildUser(UserStatus.ACTIF), MfaMethodType.SMS);
+
+      expect(usersRepository.touchLastLogin).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([
+      ['mot de passe invalide', UserStatus.ACTIF, false],
+      ['compte suspendu', UserStatus.SUSPENDU, true],
+      ['compte clos', UserStatus.CLOS, true],
+    ])(
+      'une tentative refusée (%s) n’est PAS un contact : rien n’est écrit',
+      async (_label, status, passwordValid) => {
+        const { usecase, usersRepository } = makeUsecase(
+          buildUser(status),
+          passwordValid,
+        );
+
+        await catchError(() =>
+          usecase.execute({ email: 'user@example.com', password: 'pw' }),
+        );
+
+        expect(usersRepository.touchLastLogin).not.toHaveBeenCalled();
+      },
+    );
+
+    it("un défi MFA en attente n'horodate rien : la session n'est pas ouverte", async () => {
+      const { usecase, usersRepository, challengeStrategy } = makeUsecase(
+        buildUser(UserStatus.ACTIF),
+      );
+      challengeStrategy.isActiveFor.mockResolvedValue(true);
+      challengeStrategy.issue.mockResolvedValue({ sentTo: 'j***n@example.com' });
+
+      await catchError(() =>
+        usecase.execute({ email: 'user@example.com', password: 'pw' }),
+      );
+
+      expect(usersRepository.touchLastLogin).not.toHaveBeenCalled();
+    });
+
+    /**
+     * La trace ne doit jamais prendre la session en otage : échanger une
+     * indisponibilité de connexion contre une commodité de purge serait un
+     * mauvais marché.
+     */
+    it('un échec d’écriture est journalisé, la session s’ouvre quand même', async () => {
+      const { usecase, usersRepository } = makeUsecase(
+        buildUser(UserStatus.ACTIF),
+      );
+      usersRepository.touchLastLogin.mockRejectedValue(
+        new Error('base indisponible'),
+      );
+
+      const session = await usecase.execute({
+        email: 'user@example.com',
+        password: 'pw',
+      });
+
+      expect(session.accessToken).toBe('access');
     });
   });
 
