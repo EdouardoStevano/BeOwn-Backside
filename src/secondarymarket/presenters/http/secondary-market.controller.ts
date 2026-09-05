@@ -77,10 +77,11 @@ import { ConflitsInteretsErrorFilter } from 'src/projects/presenters/http/filter
 const DEBIT_LECTURE_MARCHE = {
   short: { ttl: 60_000, limit: 60 },
   medium: { ttl: 60_000, limit: 60 },
-  // Pas de surcharge `auth` : resserrer ce palier vaudrait déclaration
-  // « sensible au bourrage d'identifiants » et basculerait la route en
-  // fail-closed sur panne Redis. Consulter le carnet n'est pas de cet ordre —
-  // le filet global `auth` continue de s'appliquer.
+  // Pas de palier `auth` : le poser vaudrait déclaration « sensible au
+  // bourrage d'identifiants » et basculerait la route en fail-closed sur
+  // panne Redis. Consulter le carnet n'est pas de cet ordre. Depuis la
+  // passe 4, `auth` n'est plus un filet global : il n'est simplement pas
+  // évalué ici, les deux paliers ci-dessus portent seuls la limite.
 } as const;
 
 /**

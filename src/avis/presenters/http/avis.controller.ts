@@ -41,10 +41,12 @@ import { Throttle } from '@nestjs/throttler';
 const DEBIT_ECRITURE_AVIS = {
   short: { ttl: 60_000, limit: 10 },
   medium: { ttl: 60_000, limit: 10 },
-  // Pas de surcharge `auth` : resserrer ce palier vaut déclaration « sensible
-  // au bourrage d'identifiants » et bascule la route en fail-closed sur panne
-  // Redis (cf. RedisThrottlerStorage). Poster un avis n'est pas de cet ordre ;
-  // le filet global `auth` (500/15 min, fail-open) continue de s'appliquer.
+  // Pas de surcharge `auth` : poser ce palier vaut déclaration « sensible au
+  // bourrage d'identifiants » et bascule la route en fail-closed sur panne
+  // Redis (cf. RedisThrottlerStorage). Poster un avis n'est pas de cet ordre.
+  // Depuis la passe 4, `auth` n'est plus un filet global : ne pas le poser
+  // signifie qu'il n'est pas évalué du tout ici — les deux paliers ci-dessus
+  // portent seuls la limite, et ils sont largement plus serrés.
 } as const;
 
 /**
@@ -71,7 +73,7 @@ const DEBIT_ECRITURE_AVIS = {
 const DEBIT_LECTURE_AVIS = {
   short: { ttl: 60_000, limit: 60 },
   medium: { ttl: 60_000, limit: 60 },
-  // Pas de surcharge `auth` — même raison que DEBIT_ECRITURE_AVIS, et à plus
+  // Pas de palier `auth` — même raison que DEBIT_ECRITURE_AVIS, et à plus
   // forte raison : deux de ces routes sont publiques, une panne Redis ne doit
   // pas rendre les avis illisibles sur les fiches projets.
 } as const;

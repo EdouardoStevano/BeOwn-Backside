@@ -71,7 +71,7 @@ describe('RedisThrottlerStorage — fail-closed borné', () => {
     expect((await increment('auth', AUTH_TIGHT_LIMIT)).isBlocked).toBe(true); // 3e → fermé
   });
 
-  it('ne ferme JAMAIS le filet global auth (limite non resserrée)', async () => {
+  it('ne ferme JAMAIS un palier auth posé large (limite non resserrée)', async () => {
     enPanne();
     for (let i = 0; i < 10; i += 1) {
       const record = await increment(

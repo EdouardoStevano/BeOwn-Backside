@@ -17,6 +17,27 @@ data:
   REDIS_HOST: 'redis-service'
   REDIS_PORT: '6379'
 
+  # ─── Limitation de débit ──────────────────────────────────────
+  # Deux filets GLOBAUX appliqués à toutes les routes (vitrine publique
+  # comprise). Ces valeurs étaient écrites en dur dans app.module.ts : les
+  # sortir ici permet de resserrer sous attaque ou de desserrer sur un pic
+  # légitime sans reconstruire l'image.
+  #
+  # Une valeur non entière ou <= 0 fait ÉCHOUER LE DÉMARRAGE du pod (une
+  # limite qu'on croit appliquée et qui est retombée en silence sur son défaut
+  # est pire que pas de limite).
+  #
+  # ⚠ Le palier `auth` n'apparaît PAS ici : il n'est plus global. Déclaré
+  # globalement (500 req/15 min par IP + verrou de 15 min), il refusait 97,8 %
+  # du trafic ANONYME dès 34 req/s — Googlebot et tout NAT d'entreprise
+  # inclus. Il vit désormais sur les seules routes qui le posent
+  # (`@Throttle({ auth: … })` : sign-in, OTP, reset de mot de passe, MFA,
+  # vérification d'email), où ses budgets sont codés au plus juste.
+  THROTTLE_SHORT_TTL: '1000'
+  THROTTLE_SHORT_LIMIT: '500'
+  THROTTLE_MEDIUM_TTL: '60000'
+  THROTTLE_MEDIUM_LIMIT: '2000'
+
   # Nombre de proxys de confiance devant l'application (M-5). Sans cela,
   # `req.ip` vaut l'IP de l'ingress pour TOUS les clients : la limitation de
   # débit devient un seau commun et n'isole plus l'attaquant.

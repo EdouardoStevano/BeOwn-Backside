@@ -357,6 +357,19 @@ export class AuthenticationController {
 
   @ApiOperation({ summary: 'Confirmer un email via token' })
   @ApiResponse({ status: 200, description: 'Email confirmé' })
+  @ApiResponse({
+    status: 429,
+    description: 'Trop de tentatives — réessayez plus tard',
+  })
+  // Route publique consommant un SECRET à usage unique passé en query string,
+  // au même titre que `reset-password` : elle appartient à la famille des
+  // portes d'authentification et doit porter son propre palier `auth`. Elle
+  // n'en avait pas et ne tenait que par le filet global `auth`, retiré en
+  // passe 4 (il refusait 97,8 % du trafic anonyme) — sans ce palier explicite,
+  // le jeton redevenait devinable à 2 000 essais/minute.
+  // 30 tentatives / 15 min par IP : un humain clique une fois, deux au pire ;
+  // un partage de NAT reste très au large.
+  @Throttle({ auth: { ttl: 900_000, limit: 30 } })
   @Public()
   @Get('email/verify')
   async confirmEmail(@Query('token') token: string) {

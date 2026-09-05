@@ -69,18 +69,25 @@ export class RedisThrottlerStorage
   private static readonly FAIL_CLOSED_THROTTLERS = new Set(['auth']);
 
   /**
-   * Le nom seul ne suffit PAS à décider le fail-closed : les trois paliers
-   * déclarés dans app.module s'appliquent à TOUTES les routes, `auth` compris
-   * (filet global à AUTH_GLOBAL_LIMIT sur 15 min). Fermer sur le nom `auth`
-   * fermait donc l'API entière à la première panne Redis — constaté au
-   * démarrage : trois échecs (short, medium, auth) sur la PREMIÈRE requête,
-   * puis 429 sur tout, /health excepté.
+   * Borne de sûreté du fail-closed, et limite par défaut du palier `auth`
+   * déclaré dans app.module.
    *
-   * Le discriminant est la LIMITE EFFECTIVE reçue : une route qui a resserré
-   * son budget via `@Throttle({ auth: { limit: 3..60 } })` (connexion, OTP,
-   * réinitialisation) s'est déclarée sensible au bourrage d'identifiants —
-   * elle seule ferme. Le filet global, lui, reste ouvert : couper tout le
-   * trafic serait un remède pire que le mal.
+   * Historique — le nom du palier ne suffisait PAS à décider le fail-closed :
+   * `auth` était alors un filet GLOBAL appliqué à toutes les routes, si bien
+   * que fermer sur le nom fermait l'API entière à la première panne Redis
+   * (constaté : trois échecs — short, medium, auth — dès la PREMIÈRE requête,
+   * puis 429 sur tout, /health excepté). Le discriminant retenu est donc la
+   * LIMITE EFFECTIVE reçue : seules les routes qui ont resserré leur budget
+   * via `@Throttle({ auth: { limit: 3..60 } })` ferment.
+   *
+   * Depuis la passe 4, `auth` n'est plus global : le `skipIf` de
+   * paliers.config.ts ne l'évalue que sur les routes qui l'ont explicitement
+   * posé (sign-in, OTP, reset, MFA — toutes à limite ≤ 50). La condition
+   * ci-dessous devient donc une redondance de sûreté plutôt qu'un
+   * discriminant : elle continue d'écarter du fail-closed tout palier `auth`
+   * qui serait posé LARGE — un budget de 500 sur 15 minutes ne protège de
+   * toute façon d'aucun bourrage d'identifiants, et couper le trafic sur une
+   * panne Redis y serait un remède pire que le mal.
    */
   static readonly AUTH_GLOBAL_LIMIT = 500;
 
@@ -210,7 +217,7 @@ export class RedisThrottlerStorage
       const failClosed =
         RedisThrottlerStorage.FAIL_CLOSED_THROTTLERS.has(throttlerName) &&
         // Seules les routes au budget explicitement resserré ferment (cf.
-        // AUTH_GLOBAL_LIMIT ci-dessus) — jamais le filet global.
+        // AUTH_GLOBAL_LIMIT ci-dessus) — jamais un palier `auth` posé large.
         limit < RedisThrottlerStorage.AUTH_GLOBAL_LIMIT &&
         // Jamais en développement : un poste sans Redis local rendrait la
         // connexion impossible (constaté : sign-in en 429 permanent). Même

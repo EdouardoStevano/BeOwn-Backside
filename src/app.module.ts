@@ -46,6 +46,12 @@ import { PlatformSettingsModule } from './common/platform-settings/platform-sett
 import { ContactModule } from './common/contact/contact.module';
 import { ThrottlerStorageModule } from './common/throttler/throttler-storage.module';
 import { RedisThrottlerStorage } from './common/throttler/redis-throttler.storage';
+import {
+  lireEntierPositif,
+  PALIER_AUTH_TTL_MS,
+  PALIERS_GLOBAUX_DEFAUT,
+  sauterPalierAuth,
+} from './common/throttler/paliers.config';
 import { SmsModule } from './shared/sms/sms.module';
 import { EmailModule } from './shared/email/email.module';
 import { CacheModule } from '@nestjs/cache-manager';
@@ -75,24 +81,56 @@ function requireEnv(name: string): string {
     }),
 
     // M-5 — les compteurs vivent dans Redis, pas dans la mémoire du processus :
-    // partagés par tous les réplicas et conservés au redéploiement. Les trois
-    // paliers nommés s'appliquent TOUS à chaque route ; les routes sensibles
-    // les resserrent via `@Throttle({ <palier>: { … } })`.
+    // partagés par tous les réplicas et conservés au redéploiement.
+    //
+    // DEUX filets GLOBAUX (`short`, `medium`), appliqués à toutes les routes et
+    // désormais réglables par variables d'environnement sans réimager le
+    // service (THROTTLE_SHORT_LIMIT/TTL, THROTTLE_MEDIUM_LIMIT/TTL — voir
+    // .env.example et le ConfigMap k8s). Les valeurs par défaut sont celles qui
+    // étaient écrites en dur ici.
+    //
+    // UN palier OPT-IN (`auth`) : il n'est évalué que sur les routes qui le
+    // posent explicitement via `@Throttle({ auth: … })` — sign-in, OTP, reset,
+    // MFA. Déclaré globalement, il refusait 97,8 % du trafic ANONYME dès
+    // 34 req/s (mesure Artillery) : voir paliers.config.ts pour le détail et
+    // pourquoi le retrait passe par `skipIf` et non par une suppression de la
+    // déclaration.
     ThrottlerModule.forRootAsync({
       imports: [ThrottlerStorageModule],
       inject: [RedisThrottlerStorage],
       useFactory: (storage: RedisThrottlerStorage) => ({
         throttlers: [
-          { name: 'short', ttl: 1000, limit: 500 },
-          { name: 'medium', ttl: 60_000, limit: 2000 },
+          {
+            name: 'short',
+            ttl: lireEntierPositif(
+              'THROTTLE_SHORT_TTL',
+              PALIERS_GLOBAUX_DEFAUT.shortTtlMs,
+            ),
+            limit: lireEntierPositif(
+              'THROTTLE_SHORT_LIMIT',
+              PALIERS_GLOBAUX_DEFAUT.shortLimit,
+            ),
+          },
+          {
+            name: 'medium',
+            ttl: lireEntierPositif(
+              'THROTTLE_MEDIUM_TTL',
+              PALIERS_GLOBAUX_DEFAUT.mediumTtlMs,
+            ),
+            limit: lireEntierPositif(
+              'THROTTLE_MEDIUM_LIMIT',
+              PALIERS_GLOBAUX_DEFAUT.mediumLimit,
+            ),
+          },
           // La limite vient du storage (source unique) : c'est elle qui sépare
-          // le filet global (fail-open sur panne Redis) des routes resserrées
-          // par @Throttle({ auth: … }) (fail-closed). Une valeur écrite en dur
+          // les routes resserrées par @Throttle({ auth: … }) (fail-closed sur
+          // panne Redis) d'un éventuel palier large. Une valeur écrite en dur
           // ici pourrait diverger et rouvrir — ou refermer — la mauvaise porte.
           {
             name: 'auth',
-            ttl: 900_000,
+            ttl: PALIER_AUTH_TTL_MS,
             limit: RedisThrottlerStorage.AUTH_GLOBAL_LIMIT,
+            skipIf: sauterPalierAuth,
           },
         ],
         storage,

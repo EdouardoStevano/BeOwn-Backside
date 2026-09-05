@@ -86,9 +86,11 @@ import { RetraitSettlementService } from '../../applications/services/retrait-se
  * rafale, création d'intentions en masse chez le prestataire, qui coûtent de
  * l'argent réel même sans paiement abouti).
  *
- * Les TROIS paliers nommés sont redéfinis : la configuration globale les
- * applique tous à chaque route, n'en resserrer qu'un laisserait les deux
- * autres à leurs valeurs généreuses (cf. `app.module.ts`).
+ * Les TROIS paliers nommés sont redéfinis : `short` et `medium` sont des
+ * filets globaux appliqués à chaque route, n'en resserrer qu'un laisserait
+ * l'autre à sa valeur généreuse ; `auth` n'est évalué QUE là où il est posé
+ * (cf. `app.module.ts` et `common/throttler/paliers.config.ts`), et le poser
+ * ici est délibéré — ces routes déplacent de l'argent.
  */
 const DEBIT_OPERATION_ARGENT = {
   short: { ttl: 60_000, limit: 10 },
