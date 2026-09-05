@@ -1,7 +1,10 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { GetProjectsUseCase } from './usecases/get-projects.usecase';
 import { INVESTMENT_REPOSITORY } from 'src/investments/applications/ports/repositories/investment.repository';
-import type { InvestmentRepository } from 'src/investments/applications/ports/repositories/investment.repository';
+import type {
+  AgregatInvestissementsProjet,
+  InvestmentRepository,
+} from 'src/investments/applications/ports/repositories/investment.repository';
 import { DOCUMENT_REPOSITORY } from 'src/documents/applications/ports/repositories/document.repository';
 import type { DocumentRepository } from 'src/documents/applications/ports/repositories/document.repository';
 import { AVIS_REPOSITORY } from 'src/avis/applications/ports/repositories/avis.repository';
@@ -47,67 +50,53 @@ export class ProjectReadModelService {
   ];
 
   /**
-   * Montant réellement collecté : Σ des investissements aux STATUTS ACTIFS.
+   * Agrégats d'un projet, calculés EN BASE (une requête pour tous les projets).
    *
-   * DÉFINITION UNIQUE pour la liste et le détail. La liste calculait
-   * `fractionsVendues × prixFraction`, le détail sommait les montants réels :
-   * les deux vues affichaient des chiffres différents pour le même projet.
-   * L'écart n'est pas théorique — une cession au marché secondaire mute le
-   * `montant` de la ligne au prix de revente sans changer le nombre de
-   * fractions, si bien que le produit « fractions × prix d'origine » dérive
-   * dès la première revente.
+   * ─── Montant collecté ───────────────────────────────────────────────────
+   * Σ des investissements aux STATUTS ACTIFS. DÉFINITION UNIQUE pour la liste
+   * et le détail. La liste calculait `fractionsVendues × prixFraction`, le
+   * détail sommait les montants réels : les deux vues affichaient des chiffres
+   * différents pour le même projet. L'écart n'est pas théorique — une cession
+   * au marché secondaire mute le `montant` de la ligne au prix de revente sans
+   * changer le nombre de fractions, si bien que le produit « fractions × prix
+   * d'origine » dérive dès la première revente. C'est la définition du DÉTAIL
+   * qui est retenue : elle somme ce qui a réellement été engagé.
    *
-   * C'est la définition du DÉTAIL qui est retenue : elle somme ce qui a
-   * réellement été engagé, là où l'autre reconstitue une estimation.
+   * ─── Investisseurs ──────────────────────────────────────────────────────
+   * Personnes DISTINCTES : une personne, une voix, quel que soit son nombre de
+   * lignes.
+   *
+   * ─── Pourquoi en base ───────────────────────────────────────────────────
+   * Ces deux chiffres venaient d'un `findByProjetId` PAR PROJET, chacun
+   * rapatriant toutes les lignes d'investissement AVEC le projet joint (blob
+   * `fici` ~2,4 Ko, `descriptionMd`, `previsionnel` — répétés sur chaque
+   * ligne) pour n'en tirer qu'une somme et un compte. Une liste de 20 projets
+   * valait 20 requêtes et des mégaoctets transférés. C'est désormais UNE
+   * requête GROUP BY qui ne remonte que les agrégats.
    */
-  private sommerCollecte(
-    investments: { statut: InvestmentStatus; montant: number | string }[],
-  ): number {
-    const total = investments
-      .filter((i) => ProjectReadModelService.STATUTS_ACTIFS.includes(i.statut))
-      .reduce((somme, inv) => somme + Number(inv.montant), 0);
-    return Math.round(total * 100) / 100;
+  private async agregerCollecte(
+    ids: string[],
+  ): Promise<Record<string, AgregatInvestissementsProjet>> {
+    return this.investmentRepository.agregerParProjet(
+      ids,
+      ProjectReadModelService.STATUTS_ACTIFS,
+    );
   }
 
-  /** Investisseurs DISTINCTS d'un projet : une personne, une voix, quel que soit son nombre de lignes. */
-  private compterInvestisseurs(
-    investments: { statut: InvestmentStatus; utilisateurId: number }[],
-  ): number {
-    return new Set(
-      investments
-        .filter((i) =>
-          ProjectReadModelService.STATUTS_ACTIFS.includes(i.statut),
-        )
-        .map((i) => i.utilisateurId),
-    ).size;
+  /** Arrondi monétaire au centime, appliqué à la somme rendue par la base. */
+  private auCentime(montant: number): number {
+    return Math.round(montant * 100) / 100;
   }
 
   async enrichFractions(projects: any[]) {
     if (projects.length === 0) return projects;
     const ids = projects.map((p) => p.id);
-    // `nbInvestisseurs` était câblé à 0 : la liste annonçait « 0 investisseur »
-    // sur des projets intégralement souscrits, alors que le détail affichait le
-    // bon compte. Une requête par projet, comme enrichImages ; le port
-    // d'investissement n'expose pas encore de compteur groupé (suivi : ajouter
-    // un `countInvestisseursBatch` côté investments, hors périmètre ici).
-    const [venduesMap, investissementsParProjet] = await Promise.all([
+    // DEUX requêtes pour toute la liste, quel qu'en soit le nombre de projets
+    // (c'était 1 + N, avec le projet entier joint sur chaque ligne).
+    const [venduesMap, agregats] = await Promise.all([
       this.investmentRepository.countFractionsVenduesBatch(ids),
-      Promise.all(
-        ids.map((id) => this.investmentRepository.findByProjetId(id)),
-      ),
+      this.agregerCollecte(ids),
     ]);
-    const collecteParProjet = new Map<string, number>(
-      ids.map((id, index) => [
-        id,
-        this.sommerCollecte(investissementsParProjet[index] as any),
-      ]),
-    );
-    const investisseursParProjet = new Map<string, number>(
-      ids.map((id, index) => [
-        id,
-        this.compterInvestisseurs(investissementsParProjet[index]),
-      ]),
-    );
 
     return projects.map((p) => {
       const prixFraction = Number(p.ticketMinimum);
@@ -135,8 +124,10 @@ export class ProjectReadModelService {
         },
         stats: {
           // MÊME définition que le détail : Σ des investissements actifs.
-          montantCollecte: collecteParProjet.get(p.id) ?? 0,
-          nbInvestisseurs: investisseursParProjet.get(p.id) ?? 0,
+          montantCollecte: this.auCentime(
+            agregats[p.id]?.montantCollecte ?? 0,
+          ),
+          nbInvestisseurs: agregats[p.id]?.nbInvestisseurs ?? 0,
           tauxRemplissage,
         },
       };
@@ -163,10 +154,14 @@ export class ProjectReadModelService {
   }
 
   async buildProjectDetail(id: string, publicView = false) {
-    const [project, allInvestments, allDocs, avisStats, fractionsVendues] =
+    const [project, agregats, allDocs, avisStats, fractionsVendues] =
       await Promise.all([
         this.getProjects.executeOne(id),
-        this.investmentRepository.findByProjetId(id),
+        // Le détail chargeait, lui aussi, TOUTES les lignes d'investissement
+        // du projet — projet joint compris — pour n'en tirer que deux
+        // chiffres. Même agrégat que la liste, donc mêmes chiffres par
+        // construction.
+        this.agregerCollecte([id]),
         this.documentRepository.findByProjectId(id),
         this.avisRepository.getStats(id),
         this.investmentRepository.countFractionsVendues(id),
@@ -179,11 +174,10 @@ export class ProjectReadModelService {
       project.nbFractions ??
       Math.floor(Number(project.capitalCible) / prixFraction);
 
-    const activeInvestments = allInvestments.filter((i) =>
-      ProjectReadModelService.STATUTS_ACTIFS.includes(i.statut),
+    const montantCollecte = this.auCentime(
+      agregats[id]?.montantCollecte ?? 0,
     );
-    const montantCollecte = this.sommerCollecte(allInvestments as any);
-    const nbInvestisseurs = this.compterInvestisseurs(allInvestments);
+    const nbInvestisseurs = agregats[id]?.nbInvestisseurs ?? 0;
 
     const images = allDocs
       .filter(

@@ -4,6 +4,18 @@ import { InvestmentStatus } from 'src/investments/domains/enums/investment-statu
 
 export const INVESTMENT_REPOSITORY = Symbol('INVESTMENT_REPOSITORY');
 
+/**
+ * Agrégats d'un projet, calculés en base et non en mémoire : les deux seuls
+ * chiffres que les vues « liste » et « détail » tiraient jusqu'ici du
+ * chargement INTÉGRAL des lignes d'investissement.
+ */
+export interface AgregatInvestissementsProjet {
+  /** Σ des montants engagés sur les statuts demandés. */
+  montantCollecte: number;
+  /** Nombre d'investisseurs DISTINCTS : une personne, une voix. */
+  nbInvestisseurs: number;
+}
+
 export interface InvestmentRepository {
   saveInvestment(investment: Investment): Promise<Investment>;
   findInvestmentById(id: string): Promise<Investment | null>;
@@ -11,6 +23,28 @@ export interface InvestmentRepository {
   findByProjetId(projetId: string): Promise<Investment[]>;
   countFractionsVendues(projetId: string): Promise<number>;
   countFractionsVenduesBatch(projetIds: string[]): Promise<Record<string, number>>;
+
+  /**
+   * Montant collecté et nombre d'investisseurs distincts, pour PLUSIEURS
+   * projets, en UNE requête (GROUP BY projetId).
+   *
+   * Remplace le `ids.map(id => findByProjetId(id))` du read-model projet : une
+   * requête SQL par projet, chacune joignant le projet ENTIER (blob `fici`
+   * d'environ 2,4 Ko, `descriptionMd`, `previsionnel`) sur CHAQUE ligne
+   * d'investissement, pour n'en tirer qu'une somme et un compte de doublons.
+   *
+   * `statuts` est passé par l'appelant et non codé ici : la définition des
+   * « statuts actifs » est une règle métier, elle vit dans la couche
+   * application (ProjectReadModelService) qui garantit que la liste et le
+   * détail comptent la même chose. Le dépôt ne fait que l'appliquer.
+   *
+   * Un projet sans aucune ligne éligible est ABSENT du résultat (pas de clé à
+   * zéro) : c'est à l'appelant de choisir sa valeur par défaut.
+   */
+  agregerParProjet(
+    projetIds: string[],
+    statuts: InvestmentStatus[],
+  ): Promise<Record<string, AgregatInvestissementsProjet>>;
 
   /**
    * Vrai si cet utilisateur détient encore des parts émises par une société

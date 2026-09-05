@@ -1,7 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { InvestmentRepository } from 'src/investments/applications/ports/repositories/investment.repository';
+import {
+  AgregatInvestissementsProjet,
+  InvestmentRepository,
+} from 'src/investments/applications/ports/repositories/investment.repository';
 import { Investment } from 'src/investments/domains/investment';
 import { Echeance } from 'src/investments/domains/echeance';
 import { InvestmentStatus } from 'src/investments/domains/enums/investment-status.enum';
@@ -86,6 +89,41 @@ export class InvestmentTypeOrmRepository implements InvestmentRepository {
       .groupBy('i.projetId')
       .getRawMany<{ projetId: string; total: string }>();
     return Object.fromEntries(rows.map((r) => [r.projetId, Number(r.total)]));
+  }
+
+  async agregerParProjet(
+    projetIds: string[],
+    statuts: InvestmentStatus[],
+  ): Promise<Record<string, AgregatInvestissementsProjet>> {
+    if (projetIds.length === 0 || statuts.length === 0) return {};
+    // UNE requête pour tous les projets, et RIEN d'autre que les agrégats :
+    // pas de jointure sur `projet`, donc pas de blob `fici` ni de
+    // `descriptionMd` rapatriés par ligne. S'appuie sur l'index
+    // `investissement.projetId` (voir InvestmentEntity), le même que
+    // countFractionsVenduesBatch.
+    const rows = await this.investRepo
+      .createQueryBuilder('i')
+      .select('i.projetId', 'projetId')
+      .addSelect('COALESCE(SUM(i.montant), 0)', 'montant')
+      .addSelect('COUNT(DISTINCT i.utilisateurId)', 'investisseurs')
+      .where('i.projetId IN (:...projetIds)', { projetIds })
+      .andWhere('i.statut IN (:...statuts)', { statuts })
+      .groupBy('i.projetId')
+      .getRawMany<{
+        projetId: string;
+        montant: string;
+        investisseurs: string;
+      }>();
+
+    return Object.fromEntries(
+      rows.map((r) => [
+        r.projetId,
+        {
+          montantCollecte: Number(r.montant),
+          nbInvestisseurs: Number(r.investisseurs),
+        },
+      ]),
+    );
   }
 
   async existeDetentionSurSocieteSupport(
