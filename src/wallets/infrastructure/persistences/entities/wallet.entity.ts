@@ -22,6 +22,26 @@ import { WalletType } from 'src/wallets/domains/enums/wallet.enum';
   unique: true,
   where: '"projetId" IS NOT NULL',
 })
+/**
+ * Symétrique pour les portefeuilles PERSONNELS : un compte ne peut porter
+ * qu'UN portefeuille par type.
+ *
+ * Le portefeuille investisseur est résolu partout par
+ * `findOne({ proprietaireUserId, type })` — une lecture qui rend la PREMIÈRE
+ * ligne trouvée. Un doublon, créé par deux requêtes concurrentes (le dépôt
+ * comme la première consultation créent le portefeuille à la volée), scinderait
+ * le solde d'une personne en deux : un crédit sur l'un, un débit sur l'autre,
+ * et un « solde insuffisant » sur un compte pourtant approvisionné. L'index
+ * transforme cette course en erreur bruyante.
+ *
+ * Partiel de la même façon : les portefeuilles de plateforme (frais, taxes,
+ * séquestres) ont `proprietaireUserId` à NULL et doivent coexister.
+ * Pose en base : hors déploiement, cf. docs/adr/ADR-migrations-hors-deploiement.md.
+ */
+@Index('UQ_wallet_proprietaire_type', ['proprietaireUserId', 'type'], {
+  unique: true,
+  where: '"proprietaireUserId" IS NOT NULL',
+})
 @Entity('wallet')
 export class WalletEntity {
   @PrimaryGeneratedColumn('uuid')

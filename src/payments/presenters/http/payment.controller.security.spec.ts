@@ -164,6 +164,11 @@ describe('PaymentController — sécurité des flux monétaires (H-1 / H-2)', ()
       // PUIS incrément wallet, dans une transaction DB. On instrumente le
       // manager pour vérifier l'ordre insert-avant-incrément.
       const em: any = {
+        // Le portefeuille est résolu DANS la transaction (création sous
+        // verrou) : le manager doit savoir le rendre.
+        findOne: jest.fn().mockResolvedValue({ id: 'w1', devise: 'EUR' }),
+        create: jest.fn((_e: any, o: any) => o),
+        save: jest.fn(async (o: any) => ({ id: 'w1', ...o })),
         insert: jest.fn().mockResolvedValue(undefined),
         createQueryBuilder: jest.fn(() => chainableQB({ affected: 1 })),
       };
@@ -192,6 +197,9 @@ describe('PaymentController — sécurité des flux monétaires (H-1 / H-2)', ()
 
       const em: any = {
         // Doublon : l'insert du ledger lève une violation d'unicité Postgres.
+        findOne: jest.fn().mockResolvedValue({ id: 'w1', devise: 'EUR' }),
+        create: jest.fn((_e: any, o: any) => o),
+        save: jest.fn(async (o: any) => ({ id: 'w1', ...o })),
         insert: jest.fn().mockRejectedValue({ code: '23505' }),
         createQueryBuilder: jest.fn(() => chainableQB({ affected: 1 })),
       };
@@ -287,6 +295,11 @@ describe('PaymentController — sécurité des flux monétaires (H-1 / H-2)', ()
       });
       walletRepo.findOne.mockResolvedValue({ id: 'w1', devise: 'EUR' });
       const em: any = {
+        // Le portefeuille est résolu DANS la transaction (création sous
+        // verrou) : le manager doit savoir le rendre.
+        findOne: jest.fn().mockResolvedValue({ id: 'w1', devise: 'EUR' }),
+        create: jest.fn((_e: any, o: any) => o),
+        save: jest.fn(async (o: any) => ({ id: 'w1', ...o })),
         insert: jest.fn().mockResolvedValue(undefined),
         createQueryBuilder: jest.fn(() => chainableQB({ affected: 1 })),
       };

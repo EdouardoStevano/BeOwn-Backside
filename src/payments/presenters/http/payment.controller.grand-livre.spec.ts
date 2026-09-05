@@ -48,6 +48,11 @@ describe('PaymentController — le dépôt se rapproche du grand livre (ANO-02)'
    */
   const entityManager = () => {
     const em: any = {
+      // Le portefeuille est désormais résolu DANS la transaction (création
+      // sous verrou) : le manager doit donc savoir le rendre.
+      findOne: jest.fn(async () => ({ id: WALLET_ID, solde: 0, devise: 'EUR' })),
+      create: jest.fn((_e: any, o: any) => o),
+      save: jest.fn(async (o: any) => ({ id: WALLET_ID, ...o })),
       insert: jest.fn(async (entity: any, valeurs: any) => {
         if (entity !== TransactionEntity) return;
         ledger.push({

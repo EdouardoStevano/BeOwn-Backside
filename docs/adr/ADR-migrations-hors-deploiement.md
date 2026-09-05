@@ -148,3 +148,54 @@ Déclarées dans les entités (le `synchronize` du seed les pose en dev), à jou
   - **Aucun index** : la colonne n'est jamais un critère de sélection à elle seule — elle est lue par jointure sur la clé primaire de `users` (purge RGPD) et par la lecture ciblée du garde d'accès.
   - **Pas de table d'historique** : la chronologie des octrois et des retraits vit déjà dans `audit_log` (5 ans, entrées `porteur_access.acces.retire` / `.retabli` et `porteur_access.demande.acceptee` / `.refusee`, avec `porteurAccessAvant` / `porteurAccessApres`). Une seconde table serait une seconde source de vérité à tenir en phase pour une question qui se résume à « quand l'accès s'est-il refermé ? ». Cette date sert de POINT DE DÉPART au barème de conservation d'une demande acceptée (« durée de l'accès, puis 5 ans ») : `RgpdPurgeService` la lit par `COALESCE("accesRevoqueLe", "anonymiseLe", "decideeLe")`.
   - `ALTER TABLE … ADD COLUMN … NULL` sans défaut est instantané, quelle que soit la version de PostgreSQL.
+
+- 2026-09-05 — **Socle d'intégrité des portefeuilles (passe 2 « flux d'argent »)**. Deux index uniques partiels et une contrainte de non-négativité. SQL ordonné, réversible :
+  ```sql
+  -- 1. Un compte ne porte qu'UN portefeuille par type.
+  --    Symétrique de UQ_wallet_projet_type, déjà en place. Le portefeuille
+  --    investisseur est résolu partout par findOne({proprietaireUserId, type}),
+  --    qui rend la PREMIÈRE ligne : un doublon né d'une course (le dépôt comme
+  --    la première consultation créent le portefeuille à la volée) scinderait
+  --    le solde d'une personne en deux — crédit sur l'un, débit sur l'autre,
+  --    « solde insuffisant » sur un compte pourtant approvisionné.
+  CREATE UNIQUE INDEX CONCURRENTLY "UQ_wallet_proprietaire_type"
+    ON wallet ("proprietaireUserId", type)
+    WHERE "proprietaireUserId" IS NOT NULL;
+
+  -- 2. Non-négativité — SUR LES SEULS PORTEFEUILLES D'UTILISATEURS.
+  ALTER TABLE wallet ADD CONSTRAINT chk_wallet_utilisateur_positif
+    CHECK (
+      "proprietaireUserId" IS NULL
+      OR (solde >= 0 AND "soldeBloque" >= 0)
+    ) NOT VALID;
+  ALTER TABLE wallet VALIDATE CONSTRAINT chk_wallet_utilisateur_positif;
+  ```
+  Retour arrière :
+  ```sql
+  ALTER TABLE wallet DROP CONSTRAINT chk_wallet_utilisateur_positif;
+  DROP INDEX CONCURRENTLY "UQ_wallet_proprietaire_type";
+  ```
+
+  **ARBITRAGE — pourquoi la contrainte ne couvre PAS les portefeuilles de projet.**
+  La consigne d'audit proposait `CHECK (solde >= 0 AND "soldeBloque" >= 0)` sur toute la table. Ce serait contradictoire avec une décision déjà prise, écrite et testée : le découvert d'un portefeuille de PROJET est **toléré et rendu visible**, jamais bloqué (`pay-echeance.usecase.ts`, `execute-distribution.usecase.ts`, et depuis cette passe `execute-sortie.usecase.ts`). La raison y est développée : le règlement d'une échéance ou la distribution d'une sortie est une **obligation envers des investisseurs**, pas une dépense discrétionnaire. Refuser le débit transformerait un défaut d'alimentation par le porteur — son problème — en impayé pour l'investisseur — le problème de la plateforme. Le découvert est donc journalisé, compté dans la jauge `PROJECT_WALLET_SHORTFALL_EUR` et visible dans l'état financier du projet.
+
+  Poser la contrainte sur toute la table ferait échouer ces règlements en base, après les gardes applicatives, sous forme d'exception d'intégrité — c'est-à-dire au pire endroit. La contrainte est donc **restreinte par la clause `proprietaireUserId IS NULL OR …`**, qui couvre exactement les portefeuilles personnels : ceux-là ne doivent JAMAIS passer sous zéro, et toutes les écritures qui les touchent sont déjà conditionnelles (`solde >= :montant`). La contrainte est le filet de dernier ressort, pas le contrôle principal.
+
+  Un `CHECK` de ligne suffit : pas de trigger, pas de fonction, rien à maintenir.
+
+  Notes :
+  - `NOT VALID` puis `VALIDATE` : la validation ne prend pas de verrou exclusif de table et n'interrompt pas le service. À jouer dans cet ordre, et à ne valider qu'après avoir vérifié qu'aucune ligne existante ne viole la contrainte :
+    ```sql
+    SELECT id, "proprietaireUserId", solde, "soldeBloque" FROM wallet
+    WHERE "proprietaireUserId" IS NOT NULL AND (solde < 0 OR "soldeBloque" < 0);
+    ```
+    Toute ligne remontée est un incident à instruire AVANT la pose — la contrainte ne doit pas servir à découvrir un problème, seulement à empêcher les suivants.
+  - `CREATE UNIQUE INDEX CONCURRENTLY` ne peut pas s'exécuter dans une transaction, et échoue s'il existe déjà des doublons. Les repérer d'abord :
+    ```sql
+    SELECT "proprietaireUserId", type, count(*) FROM wallet
+    WHERE "proprietaireUserId" IS NOT NULL
+    GROUP BY 1, 2 HAVING count(*) > 1;
+    ```
+  - **Non appliqué sur la base dev** au moment de l'écriture : la clause partielle est déclarée dans l'entité (`@Index('UQ_wallet_proprietaire_type', …)`), donc posée par le `synchronize` du seed au prochain `npm run schema:drop && npm run seed`. La contrainte `CHECK`, elle, n'est PAS exprimable en décorateur TypeORM dans ce dépôt : elle doit être posée à la main, y compris en dev.
+
+- 2026-09-05 — **Verrou distribué des tâches planifiées**. Aucun changement de schéma : `VerrouCronService` s'appuie sur `pg_try_advisory_lock`, un verrou consultatif de session, sans table ni colonne. Mentionné ici parce que c'est une dépendance PostgreSQL nouvelle du code applicatif. Rien à jouer, rien à défaire.

@@ -41,7 +41,7 @@ import {
 import { CrediterApportPorteurUseCase } from '../../applications/usecases/crediter-apport-porteur.usecase';
 import { ProjectEntity } from 'src/projects/infrastructure/persistences/entities/project.entity';
 import { InjectRepository, InjectDataSource } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, Repository, EntityManager } from 'typeorm';
 import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/wallet.entity';
 import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entities/transaction.entity';
 import {
@@ -330,32 +330,27 @@ export class PaymentController {
     paymentIntentId: string,
     amountMajor: number,
   ): Promise<{ credited: boolean; walletId: string }> {
-    // Wallet garanti présent hors section critique (idempotent : 1 par user/type).
-    let wallet = await this.walletRepo.findOne({
-      where: { proprietaireUserId: userId, type: WalletType.INVESTISSEUR },
-    });
-    if (!wallet) {
-      wallet = await this.walletRepo.save(
-        this.walletRepo.create({
-          type: WalletType.INVESTISSEUR,
-          proprietaireUserId: userId,
-          fournisseurRef: `INV-${userId}-auto`,
-          devise: 'EUR',
-          solde: 0,
-        }),
-      );
-    }
-
     const idempotencyKey = `depot:${paymentIntentId}`;
+    let wallet: WalletEntity;
     try {
-      await this.dataSource.transaction(async (em) => {
+      wallet = await this.dataSource.transaction(async (em) => {
+        // Le portefeuille est résolu — et créé s'il manque — DANS la
+        // transaction. Hors d'elle, deux webhooks concurrents sur le même
+        // compte neuf passaient tous deux le `findOne` à vide et créaient
+        // DEUX portefeuilles : le crédit atterrissait sur l'un, le débit
+        // suivant cherchait l'autre, et l'investisseur voyait « solde
+        // insuffisant » sur un compte pourtant approvisionné. Le verrou
+        // pessimiste sérialise les prétendants ; l'index unique partiel
+        // `UQ_wallet_proprietaire_type` (cf. ADR migrations) ferme le dernier
+        // interstice.
+        const resolu = await this.resoudreWalletInvestisseur(em, userId);
         // 1. Insert ledger FIRST — la contrainte unique rejette tout doublon.
         //    ANO-02 : un dépôt CRÉDITE le portefeuille — l'écriture va donc en
         //    `walletDestination`, la source restant NULL (contrepartie externe :
         //    la carte de l'investisseur). L'inscrire côté débiteur faisait
         //    diverger le rapprochement « Σ crédits − Σ débits = solde ».
         await em.insert(TransactionEntity, {
-          walletDestination: wallet!.id,
+          walletDestination: resolu.id,
           type: TransactionType.DEPOT,
           montant: amountMajor,
           devise: 'EUR',
@@ -370,16 +365,62 @@ export class PaymentController {
           .update(WalletEntity)
           .set({ solde: () => 'solde + :amount' })
           .setParameter('amount', amountMajor)
-          .where('id = :id', { id: wallet!.id })
+          .where('id = :id', { id: resolu.id })
           .execute();
+        return resolu;
       });
       return { credited: true, walletId: wallet.id };
     } catch (err: any) {
       if (err?.code === '23505' || err?.driverError?.code === '23505') {
-        // Dépôt déjà traité (violation d'unicité) → no-op idempotent.
-        return { credited: false, walletId: wallet.id };
+        // Dépôt déjà traité (violation d'unicité) → no-op idempotent. Le
+        // portefeuille est relu hors transaction : celle-ci a été annulée,
+        // mais le portefeuille, lui, existe forcément (le doublon porte sur la
+        // clé du dépôt, pas sur le portefeuille).
+        const existant = await this.walletRepo.findOne({
+          where: { proprietaireUserId: userId, type: WalletType.INVESTISSEUR },
+        });
+        return { credited: false, walletId: existant?.id ?? '' };
       }
       throw err;
+    }
+  }
+
+  /**
+   * Portefeuille INVESTISSEUR d'un compte, créé s'il n'existe pas, sous verrou.
+   *
+   * `lock: pessimistic_write` sur la lecture : deux transactions concurrentes
+   * ne peuvent pas conclure toutes deux à l'absence du portefeuille. Si la
+   * course se joue malgré tout à la création (première insertion simultanée,
+   * où il n'y a rien à verrouiller), l'index unique partiel tranche et le
+   * perdant relit la ligne du gagnant.
+   */
+  private async resoudreWalletInvestisseur(
+    em: EntityManager,
+    userId: number,
+  ): Promise<WalletEntity> {
+    const existant = await em.findOne(WalletEntity, {
+      where: { proprietaireUserId: userId, type: WalletType.INVESTISSEUR },
+      lock: { mode: 'pessimistic_write' },
+    });
+    if (existant) return existant;
+
+    try {
+      return await em.save(
+        em.create(WalletEntity, {
+          type: WalletType.INVESTISSEUR,
+          proprietaireUserId: userId,
+          fournisseurRef: `INV-${userId}-auto`,
+          devise: 'EUR',
+          solde: 0,
+        }),
+      );
+    } catch (err: any) {
+      if (err?.code !== '23505' && err?.driverError?.code !== '23505') throw err;
+      const gagnant = await em.findOne(WalletEntity, {
+        where: { proprietaireUserId: userId, type: WalletType.INVESTISSEUR },
+      });
+      if (!gagnant) throw err;
+      return gagnant;
     }
   }
 
