@@ -6,7 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, EntityManager, Repository } from 'typeorm';
 import { SortieProjet, StatutSortie } from '../../domains/sortie-projet';
 import {
   SORTIE_PROJET_REPOSITORY,
@@ -55,7 +55,7 @@ export interface ExecuteSortieResult {
  *
  * Pour chaque investisseur CONFIRME du projet :
  *   - capitalRembourse = inv.montant (1:1, retour de capital, non imposable)
- *   - plusValuePart = sortie.plusValueBrute × (inv.montant / projet.capitalCible)
+ *   - plusValuePart = PV nette de frais × (inv.montant / COLLECTÉ RÉEL)
  *   - Si plusValuePart > 0 :
  *       IR_PV = plusValuePart × 0.19    (PV immobilière)
  *       CSG_PV = plusValuePart × 0.172
@@ -108,16 +108,30 @@ export class ExecuteSortieUseCase {
 
     const projet = await this.projectRepo.findProjectById(sortie.projetId);
     if (!projet) throw new NotFoundException('Projet introuvable.');
-    const capitalCible = Number(projet.capitalCible);
-    if (!capitalCible || capitalCible <= 0) {
-      throw new BadRequestException('capitalCible du projet invalide.');
-    }
 
     const investissements = await this.investmentRepo.findByProjetId(
       sortie.projetId,
     );
     const eligibles = investissements.filter(
       (i) => i.statut === InvestmentStatus.CONFIRME,
+    );
+
+    // B3 — ASSIETTE DU PRORATA : LE COLLECTÉ RÉEL, PAS L'OBJECTIF.
+    //
+    // Le prorata était `inv.montant / projet.capitalCible`. Sur un projet
+    // financé à 60 % de son objectif, la somme des quotes-parts valait 0,6 :
+    // seuls 60 % de la plus-value étaient distribués, et les 40 % restants ne
+    // revenaient à personne. Les investisseurs présents supportent le risque
+    // sur ce qu'ils ont RÉELLEMENT engagé — la plus-value se partage donc sur
+    // cette même assiette, et la somme des quotes-parts vaut 1 par
+    // construction.
+    //
+    // Vaut 0 UNIQUEMENT quand aucun investissement n'est confirmé — cas où la
+    // boucle de distribution ne s'exécute pas une seule fois, donc où aucune
+    // division n'a lieu. Un projet dont tous les souscripteurs se sont
+    // rétractés doit pouvoir être clôturé : on ne lève pas.
+    const collecteReelle = round2(
+      eligibles.reduce((total, inv) => total + Number(inv.montant), 0),
     );
 
     // Frais sur plus-value à la vente du bien (taux configurable
@@ -137,6 +151,28 @@ export class ExecuteSortieUseCase {
     await this.dataSource.transaction(async (em) => {
       let walletIR: WalletEntity | null = null;
       let walletCSG: WalletEntity | null = null;
+
+      // B2 — LA CONTREPARTIE QUI MANQUAIT.
+      //
+      // Les cinq écritures de cette sortie n'avaient PAS de `walletSource` :
+      // elles créditaient les investisseurs, les séquestres fiscaux et les
+      // frais de plateforme sans jamais débiter personne. Le grand livre
+      // fabriquait donc des euros à chaque sortie de projet — « Σ crédits −
+      // Σ débits » ne se rapprochait plus d'aucun solde, et l'écart
+      // n'apparaissait qu'au rapprochement du lendemain, sans cause
+      // identifiable.
+      //
+      // La contrepartie est le portefeuille TECHNIQUE du projet, exactement
+      // comme pour le règlement d'une échéance (`pay-echeance.usecase.ts`) :
+      // c'est lui qui a reçu le produit de la vente, c'est de lui que part la
+      // distribution. Le débit est passé À LA FIN, pour le TOTAL réellement
+      // écrit — ainsi débit et crédits s'équilibrent au centime par
+      // construction, quels que soient les arrondis par investisseur.
+      const walletProjet = await this.findOrCreateWalletProjet(
+        em,
+        sortie.projetId,
+      );
+      let montantADebiter = 0;
 
       // Crédit du wallet FRAIS_PLATEFORME avec la performance fee
       if (performanceFee > 0) {
@@ -160,9 +196,11 @@ export class ExecuteSortieUseCase {
         walletPlat.solde = Number(walletPlat.solde) + performanceFee;
         await em.save(WalletEntity, walletPlat);
 
+        montantADebiter = round2(montantADebiter + performanceFee);
         await em.save(
           TransactionEntity,
           em.create(TransactionEntity, {
+            walletSource: walletProjet.id,
             walletDestination: walletPlat.id,
             type: TransactionType.SOUSCRIPTION,
             montant: performanceFee,
@@ -197,7 +235,7 @@ export class ExecuteSortieUseCase {
         }
 
         const capitalRembourse = round2(Number(inv.montant));
-        const pourcentage = Number(inv.montant) / capitalCible;
+        const pourcentage = Number(inv.montant) / collecteReelle;
         // PV distribuée = PV NETTE de performance fee × pourcentage détention
         const plusValuePart = round2(plusValueDistribuable * pourcentage);
 
@@ -210,6 +248,11 @@ export class ExecuteSortieUseCase {
         const netVerse = round2(
           capitalRembourse + plusValuePart - irPV - csgPV,
         );
+
+        // Ce qui sort RÉELLEMENT du projet pour cet investisseur : le net qui
+        // lui revient, plus les deux retenues fiscales consignées ailleurs.
+        // La somme de ces trois crédits, et elle seule, définit le débit.
+        montantADebiter = round2(montantADebiter + netVerse + irPV + csgPV);
 
         // Crédit wallet investisseur (peut être < capitalRembourse si moins-value)
         wallet.solde = Number(wallet.solde) + netVerse;
@@ -263,6 +306,7 @@ export class ExecuteSortieUseCase {
         await em.save(
           TransactionEntity,
           em.create(TransactionEntity, {
+            walletSource: walletProjet.id,
             walletDestination: wallet.id,
             type: TransactionType.REMBOURSEMENT_CAPITAL,
             montant: capitalRembourse,
@@ -282,6 +326,7 @@ export class ExecuteSortieUseCase {
           await em.save(
             TransactionEntity,
             em.create(TransactionEntity, {
+              walletSource: walletProjet.id,
               walletDestination: wallet.id,
               type: TransactionType.PAIEMENT_INTERETS,
               montant: plusValuePart,
@@ -301,6 +346,14 @@ export class ExecuteSortieUseCase {
           await em.save(
             TransactionEntity,
             em.create(TransactionEntity, {
+              // Source = l'INVESTISSEUR, pas le projet : la retenue est prélevée
+              // sur ce qui lui revient. Le projet lui verse le brut (capital +
+              // plus-value), il en reverse la part fiscale au séquestre. Sans
+              // cette orientation, le registre créditait l'investisseur du BRUT
+              // alors que son portefeuille ne reçoit que le NET, et le
+              // rapprochement affichait un écart égal à la retenue sur CHAQUE
+              // investisseur.
+              walletSource: wallet.id,
               walletDestination: walletIR.id,
               type: TransactionType.IMPOTS,
               montant: irPV,
@@ -319,6 +372,14 @@ export class ExecuteSortieUseCase {
           await em.save(
             TransactionEntity,
             em.create(TransactionEntity, {
+              // Source = l'INVESTISSEUR, pas le projet : la retenue est prélevée
+              // sur ce qui lui revient. Le projet lui verse le brut (capital +
+              // plus-value), il en reverse la part fiscale au séquestre. Sans
+              // cette orientation, le registre créditait l'investisseur du BRUT
+              // alors que son portefeuille ne reçoit que le NET, et le
+              // rapprochement affichait un écart égal à la retenue sur CHAQUE
+              // investisseur.
+              walletSource: wallet.id,
               walletDestination: walletCSG.id,
               type: TransactionType.IMPOTS,
               montant: csgPV,
@@ -350,6 +411,19 @@ export class ExecuteSortieUseCase {
         totalIR += irPV;
         totalCSG += csgPV;
       }
+
+      // ── DÉBIT DE LA CONTREPARTIE ────────────────────────────────────────
+      // Passé pour le total RÉELLEMENT écrit en crédits, et non pour un total
+      // théorique recalculé : débit et crédits s'équilibrent donc au centime,
+      // quels que soient les arrondis par investisseur.
+      //
+      // Découvert TOLÉRÉ et rendu VISIBLE, comme au règlement d'une échéance
+      // (`pay-echeance.usecase.ts`) : la distribution d'une sortie est une
+      // obligation envers des investisseurs dont le bien est déjà vendu, pas
+      // une dépense discrétionnaire. Refuser le débit transformerait un défaut
+      // d'alimentation du projet en impayé pour l'investisseur. On distribue,
+      // et l'écart devient un incident instruit plutôt qu'un silence.
+      await this.debiterProjet(em, walletProjet.id, montantADebiter, sortieId);
 
       // Transition projet → CLOTURE
       await this.projectRepo.updateProjectStatus(
@@ -400,5 +474,68 @@ export class ExecuteSortieUseCase {
     }
 
     return result;
+  }
+
+  /**
+   * Portefeuille TECHNIQUE du projet, verrouillé pour la durée de la
+   * transaction — créé s'il n'existe pas encore (projet dont la trésorerie
+   * n'a jamais été mouvementée).
+   *
+   * Verrou pessimiste : la sortie débite ce portefeuille en fin de parcours,
+   * après une série de lectures ; sans verrou, un règlement d'échéance
+   * concurrent pourrait s'intercaler entre le calcul et le débit.
+   */
+  private async findOrCreateWalletProjet(
+    em: EntityManager,
+    projetId: string,
+  ): Promise<WalletEntity> {
+    const existant = await em.findOne(WalletEntity, {
+      where: { projetId, type: WalletType.TECHNIQUE_PROJET },
+      lock: { mode: 'pessimistic_write' },
+    });
+    if (existant) return existant;
+
+    return em.save(
+      WalletEntity,
+      em.create(WalletEntity, {
+        type: WalletType.TECHNIQUE_PROJET,
+        proprietaireUserId: null,
+        projetId,
+        fournisseurRef: `PROJET-${projetId}`,
+        devise: 'EUR',
+        solde: 0,
+      }),
+    );
+  }
+
+  /**
+   * Débit atomique du portefeuille du projet. INCONDITIONNEL et assumé : voir
+   * l'appelant pour la justification du découvert toléré.
+   */
+  private async debiterProjet(
+    em: EntityManager,
+    walletId: string,
+    montant: number,
+    sortieId: string,
+  ): Promise<void> {
+    if (!montant) return;
+
+    const avant = await em.findOne(WalletEntity, { where: { id: walletId } });
+    const soldeApres = round2(Number(avant?.solde ?? 0) - montant);
+
+    await em
+      .createQueryBuilder()
+      .update(WalletEntity)
+      .set({ solde: () => 'solde - :montant' })
+      .setParameter('montant', montant)
+      .where('id = :id', { id: walletId })
+      .execute();
+
+    if (soldeApres < 0) {
+      this.logger.warn(
+        `Portefeuille projet ${walletId} en découvert de ${Math.abs(soldeApres).toFixed(2)} € ` +
+          `après distribution de la sortie ${sortieId}. Le projet doit être alimenté.`,
+      );
+    }
   }
 }
