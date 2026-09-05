@@ -1,4 +1,5 @@
 import { Test } from '@nestjs/testing';
+import { CacheModule } from '@nestjs/cache-manager';
 import { Reflector } from '@nestjs/core';
 import { IS_PUBLIC_KEY } from 'src/common/auth/public.decorator';
 import { PublicFeesController } from './public-fees.controller';
@@ -15,6 +16,11 @@ describe('PublicFeesController', () => {
 
   beforeEach(async () => {
     const moduleRef = await Test.createTestingModule({
+      // La route porte un `@UseInterceptors(CacheInterceptor)` : sans un
+      // CacheModule, Nest ne sait pas résoudre CACHE_MANAGER et refuse
+      // d'instancier le contrôleur. Magasin mémoire par défaut ici — c'est le
+      // câblage du cache qui est testé ailleurs, pas son stockage.
+      imports: [CacheModule.register()],
       controllers: [PublicFeesController],
       providers: [{ provide: PlatformFeesService, useValue: mockPlatformFees }],
     }).compile();
