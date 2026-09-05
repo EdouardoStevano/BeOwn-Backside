@@ -203,7 +203,11 @@ Colonne « Source » : `ConfigMap` = à mettre dans le ConfigMap (valeur non sen
 | `PLAFOND_INVESTISSEMENT_NON_AVERTI_EUR` | non | ConfigMap | **variable morte** : aucune lecture dans `src/`. Le plafond réel est codé en dur (`create-investment.usecase.ts:172`). La modifier ne change rien |
 | `PLAFOND_INVESTISSEMENT_AVERTI_EUR` | non | ConfigMap | **variable morte**, même constat |
 | `KYC_PROVIDER` | non | ConfigMap | **variable morte** : aucune lecture dans `src/`. Le choix Stripe Identity est câblé dans le code |
-| `LOG_LEVEL` | non | ConfigMap (`info`) | verbosité des journaux |
+| `LOG_LEVEL` | non | ConfigMap (`info`, **`warn` en production**) | verbosité des journaux. **`warn` est le réglage de production** : mesuré en charge, passer de `info` à `warn` divise le p95 par ~4 — à `info`, chaque requête écrit une ligne JSON sérialisée puis rédigée (redaction RGPD), et l'écriture est sur le chemin de la réponse. Posé dans `k8s/overlays/production/configmap-patch.yaml`. Ne pas remonter à `info` en production sans raison précise et sans le redescendre ensuite ; pour investiguer, préférer les traces (Tempo) et Sentry, qui ne coûtent rien au p95 |
+| `PG_POOL_MAX` | non | ConfigMap (`10`) | taille du pool de connexions PostgreSQL **par pod**. Règle à tenir : `maxReplicas` du HPA × `PG_POOL_MAX` ≤ `max_connections` de PostgreSQL, marge comprise pour l'administration, les sauvegardes et le cron. Aujourd'hui 6 × 10 = 60, sous le défaut de 100. Monter l'un des deux termes oblige à revérifier l'autre |
+| `THROTTLE_SHORT_TTL` / `THROTTLE_SHORT_LIMIT` | non | ConfigMap (`1000` / `500`) | filet global de débit, fenêtre courte. Une valeur non entière ou ≤ 0 **fait échouer le démarrage du pod** |
+| `THROTTLE_MEDIUM_TTL` / `THROTTLE_MEDIUM_LIMIT` | non | ConfigMap (`60000` / `2000`) | filet global de débit, fenêtre d'une minute. Même règle de validation |
+| `NODE_OPTIONS` | non | Deployment (`--max-old-space-size=384`) | borne du tas V8, à tenir à ~75 % de `resources.limits.memory` (512Mi). Sans elle, V8 se dimensionne sur la mémoire du **nœud** et le pod se fait OOMKiller avant que le ramasse-miettes ne s'active. Toute modification de la limite mémoire doit être répercutée ici |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | non | ConfigMap | vide = traces désactivées |
 | `OTEL_SERVICE_NAME` | non | ConfigMap (`beown-api`) | nom du service dans les traces |
 | `OTEL_DEPLOYMENT_ENVIRONMENT` | non | ConfigMap (overlay) | environnement dans les traces |

@@ -130,6 +130,10 @@ data:
   # communes ; SENTRY_ENVIRONMENT/OTEL_DEPLOYMENT_ENVIRONMENT sont surchargées
   # par overlay (voir overlays/<env>/configmap-patch.yaml). SENTRY_DSN et
   # METRICS_TOKEN sont des secrets (beown-backend-secrets), jamais ici.
+  # Valeur COMMUNE (dev, test, staging). ⚠ La production surcharge à 'warn'
+  # dans overlays/production/configmap-patch.yaml : mesuré en charge, `info`
+  # écrit une ligne JSON rédigée (redaction RGPD) par requête, sur le chemin
+  # de la réponse — passer à `warn` divise le p95 par environ 4.
   LOG_LEVEL: 'info'
   OTEL_EXPORTER_OTLP_ENDPOINT: 'http://alloy.monitoring.svc.cluster.local:4317'
   OTEL_SERVICE_NAME: 'beown-api'

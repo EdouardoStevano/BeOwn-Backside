@@ -15,3 +15,18 @@ data:
   LINKEDIN_CALLBACK_URL: 'https://api.beown.fr/auth/linkedin/callback'
   SENTRY_ENVIRONMENT: 'production'
   OTEL_DEPLOYMENT_ENVIRONMENT: 'production'
+
+  # Journalisation en production : `warn`, pas `info`.
+  #
+  # Mesuré en charge : à `info`, chaque requête écrit une ligne JSON —
+  # sérialisée puis passée à la rédaction RGPD (redaction pino), et écrite sur
+  # le chemin de la réponse. Passer à `warn` divise le p95 par environ 4.
+  #
+  # Ce qui est perdu : la trace d'accès par requête. Ce qui reste : tous les
+  # avertissements et erreurs applicatifs, les traces OpenTelemetry (Tempo) et
+  # Sentry — c'est-à-dire de quoi instruire un incident, sans payer une
+  # écriture disque par requête. Pour investiguer, remonter temporairement à
+  # `info` puis REDESCENDRE.
+  #
+  # Le défaut de développement (`info`, ConfigMap de base) est inchangé.
+  LOG_LEVEL: 'warn'
