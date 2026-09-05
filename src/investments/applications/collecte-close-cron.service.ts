@@ -1,4 +1,5 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional} from '@nestjs/common';
+import { VerrouCronService } from 'src/common/cron/verrou-cron.service';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { LessThanOrEqual, Repository } from 'typeorm';
@@ -36,10 +37,26 @@ export class CollecteCloseCronService {
     private readonly refundService: RefundCollecteService,
     private readonly metrics: MetricsPort,
     private readonly projectLedger: ProjectLedgerService,
+    // Verrou distribué, OPTIONNEL et en dernière position : `@Cron`
+    // s'exécute dans CHAQUE réplique. Son absence fait retomber sur le
+    // comportement antérieur (exécuter), jamais sur un échec.
+    @Optional() private readonly verrouCron?: VerrouCronService,
   ) {}
 
+  /**
+   * Point d'entrée planifié : n'exécute le balayage que si le verrou
+   * distribué est obtenu. Derrière un HPA, six répliques déclenchent
+   * sinon le même travail à la même seconde, sur les mêmes lignes.
+   */
   @Cron(CronExpression.EVERY_DAY_AT_8AM)
   async closeExpiredCollectes(): Promise<void> {
+    if (!this.verrouCron) return this.executerCloseExpiredCollectes();
+    await this.verrouCron.executerSiSeul('investments:collecte-close', () =>
+      this.executerCloseExpiredCollectes(),
+    );
+  }
+
+  async executerCloseExpiredCollectes(): Promise<void> {
     const now = new Date();
     const projects = await this.projectRepo.find({
       where: {

@@ -8,6 +8,7 @@ import { StockageFichiersPort } from 'src/rgpd/applications/ports/stockage-fichi
 import { AnonymizeAccountService } from 'src/rgpd/applications/anonymize-account.service';
 import { RgpdPurgeService } from 'src/rgpd/applications/rgpd-purge.service';
 import { RgpdPurgeCronService } from 'src/rgpd/applications/rgpd-purge-cron.service';
+import { VerrouCronService } from 'src/common/cron/verrou-cron.service';
 import { AdminRgpdController } from 'src/rgpd/presenters/http/admin-rgpd.controller';
 
 /**
@@ -37,6 +38,8 @@ import { AdminRgpdController } from 'src/rgpd/presenters/http/admin-rgpd.control
     AnonymizeAccountService,
     RgpdPurgeService,
     RgpdPurgeCronService,
+    // Verrou distribué des tâches planifiées de ce module.
+    VerrouCronService,
   ],
   controllers: [AdminRgpdController],
   exports: [AnonymizeAccountService],

@@ -37,6 +37,7 @@ import { ProjectScheduleGeneratorService } from './project-schedule-generator.se
 import { CollecteCloseCronService } from './collecte-close-cron.service';
 import { RefundCollecteService } from './refund-collecte.service';
 import { ConfirmRetractationCronService } from './confirm-retractation-cron.service';
+import { VerrouCronService } from 'src/common/cron/verrou-cron.service';
 import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entities/transaction.entity';
 import { WalletsModule } from 'src/wallets/applications/wallets.module';
 import { ConflitsInteretsModule } from 'src/projects/applications/conflits-interets.module';
@@ -98,6 +99,8 @@ import { ConflitsInteretsModule } from 'src/projects/applications/conflits-inter
     CollecteCloseCronService,
     RefundCollecteService,
     ConfirmRetractationCronService,
+    // Verrou distribué des tâches planifiées de ce module.
+    VerrouCronService,
   ],
   controllers: [InvestmentController],
   exports: [

@@ -1,4 +1,5 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
+import { VerrouCronService } from 'src/common/cron/verrou-cron.service';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, IsNull, LessThanOrEqual, Repository } from 'typeorm';
@@ -61,10 +62,29 @@ export class OrdresOrphelinsCronService {
     private readonly signatureRepo: Repository<SignatureEntity>,
     private readonly compensation: CessionCompensationService,
     private readonly notifications: NotificationService,
+    // Verrou distribué, OPTIONNEL et en dernière position : `@Cron` s'exécute
+    // dans CHAQUE réplique. Son absence fait retomber sur le comportement
+    // antérieur (exécuter), jamais sur un échec.
+    @Optional() private readonly verrouCron?: VerrouCronService,
   ) {}
 
+  /**
+   * Point d'entrée planifié : n'exécute le balayage que si le verrou distribué
+   * est obtenu. Derrière un HPA, six répliques compenseraient sinon les mêmes
+   * annonces à la même seconde — les écritures conditionnelles empêchent le
+   * double effet, mais les notifications partiraient en six exemplaires.
+   */
   @Cron(CronExpression.EVERY_HOUR)
   async libererOrdresOrphelins(maintenant: Date = new Date()): Promise<number> {
+    if (!this.verrouCron) return this.balayerOrdresOrphelins(maintenant);
+    const resultat = await this.verrouCron.executerSiSeul(
+      'secondaire:ordres-orphelins',
+      () => this.balayerOrdresOrphelins(maintenant),
+    );
+    return resultat ?? 0;
+  }
+
+  private async balayerOrdresOrphelins(maintenant: Date): Promise<number> {
     const limiteGrace = new Date(maintenant.getTime() - DELAI_GRACE_ACCEPTATION_MS);
 
     const candidats = await this.ordreRepo.find({

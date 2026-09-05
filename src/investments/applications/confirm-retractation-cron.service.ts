@@ -1,4 +1,5 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional} from '@nestjs/common';
+import { VerrouCronService } from 'src/common/cron/verrou-cron.service';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { DataSource, EntityManager, LessThan } from 'typeorm';
 import { InjectDataSource } from '@nestjs/typeorm';
@@ -48,10 +49,26 @@ export class ConfirmRetractationCronService {
     @InjectDataSource() private readonly dataSource: DataSource,
     private readonly projectWalletResolver: ResolveProjectWalletUseCase,
     private readonly bonusParrainage: AttribuerBonusParrainageService,
+    // Verrou distribué, OPTIONNEL et en dernière position : `@Cron`
+    // s'exécute dans CHAQUE réplique. Son absence fait retomber sur le
+    // comportement antérieur (exécuter), jamais sur un échec.
+    @Optional() private readonly verrouCron?: VerrouCronService,
   ) {}
 
+  /**
+   * Point d'entrée planifié : n'exécute le balayage que si le verrou
+   * distribué est obtenu. Derrière un HPA, six répliques déclenchent
+   * sinon le même travail à la même seconde, sur les mêmes lignes.
+   */
   @Cron(CronExpression.EVERY_HOUR)
   async confirmExpiredRetractationDelays(): Promise<void> {
+    if (!this.verrouCron) return this.executerConfirmExpiredRetractationDelays();
+    await this.verrouCron.executerSiSeul('investments:confirm-retractation', () =>
+      this.executerConfirmExpiredRetractationDelays(),
+    );
+  }
+
+  async executerConfirmExpiredRetractationDelays(): Promise<void> {
     const now = new Date();
 
     const echus = await this.dataSource.getRepository(InvestmentEntity).find({

@@ -1,4 +1,5 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional} from '@nestjs/common';
+import { VerrouCronService } from 'src/common/cron/verrou-cron.service';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { LessThanOrEqual, Repository } from 'typeorm';
@@ -81,10 +82,26 @@ export class RetraitsReaperService {
     private readonly stripeConnect: StripeConnectService,
     private readonly settlement: RetraitSettlementService,
     private readonly notificationService: NotificationService,
+    // Verrou distribué, OPTIONNEL et en dernière position : `@Cron`
+    // s'exécute dans CHAQUE réplique. Son absence fait retomber sur le
+    // comportement antérieur (exécuter), jamais sur un échec.
+    @Optional() private readonly verrouCron?: VerrouCronService,
   ) {}
 
+  /**
+   * Point d'entrée planifié : n'exécute le balayage que si le verrou
+   * distribué est obtenu. Derrière un HPA, six répliques déclenchent
+   * sinon le même travail à la même seconde, sur les mêmes lignes.
+   */
   @Cron(CronExpression.EVERY_HOUR, { name: 'retraits-reaper' })
   async balayerRetraitsEnCours(): Promise<void> {
+    if (!this.verrouCron) return this.executerBalayerRetraitsEnCours();
+    await this.verrouCron.executerSiSeul('payments:retraits-reaper', () =>
+      this.executerBalayerRetraitsEnCours(),
+    );
+  }
+
+  async executerBalayerRetraitsEnCours(): Promise<void> {
     try {
       const resultat = await this.reap();
       if (resultat.verifies === 0) {

@@ -1,4 +1,5 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional} from '@nestjs/common';
+import { VerrouCronService } from 'src/common/cron/verrou-cron.service';
 import { Cron } from '@nestjs/schedule';
 import { ReconciliationService } from './reconciliation.service';
 
@@ -19,10 +20,28 @@ import { ReconciliationService } from './reconciliation.service';
 export class ReconciliationCronService {
   private readonly logger = new Logger(ReconciliationCronService.name);
 
-  constructor(private readonly reconciliation: ReconciliationService) {}
+  constructor(
+    private readonly reconciliation: ReconciliationService,
+    // Verrou distribué, OPTIONNEL et en dernière position : `@Cron` s'exécute
+    // dans CHAQUE réplique. Son absence fait retomber sur le comportement
+    // antérieur (exécuter), jamais sur un échec.
+    @Optional() private readonly verrouCron?: VerrouCronService,
+  ) {}
 
+  /**
+   * Point d'entrée planifié : n'exécute le balayage que si le verrou
+   * distribué est obtenu. Derrière un HPA, six répliques déclenchent
+   * sinon le même travail à la même seconde, sur les mêmes lignes.
+   */
   @Cron('0 30 5 * * *', { name: 'reconciliation-grand-livre' })
   async reconcilierQuotidiennement(): Promise<void> {
+    if (!this.verrouCron) return this.executerReconcilierQuotidiennement();
+    await this.verrouCron.executerSiSeul('wallets:reconciliation', () =>
+      this.executerReconcilierQuotidiennement(),
+    );
+  }
+
+  async executerReconcilierQuotidiennement(): Promise<void> {
     try {
       const rapport = await this.reconciliation.reconcilier();
       this.logger.log(

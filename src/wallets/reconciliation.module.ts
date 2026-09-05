@@ -10,6 +10,7 @@ import { PlateformeBalanceReader } from './applications/ports/plateforme-balance
 import { StripePlateformeBalanceAdapter } from './infrastructure/stripe-plateforme-balance.adapter';
 import { ReconciliationService } from './applications/reconciliation.service';
 import { ReconciliationCronService } from './applications/reconciliation-cron.service';
+import { VerrouCronService } from 'src/common/cron/verrou-cron.service';
 import { AdminReconciliationController } from './presenters/http/admin-reconciliation.controller';
 
 /**
@@ -49,6 +50,8 @@ import { AdminReconciliationController } from './presenters/http/admin-reconcili
     { provide: PlateformeBalanceReader, useClass: StripePlateformeBalanceAdapter },
     ReconciliationService,
     ReconciliationCronService,
+    // Verrou distribué des tâches planifiées de ce module.
+    VerrouCronService,
   ],
   exports: [ReconciliationService],
 })

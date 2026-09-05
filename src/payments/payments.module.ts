@@ -21,6 +21,7 @@ import { AmlModule } from 'src/common/aml/aml.module';
 import { DepotCleanupCronService } from './applications/depot-cleanup-cron.service';
 import { RetraitSettlementService } from './applications/services/retrait-settlement.service';
 import { RetraitsReaperService } from './applications/retraits-reaper.service';
+import { VerrouCronService } from 'src/common/cron/verrou-cron.service';
 import { AdminRetraitsReapController } from './presenters/http/admin-retraits-reap.controller';
 import { KycEntity } from 'src/profiles/infrastructure/persistences/entities/kyc.entity';
 import { KycValidatedGuard } from 'src/common/auth/kyc-validated.guard';
@@ -95,6 +96,8 @@ import {
     // séquence, donc aucune divergence possible entre les deux.
     RetraitSettlementService,
     RetraitsReaperService,
+    // Verrou distribué des tâches planifiées de ce module.
+    VerrouCronService,
     CrediterApportPorteurUseCase,
     VerserPorteurUseCase,
     GetPorteurTresorerieUseCase,

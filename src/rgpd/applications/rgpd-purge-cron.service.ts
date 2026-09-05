@@ -1,4 +1,5 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional} from '@nestjs/common';
+import { VerrouCronService } from 'src/common/cron/verrou-cron.service';
 import { Cron } from '@nestjs/schedule';
 import { RgpdPurgeService } from 'src/rgpd/applications/rgpd-purge.service';
 
@@ -19,10 +20,26 @@ import { RgpdPurgeService } from 'src/rgpd/applications/rgpd-purge.service';
 export class RgpdPurgeCronService {
   private readonly logger = new Logger(RgpdPurgeCronService.name);
 
-  constructor(private readonly purge: RgpdPurgeService) {}
+  constructor(private readonly purge: RgpdPurgeService,
+    // Verrou distribué, OPTIONNEL et en dernière position : `@Cron`
+    // s'exécute dans CHAQUE réplique. Son absence fait retomber sur le
+    // comportement antérieur (exécuter), jamais sur un échec.
+    @Optional() private readonly verrouCron?: VerrouCronService,) {}
 
+  /**
+   * Point d'entrée planifié : n'exécute le balayage que si le verrou
+   * distribué est obtenu. Derrière un HPA, six répliques déclenchent
+   * sinon le même travail à la même seconde, sur les mêmes lignes.
+   */
   @Cron('0 45 3 * * *', { name: 'rgpd-purge' })
   async purgerQuotidiennement(): Promise<void> {
+    if (!this.verrouCron) return this.executerPurgerQuotidiennement();
+    await this.verrouCron.executerSiSeul('rgpd:purge', () =>
+      this.executerPurgerQuotidiennement(),
+    );
+  }
+
+  async executerPurgerQuotidiennement(): Promise<void> {
     try {
       const rapport = await this.purge.purger();
       this.logger.log(
