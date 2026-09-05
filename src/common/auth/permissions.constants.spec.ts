@@ -153,6 +153,53 @@ describe('permissions.constants', () => {
     });
   });
 
+  /**
+   * Les pièces du dossier KYC (identité, selfie, domicile, revenu) étaient
+   * lisibles sous `users:read` — support, marketing, chargé de relation
+   * investisseur, dpo — et sous `data:export` — marketing, dpo. Deux
+   * permissions dédiées referment l'accès sur la conformité.
+   */
+  describe('pièces KYC : lecture et archive', () => {
+    it('la lecture des pièces KYC est la conformité et elle seule', () => {
+      expect(rolesWithPermission('kyc:read_documents')).toEqual([
+        UserRole.SUPER_ADMIN,
+        UserRole.COMPLIANCE,
+      ]);
+    });
+
+    it("l'archive de conservation légale est la conformité et elle seule", () => {
+      expect(rolesWithPermission('kyc:read_archive')).toEqual([
+        UserRole.SUPER_ADMIN,
+        UserRole.COMPLIANCE,
+      ]);
+    });
+
+    it.each([
+      [UserRole.SUPPORT],
+      [UserRole.MARKETING],
+      [UserRole.CHARGE_RELATION_INVESTISSEUR],
+      [UserRole.DPO],
+      [UserRole.RCCI],
+      [UserRole.ANALYSTE_FINANCIER],
+      [UserRole.CIO],
+    ])('%s garde l’annuaire mais perd les pièces KYC', (role) => {
+      expect(hasPermission(role, 'kyc:read_documents')).toBe(false);
+      expect(hasPermission(role, 'kyc:read_archive')).toBe(false);
+    });
+
+    /**
+     * Le barème ouvre l'archive au « rôle conformité/DPO ». Chez BeOwn, le rôle
+     * `dpo` n'instruit pas les dossiers d'entrée en relation : lui ouvrir
+     * l'archive élargirait l'accès au lieu de le restreindre — c'est
+     * `compliance` qui porte la fonction visée par le barème.
+     */
+    it('dpo : ni les pièces, ni l’archive — décision explicite, pas un oubli', () => {
+      expect(hasPermission(UserRole.DPO, 'kyc:read_documents')).toBe(false);
+      expect(hasPermission(UserRole.DPO, 'kyc:read_archive')).toBe(false);
+      expect(hasPermission(UserRole.DPO, 'users:read')).toBe(true);
+    });
+  });
+
   it('la matrice couvre tous les rôles (snapshot anti-régression)', () => {
     expect(ROLE_PERMISSIONS).toMatchSnapshot();
   });

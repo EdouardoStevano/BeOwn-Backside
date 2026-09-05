@@ -110,6 +110,10 @@ export class DocumentTypeOrmRepository implements DocumentRepository {
     doc.uploadedBy = e.uploadedBy;
     doc.ordre = e.ordre;
     doc.estPrincipale = e.estPrincipale;
+    // `?? false` : les lignes écrites avant la pose de la colonne sur un
+    // environnement déployé rendent `undefined` — une pièce sans marqueur n'est
+    // pas archivée.
+    doc.archiveConservationLegale = e.archiveConservationLegale ?? false;
     doc.createdAt = e.createdAt;
     return doc;
   }

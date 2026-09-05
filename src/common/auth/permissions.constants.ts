@@ -66,7 +66,42 @@ export type Permission =
    * rôle qui instruit les dossiers d'entrée en relation. Minimisation RGPD
    * art. 5.1.c.
    */
-  | 'profiles:read_sensitive';
+  | 'profiles:read_sensitive'
+  /**
+   * Lire les PIÈCES du dossier KYC d'un autre compte — pièce d'identité,
+   * selfie, justificatif de domicile, justificatif de revenu — c'est-à-dire les
+   * fichiers eux-mêmes, leurs métadonnées et leur URL de téléchargement signée.
+   *
+   * Permission DISTINCTE de `users:read` : l'annuaire sert à désigner une
+   * personne, pas à ouvrir la photo de sa carte d'identité. `users:read` est
+   * détenue par support, marketing, chargé de relation investisseur, dpo et
+   * compliance — et `GET /documents/user/:userId` la leur suffisait, ainsi que
+   * `data:export` (marketing, dpo), pour lister ET télécharger tout le dossier.
+   *
+   * Accordée à `compliance` seul — le rôle qui instruit les dossiers d'entrée
+   * en relation et rend les décisions KYC (`kyc:validate`) ; `super_admin` l'a
+   * par le joker. Séparée de `kyc:validate` par ISP : décider n'est pas lire,
+   * et un futur rôle de revue pourra lire sans décider.
+   */
+  | 'kyc:read_documents'
+  /**
+   * Lire les pièces KYC placées en ARCHIVAGE RESTREINT
+   * (`document.archiveConservationLegale`) : celles d'un compte supprimé,
+   * conservées cinq ans après la clôture de la relation au titre de
+   * l'art. L. 561-12 CMF et purgées ensuite par le cron RGPD.
+   *
+   * Le barème (§ 2.3, note d'implémentation) exige que la restriction soit
+   * APPLICATIVE, Cloudinary n'ayant pas d'accès restreint natif : le marqueur
+   * ne servait à rien tant qu'aucune lecture ne le filtrait. « Archivé » veut
+   * dire sorti des écrans courants — y compris de ceux de la conformité en
+   * usage ordinaire — et n'est ré-ouvert que par un accès explicitement dédié.
+   *
+   * Accordée à `compliance` seul (`super_admin` par le joker), conformément au
+   * barème : « accès rôle conformité/DPO uniquement ». Le dpo de BeOwn n'a pas
+   * `kyc:validate` et n'instruit pas les dossiers : lui ouvrir l'archive
+   * élargirait l'accès au lieu de le restreindre.
+   */
+  | 'kyc:read_archive';
 
 const WILDCARD = '*' as const;
 type Wildcard = typeof WILDCARD;
@@ -107,6 +142,8 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[] | [Wildcard]> = {
     'reports:read',
     'porteur_access:review',
     'profiles:read_sensitive',
+    'kyc:read_documents',
+    'kyc:read_archive',
   ],
   [UserRole.MARKETING]: [
     'data:export',

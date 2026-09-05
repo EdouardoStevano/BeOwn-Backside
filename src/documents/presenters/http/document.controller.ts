@@ -51,6 +51,7 @@ import {
   UploadDocumentDto,
 } from '../dto/document.dto';
 import { CloudStorageService } from 'src/shared/cloud-storage/cloud-storage.service';
+import { estPieceKyc } from 'src/rgpd/domains/retention-policy';
 
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
 const ALLOWED_MIME = [
@@ -75,7 +76,12 @@ export class DocumentController {
     private readonly investmentRepo: Repository<InvestmentEntity>,
   ) {}
 
-  private canReadUserDocuments(
+  /**
+   * Premier niveau : le compte peut-il seulement CONSULTER LA LISTE des pièces
+   * d'un utilisateur ? Inchangé — c'est l'accès à l'annuaire documentaire, pas
+   * aux pièces sensibles, que le second niveau filtre ensuite pièce par pièce.
+   */
+  private canListUserDocuments(
     user: ActiveUser,
     ownerUserId: number | null,
   ): boolean {
@@ -86,6 +92,41 @@ export class DocumentController {
       hasPermission(user.role, 'kyc:validate') ||
       hasPermission(user.role, 'data:export')
     );
+  }
+
+  /**
+   * Second niveau : cette PIÈCE PRÉCISE est-elle lisible ?
+   *
+   * Deux verrous que le premier niveau ne posait pas, et qui manquaient
+   * entièrement :
+   *
+   *  1. **Pièces KYC** (identité, selfie, justificatif de domicile,
+   *     justificatif de revenu) : `kyc:read_documents` exigée. `users:read`
+   *     ouvrait jusqu'ici la photo de la carte d'identité de n'importe quel
+   *     compte à support, marketing et chargé de relation investisseur ;
+   *     `data:export` en faisait autant pour marketing.
+   *  2. **Pièces en archivage restreint** (`archiveConservationLegale`, dossier
+   *     KYC d'un compte supprimé conservé 5 ans, L. 561-12 CMF) :
+   *     `kyc:read_archive` exigée, conformité seule. Le marqueur existait en
+   *     base depuis le lot 2 et n'était filtré par AUCUNE lecture — un compte
+   *     « supprimé » restait donc consultable comme avant par tout détenteur de
+   *     `users:read`, ce qui vidait l'archivage restreint de son sens.
+   *
+   * Les deux verrous se cumulent : une pièce KYC archivée demande les deux
+   * permissions. Le propriétaire de la pièce garde l'accès à ses propres
+   * documents courants — mais pas à ceux qui ont basculé en archive, que le
+   * barème veut hors de tout écran applicatif courant.
+   */
+  private canReadUserDocument(user: ActiveUser, doc: Document): boolean {
+    if (doc.archiveConservationLegale) {
+      return hasPermission(user.role, 'kyc:read_archive');
+    }
+    if (doc.userId !== null && doc.userId === user.userId) return true;
+    if (!this.canListUserDocuments(user, doc.userId)) return false;
+    if (estPieceKyc(doc.type)) {
+      return hasPermission(user.role, 'kyc:read_documents');
+    }
+    return true;
   }
 
   private canManageProject(user: ActiveUser, project: ProjectEntity): boolean {
@@ -182,12 +223,17 @@ export class DocumentController {
     user: ActiveUser,
     doc: Document,
   ): Promise<void> {
-    if (doc.uploadedBy === user.userId) return;
-
+    // Les pièces d'un dossier utilisateur sont jugées AVANT le raccourci
+    // « c'est moi qui l'ai téléversée » : un administrateur qui a déposé la
+    // pièce d'identité d'un tiers ne doit pas garder un droit de lecture
+    // personnel dessus après avoir perdu l'habilitation KYC, et une pièce
+    // archivée ne se rouvre pas parce qu'on l'a soi-même déposée.
     if (doc.relatedTo === DocumentRelatedTo.USER) {
-      if (this.canReadUserDocuments(user, doc.userId)) return;
+      if (this.canReadUserDocument(user, doc)) return;
       throw new NotFoundException('Document introuvable.');
     }
+
+    if (doc.uploadedBy === user.userId) return;
 
     if (doc.relatedTo === DocumentRelatedTo.PROJECT) {
       if (doc.isPublic) return;
@@ -213,10 +259,20 @@ export class DocumentController {
     user: ActiveUser,
     doc: Document,
   ): Promise<void> {
-    if (doc.uploadedBy === user.userId) return;
+    // Une pièce en archivage restreint n'est supprimable PAR PERSONNE : sa
+    // conservation est une obligation légale de cinq ans (art. L. 561-12 CMF)
+    // et son unique voie de sortie est le cron de purge RGPD, à l'échéance.
+    // Rien ne l'interdisait : `users:manage` ou `kyc:validate` suffisaient à
+    // détruire un dossier que la loi impose de garder.
+    if (doc.archiveConservationLegale) {
+      throw new ForbiddenException(
+        'Pièce en archivage de conservation légale : suppression impossible.',
+      );
+    }
 
     if (doc.relatedTo === DocumentRelatedTo.USER) {
       if (
+        doc.uploadedBy === user.userId ||
         hasPermission(user.role, 'users:manage') ||
         hasPermission(user.role, 'kyc:validate')
       ) {
@@ -224,6 +280,8 @@ export class DocumentController {
       }
       throw new NotFoundException('Document introuvable.');
     }
+
+    if (doc.uploadedBy === user.userId) return;
 
     if (doc.relatedTo === DocumentRelatedTo.PROJECT) {
       if (!doc.projectId) throw new NotFoundException('Document introuvable.');
@@ -340,22 +398,33 @@ export class DocumentController {
   @ApiOperation({ summary: 'Mes documents' })
   @ApiResponse({ status: 200, description: 'Liste des documents' })
   @Get('me')
-  getMyDocuments(@CurrentUser() user: ActiveUser) {
-    return this.documentRepository.findByUserId(user.userId);
+  async getMyDocuments(@CurrentUser() user: ActiveUser) {
+    const docs = await this.documentRepository.findByUserId(user.userId);
+    // Une pièce archivée n'appartient qu'à un compte supprimé, qui ne peut plus
+    // s'authentifier : le filtre est théorique. Il est posé quand même parce
+    // que « archivage restreint » veut dire « hors de tout écran courant », et
+    // qu'un marqueur qui ne dépend pas de l'appelant ne doit pas avoir une
+    // exception par route.
+    return docs.filter((d) => !d.archiveConservationLegale);
   }
 
   @ApiOperation({ summary: "Documents d'un utilisateur" })
   @ApiParam({ name: 'userId', description: "ID numerique de l'utilisateur" })
   @ApiResponse({ status: 200, description: 'Liste des documents' })
   @Get('user/:userId')
-  getByUser(
+  async getByUser(
     @Param('userId', ParseIntPipe) userId: number,
     @CurrentUser() user: ActiveUser,
   ) {
-    if (!this.canReadUserDocuments(user, userId)) {
+    if (!this.canListUserDocuments(user, userId)) {
       throw new ForbiddenException('Acces refuse.');
     }
-    return this.documentRepository.findByUserId(userId);
+    // Le 403 ne porte que sur l'accès à la liste ; ce qu'elle CONTIENT est
+    // filtré pièce par pièce. Un rôle sans `kyc:read_documents` voit donc que
+    // le compte a des documents, sans voir les pièces d'identité — et sans
+    // apprendre, par un refus global, qu'il y en a.
+    const docs = await this.documentRepository.findByUserId(userId);
+    return docs.filter((d) => this.canReadUserDocument(user, d));
   }
 
   @ApiOperation({ summary: 'Documents publics d un projet' })
