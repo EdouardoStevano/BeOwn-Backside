@@ -1,4 +1,6 @@
+import { Logger } from '@nestjs/common';
 import { RegisterUseCase } from './register.usecase';
+import { CGU_VERSION_PAR_DEFAUT } from 'src/iam/domains/cgu-version';
 import {
   CguNotAcceptedError,
   EmailAlreadyRegisteredError,
@@ -105,8 +107,6 @@ describe('RegisterUseCase', () => {
   it.each([
     ['absence du champ', { ...INPUT, accepteCgu: undefined }],
     ['acceptation à false', { ...INPUT, accepteCgu: false }],
-    ['version vide', { ...INPUT, cguVersion: '   ' }],
-    ['version absente', { ...INPUT, cguVersion: undefined }],
   ])(
     'refuse l’inscription sans consentement CGU exploitable : %s',
     async (_cas, entree) => {
@@ -122,4 +122,71 @@ describe('RegisterUseCase', () => {
       expect(eventBus.publish).not.toHaveBeenCalled();
     },
   );
+
+  /**
+   * La version archivée est une PREUVE de consentement (art. 7.1 RGPD) : elle
+   * venait du corps de requête, donc du client, qui pouvait déclarer avoir
+   * accepté « 99.0 » ou un texte n'ayant jamais existé. Le serveur décide.
+   */
+  describe('version des CGU décidée par le SERVEUR', () => {
+    const versionArchivee = (userFactory: { create: jest.Mock }) =>
+      userFactory.create.mock.calls[0][0].cguAcceptation.version;
+
+    it('archive la version en vigueur, pas celle envoyée par le client', async () => {
+      const { usecase, userFactory } = makeUsecase();
+
+      await usecase.execute({ ...INPUT, cguVersion: '99.0' } as any);
+
+      expect(versionArchivee(userFactory)).toBe(CGU_VERSION_PAR_DEFAUT);
+    });
+
+    it("accepte une inscription SANS champ de version (le client n'en décide plus)", async () => {
+      const { usecase, userFactory, userRepository } = makeUsecase();
+
+      await usecase.execute({ ...INPUT, cguVersion: undefined } as any);
+
+      expect(userRepository.save).toHaveBeenCalled();
+      expect(versionArchivee(userFactory)).toBe(CGU_VERSION_PAR_DEFAUT);
+    });
+
+    it('suit CGU_VERSION_COURANTE quand elle est posée', async () => {
+      const precedente = process.env.CGU_VERSION_COURANTE;
+      process.env.CGU_VERSION_COURANTE = '2.0';
+      try {
+        const { usecase, userFactory } = makeUsecase();
+
+        await usecase.execute(INPUT);
+
+        expect(versionArchivee(userFactory)).toBe('2.0');
+      } finally {
+        if (precedente === undefined) delete process.env.CGU_VERSION_COURANTE;
+        else process.env.CGU_VERSION_COURANTE = precedente;
+      }
+    });
+
+    it('une divergence est SIGNALÉE, jamais rejetée (fronts en transition)', async () => {
+      const avertir = jest
+        .spyOn(Logger.prototype, 'warn')
+        .mockImplementation(() => undefined);
+      const { usecase, userRepository } = makeUsecase();
+
+      await usecase.execute({ ...INPUT, cguVersion: '0.9' } as any);
+
+      expect(userRepository.save).toHaveBeenCalled();
+      expect(avertir).toHaveBeenCalledWith(expect.stringContaining('0.9'));
+      avertir.mockRestore();
+    });
+
+    it('aucun avertissement quand le client affiche la bonne version', async () => {
+      const avertir = jest
+        .spyOn(Logger.prototype, 'warn')
+        .mockImplementation(() => undefined);
+      const { usecase } = makeUsecase();
+
+      await usecase.execute({ ...INPUT, cguVersion: CGU_VERSION_PAR_DEFAUT });
+
+      expect(avertir).not.toHaveBeenCalled();
+      avertir.mockRestore();
+    });
+  });
 });

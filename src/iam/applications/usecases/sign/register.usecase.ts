@@ -16,6 +16,7 @@ import {
 } from 'src/iam/domains/ports/user.repository';
 import { User } from 'src/iam/domains/models/user';
 import { UserRegisteredDomainEvent } from 'src/iam/domains/events/user-registered.domain-event';
+import { versionCguCourante } from 'src/iam/domains/cgu-version';
 
 /**
  * Entrée du sign-up, exprimée par la couche applicative.
@@ -38,7 +39,11 @@ export interface RegisterInput {
    * de validation générique, sans code exploitable par le front).
    */
   accepteCgu?: boolean;
-  /** Version des CGU affichée par le client au moment de l'acceptation. */
+  /**
+   * Version des CGU AFFICHÉE par le client. N'est plus ce qui est archivé —
+   * c'est le serveur qui décide (cf. `versionCguCourante`) — mais un simple
+   * contrôle de cohérence : une divergence est journalisée, jamais rejetée.
+   */
   cguVersion?: string;
   /** IP de la requête d'inscription (req.ip, trust proxy réglé dans main.ts). */
   cguAcceptationIp?: string | null;
@@ -73,14 +78,27 @@ export class RegisterUseCase {
 
   async execute(registerDto: RegisterInput): Promise<User> {
     // Consentement CGU (lot 2 RGPD) : aucune inscription sans acceptation
-    // EXPLICITE (`=== true` — ni false, ni absent, ni truthy) NI sans version
-    // identifiable du texte accepté. La validation front n'est jamais une
-    // preuve ; c'est ce refus serveur qui fait foi. Les comptes créés AVANT ce
-    // lot gardent `cguAccepteesLe` null — aucun backfill, un consentement ne
-    // se reconstitue pas a posteriori (art. 7.1 RGPD).
-    const cguVersion = registerDto.cguVersion?.trim();
-    if (registerDto.accepteCgu !== true || !cguVersion) {
+    // EXPLICITE (`=== true` — ni false, ni absent, ni truthy). La validation
+    // front n'est jamais une preuve ; c'est ce refus serveur qui fait foi. Les
+    // comptes créés AVANT ce lot gardent `cguAccepteesLe` null — aucun
+    // backfill, un consentement ne se reconstitue pas a posteriori (art. 7.1).
+    if (registerDto.accepteCgu !== true) {
       throw new CguNotAcceptedError();
+    }
+
+    // La VERSION archivée vient du serveur, jamais du corps de requête : elle
+    // fait preuve, et une preuve que la partie intéressée rédige elle-même
+    // n'en est pas une. Le champ client ne sert plus qu'à repérer un front qui
+    // affichait un autre texte — signalé, jamais rejeté, pour ne pas casser
+    // les clients en cours de mise à jour.
+    const cguVersion = versionCguCourante();
+    const versionAffichee = registerDto.cguVersion?.trim();
+    if (versionAffichee && versionAffichee !== cguVersion) {
+      this.logger.warn(
+        `Version de CGU divergente à l'inscription : le client affichait ` +
+          `« ${versionAffichee} », la version en vigueur est « ${cguVersion} ». ` +
+          `C'est cette dernière qui est archivée.`,
+      );
     }
 
     const existing = await this.userRepository.findByEmail(registerDto.email);

@@ -775,6 +775,22 @@ export class SeedService {
         adresse: '8 rue Auguste Babet', codePostal: '97410', ville: 'Saint-Pierre', pays: 'FR',
         telephone: '+262 692 34 56 78', patrimoine: null,
       },
+      // inv7 / inv8 — personas d'ACCÈS PORTEUR. Ils n'avaient ni profil PP ni
+      // dossier KYC : le gating KYC bloquait donc toute action financière, et
+      // la recette de bout en bout du parcours porteur (soumettre un projet,
+      // déclarer un loyer, suivre une trésorerie) s'arrêtait à la première
+      // porte — sur un compte qui, par construction, est censé l'avoir
+      // franchie. Profil complet + KYC VALIDE plus bas.
+      {
+        u: uInv7, civilite: 'Mme', profession: 'Architecte', cat: CategorieInvestisseur.NON_AVERTI,
+        adresse: '17 rue Jean Chatel', codePostal: '97400', ville: 'Saint-Denis', pays: 'FR',
+        telephone: '+262 692 11 22 33', patrimoine: 145_000,
+      },
+      {
+        u: uInv8, civilite: 'M.', profession: 'Gérant de société', cat: CategorieInvestisseur.AVERTI,
+        adresse: '3 chemin des Cocotiers', codePostal: '97434', ville: 'Saint-Gilles-les-Bains', pays: 'FR',
+        telephone: '+262 692 44 55 66', patrimoine: 620_000,
+      },
     ];
     for (const p of ppData) {
       await this.profilPPRepo.save(
@@ -821,11 +837,13 @@ export class SeedService {
       } as any),
     );
 
-    // KYC — états variés répartis sur les 6 investisseurs :
+    // KYC — états variés répartis sur les investisseurs :
     //  inv1/inv2/inv3 : VALIDE ; inv4 : AUCUN dossier (non commencé, persona
     //  gating) ; inv5 : REFUSE avec motif ; inv6 (PM) : EN_REVUE (revue
-    //  manuelle admin, niveau renforcé).
-    for (const u of [uInv1, uInv2, uInv3]) {
+    //  manuelle admin, niveau renforcé) ; inv7/inv8 : VALIDE — ce sont les
+    //  personas d'accès porteur, et un parcours porteur de bout en bout n'a
+    //  aucun sens depuis un compte que le gating KYC arrête au premier geste.
+    for (const u of [uInv1, uInv2, uInv3, uInv7, uInv8]) {
       await this.kycRepo.save(
         this.kycRepo.create({
           utilisateurId: u.userId,
@@ -2349,8 +2367,8 @@ Deux appartements (T3 et T2) dans une résidence récente du Tampon, tous deux l
     this.logger.log('  inv4 Jean-Hugues Técher  KYC NON COMMENCÉ (aucun dossier, aucun wallet) — persona gating');
     this.logger.log('  inv5 Marie Payet      KYC REFUSÉ (motif visible côté admin)');
     this.logger.log('  inv6 Grondin Invest   PM — KYC EN REVUE manuelle');
-    this.logger.log("  inv7 Nadia Rivière    demande d'accès porteur SOUMISE (à instruire)");
-    this.logger.log('  inv8 Téo Lebon        DOUBLE ACCÈS : investisseur + espace porteur ouvert');
+    this.logger.log("  inv7 Nadia Rivière    KYC validé — demande d'accès porteur SOUMISE (à instruire)");
+    this.logger.log('  inv8 Téo Lebon        KYC validé — DOUBLE ACCÈS : investisseur + espace porteur ouvert');
     this.logger.log(line);
     this.logger.log('Projets :');
     this.logger.log('  A  Résidence Les Jardins   en_exploitation — 3 distributions versées, sortie projetée');

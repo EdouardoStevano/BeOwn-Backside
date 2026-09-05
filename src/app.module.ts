@@ -34,6 +34,7 @@ import { AvisModule } from './avis/applications/avis.module';
 import { ReclamationsModule } from './reclamations/reclamations.module';
 import { NewsModule } from './news/news.module';
 import { KpiModule } from './kpi/kpi.module';
+import { ExchangeRatesModule } from './shared/exchange-rates/exchange-rates.module';
 import { LocativeManagementModule } from './locative-management/applications/locative-management.module';
 import { DistributionsModule } from './distributions/applications/distributions.module';
 import { FiscaliteModule } from './fiscalite/applications/fiscalite.module';
@@ -146,6 +147,9 @@ function requireEnv(name: string): string {
     ReclamationsModule,
     NewsModule,
     KpiModule,
+    // Proxy serveur des taux de change : la clé du fournisseur quitte le
+    // bundle du front, où elle était inlinée et donc publique.
+    ExchangeRatesModule,
     AdminModule,
     CgpModule,
     LocativeManagementModule,

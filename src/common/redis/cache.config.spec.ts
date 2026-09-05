@@ -116,4 +116,52 @@ describe('buildCacheModuleOptions', () => {
 
     expect(optionsUrl).toContain(`${host}:${port}`);
   });
+
+  /**
+   * S4 — CRASH DU PROCESSUS SUR PANNE REDIS.
+   *
+   * Sur un `EventEmitter` de Node, l'émission d'un `'error'` SANS AUCUN
+   * ÉCOUTEUR est relancée en exception non capturée : le processus meurt. Le
+   * client node-redis émet `'error'` à chaque échec de connexion et retente
+   * indéfiniment — une indisponibilité de Redis suffisait donc à faire tomber
+   * le pod, puis le suivant, en boucle de redémarrage.
+   *
+   * Mesuré avant correction : `store.client.listenerCount('error') === 0`,
+   * alors que le commentaire du fichier affirmait que @keyv/redis s'en
+   * chargeait.
+   */
+  describe('résilience : écouteurs d’erreur', () => {
+    it("le client node-redis sous-jacent a un écouteur 'error'", () => {
+      const client: any = (options.stores[0] as any).store?.client;
+
+      expect(client).toBeDefined();
+      expect(client.listenerCount('error')).toBeGreaterThan(0);
+    });
+
+    /**
+     * Assertion COMPORTEMENTALE, et non par comptage : `Keyv` v5 et le store
+     * @keyv/redis n'exposent pas `listenerCount`. Ce qui compte de toute façon
+     * n'est pas le nombre d'écouteurs mais le fait qu'un `'error'` ne remonte
+     * pas — c'est exactement le crash observé.
+     */
+    it.each([
+      ['client node-redis', (o: any) => o.stores[0].store.client],
+      ['store @keyv/redis', (o: any) => o.stores[0].store],
+      ['magasin Keyv', (o: any) => o.stores[0]],
+    ])("un 'error' émis par %s ne remonte PAS en exception", (_nom, cible) => {
+      const emetteur: any = cible(options);
+
+      expect(() =>
+        emetteur.emit('error', new Error('ECONNREFUSED 127.0.0.1:6379')),
+      ).not.toThrow();
+    });
+
+    it("CONTRE-ÉPREUVE : sans écouteur, le même 'error' TUE le processus", () => {
+      // Sans cette assertion, les trois précédentes passeraient même si Node
+      // n'avait pas cette sémantique — et ne prouveraient rien.
+      const nu = new (require('events').EventEmitter)();
+
+      expect(() => nu.emit('error', new Error('boum'))).toThrow('boum');
+    });
+  });
 });

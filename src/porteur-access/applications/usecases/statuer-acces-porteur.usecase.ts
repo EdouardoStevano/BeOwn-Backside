@@ -128,7 +128,16 @@ export class StatuerAccesPorteurUseCase {
               message: `L'accès à votre espace porteur a été retiré. Motif : ${libelleMotifRetrait(
                 acte.motifRetrait as MotifRetraitAccesPorteur,
               )} Votre espace investisseur, vos investissements et votre solde restent inchangés.`,
-              metadata: { motifRetrait: acte.motifRetrait },
+              // Le CODE de motif ne sort pas : il appartient au vocabulaire
+              // interne de l'instruction (`OBSTACLE_LEGAL_LCBFT`…), lisible
+              // par la personne concernée via l'API de notifications comme par
+              // le canal temps réel, alors qu'elle a déjà le LIBELLÉ dans le
+              // message. Publier le code, c'est exposer la qualification
+              // interne d'une décision — et donner prise à une contestation
+              // sur un mot que la plateforme n'a jamais voulu lui adresser.
+              // Il reste dans l'entrée d'audit ci-dessous, qui est le bon
+              // endroit pour relire une décision.
+              metadata: {},
             }
           : {
               utilisateurId: commande.utilisateurId,
