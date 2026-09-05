@@ -12,6 +12,17 @@ data:
   DATABASE_HOST: 'postgres-service'
   DATABASE_PORT: '5432'
   DATABASE_DB: 'beown'
+  # Taille maximale du pool de connexions PostgreSQL, PAR POD.
+  # Défaut de `pg` (10), désormais explicite et ajustable sans réimager.
+  #
+  # ⚠ RÈGLE À TENIR : maxReplicas du HPA × PG_POOL_MAX <= max_connections de
+  # PostgreSQL, marge comprise pour l'administration, les sauvegardes
+  # (backup-cronjob.yaml) et les tâches planifiées.
+  # Aujourd'hui : 6 (hpa.yaml) × 10 = 60 connexions au pire, sous le
+  # max_connections par défaut de 100. Toute hausse de l'un des deux termes
+  # oblige à revérifier l'autre — sinon un pic de trafic devient un
+  # « sorry, too many clients already », c'est-à-dire une panne totale.
+  PG_POOL_MAX: '10'
 
   # Redis (Service k8s défini dans redis.yaml)
   REDIS_HOST: 'redis-service'

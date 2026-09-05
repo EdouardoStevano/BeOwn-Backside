@@ -47,11 +47,11 @@ import { ContactModule } from './common/contact/contact.module';
 import { ThrottlerStorageModule } from './common/throttler/throttler-storage.module';
 import { RedisThrottlerStorage } from './common/throttler/redis-throttler.storage';
 import {
-  lireEntierPositif,
   PALIER_AUTH_TTL_MS,
   PALIERS_GLOBAUX_DEFAUT,
   sauterPalierAuth,
 } from './common/throttler/paliers.config';
+import { lireEntierPositif } from './common/config/env.config';
 import { SmsModule } from './shared/sms/sms.module';
 import { EmailModule } from './shared/email/email.module';
 import { CacheModule } from '@nestjs/cache-manager';
@@ -157,6 +157,21 @@ function requireEnv(name: string): string {
       autoLoadEntities: true,
       // Schema changes are applied only by reviewed migrations.
       synchronize: false,
+      // A4 — taille du pool de connexions, jusqu'ici laissée au défaut
+      // implicite de `pg` (10) : une valeur subie, invisible depuis la
+      // configuration, et impossible à ajuster sans réimager le service.
+      //
+      // RÈGLE DE DIMENSIONNEMENT — répliques maximales du HPA × PG_POOL_MAX
+      // doit rester ≤ `max_connections` de PostgreSQL, marge comprise pour les
+      // sessions d'administration, les sauvegardes et le cron.
+      // État actuel : HPA à 6 répliques max × 10 = 60 connexions au pire, sous
+      // le `max_connections` par défaut de 100. Augmenter le pool SANS
+      // augmenter `max_connections` transforme un pic de trafic en « sorry,
+      // too many clients already » — c'est-à-dire en panne totale, y compris
+      // pour les pods qui n'ont rien demandé.
+      extra: {
+        max: lireEntierPositif('PG_POOL_MAX', 10),
+      },
     }),
     // Plus de MailerModule/SMTP : l'email passe par EMAIL_SERVICE, fourni
     // globalement par EmailModule (Mailpit en dev, Brevo en prod).

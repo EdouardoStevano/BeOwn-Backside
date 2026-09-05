@@ -51,22 +51,13 @@ export const PALIERS_GLOBAUX_DEFAUT = {
 } as const;
 
 /**
- * Lit un entier strictement positif dans l'environnement, sinon la valeur par
- * défaut. Une valeur présente mais invalide FAIT ÉCHOUER LE DÉMARRAGE : une
- * limite de débit silencieusement retombée sur son défaut est exactement le
- * genre de configuration qu'on croit appliquée et qui ne l'est pas.
+ * Réexport : les limites de débit se lisent avec la même règle que les autres
+ * réglages numériques d'environnement (absent → défaut, invalide → refus de
+ * démarrer). Une limite silencieusement retombée sur son défaut est
+ * exactement le genre de configuration qu'on croit appliquée et qui ne l'est
+ * pas.
  */
-export function lireEntierPositif(nom: string, defaut: number): number {
-  const brut = process.env[nom];
-  if (brut === undefined || brut.trim() === '') return defaut;
-  const valeur = Number(brut);
-  if (!Number.isInteger(valeur) || valeur <= 0) {
-    throw new Error(
-      `${nom} doit être un entier strictement positif (reçu « ${brut} »).`,
-    );
-  }
-  return valeur;
-}
+export { lireEntierPositif } from 'src/common/config/env.config';
 
 /**
  * Vrai si la route (handler ou contrôleur) a explicitement posé un palier
