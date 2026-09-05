@@ -94,4 +94,17 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
     CMD wget --no-verbose --tries=1 --spider "http://127.0.0.1:${PORT:-8080}/health" || exit 1
 
+# ⚠ Borne de tas V8 (--max-old-space-size) VOLONTAIREMENT ABSENTE ici.
+#
+# Sans borne, V8 dimensionne son vieux tas sur la mémoire de la MACHINE et non
+# sur le cgroup : sous saturation, le process dépasse la limite du conteneur et
+# se fait tuer (OOMKilled) sans trace applicative. La borne est donc
+# obligatoire — mais elle dépend de la limite mémoire de l'ORCHESTRATEUR, que
+# l'image ne connaît pas. La figer ici la rendrait fausse partout ailleurs.
+#
+# Elle est posée à l'exécution, via NODE_OPTIONS :
+#   - Kubernetes : k8s/base/deployment.yaml (384 Mio pour limits.memory 512Mi,
+#     soit 75 % ; le reste couvre le tas natif, les piles et le JIT) ;
+#   - docker-compose / lancement manuel : passer NODE_OPTIONS au conteneur avec
+#     la même règle, en regard du `mem_limit` retenu.
 CMD ["node", "./dist/main.js"]

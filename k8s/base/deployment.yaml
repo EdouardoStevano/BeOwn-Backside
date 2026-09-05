@@ -125,11 +125,41 @@ spec:
               exec:
                 command: ['/bin/sh', '-c', 'sleep 10']
 
+          # Borne de tas V8, alignée sur la limite mémoire du conteneur.
+          #
+          # Sans elle, V8 dimensionne son vieux tas sur la mémoire de la MACHINE
+          # (plusieurs Go sur un nœud), pas sur le cgroup : sous saturation, le
+          # process gonfle bien au-delà de `limits.memory` et se fait tuer par
+          # le kernel (OOMKilled, code 137) AVANT que le ramasse-miettes ne se
+          # sente obligé de travailler. Symptôme observé en charge : le process
+          # meurt sans trace applicative.
+          #
+          # 384 Mio = 75 % de la limite de 512 Mi ci-dessous. Les 128 Mio
+          # restants ne sont pas du gaspillage : ils couvrent le tas natif
+          # (Buffers de réponses HTTP, pilote pg, OpenSSL), les piles et le
+          # code JIT, qui ne sont PAS comptés dans --max-old-space-size.
+          # ⚠ Toute modification de `limits.memory` doit être répercutée ici,
+          # dans le même rapport.
+          env:
+            - name: NODE_OPTIONS
+              value: '--max-old-space-size=384'
           envFrom:
             - configMapRef:
                 name: beown-backend-config
             - secretRef:
                 name: beown-backend-secrets
+          # Sonde de vie : `GET /health/live` est un handler synchrone qui ne
+          # touche NI la base NI Redis (voir health.controller.ts). C'est
+          # délibéré et suffisant pour ce qu'une liveness doit détecter :
+          # - process gelé (boucle d'événements bloquée, tas saturé passé en
+          #   GC permanent) → la sonde n'obtient pas de réponse dans le délai
+          #   et le pod est redémarré au bout de 3 échecs (~45 s) ;
+          # - dépendance externe en panne → volontairement PAS détecté ici,
+          #   c'est le rôle de la readinessProbe (`/health/ready`). Redémarrer
+          #   tous les pods parce que Postgres tousse ne répare rien et
+          #   transforme un incident en panne totale.
+          # `timeoutSeconds` reste au défaut de 1 s : un handler qui ne rend
+          # pas la main en une seconde est, par définition, gelé.
           livenessProbe:
             httpGet:
               path: /health/live

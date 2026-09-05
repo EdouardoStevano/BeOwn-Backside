@@ -1,5 +1,7 @@
 import { randomUUID } from 'crypto';
 import type { Params } from 'nestjs-pino';
+import pino from 'pino';
+import type { DestinationStream } from 'pino';
 import { trace } from '@opentelemetry/api';
 import type { IncomingMessage, ServerResponse } from 'http';
 
@@ -108,44 +110,99 @@ const REDACT_PATHS = [
 
 const IGNORED_PREFIXES = ['/health', '/metrics'];
 
+/**
+ * Rend une destination de logs INCAPABLE de tuer le processus (finding A2).
+ *
+ * Constat en charge : sous saturation, le service mourait sur un
+ * `Error: UNKNOWN: unknown error, write` remonté par SonicBoom — le flux de
+ * sortie de pino. Vérifié dans pino 10.3.1 (`lib/tools.js`,
+ * `buildSafeSonicBoom`) : le seul gestionnaire d'erreur posé par défaut,
+ * `filterBrokenPipe`, traite EPIPE puis **se retire et ré-émet** toute autre
+ * erreur. Sans autre écouteur, un 'error' ré-émis sur un EventEmitter est une
+ * exception non gérée : le process meurt.
+ *
+ * Un échec d'ÉCRITURE DE LOG ne doit jamais interrompre un service. On pose
+ * donc un écouteur permanent : la première erreur est signalée sur stderr (si
+ * stderr veut bien l'accepter), les suivantes sont avalées pour ne pas
+ * transformer une panne d'écriture en boucle de bruit. Les lignes de log
+ * concernées sont perdues — c'est le coût assumé, et il est très inférieur à
+ * l'arrêt du pod.
+ */
+export function protegerDestinationLogs<
+  T extends { on(evenement: 'error', ecouteur: (err: Error) => void): unknown },
+>(destination: T): T {
+  let dejaSignale = false;
+  destination.on('error', (err: Error) => {
+    if (dejaSignale) return;
+    dejaSignale = true;
+    try {
+      process.stderr.write(
+        `[logger] écriture des logs en échec, journalisation dégradée : ${err?.message ?? err}\n`,
+      );
+    } catch {
+      // stderr est cassé lui aussi : il ne reste rien à faire, surtout pas
+      // relancer une erreur depuis un gestionnaire d'erreur.
+    }
+  });
+  return destination;
+}
+
+/**
+ * Destination des logs : même flux que le défaut de pino (descripteur 1,
+ * SonicBoom asynchrone), à ceci près qu'elle est explicitement construite ici
+ * pour qu'on puisse y brancher le garde ci-dessus.
+ */
+export const logDestination: DestinationStream = protegerDestinationLogs(
+  pino.destination({ dest: process.stdout.fd ?? 1 }),
+);
+
 export const loggerConfig: Params = {
-  pinoHttp: {
-    level: process.env.LOG_LEVEL ?? 'info',
+  // Forme [options, flux] : c'est la seule qui permette de fournir NOTRE
+  // destination — celle dont l'événement 'error' est géré (cf. A2 ci-dessus).
+  pinoHttp: [
+    {
+      level: process.env.LOG_LEVEL ?? 'info',
 
-    genReqId(req: IncomingMessage, res: ServerResponse): string {
-      const header = req.headers['x-request-id'];
-      const id = (Array.isArray(header) ? header[0] : header) ?? randomUUID();
-      res.setHeader('x-request-id', id);
-      return id;
-    },
+      genReqId(req: IncomingMessage, res: ServerResponse): string {
+        const header = req.headers['x-request-id'];
+        const id = (Array.isArray(header) ? header[0] : header) ?? randomUUID();
+        res.setHeader('x-request-id', id);
+        return id;
+      },
 
-    mixin() {
-      const span = trace.getActiveSpan();
-      if (!span) return {};
-      const ctx = span.spanContext();
-      return { traceId: ctx.traceId, spanId: ctx.spanId };
-    },
+      mixin() {
+        const span = trace.getActiveSpan();
+        if (!span) return {};
+        const ctx = span.spanContext();
+        return { traceId: ctx.traceId, spanId: ctx.spanId };
+      },
 
-    redact: {
-      paths: REDACT_PATHS,
-      censor: '[redacted]',
-    },
+      redact: {
+        paths: REDACT_PATHS,
+        censor: '[redacted]',
+      },
 
-    autoLogging: {
-      ignore: (req: IncomingMessage) => {
-        const url = req.url ?? '';
-        return IGNORED_PREFIXES.some((p) => url.startsWith(p));
+      autoLogging: {
+        ignore: (req: IncomingMessage) => {
+          const url = req.url ?? '';
+          return IGNORED_PREFIXES.some((p) => url.startsWith(p));
+        },
+      },
+
+      // Sérialiseurs minimaux : jamais le corps complet ni tous les headers.
+      serializers: {
+        req(req: { id: unknown; method: string; url: string }) {
+          return {
+            id: req.id,
+            method: req.method,
+            url: stripQueryString(req.url),
+          };
+        },
+        res(res: { statusCode: number }) {
+          return { statusCode: res.statusCode };
+        },
       },
     },
-
-    // Sérialiseurs minimaux : jamais le corps complet ni tous les headers.
-    serializers: {
-      req(req: { id: unknown; method: string; url: string }) {
-        return { id: req.id, method: req.method, url: stripQueryString(req.url) };
-      },
-      res(res: { statusCode: number }) {
-        return { statusCode: res.statusCode };
-      },
-    },
-  },
+    logDestination,
+  ],
 };
