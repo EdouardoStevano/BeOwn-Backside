@@ -9,6 +9,7 @@ import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { randomUUID } from 'crypto';
 import { ProjectEntity } from 'src/projects/infrastructure/persistences/entities/project.entity';
+import { STATUTS_PROJET_VERSABLES } from 'src/projects/domains/enums/project-status.enum';
 import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/wallet.entity';
 import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entities/transaction.entity';
 import {
@@ -48,6 +49,12 @@ export type VerserPorteurResultat =
       alreadyProcessed?: boolean;
     }
   | { success: false; code: string; message: string };
+
+/**
+ * Code stable du refus de versement pour statut de projet inadapté. Consommé
+ * par le back-office pour distinguer ce cas d'un solde insuffisant.
+ */
+export const PROJET_NON_VERSABLE = 'PROJET_NON_VERSABLE';
 
 /**
  * Verse au porteur, PAR STRIPE, ce que son projet lui doit.
@@ -285,6 +292,26 @@ export class VerserPorteurUseCase {
         'Ce projet n’a pas de porteur rattaché : impossible de désigner un bénéficiaire.',
       );
     }
+
+    // B8 — LE STATUT DU PROJET N'ÉTAIT PAS CONTRÔLÉ.
+    //
+    // Le versement au porteur n'était gardé que par le solde du portefeuille
+    // de projet. Or ce portefeuille se remplit DÈS la collecte : un projet
+    // encore EN_COLLECTE, voire un projet en ÉCHEC ou ANNULÉ dont les fonds
+    // attendent d'être remboursés aux investisseurs, pouvait être vidé vers le
+    // porteur. L'argent des souscripteurs ne devient celui du porteur qu'une
+    // fois la collecte ABOUTIE — avant, il leur est encore dû.
+    if (!STATUTS_PROJET_VERSABLES.includes(projet.statut)) {
+      throw new ConflictException({
+        statusCode: 409,
+        code: PROJET_NON_VERSABLE,
+        message:
+          `Versement impossible : le projet est au statut « ${projet.statut} ». ` +
+          'Les fonds ne sont versables au porteur qu’une fois la collecte ' +
+          'aboutie (finance, en_exploitation ou cloture).',
+      });
+    }
+
     return { projet, porteurId: projet.porteurId };
   }
 

@@ -12,6 +12,7 @@ import { DocumentsInfrastructureModule } from 'src/documents/infrastructure/docu
 import { WalletsInfrastructureModule } from 'src/wallets/infrastructure/wallets-infrastructure.module';
 import { NotificationsModule } from 'src/notifications/notifications.module';
 import { RgpdModule } from 'src/rgpd/rgpd.module';
+import { AmlModule } from 'src/common/aml/aml.module';
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 import { NotificationEntity } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
 import { InvestorInactivityCronService } from 'src/iam/applications/services/investor-inactivity-cron.service';
@@ -52,6 +53,10 @@ import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entit
     // Anonymisation RGPD, invoquée par DeleteAccountUseCase après le
     // soft-delete (lot 2, mission 3).
     RgpdModule,
+    // `GelDesAvoirsPort` : la suppression de compte crée un RETRAIT quand le
+    // portefeuille n'est pas vide — c'est une sortie d'argent, elle doit
+    // passer la garde de gel comme les quatre autres.
+    AmlModule,
   ],
   providers: [
     DeleteAccountUseCase,

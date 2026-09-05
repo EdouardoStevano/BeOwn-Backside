@@ -39,6 +39,7 @@ describe('DeleteAccountUseCase', () => {
   let templates: any;
   let emailService: any;
   let anonymizeAccount: any;
+  let gelDesAvoirs: any;
 
   // État du portefeuille tel que relu SOUS VERROU dans la transaction.
   let lockedWallet: any;
@@ -103,6 +104,11 @@ describe('DeleteAccountUseCase', () => {
     anonymizeAccount = {
       anonymiser: jest.fn().mockResolvedValue({ statut: 'anonymise' }),
     };
+    // Garde « avoirs gelés » : passante par défaut, resserrée dans le bloc
+    // dédié plus bas.
+    gelDesAvoirs = {
+      assertAvoirsNonGeles: jest.fn().mockResolvedValue(undefined),
+    };
 
     useCase = new DeleteAccountUseCase(
       userRepo,
@@ -116,6 +122,7 @@ describe('DeleteAccountUseCase', () => {
       templates,
       emailService,
       anonymizeAccount,
+      gelDesAvoirs,
     );
   });
 
@@ -459,5 +466,64 @@ describe('DeleteAccountUseCase', () => {
     expect(userRepo.save).toHaveBeenCalledWith(
       expect.objectContaining({ status: UserStatus.SUPPRIME }),
     );
+  });
+
+  /**
+   * B7 — CINQUIÈME SORTIE D'ARGENT NON GARDÉE (art. L. 562-4 CMF).
+   *
+   * Quand le portefeuille n'est pas vide, ce use case CRÉE UN RETRAIT. C'était
+   * la seule sortie d'argent de la plateforme à ne jamais appeler la garde de
+   * gel — un compte sous mesure de gel pouvait donc faire sortir l'intégralité
+   * de son solde en demandant simplement la suppression de son compte.
+   */
+  describe('gel des avoirs', () => {
+    const REFUS = Object.assign(new Error('AVOIRS_GELES'), { status: 403 });
+
+    beforeEach(() => {
+      gelDesAvoirs.assertAvoirsNonGeles.mockRejectedValue(REFUS);
+    });
+
+    it('un compte gelé ne peut pas être supprimé', async () => {
+      await expect(useCase.execute(USER_ID, SELF)).rejects.toBe(REFUS);
+    });
+
+    it("la garde s'exécute AVANT toute lecture ou écriture", async () => {
+      await expect(useCase.execute(USER_ID, SELF)).rejects.toBe(REFUS);
+
+      // Un compte gelé n'a même pas à savoir quels bloqueurs le concernent.
+      expect(gelDesAvoirs.assertAvoirsNonGeles).toHaveBeenCalledWith(USER_ID);
+      expect(userRepo.findOne).not.toHaveBeenCalled();
+      expect(investRepo.count).not.toHaveBeenCalled();
+      expect(userRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('AUCUN retrait automatique du solde n’est déclenché', async () => {
+      givenBalanceWithIban(1500);
+
+      await expect(useCase.execute(USER_ID, SELF)).rejects.toBe(REFUS);
+
+      // Le retrait automatique s'écrit dans cette transaction : ne pas l'ouvrir,
+      // c'est ne créer ni transaction de retrait ni débit de portefeuille.
+      expect(dataSource.transaction).not.toHaveBeenCalled();
+      expect(walletRepo.findOne).not.toHaveBeenCalled();
+    });
+
+    it('la garde vise le compte CIBLE, pas le demandeur', async () => {
+      // Suppression par un admin : c'est le solde du compte supprimé qui
+      // sortirait, donc c'est lui qui doit être contrôlé.
+      await expect(useCase.execute(USER_ID, ADMIN)).rejects.toBe(REFUS);
+
+      expect(gelDesAvoirs.assertAvoirsNonGeles).toHaveBeenCalledWith(USER_ID);
+    });
+
+    it('CONTRE-ÉPREUVE : garde passante → la suppression aboutit', async () => {
+      gelDesAvoirs.assertAvoirsNonGeles.mockResolvedValue(undefined);
+
+      await useCase.execute(USER_ID, SELF);
+
+      expect(userRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({ status: UserStatus.SUPPRIME }),
+      );
+    });
   });
 });

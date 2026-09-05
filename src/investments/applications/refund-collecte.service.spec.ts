@@ -112,8 +112,18 @@ describe('RefundCollecteService — invariant comptable (scénario : rembourseme
           const wallet = [walletU1, walletU2, projectWalletRow].find(
             (w) => w.id === id,
           );
-          if (wallet) applySet(wallet, qb._set, amount);
-          return { affected: wallet ? 1 : 0 };
+          if (!wallet) return { affected: 0 };
+          // La clause `solde >= :amount` du débit projet est APPLIQUÉE ici :
+          // sans elle, ce dépôt simulé accepterait un découvert que la base
+          // refuse, et le test ne prouverait rien.
+          const estDebit =
+            typeof qb._set?.solde === 'function' &&
+            String(qb._set.solde()).includes('-');
+          if (estDebit && Number(wallet.solde) < amount) {
+            return { affected: 0 };
+          }
+          applySet(wallet, qb._set, amount);
+          return { affected: 1 };
         },
       };
       return qb;
@@ -232,5 +242,55 @@ describe('RefundCollecteService — invariant comptable (scénario : rembourseme
     expect(result).toEqual({ refundedCount: 0, refundedAmount: 0 });
     expect(mouvementsDepuisInstantanes(avant, snapshotWallets())).toHaveLength(0);
     expect(savedTxs).toHaveLength(0);
+  });
+
+  /**
+   * Le débit du portefeuille de projet était INCONDITIONNEL : il passait
+   * toujours, et un simple `warn` signalait après coup que le solde était
+   * devenu négatif. Un remboursement de collecte porte sur des dizaines
+   * d'engagements — le découvert se creusait silencieusement à chaque tour de
+   * boucle, et l'avertissement ne bloquait rien.
+   */
+  describe('portefeuille de projet insuffisant', () => {
+    it('interrompt le remboursement au lieu de creuser un découvert', async () => {
+      // 100 € au projet pour 100 € dus à u1 puis... rien pour la suite.
+      projectWalletRow.solde = 50;
+
+      await expect(
+        service.refundProjectCollecte(PROJECT_ID, { targetStatus: 'echec' }),
+      ).rejects.toMatchObject({ code: 'SOLDE_PROJET_INSUFFISANT' });
+    });
+
+    it('le portefeuille du projet ne passe JAMAIS en négatif', async () => {
+      projectWalletRow.solde = 50;
+
+      await service
+        .refundProjectCollecte(PROJECT_ID, { targetStatus: 'echec' })
+        .catch(() => undefined);
+
+      expect(Number(projectWalletRow.solde)).toBeGreaterThanOrEqual(0);
+    });
+
+    it("l'erreur porte le projet, le portefeuille et le montant dû", async () => {
+      projectWalletRow.solde = 0;
+
+      const erreur = await service
+        .refundProjectCollecte(PROJECT_ID, { targetStatus: 'echec' })
+        .catch((e) => e);
+
+      expect(erreur).toMatchObject({
+        projetId: PROJECT_ID,
+        walletId: 'wp1',
+        montantRequis: 400,
+      });
+    });
+
+    it('CONTRE-ÉPREUVE : solde suffisant → remboursement complet', async () => {
+      projectWalletRow.solde = 400;
+
+      await expect(
+        service.refundProjectCollecte(PROJECT_ID, { targetStatus: 'echec' }),
+      ).resolves.toMatchObject({ refundedCount: 2 });
+    });
   });
 });

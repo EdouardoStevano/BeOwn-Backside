@@ -35,6 +35,29 @@ export interface RefundResult {
 }
 
 /**
+ * Le portefeuille du projet ne couvre pas un remboursement dû.
+ *
+ * Erreur de DOMAINE, volontairement bloquante : elle annule la transaction du
+ * remboursement complet plutôt que de laisser un portefeuille de projet passer
+ * en négatif — c'est-à-dire de rendre aux investisseurs un argent que le projet
+ * n'a pas. L'incident doit être instruit, pas absorbé.
+ */
+export class SoldeProjetInsuffisantError extends Error {
+  readonly code = 'SOLDE_PROJET_INSUFFISANT';
+
+  constructor(
+    readonly projetId: string,
+    readonly walletId: string,
+    readonly montantRequis: number,
+  ) {
+    super(
+      `Portefeuille du projet ${projetId} insuffisant : ${formatEur(montantRequis)} requis.`,
+    );
+    this.name = 'SoldeProjetInsuffisantError';
+  }
+}
+
+/**
  * Remboursement intégral de la collecte d'un projet — mécanisme « tout ou rien »
  * du crowdfunding : si l'objectif minimum n'est pas atteint (ou si l'admin
  * annule), les fonds sont recrédités aux investisseurs et les échéances
@@ -137,22 +160,49 @@ export class RefundCollecteService {
               );
             soldeProjetSuivi = Number(projectWallet.solde);
           }
-          await manager
+          // DÉBIT CONDITIONNEL (`solde >= :amount`), et non plus
+          // inconditionnel avec un simple avertissement a posteriori.
+          //
+          // L'écriture précédente débitait toujours, puis journalisait un
+          // `warn` si le compteur local passait sous zéro. Deux problèmes :
+          // le portefeuille du projet pouvait finir NÉGATIF — de l'argent
+          // remboursé aux investisseurs que le projet n'avait pas — et
+          // l'avertissement, noyé dans les logs, ne bloquait rien. Un
+          // remboursement de collecte échouée porte sur des dizaines
+          // d'engagements : le découvert se creusait silencieusement à chaque
+          // tour de boucle.
+          //
+          // `affected = 0` signifie que les fonds ne sont pas là. On ARRÊTE :
+          // la transaction entière est annulée, aucun investisseur n'est
+          // partiellement remboursé, et l'incident remonte au lieu de se
+          // dissoudre. Mieux vaut un remboursement qui ne part pas et qu'on
+          // instruit qu'un grand livre qui ment.
+          const debit = await manager
             .createQueryBuilder()
             .update(WalletEntity)
             .set({ solde: () => 'solde - :amount' })
             .setParameter('amount', amount)
-            .where('id = :id', { id: projectWallet.id })
+            .where('id = :id AND solde >= :amount', {
+              id: projectWallet.id,
+              amount,
+            })
             .execute();
-          soldeProjetSuivi -= amount;
-          if (soldeProjetSuivi < 0) {
-            // Données antérieures au grand livre : le débit est quand même
-            // inscrit (double entrée honnête) et l'écart devient visible
-            // dans l'état financier au lieu de disparaître.
-            this.logger.warn(
-              `Wallet projet ${projectWallet.id} négatif après remboursement de ${inv.id} — écritures antérieures au grand livre probables.`,
+
+          if (!debit.affected) {
+            this.logger.error(
+              `Remboursement de collecte INTERROMPU sur le projet ${project.id} : ` +
+                `le portefeuille ${projectWallet.id} ne couvre pas ${formatEur(amount)} ` +
+                `dû au titre de l'investissement ${inv.id}. Aucun remboursement n'est ` +
+                'appliqué — instruction manuelle requise.',
+            );
+            throw new SoldeProjetInsuffisantError(
+              project.id,
+              projectWallet.id,
+              amount,
             );
           }
+
+          soldeProjetSuivi -= amount;
           txSource = projectWallet.id;
         }
 

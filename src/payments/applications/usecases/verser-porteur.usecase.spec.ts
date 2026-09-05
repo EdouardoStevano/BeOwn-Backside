@@ -1,5 +1,9 @@
 import { ConflictException, NotFoundException } from '@nestjs/common';
-import { VerserPorteurUseCase } from './verser-porteur.usecase';
+import { ProjectStatus } from 'src/projects/domains/enums/project-status.enum';
+import {
+  PROJET_NON_VERSABLE,
+  VerserPorteurUseCase,
+} from './verser-porteur.usecase';
 import { TransactionStatus, TransactionType } from 'src/wallets/domains/enums/wallet.enum';
 import { KIND_VERSEMENT_PORTEUR } from 'src/wallets/applications/project-ledger.service';
 
@@ -17,6 +21,8 @@ function build(options: {
   txExistante?: any;
   /** Fait échouer l'insertion de l'écriture (course sur la clé unique, panne). */
   insertJette?: Error;
+  /** Statut du projet — seule une collecte ABOUTIE est versable (B8). */
+  statutProjet?: ProjectStatus;
 } = {}) {
   const solde = options.soldeProjet ?? WALLET_PROJET.solde;
   const savedTx: any[] = [];
@@ -60,8 +66,16 @@ function build(options: {
   const projectRepo: any = {
     findOne: jest.fn().mockResolvedValue(
       options.porteurId === null
-        ? { id: PROJET_ID, porteurId: null }
-        : { id: PROJET_ID, porteurId: options.porteurId ?? PORTEUR_ID },
+        ? {
+            id: PROJET_ID,
+            porteurId: null,
+            statut: options.statutProjet ?? ProjectStatus.FINANCE,
+          }
+        : {
+            id: PROJET_ID,
+            porteurId: options.porteurId ?? PORTEUR_ID,
+            statut: options.statutProjet ?? ProjectStatus.FINANCE,
+          },
     ),
   };
   const resolver: any = {
@@ -110,6 +124,8 @@ function build(options: {
     ),
     savedTx,
     txRepo,
+    dataSource,
+    resolver,
     stripeConnect,
     requestRetrait,
     notifications,
@@ -295,5 +311,68 @@ describe('VerserPorteurUseCase', () => {
       h.useCase.execute({ ...INPUT, idempotencyKey: 'cle-x' }),
     ).rejects.toThrow('connexion perdue');
     expect(h.stripeConnect.createTransfer).not.toHaveBeenCalled();
+  });
+
+  /**
+   * B8 — LE STATUT DU PROJET N'ÉTAIT PAS CONTRÔLÉ.
+   *
+   * Le versement n'était gardé que par le solde du portefeuille de projet. Or
+   * ce portefeuille se remplit DÈS la collecte : un projet encore en collecte,
+   * voire en échec ou annulé dont les fonds attendent d'être remboursés aux
+   * investisseurs, pouvait être vidé vers le porteur.
+   */
+  describe('statut du projet', () => {
+    it.each([
+      ProjectStatus.BROUILLON,
+      ProjectStatus.ANNONCE,
+      ProjectStatus.PRE_INVESTISSEMENT,
+      ProjectStatus.EN_COLLECTE,
+      ProjectStatus.ECHEC,
+      ProjectStatus.ANNULE,
+    ])('refuse le versement sur un projet %s — sans toucher à l’argent', async (statut) => {
+      const h = build({ statutProjet: statut });
+
+      await expect(h.useCase.execute(INPUT)).rejects.toBeInstanceOf(
+        ConflictException,
+      );
+
+      // Ni débit du portefeuille, ni appel au prestataire.
+      expect(h.dataSource.transaction).not.toHaveBeenCalled();
+      expect(h.stripeConnect.createTransfer).not.toHaveBeenCalled();
+    });
+
+    it('le refus porte un code stable, distinct d’un solde insuffisant', async () => {
+      const h = build({ statutProjet: ProjectStatus.EN_COLLECTE });
+
+      await expect(h.useCase.execute(INPUT)).rejects.toMatchObject({
+        response: expect.objectContaining({ code: PROJET_NON_VERSABLE }),
+      });
+    });
+
+    it.each([
+      ProjectStatus.FINANCE,
+      ProjectStatus.EN_EXPLOITATION,
+      ProjectStatus.CLOTURE,
+    ])('autorise le versement sur un projet %s', async (statut) => {
+      const h = build({ statutProjet: statut });
+
+      await expect(h.useCase.execute(INPUT)).resolves.toMatchObject({
+        success: true,
+      });
+    });
+
+    it('le statut est contrôlé AVANT la vérification du compte Stripe', async () => {
+      // L'ordre compte : inutile d'interroger le prestataire pour un projet
+      // dont les fonds ne sont de toute façon pas versables.
+      const h = build({
+        statutProjet: ProjectStatus.EN_COLLECTE,
+        payoutsEnabled: false,
+      });
+
+      await expect(h.useCase.execute(INPUT)).rejects.toMatchObject({
+        response: expect.objectContaining({ code: PROJET_NON_VERSABLE }),
+      });
+      expect(h.stripeConnect.getAccountStatus).not.toHaveBeenCalled();
+    });
   });
 });

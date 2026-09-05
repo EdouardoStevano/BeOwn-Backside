@@ -24,6 +24,7 @@ import { EMAIL_SERVICE } from 'src/shared/email/email.service';
 import type { EmailService } from 'src/shared/email/email.service';
 import { hasPermission } from 'src/common/auth/permissions.constants';
 import { AnonymizeAccountService } from 'src/rgpd/applications/anonymize-account.service';
+import { GelDesAvoirsPort } from 'src/common/aml/gel-des-avoirs.port';
 import { formatEur } from 'src/shared/money/format-eur';
 import {
   AccountDeletionBlockedError,
@@ -133,9 +134,25 @@ export class DeleteAccountUseCase {
     // EN DERNIÈRE POSITION (convention du dépôt : les specs construisent à la
     // main) — anonymisation RGPD post-suppression (lot 2, mission 3).
     private readonly anonymizeAccount: AnonymizeAccountService,
+    // Idem, ajouté en queue : garde « avoirs gelés » (port DIP).
+    private readonly gelDesAvoirs: GelDesAvoirsPort,
   ) {}
 
   async execute(userId: number, initiator: DeletionInitiator): Promise<void> {
+    // ── Gel des avoirs (art. L. 562-4 CMF) — CINQUIÈME SORTIE D'ARGENT ───────
+    //
+    // Ce use case ne fait pas que fermer un compte : quand le portefeuille
+    // n'est pas vide, il CRÉE UN RETRAIT (cf. `declencherRetraitAutomatique`).
+    // C'était la seule sortie d'argent de la plateforme à ne jamais appeler
+    // cette garde — dépôt, souscription, retrait et achat au marché secondaire
+    // l'appellent tous. Un compte sous mesure de gel pouvait donc faire sortir
+    // l'intégralité de son solde en demandant simplement la suppression de son
+    // compte, ce que le gel a précisément pour objet d'empêcher.
+    //
+    // Placée EN TÊTE, avant toute lecture ou écriture : un compte gelé n'a même
+    // pas à savoir quels bloqueurs s'appliqueraient à lui.
+    await this.gelDesAvoirs.assertAvoirsNonGeles(userId);
+
     // Un admin (users:delete — super_admin via wildcard) ne peut pas supprimer
     // son propre compte : évite de perdre le dernier super admin.
     if (
