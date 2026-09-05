@@ -85,7 +85,7 @@ export class CreateReservationAdminDto {
 }
 
 class UpdateReservationAdminDto {
-  @IsOptional() @IsNumber() @Min(0) montantReserve?: number;
+  @IsOptional() @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) montantReserve?: number;
   @IsOptional() @IsNumber() @Min(0) rangFile?: number;
 }
 

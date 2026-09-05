@@ -44,7 +44,7 @@ export class DeclarerVersementPorteurDto {
     example: 25000,
   })
   @IsOptional()
-  @IsNumber()
+  @IsNumber({ maxDecimalPlaces: 2 })
   @IsPositive({ message: 'Le montant doit être strictement positif.' })
   montant?: number;
 

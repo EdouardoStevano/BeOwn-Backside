@@ -9,7 +9,11 @@ import {
 } from 'src/iam/presenters/http/dto/user.dto';
 import { CreateOrdreMarcheDto } from 'src/secondarymarket/presenters/dto/ordre-marche.dto';
 import { CreateReservationAdminDto } from 'src/admin/admin-reservations.controller';
-import { CreateRetraitDto } from 'src/payments/presenters/dto/payment.dto';
+import {
+  CreatePaymentIntentDto,
+  CreateRetraitDto,
+} from 'src/payments/presenters/dto/payment.dto';
+import { CreateBailDto } from 'src/locative-management/presenters/dto/bail.dto';
 import { OrdreMarcheSens } from 'src/secondarymarket/domains/ordre-marche';
 
 /**
@@ -189,6 +193,45 @@ describe('ValidationPipe — CreateReservationAdminDto', () => {
     await expect(
       valider(CreateReservationAdminDto, valide),
     ).resolves.toMatchObject({ userId: 7, montantReserve: 1500 });
+  });
+});
+
+/**
+ * Les montants vivent en `decimal(18,2)`. Un DTO qui accepte trois décimales
+ * laisse entrer un centime fantôme : la valeur est arrondie à l'écriture, et
+ * l'écart — invisible — se retrouve au rapprochement du grand livre.
+ */
+describe('ValidationPipe — bornes décimales des montants', () => {
+  it.each([
+    ['dépôt', CreatePaymentIntentDto, { amount: 100.999, currency: 'EUR' }],
+    [
+      'retrait',
+      CreateRetraitDto,
+      { amount: 100.999, currency: 'EUR' },
+    ],
+  ])('rejette un montant à trois décimales (%s)', async (_cas, dto, corps) => {
+    await expect(valider(dto as any, corps)).rejects.toThrow();
+  });
+
+  it.each([
+    ['dépôt', CreatePaymentIntentDto, { amount: 100.99, currency: 'EUR' }],
+    ['retrait', CreateRetraitDto, { amount: 100.99, currency: 'EUR' }],
+  ])('accepte deux décimales (%s)', async (_cas, dto, corps) => {
+    await expect(valider(dto as any, corps)).resolves.toMatchObject({
+      amount: 100.99,
+    });
+  });
+
+  it('rejette un loyer à trois décimales', async () => {
+    await expect(
+      valider(CreateBailDto, {
+        uniteLouableId: '3f0b8b9e-6a1e-4d3a-9c1f-2b8a7c6d5e4f',
+        locataire: { nom: 'Martin', prenom: 'Léa' },
+        loyerMensuel: 800.125,
+        dateDebut: '2026-09-01',
+        spvId: '3f0b8b9e-6a1e-4d3a-9c1f-2b8a7c6d5e4e',
+      }),
+    ).rejects.toThrow();
   });
 });
 

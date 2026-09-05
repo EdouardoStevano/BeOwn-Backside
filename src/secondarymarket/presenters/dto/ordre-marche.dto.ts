@@ -24,7 +24,7 @@ export class CreateOrdreMarcheDto {
   sens: OrdreMarcheSens;
 
   /**
-   * `@IsNumber()` acceptait 2.5 fraction — une quantité décimale sur un titre
+   * `@IsNumber({ maxDecimalPlaces: 2 })` acceptait 2.5 fraction — une quantité décimale sur un titre
    * indivisible, qui se propageait en base et dans les calculs de solde de
    * fractions. Une fraction est une unité : entier strictement positif.
    */

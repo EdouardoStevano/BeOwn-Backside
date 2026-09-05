@@ -24,7 +24,7 @@ export class CreateBailDto {
   @ValidateNested()
   @Type(() => CreateLocataireInline)
   locataire: CreateLocataireInline;
-  @ApiProperty() @IsNumber() @Min(0.01) loyerMensuel: number;
+  @ApiProperty() @IsNumber({ maxDecimalPlaces: 2 }) @Min(0.01) loyerMensuel: number;
   @ApiProperty() @IsDateString() dateDebut: string;
   @ApiProperty({ required: false }) @IsOptional() @IsDateString() dateFin?: string;
   @ApiProperty() @IsUUID() spvId: string;

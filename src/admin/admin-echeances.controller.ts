@@ -68,16 +68,16 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 
 class UpdateEcheanceDto {
   @IsOptional() @IsDateString() datePrevue?: string;
-  @IsOptional() @IsNumber() @Min(0) montantCapital?: number;
-  @IsOptional() @IsNumber() @Min(0) montantInterets?: number;
+  @IsOptional() @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) montantCapital?: number;
+  @IsOptional() @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) montantInterets?: number;
   @IsOptional() @IsEnum(EcheanceStatus) statut?: EcheanceStatus;
 }
 
 class UpdateAggregatedEcheanceDto {
   @IsOptional() @IsDateString() datePrevue?: string;
-  @IsOptional() @IsNumber() @Min(0) montantCapital?: number;
-  @IsOptional() @IsNumber() @Min(0) montantInterets?: number;
-  @IsOptional() @IsNumber() @Min(0) montantTotal?: number;
+  @IsOptional() @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) montantCapital?: number;
+  @IsOptional() @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) montantInterets?: number;
+  @IsOptional() @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) montantTotal?: number;
 }
 
 class InitializeScheduleDto {

@@ -15,7 +15,7 @@ export class DeclareLoyerDto {
   @ApiProperty({ example: '2026-06' })
   @Matches(/^\d{4}-(0[1-9]|1[0-2])$/)
   periode: string;
-  @ApiProperty() @IsNumber() @Min(0.01) montant: number;
+  @ApiProperty() @IsNumber({ maxDecimalPlaces: 2 }) @Min(0.01) montant: number;
   @ApiProperty() @IsDateString() dateEncaissement: string;
   @ApiProperty({ type: [String], minItems: 1 })
   @IsArray()

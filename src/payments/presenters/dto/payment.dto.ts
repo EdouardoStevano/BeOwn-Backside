@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsIn, IsInt, IsNotEmpty, IsOptional, IsPositive, IsString, IsUUID, Matches, Max, MaxLength, Min } from 'class-validator';
+import { IsEnum, IsIn, IsInt, IsNotEmpty, IsNumber, IsOptional, IsPositive, IsString, IsUUID, Matches, Max, MaxLength, Min } from 'class-validator';
 
 export class CreatePaymentIntentDto {
   @ApiProperty({
@@ -8,6 +8,10 @@ export class CreatePaymentIntentDto {
       'Montant en EUR (minimum 1 €, plafond de sécurité : 1 000 000 €)',
     minimum: 1,
   })
+  // Deux décimales AU PLUS : les montants vivent en `decimal(18,2)`. Sans
+  // cette borne, 100.999 passait et produisait un centime fantôme à
+  // l'arrondi — écart invisible, mais réel, au rapprochement.
+  @IsNumber({ maxDecimalPlaces: 2 })
   @IsPositive()
   // Plancher explicite : `@IsPositive()` accepte 0,004 €, qui s'arrondit à
   // 0 centime chez le prestataire. On créerait alors des intentions de
@@ -49,6 +53,7 @@ export class CreateApportPorteurDto {
       'Montant en EUR à porter au crédit du projet (minimum 1 €, plafond 1 000 000 €)',
     minimum: 1,
   })
+  @IsNumber({ maxDecimalPlaces: 2 })
   @IsPositive()
   @Min(1, { message: "Le montant minimum d'un apport est de 1 €." })
   @Max(1_000_000, { message: "Le montant de l'apport dépasse le plafond autorisé." })
@@ -89,6 +94,7 @@ export class ConfirmDepotDto {
 
 export class CreateRetraitDto {
   @ApiProperty({ example: 500, description: 'Montant à retirer (EUR)' })
+  @IsNumber({ maxDecimalPlaces: 2 })
   @IsPositive()
   @Min(10, { message: 'Le montant minimum de retrait est de 10 €.' })
   amount: number;

@@ -8,5 +8,5 @@ export class AddUniteLouableDto {
   @IsOptional()
   @IsNumber()
   surfaceM2?: number;
-  @ApiProperty({ example: 1500 }) @IsNumber() @Min(0.01) loyerMensuelCible: number;
+  @ApiProperty({ example: 1500 }) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0.01) loyerMensuelCible: number;
 }

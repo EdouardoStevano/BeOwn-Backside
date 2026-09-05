@@ -218,15 +218,21 @@ describe('PaymentController — branches argent du webhook Stripe', () => {
   // ── charge.refunded ────────────────────────────────────────────────────────
 
   describe('charge.refunded', () => {
-    const evenementRemboursement = () => ({
+    /** Charge avec le DÉTAIL de ses remboursements, comme Stripe l'envoie. */
+    const evenementRemboursement = (
+      refunds: Array<{ id: string; amount: number; status?: string }> = [
+        { id: 're_1', amount: 12000 },
+      ],
+    ) => ({
       id: 'evt_2',
       type: 'charge.refunded',
       data: {
         object: {
           id: 'ch_1',
-          amount_refunded: 12000,
+          amount_refunded: refunds.reduce((s, r) => s + r.amount, 0),
           currency: 'eur',
           payment_intent: 'pi_1',
+          refunds: { data: refunds },
         },
       },
     });
@@ -238,7 +244,7 @@ describe('PaymentController — branches argent du webhook Stripe', () => {
       montant: 120,
     };
 
-    it('débite le portefeuille une seule fois, écriture d’abord, clé refund:<chargeId>', async () => {
+    it('débite le portefeuille une seule fois, écriture d’abord, clé refund:<refundId>', async () => {
       txRepo.findOne.mockResolvedValue(depotCredite);
 
       await declencher(evenementRemboursement());
@@ -250,10 +256,10 @@ describe('PaymentController — branches argent du webhook Stripe', () => {
         montant: 120,
         walletSource: 'w-1',
         walletDestination: null,
-        idempotencyKey: 'refund:ch_1',
+        idempotencyKey: 'refund:re_1',
       });
       // La clé demandée figure AUSSI dans les metadata de l'écriture.
-      expect(inserees[0].metadata).toMatchObject({ refundKey: 'refund:ch_1' });
+      expect(inserees[0].metadata).toMatchObject({ refundKey: 'refund:re_1' });
     });
 
     it('idempotent : une redélivrance ne débite pas une seconde fois', async () => {
@@ -279,7 +285,7 @@ describe('PaymentController — branches argent du webhook Stripe', () => {
       );
       expect(tracesEchouees).toHaveLength(1);
       expect(tracesEchouees[0]).toMatchObject({
-        idempotencyKey: 'refund:ch_1',
+        idempotencyKey: 'refund:re_1',
         walletSource: 'w-1',
       });
       expect(tracesEchouees[0].metadata).toMatchObject({ soldeInsuffisant: true });
@@ -296,6 +302,88 @@ describe('PaymentController — branches argent du webhook Stripe', () => {
 
       expect(inserees).toHaveLength(0);
       expect(notificationService.pushToAdmins).toHaveBeenCalledTimes(1);
+    });
+
+    /**
+     * La clé était portée par la CHARGE et le montant valait le CUMUL
+     * `amount_refunded`. Sur un remboursement partiel échelonné, le second
+     * événement butait donc sur la contrainte d'unicité et n'était jamais
+     * débité : l'investisseur gardait un solde que la trésorerie ne couvrait
+     * plus.
+     */
+    describe('remboursements partiels échelonnés', () => {
+      it('débite CHAQUE remboursement, pour son montant propre', async () => {
+        txRepo.findOne.mockResolvedValue(depotCredite);
+
+        await declencher(
+          evenementRemboursement([
+            { id: 're_1', amount: 5000 },
+            { id: 're_2', amount: 7000 },
+          ]),
+        );
+
+        expect(inserees).toHaveLength(2);
+        expect(inserees.map((e) => e.montant).sort((a, b) => a - b)).toEqual([
+          50, 70,
+        ]);
+        expect(inserees.map((e) => e.idempotencyKey).sort()).toEqual([
+          'refund:re_1',
+          'refund:re_2',
+        ]);
+      });
+
+      it('le montant débité n’est JAMAIS le cumul de la charge', async () => {
+        txRepo.findOne.mockResolvedValue(depotCredite);
+
+        await declencher(
+          evenementRemboursement([
+            { id: 're_1', amount: 5000 },
+            { id: 're_2', amount: 7000 },
+          ]),
+        );
+
+        // 120 € = amount_refunded cumulé : aucune écriture ne doit le porter.
+        expect(inserees.some((e) => e.montant === 120)).toBe(false);
+      });
+
+      it('ignore un remboursement non abouti', async () => {
+        txRepo.findOne.mockResolvedValue(depotCredite);
+
+        await declencher(
+          evenementRemboursement([
+            { id: 're_1', amount: 5000, status: 'succeeded' },
+            { id: 're_2', amount: 7000, status: 'pending' },
+          ]),
+        );
+
+        expect(inserees).toHaveLength(1);
+        expect(inserees[0].idempotencyKey).toBe('refund:re_1');
+      });
+
+      it('repli documenté : sans détail, on retombe sur le cumul de la charge', async () => {
+        txRepo.findOne.mockResolvedValue(depotCredite);
+
+        await declencher({
+          id: 'evt_2',
+          type: 'charge.refunded',
+          data: {
+            object: {
+              id: 'ch_1',
+              amount_refunded: 12000,
+              currency: 'eur',
+              payment_intent: 'pi_1',
+            },
+          },
+        });
+
+        // Mieux vaut l'ancien comportement, avec sa limite, que ne rien
+        // débiter du tout.
+        expect(inserees).toHaveLength(1);
+        expect(inserees[0]).toMatchObject({
+          montant: 120,
+          idempotencyKey: 'refund:ch_1',
+        });
+      });
     });
   });
 

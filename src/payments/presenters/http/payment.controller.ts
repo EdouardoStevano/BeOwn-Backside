@@ -14,6 +14,7 @@ import {
   Param,
   Post,
   Req,
+  UseFilters,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
@@ -53,6 +54,7 @@ import { Public } from 'src/common/auth/public.decorator';
 import { RequirePermission } from 'src/common/auth/require-permission.decorator';
 import { hasPermission } from 'src/common/auth/permissions.constants';
 import { formatEur } from 'src/shared/money/format-eur';
+import { PayoutMethodExceptionFilter } from './payout-method-exception.filter';
 import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
 import { UseGuards } from '@nestjs/common';
@@ -98,6 +100,13 @@ const DEBIT_OPERATION_ARGENT = {
 @ApiBearerAuth()
 @Controller('payments')
 @UseGuards(JwtAuthGuard)
+// Les erreurs de moyen de versement (`PayoutMethodError`) sont des refus
+// MÉTIER — dépassement du plafond de virement instantané, moyen inéligible.
+// Sans ce filtre, elles n'étaient traduites nulle part sur ce contrôleur :
+// elles ressortaient en 500 et remontaient dans Sentry comme des incidents,
+// noyant les vrais. Le filtre est déjà posé sur `PayoutMethodsController` ;
+// il manquait ici, alors que c'est ce contrôleur qui porte le retrait.
+@UseFilters(PayoutMethodExceptionFilter)
 export class PaymentController {
   private readonly logger = new Logger(PaymentController.name);
 
@@ -1214,17 +1223,23 @@ export class PaymentController {
    *    solde en négatif fabriquerait une créance silencieuse sur un
    *    utilisateur, invisible de tous les écrans.
    *
-   * LIMITE CONNUE : la clé étant portée par la CHARGE, un remboursement
-   * partiel effectué en plusieurs fois sur la même charge n'est débité qu'une
-   * seule fois, au montant cumulé connu lors du premier événement. Aujourd'hui
-   * `createRefund` est appelé sans montant (remboursement intégral) ; à revoir
-   * le jour où des remboursements partiels échelonnés seraient ouverts.
+   * CLÉ PORTÉE PAR LE REMBOURSEMENT, PAS PAR LA CHARGE. Elle était
+   * `refund:<chargeId>` et le montant valait `charge.amount_refunded`,
+   * c'est-à-dire le CUMUL remboursé sur la charge. Deux conséquences sur un
+   * remboursement partiel échelonné : le second événement butait sur la
+   * contrainte d'unicité et n'était jamais débité — l'investisseur gardait un
+   * solde que la trésorerie ne couvrait plus — tandis que le premier débitait
+   * un cumul qui n'était pas encore sorti.
+   *
+   * Chaque remboursement de `charge.refunds.data` est donc traité pour SON
+   * montant propre, sous SA clé. Reparcourir toute la liste à chaque événement
+   * rend le traitement auto-réparateur : un événement manqué est rattrapé au
+   * suivant, et ceux déjà traités butent simplement sur leur clé.
    */
   private async handleChargeRefunded(event: any): Promise<void> {
     const charge = event.data.object as any;
     const chargeId = charge?.id as string | undefined;
-    const montant = Number(charge?.amount_refunded ?? 0) / 100;
-    if (!chargeId || !(montant > 0)) return;
+    if (!chargeId) return;
 
     const paymentIntentId =
       typeof charge.payment_intent === 'string'
@@ -1237,28 +1252,90 @@ export class PaymentController {
         })
       : null;
 
+    const remboursements = this.remboursementsDeLaCharge(charge);
+    if (remboursements.length === 0) return;
+
     if (!depot?.walletDestination) {
       // Remboursement d'un encaissement qui n'a jamais crédité de portefeuille
       // (dépôt refusé pour devise, paiement hors parcours…) : rien à débiter,
       // mais l'écart mérite un œil humain.
+      const total =
+        Math.round(
+          remboursements.reduce((somme, r) => somme + r.montant, 0) * 100,
+        ) / 100;
       this.logger.warn(
         `charge.refunded sans dépôt rattachable: charge=${chargeId} pi=${paymentIntentId ?? 'n/a'} — revue manuelle`,
       );
       this.alerterFinance(
         'Remboursement Stripe non rattaché à un dépôt',
-        `Le remboursement de ${formatEur(montant)} (charge ${chargeId}) ne correspond à aucun dépôt crédité. ` +
+        `Le remboursement de ${formatEur(total)} (charge ${chargeId}) ne correspond à aucun dépôt crédité. ` +
           'Vérifier côté Stripe avant tout ajustement manuel.',
-        { chargeId, paymentIntentId: paymentIntentId ?? null, montant },
+        { chargeId, paymentIntentId: paymentIntentId ?? null, montant: total },
       );
       return;
     }
 
-    const walletId = depot.walletDestination;
-    const cleIdempotence = `refund:${chargeId}`;
+    for (const remboursement of remboursements) {
+      await this.debiterRemboursement({
+        walletId: depot.walletDestination,
+        depot,
+        chargeId,
+        paymentIntentId: paymentIntentId ?? null,
+        refundId: remboursement.id,
+        montant: remboursement.montant,
+      });
+    }
+  }
+
+  /**
+   * Remboursements exploitables d'une charge, chacun avec son identifiant et
+   * son montant PROPRE.
+   *
+   * Repli documenté : certaines charges arrivent sans `refunds.data`
+   * (payload élidé, ancien schéma). On retombe alors sur le cumul
+   * `amount_refunded` sous la clé de la charge — l'ancien comportement, avec
+   * sa limite, plutôt que de ne rien débiter du tout.
+   */
+  private remboursementsDeLaCharge(
+    charge: any,
+  ): Array<{ id: string; montant: number }> {
+    const lignes: any[] = charge?.refunds?.data ?? [];
+
+    if (Array.isArray(lignes) && lignes.length > 0) {
+      return lignes
+        .filter(
+          (r) => r?.id && (!r.status || r.status === 'succeeded'),
+        )
+        .map((r) => ({ id: String(r.id), montant: Number(r.amount ?? 0) / 100 }))
+        .filter((r) => r.montant > 0);
+    }
+
+    const cumul = Number(charge?.amount_refunded ?? 0) / 100;
+    if (!(cumul > 0)) return [];
+    this.logger.warn(
+      `charge.refunded sans détail des remboursements (charge=${charge?.id}) : ` +
+        'repli sur le cumul amount_refunded.',
+    );
+    return [{ id: String(charge.id), montant: cumul }];
+  }
+
+  /** Débit d'UN remboursement, sous sa propre clé d'idempotence. */
+  private async debiterRemboursement(params: {
+    walletId: string;
+    depot: TransactionEntity;
+    chargeId: string;
+    paymentIntentId: string | null;
+    refundId: string;
+    montant: number;
+  }): Promise<void> {
+    const { walletId, depot, chargeId, paymentIntentId, refundId, montant } =
+      params;
+    const cleIdempotence = `refund:${refundId}`;
     const metadataEcriture = {
       refundKey: cleIdempotence,
+      refundId,
       chargeId,
-      paymentIntentId: paymentIntentId ?? null,
+      paymentIntentId: paymentIntentId ?? '',
       depotTransactionId: depot.id,
     };
 
@@ -1298,7 +1375,7 @@ export class PaymentController {
     } catch (err: any) {
       if (err?.code === '23505' || err?.driverError?.code === '23505') {
         this.logger.debug(
-          `charge.refunded déjà traité (idempotent): charge=${chargeId}`,
+          `remboursement déjà traité (idempotent): refund=${refundId}`,
         );
         return;
       }
@@ -1318,7 +1395,8 @@ export class PaymentController {
     }
 
     this.logger.log(
-      `Remboursement débité: charge=${chargeId} wallet=${walletId} montant=${montant}`,
+      `Remboursement débité: refund=${refundId} charge=${chargeId} ` +
+        `wallet=${walletId} montant=${montant}`,
     );
 
     const userId = await this.proprietaireDuWallet(walletId);
