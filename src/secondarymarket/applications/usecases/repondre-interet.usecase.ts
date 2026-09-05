@@ -9,6 +9,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { OrdreMarcheEntity } from 'src/secondarymarket/infrastructure/persistences/entities/ordre-marche.entity';
 import { OrdreMarcheStatus } from 'src/secondarymarket/domains/ordre-marche';
+import { jourLimiteValidite } from 'src/secondarymarket/domains/tableau-affichage';
 import { NotificationService } from 'src/notifications/applications/notification.service';
 import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
 import { InitiateBuyUseCase } from './initiate-buy.usecase';
@@ -54,6 +55,29 @@ export class RepondreInteretUseCase {
     if (!acheteurId || !nbFractions) {
       throw new BadRequestException(
         "Aucune marque d'intérêt exploitable sur cette annonce.",
+      );
+    }
+
+    // ÉCHÉANCE REVÉRIFIÉE AU MOMENT DE L'ACCEPTATION.
+    //
+    // La date de validité n'était contrôlée qu'à l'affichage du carnet : une
+    // annonce échue entre l'expression d'intérêt et la réponse du vendeur
+    // pouvait encore être acceptée, et la cession se formait sur une offre que
+    // son auteur avait explicitement bornée dans le temps. Le vendeur a fixé
+    // cette limite ; elle vaut jusqu'à la formation du contrat, pas seulement
+    // jusqu'à l'affichage.
+    // `valideJusquAu` est une colonne `date` : TypeORM la rend tantôt en Date,
+    // tantôt en chaîne `YYYY-MM-DD` selon le driver. La comparaison se fait
+    // donc sur la forme normalisée, la même que celle du carnet.
+    const jourValidite =
+      ordre.valideJusquAu instanceof Date
+        ? jourLimiteValidite(ordre.valideJusquAu)
+        : (ordre.valideJusquAu as string | null);
+
+    if (jourValidite && jourValidite < jourLimiteValidite(new Date())) {
+      throw new BadRequestException(
+        "Cette annonce a expiré : sa date de validité est dépassée. " +
+          'Republiez-la pour accepter une nouvelle marque d’intérêt.',
       );
     }
 

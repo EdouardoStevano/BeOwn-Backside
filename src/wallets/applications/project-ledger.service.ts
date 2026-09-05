@@ -369,6 +369,7 @@ export class ProjectLedgerService {
       dejaVerse,
       enDelaiReflexion,
       rates,
+      apportPorteur,
     ] = await Promise.all([
       this.sommeTx(manager, { walletDestination: wallet.id }),
       this.sommeTx(manager, { walletSource: wallet.id }),
@@ -386,6 +387,11 @@ export class ProjectLedgerService {
       }),
       this.sommeEngagementsEnDelai(manager, projetId),
       this.platformFees.getRates(),
+      // Apport du porteur : compté à part du collecté investisseurs.
+      this.sommeTx(manager, {
+        walletDestination: wallet.id,
+        type: TransactionType.APPORT_PORTEUR,
+      }),
     ]);
 
     const collecteBrute = credite - rembourse;
@@ -393,6 +399,7 @@ export class ProjectLedgerService {
       devise: wallet.devise ?? 'EUR',
       credite,
       rembourse,
+      apportPorteur,
       fraisRetenus:
         fraisRetenus + this.fraisDusSurCollecte(collecteBrute, rates),
       dejaVerse,

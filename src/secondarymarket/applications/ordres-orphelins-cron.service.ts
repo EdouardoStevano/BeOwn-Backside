@@ -146,16 +146,30 @@ export class OrdresOrphelinsCronService {
       })
       .catch(() => {});
 
-    if (montantLibere > 0 && ordre.acheteurId != null) {
+    // L'ACHETEUR EST PRÉVENU MÊME SI RIEN N'A ÉTÉ LIBÉRÉ.
+    //
+    // La notification était conditionnée à `montantLibere > 0` : quand aucun
+    // fonds n'était trouvé — libération déjà jouée, ou réservation perdue —
+    // l'acheteur n'apprenait RIEN. Or c'est précisément le cas où il a le plus
+    // besoin de savoir : sa cession est morte, et il doit pouvoir vérifier son
+    // solde. Le message diffère, le silence n'est plus une option.
+    if (ordre.acheteurId != null) {
       await this.notifications
         .push({
           utilisateurId: ordre.acheteurId,
           type: NotificationType.MARCHE_SECONDAIRE,
-          titre: 'Fonds de nouveau disponibles',
+          titre:
+            montantLibere > 0
+              ? 'Fonds de nouveau disponibles'
+              : 'Cession non aboutie',
           message:
-            "La cession que vous aviez engagée n'a pas pu aboutir : les fonds réservés " +
-            'sont de nouveau disponibles sur votre portefeuille.',
-          metadata: { ordreId: ordre.id },
+            montantLibere > 0
+              ? "La cession que vous aviez engagée n'a pas pu aboutir : les fonds réservés " +
+                'sont de nouveau disponibles sur votre portefeuille.'
+              : "La cession que vous aviez engagée n'a pas pu aboutir. Aucun montant " +
+                "n'était réservé à libérer — vérifiez votre solde et contactez-nous " +
+                'si quelque chose vous paraît anormal.',
+          metadata: { ordreId: ordre.id, montantLibere },
         })
         .catch(() => {});
     }

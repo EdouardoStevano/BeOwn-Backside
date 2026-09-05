@@ -38,19 +38,35 @@ export class ExpirerSignatureCessionUseCase {
   ) {}
 
   /** Entrée du webhook prestataire : la signature est désignée par son id externe. */
-  async parRequeteFournisseur(youSignRequestId: string): Promise<ResultatExpiration> {
+  async parRequeteFournisseur(
+    youSignRequestId: string,
+    statutCible: SignatureStatus = SignatureStatus.EXPIRED,
+  ): Promise<ResultatExpiration> {
     const signature = await this.signatureRepo.findOne({
       where: { youSignRequestId },
     });
     if (!signature) return 'noop';
-    return this.execute(signature);
+    return this.execute(signature, statutCible);
   }
 
-  async execute(signature: SignatureEntity): Promise<ResultatExpiration> {
+  /**
+   * `statutCible` distingue les deux façons dont une signature meurt :
+   *  - EXPIRED : le délai s'est écoulé sans que personne n'agisse ;
+   *  - CANCELLED : le signataire a REFUSÉ, ou le parcours a été annulé.
+   *
+   * La compensation qui suit est la MÊME dans les deux cas — annonce rendue au
+   * vendeur, fonds rendus à l'acheteur — parce que le résultat est le même :
+   * la cession n'aura pas lieu. Seule la trace diffère, et elle doit dire ce
+   * qui s'est réellement passé : un refus n'est pas un oubli.
+   */
+  async execute(
+    signature: SignatureEntity,
+    statutCible: SignatureStatus = SignatureStatus.EXPIRED,
+  ): Promise<ResultatExpiration> {
     const expiration = await this.signatureRepo
       .createQueryBuilder()
       .update(SignatureEntity)
-      .set({ statut: SignatureStatus.EXPIRED })
+      .set({ statut: statutCible })
       .where('id = :id AND statut = :pending', {
         id: signature.id,
         pending: SignatureStatus.PENDING,

@@ -16,7 +16,21 @@ import { YouSignService } from 'src/common/yousign/yousign.service';
 import { MetricsPort } from 'src/observability/metrics/metrics.port';
 import { METRIC } from 'src/observability/metrics/metric-names';
 import { ExpirerSignatureCessionUseCase } from 'src/secondarymarket/applications/usecases/expirer-signature-cession.usecase';
+import { SignatureStatus } from 'src/signatures/domains/enums/signature-status.enum';
 import { FinalizeSignedContractUseCase } from 'src/signatures/applications/usecases/finalize-signed-contract.usecase';
+
+/**
+ * Événements du prestataire signifiant que la signature n'aura PAS lieu.
+ *
+ * `declined` : le signataire a explicitement refusé. `canceled` : le parcours
+ * a été annulé (par nous, ou côté prestataire). Les deux formes d'orthographe
+ * sont acceptées — le prestataire n'a pas toujours été constant.
+ */
+const EVENEMENTS_REFUS = [
+  'signature_request.declined',
+  'signature_request.canceled',
+  'signature_request.cancelled',
+];
 
 /**
  * Presenter du webhook YouSign — HTTP uniquement (SRP).
@@ -89,6 +103,25 @@ export class YouSignWebhookController {
       await this.expirerSignature.parRequeteFournisseur(requestId).catch((err) =>
         this.logger.error(`handleSignatureExpired failed for ${requestId}: ${err?.message}`),
       );
+    } else if (EVENEMENTS_REFUS.includes(event)) {
+      // REFUS ou ANNULATION du parcours de signature.
+      //
+      // Ces événements n'étaient routés NULLE PART : la signature restait
+      // PENDING, l'annonce restait bloquée en `accepte` hors du carnet, et les
+      // fonds de l'acheteur restaient réservés — jusqu'à ce que le balayeur
+      // des ordres orphelins passe, des heures plus tard. Le vendeur perdait
+      // son annonce et l'acheteur son argent pour un refus dont la plateforme
+      // était pourtant informée à la seconde.
+      //
+      // La compensation est immédiate, et la signature est marquée CANCELLED
+      // et non EXPIRED : un refus n'est pas un oubli.
+      await this.expirerSignature
+        .parRequeteFournisseur(requestId, SignatureStatus.CANCELLED)
+        .catch((err) =>
+          this.logger.error(
+            `Annulation de cession non traitée pour ${requestId} : ${err?.message}`,
+          ),
+        );
     }
 
     return { received: true };

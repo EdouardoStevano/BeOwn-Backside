@@ -220,8 +220,18 @@ export class DeleteAccountUseCase {
     });
     const solde = wallet ? Number(wallet.solde) : 0;
     if (wallet && solde > 0) {
+      // Deux façons légitimes de savoir où renvoyer l'argent : un IBAN saisi
+      // lors d'un retrait manuel, ou un compte de versement Stripe Connect
+      // actif — le chemin nominal, où les coordonnées bancaires sont détenues
+      // par le prestataire et jamais par nous.
+      //
+      // Ne regarder que l'IBAN bloquait le droit à l'effacement de tout
+      // utilisateur Connect n'ayant jamais retiré : il n'avait aucun IBAN chez
+      // nous, et n'en aurait jamais eu, quoi qu'il fasse.
       const iban = await this.findRegisteredIban(wallet.id);
-      if (!iban) {
+      const versementConnectPossible =
+        user.stripeConnectAccountId != null && user.stripeConnectPayoutsEnabled;
+      if (!iban && !versementConnectPossible) {
         blockers.push({
           code: 'WALLET_BALANCE',
           withdrawalCreated: false,
@@ -298,10 +308,22 @@ export class DeleteAccountUseCase {
       order: { createdAt: 'DESC' },
     });
     if (!lastRetrait) return null;
-    const metaIban = (
-      lastRetrait.metadata as { ibanDestination?: string } | null
-    )?.ibanDestination;
-    return metaIban ?? lastRetrait.fournisseurRef ?? null;
+
+    // SEULE la métadonnée `ibanDestination` fait foi.
+    //
+    // Le repli sur `fournisseurRef` était faux : sur un retrait Stripe
+    // Connect — le chemin nominal — cette colonne porte l'IDENTIFIANT DE
+    // TRANSFERT (`tr_...`), pas des coordonnées bancaires. La plateforme
+    // affichait donc une référence interne du prestataire en la présentant à
+    // l'utilisateur comme « votre IBAN enregistré », et s'en servait pour
+    // décider de son droit à l'effacement.
+    //
+    // Absent, cela signifie simplement qu'aucun retrait MANUEL (chemin
+    // legacy) n'a jamais été fait — pas qu'on ne sait pas où envoyer l'argent.
+    return (
+      (lastRetrait.metadata as { ibanDestination?: string } | null)
+        ?.ibanDestination ?? null
+    );
   }
 
   /**
@@ -325,7 +347,12 @@ export class DeleteAccountUseCase {
     userId: number,
     walletId: string,
     dirtySolde: number,
-    iban: string,
+    /**
+     * IBAN saisi lors d'un retrait manuel, ou `null` quand le versement passe
+     * par le compte Stripe Connect de l'utilisateur — cas nominal, où les
+     * coordonnées bancaires sont détenues par le prestataire et jamais ici.
+     */
+    iban: string | null,
   ): Promise<WithdrawalOutcome> {
     const idempotencyKey = `retrait:suppression:${userId}`;
     let outcome: WithdrawalOutcome;

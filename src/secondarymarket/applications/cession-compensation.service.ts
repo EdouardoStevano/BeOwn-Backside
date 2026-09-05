@@ -1,4 +1,14 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  Optional,
+} from '@nestjs/common';
+import { NotificationService } from 'src/notifications/applications/notification.service';
+import { NotificationType } from 'src/notifications/infrastructure/persistences/entities/notification.entity';
+import { UserRole } from 'src/iam/domains/enums/user.enum';
+import { MetricsPort } from 'src/observability/metrics/metrics.port';
+import { METRIC } from 'src/observability/metrics/metric-names';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, Repository } from 'typeorm';
 import { OrdreMarcheEntity } from 'src/secondarymarket/infrastructure/persistences/entities/ordre-marche.entity';
@@ -50,6 +60,11 @@ export class CessionCompensationService {
     @InjectRepository(WalletEntity)
     private readonly walletRepo: Repository<WalletEntity>,
     private readonly dataSource: DataSource,
+    // Ajoutés en DERNIÈRE position et OPTIONNELS : plusieurs specs
+    // construisent ce service à la main, et une libération sans effet ne doit
+    // jamais échouer faute de collaborateur d'alerte.
+    @Optional() private readonly notifications?: NotificationService,
+    @Optional() private readonly metrics?: MetricsPort,
   ) {}
 
   /** Montant qu'engage une cession — sert d'assiette à la réservation. */
@@ -122,13 +137,37 @@ export class CessionCompensationService {
       .execute();
 
     if (!liberation.affected) {
-      // Rien de bloqué à hauteur du montant : cession antérieure à la
-      // réservation, ou libération déjà jouée. On ne force pas — un recrédit
-      // inconditionnel créerait de l'argent.
-      this.logger.warn(
-        `Libération sans effet pour l'acheteur ${acheteurId} (${formatEur(montant)}) : ` +
-          'aucun montant bloqué correspondant.',
+      // Rien de bloqué à hauteur du montant. Deux mondes possibles, et l'un
+      // des deux est un incident :
+      //  - libération DÉJÀ jouée (webhook puis cron de sécurité) : bénin ;
+      //  - fonds jamais réservés, ou réservation perdue : l'acheteur a une
+      //    cession compensée SANS que son argent lui revienne.
+      //
+      // On ne force RIEN — un recrédit inconditionnel créerait de l'argent —
+      // mais on cesse de traiter les deux cas comme une simple ligne de log
+      // parmi d'autres : `error`, métrique et alerte interne. Un
+      // avertissement noyé dans les journaux n'a jamais rendu un euro à
+      // personne.
+      this.logger.error(
+        `Libération SANS EFFET pour l'acheteur ${acheteurId} (${formatEur(montant)}) : ` +
+          'aucun montant bloqué correspondant. Soit la libération avait déjà été ' +
+          'jouée, soit les fonds n’ont jamais été réservés — à vérifier.',
       );
+      this.metrics?.incrementCounter(METRIC.SECONDARY_ORDERS_TOTAL, {
+        action: 'liberation_sans_effet',
+      });
+      this.notifications
+        ?.pushToAdmins({
+          type: NotificationType.MARCHE_SECONDAIRE,
+          titre: 'Libération de fonds sans effet',
+          message:
+            `La compensation d'une cession a tenté de libérer ${formatEur(montant)} ` +
+            `pour l'acheteur ${acheteurId}, sans trouver de montant bloqué ` +
+            'correspondant. Vérifier que ses fonds ne sont pas restés engagés.',
+          roles: [UserRole.FINANCIER, UserRole.SUPER_ADMIN],
+          metadata: { acheteurId, montant },
+        })
+        .catch(() => undefined);
       return 0;
     }
     return montant;

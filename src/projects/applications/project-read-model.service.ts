@@ -46,6 +46,29 @@ export class ProjectReadModelService {
     InvestmentStatus.REMBOURSE_TOTAL,
   ];
 
+  /**
+   * Montant réellement collecté : Σ des investissements aux STATUTS ACTIFS.
+   *
+   * DÉFINITION UNIQUE pour la liste et le détail. La liste calculait
+   * `fractionsVendues × prixFraction`, le détail sommait les montants réels :
+   * les deux vues affichaient des chiffres différents pour le même projet.
+   * L'écart n'est pas théorique — une cession au marché secondaire mute le
+   * `montant` de la ligne au prix de revente sans changer le nombre de
+   * fractions, si bien que le produit « fractions × prix d'origine » dérive
+   * dès la première revente.
+   *
+   * C'est la définition du DÉTAIL qui est retenue : elle somme ce qui a
+   * réellement été engagé, là où l'autre reconstitue une estimation.
+   */
+  private sommerCollecte(
+    investments: { statut: InvestmentStatus; montant: number | string }[],
+  ): number {
+    const total = investments
+      .filter((i) => ProjectReadModelService.STATUTS_ACTIFS.includes(i.statut))
+      .reduce((somme, inv) => somme + Number(inv.montant), 0);
+    return Math.round(total * 100) / 100;
+  }
+
   /** Investisseurs DISTINCTS d'un projet : une personne, une voix, quel que soit son nombre de lignes. */
   private compterInvestisseurs(
     investments: { statut: InvestmentStatus; utilisateurId: number }[],
@@ -73,6 +96,12 @@ export class ProjectReadModelService {
         ids.map((id) => this.investmentRepository.findByProjetId(id)),
       ),
     ]);
+    const collecteParProjet = new Map<string, number>(
+      ids.map((id, index) => [
+        id,
+        this.sommerCollecte(investissementsParProjet[index] as any),
+      ]),
+    );
     const investisseursParProjet = new Map<string, number>(
       ids.map((id, index) => [
         id,
@@ -105,7 +134,8 @@ export class ProjectReadModelService {
           prix: prixFraction,
         },
         stats: {
-          montantCollecte: fractionsVendues * prixFraction,
+          // MÊME définition que le détail : Σ des investissements actifs.
+          montantCollecte: collecteParProjet.get(p.id) ?? 0,
           nbInvestisseurs: investisseursParProjet.get(p.id) ?? 0,
           tauxRemplissage,
         },
@@ -152,10 +182,7 @@ export class ProjectReadModelService {
     const activeInvestments = allInvestments.filter((i) =>
       ProjectReadModelService.STATUTS_ACTIFS.includes(i.statut),
     );
-    const montantCollecte = activeInvestments.reduce(
-      (sum, inv) => sum + Number(inv.montant),
-      0,
-    );
+    const montantCollecte = this.sommerCollecte(allInvestments as any);
     const nbInvestisseurs = this.compterInvestisseurs(allInvestments);
 
     const images = allDocs

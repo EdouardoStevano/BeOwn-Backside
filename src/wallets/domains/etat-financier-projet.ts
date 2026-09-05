@@ -20,6 +20,20 @@ export interface AgregatsLedgerProjet {
   credite: number;
   /** Σ des remboursements débités du wallet projet (collecte échouée ou annulée). */
   rembourse: number;
+  /**
+   * Σ des APPORTS DU PORTEUR (`APPORT_PORTEUR`) : l'argent qu'il a lui-même
+   * mis dans son projet pour en servir la dette.
+   *
+   * Compté à part parce que ce n'est PAS de la collecte : le confondre avec
+   * les souscriptions gonflait le « Collecté » affiché au back-office d'un
+   * montant qui ne vient d'aucun investisseur — un projet peu souscrit mais
+   * bien alimenté par son porteur paraissait avoir levé plus qu'il n'avait
+   * réellement levé.
+   *
+   * Optionnel : les appelants qui ne le fournissent pas (états financiers
+   * historiques, tests antérieurs) valent zéro — le comportement précédent.
+   */
+  apportPorteur?: number;
   /** Σ des frais de plateforme prélevés sur le wallet projet. */
   fraisRetenus: number;
   /** Σ des versements au porteur déjà constatés (sorties hors plateforme). */
@@ -44,6 +58,16 @@ export interface EtatFinancierProjet {
   devise: string;
   /** Fonds définitivement acquis au projet, remboursements déduits. */
   collecte: number;
+  /** Part de `collecte` provenant du PORTEUR lui-même, et non d'investisseurs. */
+  apportPorteur: number;
+  /**
+   * Ce que les INVESTISSEURS ont réellement engagé : `collecte − apportPorteur`.
+   *
+   * C'est ce chiffre que le back-office doit afficher sous « Collecté ».
+   * `collecte` reste la somme des entrées du portefeuille et sert au contrôle
+   * de cohérence — les mélanger ferait mentir l'un ou l'autre.
+   */
+  collecteInvestisseurs: number;
   /** Fonds engagés mais encore rétractables : ils ne sont pas dans `collecte`. */
   enDelaiReflexion: number;
   fraisRetenus: number;
@@ -71,6 +95,11 @@ export function calculerEtatFinancierProjet(
   agregats: AgregatsLedgerProjet,
 ): EtatFinancierProjet {
   const collecte = round2(agregats.credite - agregats.rembourse);
+  const apportPorteur = round2(agregats.apportPorteur ?? 0);
+  // Retranché de l'AFFICHAGE, jamais de l'arithmétique de réconciliation :
+  // l'apport est bien dans le portefeuille, et l'en soustraire ferait
+  // apparaître un faux écart entre le solde réel et le restant dû.
+  const collecteInvestisseurs = round2(collecte - apportPorteur);
   const fraisRetenus = round2(agregats.fraisRetenus);
   const autresDecaissements = round2(agregats.autresDecaissements);
   const netAVerser = round2(collecte - fraisRetenus - autresDecaissements);
@@ -83,6 +112,8 @@ export function calculerEtatFinancierProjet(
     projetId,
     devise: agregats.devise,
     collecte,
+    apportPorteur,
+    collecteInvestisseurs,
     enDelaiReflexion: round2(agregats.enDelaiReflexion),
     fraisRetenus,
     autresDecaissements,

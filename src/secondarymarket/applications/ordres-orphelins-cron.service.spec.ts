@@ -149,7 +149,13 @@ describe('OrdresOrphelinsCronService', () => {
     expect(h.notifications.push).not.toHaveBeenCalled();
   });
 
-  it('rien à rendre côté fonds : l’acheteur n’est pas notifié d’une libération qui n’a pas eu lieu', async () => {
+  /**
+   * L'acheteur n'était PAS prévenu quand rien n'avait pu être libéré — c'est
+   * pourtant le cas où il en a le plus besoin : sa cession est morte, et si
+   * aucun montant n'était réservé, il doit pouvoir vérifier son solde. Le
+   * silence laissait l'anomalie invisible de la seule personne concernée.
+   */
+  it('rien à rendre côté fonds : l’acheteur est prévenu QUAND MÊME, avec un autre message', async () => {
     const h = build({
       candidats: [ordre()],
       signatures: [],
@@ -164,7 +170,14 @@ describe('OrdresOrphelinsCronService', () => {
     const destinataires = h.notifications.push.mock.calls.map(
       (appel: any[]) => appel[0].utilisateurId,
     );
-    expect(destinataires).toEqual([5]); // le vendeur seulement
+    expect(destinataires).toEqual(expect.arrayContaining([5, 9]));
+
+    const versAcheteur = h.notifications.push.mock.calls.find(
+      (appel: any[]) => appel[0].utilisateurId === 9,
+    )[0];
+    expect(versAcheteur.titre).toBe('Cession non aboutie');
+    expect(versAcheteur.message).toContain('Aucun montant');
+    expect(versAcheteur.metadata.montantLibere).toBe(0);
   });
 
   it('un ordre en échec n’empêche pas la libération des suivants', async () => {
