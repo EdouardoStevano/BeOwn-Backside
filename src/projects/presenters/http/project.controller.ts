@@ -48,6 +48,7 @@ import { AVIS_REPOSITORY } from 'src/avis/applications/ports/repositories/avis.r
 import type { AvisRepository } from 'src/avis/applications/ports/repositories/avis.repository';
 import { Avis } from 'src/avis/domains/avis';
 import { projeterAvisPublics } from 'src/avis/domains/avis-public';
+import { projeterProjetPourListe } from 'src/projects/domains/projet-liste-publique';
 import { CreateAvisDto } from 'src/avis/presenters/dto/avis.dto';
 import { CurrentUser } from 'src/common/auth/current-user.decorator';
 import type { ActiveUser } from 'src/common/auth/current-user.decorator';
@@ -117,7 +118,11 @@ export class ProjectController {
     });
     const enriched = await this.projectReadModel.enrichFractions(result.data);
     const withImages = await this.projectReadModel.enrichImages(enriched);
-    return { ...result, data: withImages };
+    // A6 — une liste n'est pas une pile de dossiers complets : le FICI, la
+    // présentation rédigée et le prévisionnel sortent d'ici (≈ 25 Ko pour
+    // quatre projets). Le détail les conserve. Voir projet-liste-publique.ts
+    // pour la vérification champ par champ de ce que le front consomme.
+    return { ...result, data: withImages.map(projeterProjetPourListe) };
   }
 
   @ApiOperation({ summary: 'Lister les projets (admin)' })
