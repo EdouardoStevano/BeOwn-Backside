@@ -163,7 +163,6 @@ describe('Gel des avoirs — refus 403 sur les 4 chemins d’argent sortant', ()
         piege(), // investRepo
         piege(), // documentRepo
         piege(), // signatureRepo
-        piege(), // walletRepo
         piege(), // userRepo
         piege(), // userEmailRepo
         piege(), // cloudStorage

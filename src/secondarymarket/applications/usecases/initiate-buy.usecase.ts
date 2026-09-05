@@ -11,19 +11,16 @@ import { OrdreMarcheEntity } from 'src/secondarymarket/infrastructure/persistenc
 import { InvestmentEntity } from 'src/investments/infrastructure/persistences/entities/investment.entity';
 import { DocumentEntity } from 'src/documents/infrastructure/persistences/entities/document.entity';
 import { SignatureEntity } from 'src/signatures/infrastructure/persistences/entities/signature.entity';
-import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/wallet.entity';
 import { UserEntity } from 'src/iam/infrastructure/persistence/entities/user.entity';
 import { UserEmailEntity } from 'src/iam/infrastructure/persistence/entities/user-email.entity';
 import { OrdreMarcheStatus } from 'src/secondarymarket/domains/ordre-marche';
 import { InvestmentStatus } from 'src/investments/domains/enums/investment-status.enum';
 import { DocumentType, DocumentRelatedTo } from 'src/documents/domains/enums/document-type.enum';
 import { SignatureStatus } from 'src/signatures/domains/enums/signature-status.enum';
-import { WalletType } from 'src/wallets/domains/enums/wallet.enum';
 import { CloudStorageService } from 'src/shared/cloud-storage/cloud-storage.service';
 import { ContractGeneratorService } from 'src/investments/applications/usecases/contract-generator.service';
 import { SignatureProvider } from 'src/signatures/applications/ports/signature-provider.port';
 import { GelDesAvoirsPort } from 'src/common/aml/gel-des-avoirs.port';
-import { formatEur } from 'src/shared/money/format-eur';
 import { ConflitsInteretsService } from 'src/projects/applications/conflits-interets.service';
 
 /**
@@ -55,8 +52,9 @@ export class InitiateBuyUseCase {
     private readonly documentRepo: Repository<DocumentEntity>,
     @InjectRepository(SignatureEntity)
     private readonly signatureRepo: Repository<SignatureEntity>,
-    @InjectRepository(WalletEntity)
-    private readonly walletRepo: Repository<WalletEntity>,
+    // `walletRepo` a été RETIRÉ avec le contrôle de solde redondant : garder
+    // une dépendance injectée que plus personne n'utilise, c'est laisser
+    // croire que ce use case a encore son mot à dire sur la solvabilité.
     @InjectRepository(UserEntity)
     private readonly userRepo: Repository<UserEntity>,
     @InjectRepository(UserEmailEntity)
@@ -125,20 +123,24 @@ export class InitiateBuyUseCase {
       ordre.investissement?.projet ?? projetId,
     );
 
-    // ── Vérification solde wallet (sans débiter) ───────────────────────────────
-    const wallet = await this.walletRepo.findOne({
-      where: { proprietaireUserId: userId, type: WalletType.INVESTISSEUR },
-    });
-    if (!wallet) {
-      throw new BadRequestException(
-        "Wallet introuvable. Alimentez votre compte avant d'investir.",
-      );
-    }
-    if (Number(wallet.solde) < totalCost) {
-      throw new BadRequestException(
-        `Solde insuffisant. Disponible : ${formatEur(Number(wallet.solde))} — Requis : ${formatEur(totalCost)}`,
-      );
-    }
+    // ── Pas de contrôle de solde ici : il est DÉJÀ fait, et le rejouer casse ──
+    //
+    // Ce use case n'est appelé que par `RepondreInteretUseCase.accepter()`, qui
+    // vient d'exécuter `CessionCompensationService.reserverFonds()` — une
+    // écriture ATOMIQUE ET CONDITIONNELLE (`solde >= :montant`) qui a déplacé
+    // le montant de la cession de `solde` vers `soldeBloque` et qui a déjà
+    // échoué en erreur métier si les fonds manquaient.
+    //
+    // Le contrôle qui vivait ici relisait `wallet.solde` APRÈS ce débit et
+    // exigeait `solde >= totalCost`. La condition réelle était donc
+    // `soldeAvant - montant >= montant`, c'est-à-dire `soldeAvant >= 2 × montant` :
+    // un acheteur provisionné au centime près se voyait refuser sa propre
+    // cession avec « Solde insuffisant. Disponible : 0,00 € » — le montant
+    // était bien là, mais bloqué pour cette cession précise. Le marché
+    // secondaire était inutilisable hors sur-provisionnement du double.
+    //
+    // Il n'y a rien à remettre à la place : la réservation est la garde, elle
+    // est atomique, et elle est antérieure.
 
     // ── Investissement existant sur ce projet ? (cas A vs cas B) ─────────────
     const existingInvestment = await this.investRepo.findOne({

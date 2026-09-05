@@ -93,10 +93,13 @@ describe('Acceptation vendeur → initiation de cession (intégration)', () => {
       ordre = construireOrdre(),
       erreurYousign = null,
       porteurDuProjet = VENDEUR_ID,
+      soldeAcheteur = 10_000,
     }: {
       ordre?: any;
       erreurYousign?: Error | null;
       porteurDuProjet?: number | null;
+      /** Disponible de l'acheteur AVANT réservation — B1 se joue ici. */
+      soldeAcheteur?: number;
     } = {},
   ) => {
     const ordreRepo = construireDepotOrdres(ordre);
@@ -142,8 +145,6 @@ describe('Acceptation vendeur → initiation de cession (intégration)', () => {
           return saved;
         }),
       } as any,
-      // walletRepo — l'acheteur est solvable.
-      { findOne: jest.fn(async () => ({ solde: 10_000 })) } as any,
       // userRepo
       {
         findOne: jest.fn(async () => ({
@@ -184,7 +185,7 @@ describe('Acceptation vendeur → initiation de cession (intégration)', () => {
     // Réservation des fonds : simulée, avec une position d'acheteur réelle pour
     // que blocage et libération se compensent réellement dans les scénarios de
     // compensation ci-dessous.
-    const position = { disponible: 10_000, bloque: 0 };
+    const position = { disponible: soldeAcheteur, bloque: 0 };
     const compensation = {
       reserverFonds: jest.fn(async (_acheteurId: number, montant: number) => {
         if (position.disponible < montant) {
@@ -240,6 +241,63 @@ describe('Acceptation vendeur → initiation de cession (intégration)', () => {
       userId: ACHETEUR_ID,
       nbFractions: 3,
       youSignRequestId: 'ys-req-1',
+    });
+  });
+
+  /**
+   * B1 — LE MARCHÉ SECONDAIRE ÉTAIT INUTILISABLE HORS SUR-PROVISIONNEMENT.
+   *
+   * `InitiateBuyUseCase` rejouait un contrôle `wallet.solde >= totalCost`
+   * APRÈS que `reserverFonds` ait déplacé ce même montant de `solde` vers
+   * `soldeBloque`. La condition effective était donc `soldeAvant >= 2 × montant` :
+   * l'acheteur provisionné au centime près recevait
+   * « Solde insuffisant. Disponible : 0,00 € » — son argent était là, mais
+   * bloqué pour la cession qu'il tentait justement de conclure.
+   *
+   * Les suites existantes provisionnaient 10 000 € pour une cession de 300 € :
+   * elles satisfaisaient le double sans le savoir et ne pouvaient pas voir le
+   * défaut. D'où ce cas, au centime exact.
+   */
+  describe('B1 — provisionnement au centime exact', () => {
+    const MONTANT_CESSION = 300; // 3 fractions × 100 €
+
+    it('solde = montant exact → la cession se forme', async () => {
+      const { repondre, ordre, position, signaturesEnregistrees } = construire({
+        soldeAcheteur: MONTANT_CESSION,
+      });
+
+      await expect(repondre.accepter(ORDRE_ID, VENDEUR_ID)).resolves.toMatchObject(
+        { signatureId: 'sig-1' },
+      );
+
+      expect(ordre.statut).toBe(OrdreMarcheStatus.ACCEPTE);
+      expect(signaturesEnregistrees).toHaveLength(1);
+      // Tout le disponible est passé en bloqué : rien n'a été créé ni détruit.
+      expect(position).toEqual({ disponible: 0, bloque: MONTANT_CESSION });
+    });
+
+    it('solde = montant − 1 centime → refus AVANT tout engagement', async () => {
+      const { repondre, ordre, position, signaturesEnregistrees } = construire({
+        soldeAcheteur: MONTANT_CESSION - 0.01,
+      });
+
+      await expect(repondre.accepter(ORDRE_ID, VENDEUR_ID)).rejects.toThrow();
+
+      // L'annonce est rendue au vendeur, aucun euro n'est resté bloqué.
+      expect(ordre.statut).toBe(OrdreMarcheStatus.INTERET_EXPRIME);
+      expect(position).toEqual({
+        disponible: MONTANT_CESSION - 0.01,
+        bloque: 0,
+      });
+      expect(signaturesEnregistrees).toHaveLength(0);
+    });
+
+    it("l'initiation ne consulte AUCUN portefeuille : la solvabilité est déjà tranchée", async () => {
+      // Contre-épreuve structurelle du correctif : si un contrôle de solde
+      // revenait dans ce use case, il aurait besoin d'un dépôt de wallets —
+      // qui n'est plus dans son constructeur. Le nombre d'arguments fige la
+      // décision.
+      expect(InitiateBuyUseCase.length).toBe(11);
     });
   });
 

@@ -268,8 +268,7 @@ describe('Décision D5 — les sept portes d’entrée refusent le porteur du pr
         piege(), // investRepo
         piege(), // documentRepo
         piege(), // signatureRepo
-        piege(), // walletRepo — premier collaborateur APRÈS la garde
-        piege(), // userRepo
+        piege(), // userRepo — premier collaborateur APRÈS la garde
         piege(), // userEmailRepo
         piege(), // cloudStorage
         piege(), // contractGenerator
