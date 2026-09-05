@@ -48,6 +48,30 @@ const MAX_ECARTS_JOURNALISES = 20;
 /** Étiquette du job portée par la jauge de fraîcheur de réconciliation. */
 const JOB_RECONCILIATION = 'grand-livre';
 
+/**
+ * Marge tolérée sur la COUVERTURE, en euros.
+ *
+ * Plus large que la tolérance d'arrondi du grand livre interne (un dixième de
+ * centime), et pour une raison de fond : les dépôts sont crédités BRUT à
+ * l'investisseur alors que le prestataire encaisse NET de ses propres frais.
+ * L'écart est donc STRUCTUREL et croît avec le volume — il ne traduit aucune
+ * anomalie. Tant que les frais du prestataire ne sont pas inscrits au registre
+ * (écriture dédiée vers un portefeuille de frais), cette marge absorbe le
+ * biais connu ; au-delà, c'est un vrai découvert.
+ */
+const TOLERANCE_COUVERTURE_EUR = 500;
+
+/**
+ * Aggravation à partir de laquelle un découvert DÉJÀ CONNU redevient une
+ * alerte. En deçà, il est journalisé sans réveiller personne : un incident
+ * stable est un incident instruit, et le réannoncer chaque matin est le plus
+ * sûr moyen de le faire ignorer le jour où il se creuse.
+ */
+const SEUIL_DEGRADATION_EUR = 50;
+
+/** Arrondi au centime — les montants du registre vivent en decimal(18,2). */
+const round2 = (n: number): number => Math.round(n * 100) / 100;
+
 export interface RapportReconciliation {
   /** Horodatage ISO de l'exécution. */
   executeLe: string;
@@ -59,10 +83,40 @@ export interface RapportReconciliation {
   ecartLedgerTotalEur: number;
   /** Σ (solde + soldeBloque) des portefeuilles investisseurs. */
   soldeInvestisseursEur: number;
+  /**
+   * Σ des fonds détenus par TOUS les portefeuilles créditeurs — investisseurs,
+   * trésorerie de projet, SCI, frais, taxes, séquestres fiscaux. C'est ce que
+   * la plateforme doit pouvoir honorer.
+   *
+   * Les portefeuilles à solde NÉGATIF (découvert de projet, toléré et
+   * documenté) sont comptés pour ZÉRO et non en négatif : un déficit interne
+   * ne réduit pas ce que la plateforme doit à ses créanciers, et le compter
+   * en moins rendrait l'invariant plus indulgent à mesure que la situation se
+   * dégrade.
+   */
+  engagementTotalEur: number;
   /** Solde du compte plateforme chez le PSP ; `null` si celui-ci est injoignable. */
   soldeStripeEur: number | null;
   /** `soldeStripe − soldeInvestisseurs` ; `null` si le PSP est injoignable. */
   ecartStripeEur: number | null;
+  /**
+   * `soldeStripe − engagementTotal`. POSITIF = la couverture est assurée.
+   * `null` si le PSP est injoignable.
+   */
+  couvertureEur: number | null;
+  /**
+   * Verdict du volet PSP :
+   *  - `couverte`      : le prestataire couvre les engagements ;
+   *  - `decouverte`    : il ne les couvre pas — anomalie réelle ;
+   *  - `indisponible`  : prestataire injoignable, contrôle NON MENÉ (STALE).
+   */
+  couvertureStatut: 'couverte' | 'decouverte' | 'indisponible';
+  /**
+   * Aggravation du découvert depuis la dernière exécution, en euros. `null`
+   * quand il n'existe pas de point de comparaison (premier passage après un
+   * redémarrage). Positif = la situation s'est dégradée.
+   */
+  degradationEur: number | null;
   /** Vrai seulement si les DEUX contrôles ont pu être menés et sont au vert. */
   equilibre: boolean;
 }
@@ -97,6 +151,16 @@ export interface RapportReconciliation {
 @Injectable()
 export class ReconciliationService {
   private readonly logger = new Logger(ReconciliationService.name);
+
+  /**
+   * Découvert de couverture constaté à l'exécution précédente, en euros.
+   *
+   * En mémoire de processus — entorse assumée et bornée : perdre ce repère au
+   * redémarrage fait simplement retomber sur l'alerte absolue au passage
+   * suivant, jamais sur un silence. Le persister supposerait une table, donc
+   * une évolution de schéma, pour une valeur dont l'oubli est sans danger.
+   */
+  private dernierDecouvertEur: number | null = null;
 
   constructor(
     @InjectRepository(WalletEntity)
@@ -142,22 +206,56 @@ export class ReconciliationService {
       .filter((w) => w.type === WalletType.INVESTISSEUR)
       .reduce((total, w) => total + fondsDetenus(w), 0);
 
-    // 5. Volet PSP — isolé dans son propre try/catch : une panne Stripe ne doit
+    // 5. ENGAGEMENT TOTAL — ce que la plateforme doit pouvoir honorer, tous
+    //    portefeuilles créditeurs confondus. L'invariant précédent comparait
+    //    le solde PSP aux SEULS portefeuilles investisseurs, et exigeait
+    //    l'ÉGALITÉ : deux raisons de crier tous les matins sans qu'il ne se
+    //    passe rien.
+    const engagementTotalEur = round2(
+      wallets.reduce((total, w) => total + Math.max(0, fondsDetenus(w)), 0),
+    );
+
+    // 6. Volet PSP — isolé dans son propre try/catch : une panne Stripe ne doit
     //    PAS emporter le contrôle du grand livre interne, qui se suffit à
     //    lui-même et reste le plus critique des deux.
     const soldeStripeEur = await this.lireSoldePlateforme();
     const ecartStripeEur =
-      soldeStripeEur === null ? null : soldeStripeEur - soldeInvestisseursEur;
+      soldeStripeEur === null ? null : round2(soldeStripeEur - soldeInvestisseursEur);
+
+    // COUVERTURE, ET NON ÉGALITÉ. Le prestataire doit COUVRIR les engagements,
+    // pas les égaler : il détient en plus les frais encaissés, la trésorerie
+    // des projets et les séquestres fiscaux. Exiger l'égalité garantissait une
+    // alerte critique STRUCTURELLE chaque matin — et une alerte qui crie tous
+    // les jours est une alerte que plus personne ne lit le jour où elle a
+    // raison.
+    const couvertureEur =
+      soldeStripeEur === null
+        ? null
+        : round2(soldeStripeEur - engagementTotalEur);
+
+    const couvertureStatut: RapportReconciliation['couvertureStatut'] =
+      couvertureEur === null
+        ? 'indisponible'
+        : couvertureEur >= -TOLERANCE_COUVERTURE_EUR
+          ? 'couverte'
+          : 'decouverte';
+
+    // DÉGRADATION plutôt qu'écart absolu : un découvert stable est un incident
+    // déjà connu et instruit ; ce qui doit réveiller quelqu'un, c'est qu'il se
+    // CREUSE. La comparaison porte sur l'exécution précédente de ce processus.
+    const decouvertActuel = couvertureEur === null ? null : Math.max(0, -couvertureEur);
+    const degradationEur =
+      decouvertActuel === null || this.dernierDecouvertEur === null
+        ? null
+        : round2(decouvertActuel - this.dernierDecouvertEur);
+    if (decouvertActuel !== null) this.dernierDecouvertEur = decouvertActuel;
 
     // Un contrôle qui n'a pas pu être mené n'est pas un contrôle réussi : PSP
     // injoignable ⇒ l'invariant de couverture n'est pas PROUVÉ, donc pas
     // d'« équilibre » annoncé. Mieux vaut une alerte explicitement libellée
     // « solde PSP indisponible » qu'un feu vert sur une vérification qui n'a
     // jamais eu lieu.
-    const equilibre =
-      ecarts.length === 0 &&
-      ecartStripeEur !== null &&
-      Math.abs(ecartStripeEur) <= TOLERANCE_INVARIANT_EUR;
+    const equilibre = ecarts.length === 0 && couvertureStatut === 'couverte';
 
     const rapport: RapportReconciliation = {
       executeLe,
@@ -166,8 +264,12 @@ export class ReconciliationService {
       ecarts,
       ecartLedgerTotalEur,
       soldeInvestisseursEur,
+      engagementTotalEur,
       soldeStripeEur,
       ecartStripeEur,
+      couvertureEur,
+      couvertureStatut,
+      degradationEur,
       equilibre,
     };
 
@@ -176,8 +278,32 @@ export class ReconciliationService {
     if (equilibre) {
       this.logger.log(
         `Réconciliation OK — ${rapport.nbWallets} portefeuilles, ` +
-          `${rapport.nbEcritures} écritures, aucun écart ; ` +
-          `investisseurs ${formatEur(soldeInvestisseursEur)} / PSP ${formatEur(soldeStripeEur ?? 0)}.`,
+          `${rapport.nbEcritures} écritures, aucun écart ; engagements ` +
+          `${formatEur(engagementTotalEur)} couverts par ${formatEur(soldeStripeEur ?? 0)} ` +
+          `chez le prestataire (marge ${formatEur(couvertureEur ?? 0)}).`,
+      );
+    } else if (
+      ecarts.length === 0 &&
+      couvertureStatut === 'indisponible'
+    ) {
+      // Contrôle NON MENÉ : le grand livre interne est pourtant rapproché.
+      // C'est une lacune de surveillance, pas une anomalie comptable — la
+      // distinguer évite de réveiller quelqu'un pour une panne d'API.
+      this.logger.warn(
+        `Réconciliation PARTIELLE (STALE) — grand livre rapproché, couverture ` +
+          'NON vérifiée : prestataire de paiement injoignable.',
+      );
+    } else if (
+      ecarts.length === 0 &&
+      couvertureStatut === 'decouverte' &&
+      degradationEur !== null &&
+      degradationEur <= SEUIL_DEGRADATION_EUR
+    ) {
+      // Découvert connu et STABLE (voire résorbé) : on le journalise sans
+      // réveiller personne. Ce qui alerte, c'est qu'il se creuse.
+      this.logger.warn(
+        `Découvert de couverture STABLE à ${formatEur(Math.abs(couvertureEur ?? 0))} ` +
+          `(variation ${formatEur(degradationEur)}) — déjà signalé, pas de nouvelle alerte.`,
       );
     } else {
       this.alerter(rapport);
@@ -271,12 +397,13 @@ export class ReconciliationService {
       METRIC.WALLET_LEDGER_DISCREPANCY_EUR,
       rapport.ecartLedgerTotalEur,
     );
-    if (rapport.ecartStripeEur !== null) {
-      // Valeur ABSOLUE : le sens de l'écart se lit dans le rapport et les
-      // journaux ; l'alerte, elle, ne doit se déclencher que sur l'ampleur.
+    if (rapport.couvertureEur !== null) {
+      // La jauge porte le DÉCOUVERT (0 quand la couverture est assurée), et
+      // non l'écart à une égalité qui n'a jamais eu lieu d'être : une marge
+      // positive est le fonctionnement normal, pas une anomalie à mesurer.
       this.metrics.setGauge(
         METRIC.STRIPE_BALANCE_DISCREPANCY_EUR,
-        Math.abs(rapport.ecartStripeEur),
+        Math.max(0, -rapport.couvertureEur),
       );
     }
   }
@@ -361,14 +488,27 @@ export class ReconciliationService {
         'Solde du prestataire de paiement INDISPONIBLE : la couverture des ' +
           'portefeuilles investisseurs n’a pas pu être vérifiée.',
       );
-    } else if (
-      rapport.ecartStripeEur !== null &&
-      Math.abs(rapport.ecartStripeEur) > TOLERANCE_INVARIANT_EUR
-    ) {
+    } else if (rapport.couvertureStatut === 'decouverte') {
       morceaux.push(
-        `Couverture PSP : ${formatEur(rapport.soldeStripeEur)} détenus pour ` +
-          `${formatEur(rapport.soldeInvestisseursEur)} dus aux investisseurs, ` +
-          `soit un écart de ${formatEur(rapport.ecartStripeEur)}.`,
+        `DÉCOUVERT DE COUVERTURE : ${formatEur(rapport.soldeStripeEur)} détenus ` +
+          `chez le prestataire pour ${formatEur(rapport.engagementTotalEur)} ` +
+          `d'engagements (dont ${formatEur(rapport.soldeInvestisseursEur)} dus aux ` +
+          `investisseurs), soit un manque de ` +
+          `${formatEur(Math.abs(rapport.couvertureEur ?? 0))}.` +
+          (rapport.degradationEur !== null
+            ? ` Aggravation depuis le dernier contrôle : ${formatEur(rapport.degradationEur)}.`
+            : ''),
+      );
+      // BIAIS STRUCTUREL CONNU, dit dans l'alerte plutôt que découvert par
+      // celui qui la reçoit : les dépôts sont crédités BRUT à l'investisseur
+      // alors que le prestataire encaisse NET de ses propres frais. Un
+      // découvert de l'ordre de ces frais cumulés n'est donc pas
+      // nécessairement une perte — tant que ces frais ne sont pas inscrits au
+      // registre par une écriture dédiée, l'écart croît avec le volume.
+      morceaux.push(
+        'À vérifier avant de conclure : les frais du prestataire ne sont pas ' +
+          'encore inscrits au registre (dépôts crédités BRUT, encaissés NET). ' +
+          'Un écart de cet ordre de grandeur est structurel, pas comptable.',
       );
     }
 

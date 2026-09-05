@@ -99,9 +99,12 @@ describe('ReconciliationService', () => {
       }),
     };
 
-    // Solde PSP couvrant exactement les 1 500 € dus aux investisseurs.
+    // Solde PSP couvrant l'ENGAGEMENT TOTAL : 1 500 € dus aux investisseurs
+    // PLUS 2 000 € de trésorerie de projet. L'invariant précédent comparait au
+    // seul solde investisseurs et exigeait l'égalité — il criait donc tous les
+    // matins sur une plateforme parfaitement saine.
     plateformeBalance = {
-      lireSolde: jest.fn(async () => ({ totalEur: 1500, devise: 'EUR' })),
+      lireSolde: jest.fn(async () => ({ totalEur: 3500, devise: 'EUR' })),
     };
     notifications = { pushToAdmins: jest.fn(async () => []) };
     metrics = {
@@ -135,8 +138,14 @@ describe('ReconciliationService', () => {
     expect(rapport.nbWallets).toBe(3);
     expect(rapport.nbEcritures).toBe(3);
     expect(rapport.soldeInvestisseursEur).toBe(1500);
-    expect(rapport.soldeStripeEur).toBe(1500);
-    expect(rapport.ecartStripeEur).toBe(0);
+    expect(rapport.engagementTotalEur).toBe(3500);
+    expect(rapport.soldeStripeEur).toBe(3500);
+    expect(rapport.couvertureEur).toBe(0);
+    expect(rapport.couvertureStatut).toBe('couverte');
+    // Champ historique conservé : marge au-dessus des SEULS investisseurs.
+    // Il ne porte plus l'invariant — la couverture porte sur TOUS les
+    // engagements — mais reste utile au diagnostic.
+    expect(rapport.ecartStripeEur).toBe(2000);
     expect(rapport.equilibre).toBe(true);
 
     // Silence radio : alerter sur un contrôle au vert est le plus sûr moyen
@@ -214,38 +223,144 @@ describe('ReconciliationService', () => {
     // Le job, lui, est bien allé au bout.
     expect(jauge(METRIC.RECONCILIATION_LAST_SUCCESS_TIMESTAMP)).toBeDefined();
 
-    // ARBITRAGE ASSUMÉ : un contrôle non mené n'est pas un contrôle réussi.
-    // L'équipe est prévenue que le volet PSP n'a pas pu être vérifié.
+    // ARBITRAGE ASSUMÉ : un contrôle non mené n'est pas un contrôle réussi —
+    // l'équilibre n'est donc PAS annoncé, et le rapport le dit explicitement.
     expect(rapport.equilibre).toBe(false);
-    expect(notifications.pushToAdmins).toHaveBeenCalledTimes(1);
-    expect(notifications.pushToAdmins.mock.calls[0][0].message).toContain(
-      'INDISPONIBLE',
-    );
+    expect(rapport.couvertureStatut).toBe('indisponible');
+    expect(rapport.couvertureEur).toBeNull();
+
+    // Mais ce n'est pas une anomalie COMPTABLE : le grand livre interne est
+    // rapproché. Une panne d'API tierce ne doit pas réveiller quelqu'un la
+    // nuit sous le même libellé qu'un trou de trésorerie.
+    expect(notifications.pushToAdmins).not.toHaveBeenCalled();
   });
 
-  it('alerte sur un écart de couverture PSP même quand le grand livre est rapproché', async () => {
-    // 1 200 € détenus chez le prestataire pour 1 500 € dus aux investisseurs :
-    // la plateforme doit à ses clients plus qu'elle ne détient.
+  it('alerte sur un DÉCOUVERT de couverture même quand le grand livre est rapproché', async () => {
+    // 2 000 € détenus chez le prestataire pour 3 500 € d'engagements : la
+    // plateforme doit plus qu'elle ne détient. Le manque (1 500 €) dépasse
+    // largement la marge tolérée pour le biais brut/net.
     plateformeBalance.lireSolde.mockResolvedValueOnce({
-      totalEur: 1200,
+      totalEur: 2000,
       devise: 'EUR',
     });
 
     const rapport = await service.reconcilier();
 
     expect(rapport.ecarts).toEqual([]);
-    expect(rapport.soldeInvestisseursEur).toBe(1500);
-    expect(rapport.soldeStripeEur).toBe(1200);
-    expect(rapport.ecartStripeEur).toBeCloseTo(-300, 6);
+    expect(rapport.engagementTotalEur).toBe(3500);
+    expect(rapport.soldeStripeEur).toBe(2000);
+    expect(rapport.couvertureEur).toBe(-1500);
+    expect(rapport.couvertureStatut).toBe('decouverte');
     expect(rapport.equilibre).toBe(false);
 
-    expect(jauge(METRIC.STRIPE_BALANCE_DISCREPANCY_EUR)![1]).toBeCloseTo(300, 6);
+    // La jauge porte le DÉCOUVERT, pas l'écart à une égalité.
+    expect(jauge(METRIC.STRIPE_BALANCE_DISCREPANCY_EUR)![1]).toBeCloseTo(1500, 6);
 
     expect(notifications.pushToAdmins).toHaveBeenCalledTimes(1);
     const alerte = notifications.pushToAdmins.mock.calls[0][0];
     expect(alerte.roles).toEqual([UserRole.FINANCIER, UserRole.SUPER_ADMIN]);
-    expect(alerte.message).toContain('Couverture PSP');
-    expect(alerte.metadata.ecartStripeEur).toBeCloseTo(-300, 6);
+    expect(alerte.message).toContain('DÉCOUVERT DE COUVERTURE');
+    // Le biais structurel connu est DIT dans l'alerte, pas laissé à découvrir.
+    expect(alerte.message).toContain('crédités BRUT');
+  });
+
+  /**
+   * G(b) — L'ALERTE QUOTIDIENNE MENSONGÈRE.
+   *
+   * L'invariant exigeait `soldeStripe == Σ portefeuilles INVESTISSEURS`. Or le
+   * prestataire détient AUSSI la trésorerie des projets, les frais encaissés
+   * et les séquestres fiscaux : l'égalité était structurellement fausse, et
+   * une alerte critique partait chaque matin sur une plateforme saine.
+   */
+  describe('couverture, pas égalité', () => {
+    it('une marge positive n’est PAS une anomalie', async () => {
+      // 10 000 € chez le prestataire pour 3 500 € d'engagements.
+      plateformeBalance.lireSolde.mockResolvedValueOnce({
+        totalEur: 10_000,
+        devise: 'EUR',
+      });
+
+      const rapport = await service.reconcilier();
+
+      expect(rapport.couvertureStatut).toBe('couverte');
+      expect(rapport.equilibre).toBe(true);
+      expect(notifications.pushToAdmins).not.toHaveBeenCalled();
+    });
+
+    it('la trésorerie des projets et les séquestres entrent dans l’engagement', async () => {
+      const rapport = await service.reconcilier();
+
+      // 1 500 € investisseurs + 2 000 € de trésorerie projet.
+      expect(rapport.engagementTotalEur).toBe(3500);
+      expect(rapport.engagementTotalEur).toBeGreaterThan(
+        rapport.soldeInvestisseursEur,
+      );
+    });
+
+    it('un portefeuille en découvert ne RÉDUIT pas l’engagement', async () => {
+      // Découvert de projet, toléré et documenté : il ne doit pas rendre
+      // l'invariant plus indulgent à mesure que la situation se dégrade.
+      wallets[2].solde = '-5000.00';
+      plateformeBalance.lireSolde.mockResolvedValueOnce({
+        totalEur: 1500,
+        devise: 'EUR',
+      });
+
+      const rapport = await service.reconcilier();
+
+      expect(rapport.engagementTotalEur).toBe(1500);
+      expect(rapport.couvertureEur).toBe(0);
+    });
+
+    it('un découvert STABLE ne réalerte pas au passage suivant', async () => {
+      plateformeBalance.lireSolde.mockResolvedValue({
+        totalEur: 2000,
+        devise: 'EUR',
+      });
+
+      await service.reconcilier();
+      expect(notifications.pushToAdmins).toHaveBeenCalledTimes(1);
+
+      // Deuxième passage, même situation : l'incident est connu et instruit.
+      // Le réannoncer chaque matin est le plus sûr moyen de le faire ignorer.
+      pagesEcritures = [
+        [
+          ecriture(null, W_INV_1, '1000.00'),
+          ecriture(null, W_INV_2, '2500.00'),
+          ecriture(W_INV_2, W_PROJET, '2000.00'),
+        ],
+        [],
+      ];
+      await service.reconcilier();
+
+      expect(notifications.pushToAdmins).toHaveBeenCalledTimes(1);
+    });
+
+    it('un découvert qui SE CREUSE alerte de nouveau', async () => {
+      plateformeBalance.lireSolde.mockResolvedValueOnce({
+        totalEur: 2000,
+        devise: 'EUR',
+      });
+      await service.reconcilier();
+
+      pagesEcritures = [
+        [
+          ecriture(null, W_INV_1, '1000.00'),
+          ecriture(null, W_INV_2, '2500.00'),
+          ecriture(W_INV_2, W_PROJET, '2000.00'),
+        ],
+        [],
+      ];
+      plateformeBalance.lireSolde.mockResolvedValueOnce({
+        totalEur: 1000, // le manque passe de 1 500 € à 2 500 €
+        devise: 'EUR',
+      });
+      await service.reconcilier();
+
+      expect(notifications.pushToAdmins).toHaveBeenCalledTimes(2);
+      const seconde = notifications.pushToAdmins.mock.calls[1][0];
+      expect(seconde.message).toContain('Aggravation');
+    });
   });
 
   it('arrête la pagination du grand livre dès qu’une page est incomplète', async () => {
@@ -314,8 +429,9 @@ describe('ReconciliationService', () => {
         ecriture(W_INV_2, null, '500.00'), // retrait EN_COURS
       ],
     ];
+    // Engagement total = 1 000 € investisseurs + 2 000 € de trésorerie projet.
     plateformeBalance.lireSolde = jest.fn(async () => ({
-      totalEur: 1000,
+      totalEur: 3000,
       devise: 'EUR',
     }));
 

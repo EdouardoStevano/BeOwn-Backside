@@ -43,8 +43,15 @@ export class StripePlateformeBalanceAdapter implements PlateformeBalanceReader {
         .filter((entree) => entree?.currency === 'eur')
         .reduce((total, entree) => total + Number(entree.amount ?? 0), 0);
 
+    // `connect_reserved` : fonds mis de côté par Stripe pour les comptes
+    // connectés. Ils appartiennent toujours à la plateforme et garantissent
+    // toujours les soldes affichés — les omettre creusait un faux découvert
+    // exactement à hauteur de ce qui est en cours d'acheminement vers les
+    // porteurs, c'est-à-dire au pire moment.
     const totalCentimes =
-      sommeEur(balance?.available) + sommeEur(balance?.pending);
+      sommeEur(balance?.available) +
+      sommeEur(balance?.pending) +
+      sommeEur((balance as { connect_reserved?: any[] })?.connect_reserved);
 
     return { totalEur: totalCentimes / 100, devise: 'EUR' };
   }
