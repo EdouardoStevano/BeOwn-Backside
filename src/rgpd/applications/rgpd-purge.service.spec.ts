@@ -42,14 +42,17 @@ describe('RgpdPurgeService', () => {
     anonymize = {
       anonymiser: jest.fn().mockResolvedValue({ statut: 'anonymise' }),
     };
-    stockage = { delete: jest.fn().mockResolvedValue(undefined) };
+    // Le port rend désormais l'ISSUE de la destruction (`true` = détruit) : la
+    // purge KYC ne supprime la ligne `document` que si le fichier est
+    // effectivement parti du sous-traitant.
+    stockage = { delete: jest.fn().mockResolvedValue(true) };
     service = new RgpdPurgeService(dataSource, anonymize, stockage);
   });
 
   const compteur = (rapport: any, finalite: FinalitePurge) =>
     rapport.compteurs.find((c: any) => c.finalite === finalite);
 
-  it('run à vide : les 9 finalités du barème sont couvertes, 0 traité partout', async () => {
+  it('run à vide : les 13 finalités du barème sont couvertes, 0 traité partout', async () => {
     const rapport = await service.purger(MAINTENANT);
     expect(rapport.executeLe).toBe(MAINTENANT.toISOString());
     expect(rapport.compteurs.map((c: any) => c.finalite)).toEqual([
@@ -59,6 +62,14 @@ describe('RgpdPurgeService', () => {
       FinalitePurge.KYC_ECHEANCE_POST_CLOTURE,
       FinalitePurge.NOTIFICATIONS,
       FinalitePurge.JOURNAUX_AUDIT,
+      // Passe RGPD — quatre finalités que le barème déclarait et qu'aucun code
+      // n'appliquait : la preuve de consentement CGU (IP d'acceptation
+      // comprise), les réclamations closes, les traces de consultation de
+      // projet et les inscriptions radiées de la liste de gel.
+      FinalitePurge.CONSENTEMENT_CGU_POST_CLOTURE,
+      FinalitePurge.RECLAMATIONS,
+      FinalitePurge.CONSULTATIONS_PROJET,
+      FinalitePurge.LISTE_GEL_LEVEE,
       // Lot 4 — trois passes sur `demande_acces_porteur` : le texte libre part
       // à 2 ans, la ligne de décision à 5 ans, la demande jamais instruite à
       // 12 mois. Trois finalités et non une seule parce que trois natures de
@@ -171,7 +182,7 @@ describe('RgpdPurgeService', () => {
     ).toBe(2);
   });
 
-  it('chaque sélection de compte exclut les réclamations ouvertes (suspension litige, NOT EXISTS)', async () => {
+  it('chaque sélection de compte exclut les réclamations (suspension litige, NOT EXISTS)', async () => {
     await service.purger(MAINTENANT);
     const selects = dataSource.query.mock.calls
       .map((c: any) => c[0] as string)
@@ -179,8 +190,58 @@ describe('RgpdPurgeService', () => {
     expect(selects.length).toBeGreaterThanOrEqual(4);
     for (const sql of selects) {
       expect(sql).toMatch(/NOT EXISTS \(SELECT 1 FROM reclamation/);
-      expect(sql).toMatch(/'recue','accuse_reception','en_instruction'/);
       expect(sql).toMatch(/LIMIT/);
+    }
+  });
+
+  /**
+   * Les deux finalités qui SUPPRIMENT la ligne `users` en dur ne se contentent
+   * plus d'écarter les litiges OUVERTS : une réclamation close, mais pas encore
+   * échue, vit cinq ans après sa clôture (barème ligne 15) et la table n'a pas
+   * de clé étrangère vers `users` — le compte parti, il resterait un fil
+   * nominatif orphelin.
+   */
+  it('les purges DÉFINITIVES écartent tout compte ayant déposé une réclamation, même close', async () => {
+    await service.purger(MAINTENANT);
+    const selects = dataSource.query.mock.calls
+      .map((c: any) => c[0] as string)
+      .filter(
+        (sql: string) =>
+          /SELECT u\."userId"/.test(sql) &&
+          (/status = 'cree'/.test(sql) || /email_verifie/.test(sql)),
+      );
+    expect(selects).toHaveLength(2);
+    for (const sql of selects) {
+      expect(sql).toMatch(
+        /NOT EXISTS \(SELECT 1 FROM reclamation\s+r\s+WHERE r\."utilisateurId" = u\."userId"\)/,
+      );
+      // Aucune restriction de statut : c'est bien « n'importe quelle
+      // réclamation », pas seulement une réclamation ouverte.
+      expect(sql).not.toMatch(/'recue','accuse_reception','en_instruction'/);
+    }
+  });
+
+  /**
+   * Les deux tables que ces mêmes purges laissaient derrière elles : un
+   * prospect peut renseigner son évaluation d'adéquation et consulter des
+   * projets sans jamais engager de KYC — les gardes `NOT EXISTS` de la
+   * sélection ne portent pas sur elles.
+   */
+  it('la suppression définitive emporte l’évaluation d’adéquation et les traces de consultation', async () => {
+    reponses.push({
+      motif: /status = 'cree'[\s\S]*ORDER BY/,
+      resultat: [{ userId: 31 }],
+    });
+    await service.purger(MAINTENANT);
+
+    const ordres = manager.query.mock.calls.map((c: any[]) => String(c[0]));
+    const indexUsers = ordres.findIndex((sql) => /DELETE FROM users/.test(sql));
+    for (const table of ['questionnaire_adequation', 'project_view']) {
+      const index = ordres.findIndex((sql) =>
+        new RegExp(`DELETE FROM ${table}`).test(sql),
+      );
+      expect(index).toBeGreaterThanOrEqual(0);
+      expect(index).toBeLessThan(indexUsers);
     }
   });
 
@@ -360,6 +421,138 @@ describe('RgpdPurgeService', () => {
     expect(call[0]).toContain('LIMIT');
     // Seuil : 5 ans avant « maintenant » (calendaire).
     expect((call[1][0] as Date).toISOString()).toBe('2021-09-03T12:00:00.000Z');
+  });
+
+  // ── Passe RGPD : les quatre finalités déclarées mais jamais appliquées ────
+
+  /**
+   * L'anonymisation CONSERVE délibérément la preuve de consentement (art. 7.1
+   * RGPD) ; plus rien ne l'effaçait ensuite. C'était la seule donnée du barème
+   * dont l'IP restait indéfiniment.
+   */
+  it('consentement CGU : les trois champs, IP comprise, sont vidés 5 ans après la clôture', async () => {
+    reponses.push({ motif: /UPDATE users\s+SET "cguAccepteesLe"/, resultat: [[], 4] });
+    const rapport = await service.purger(MAINTENANT);
+
+    expect(
+      compteur(rapport, FinalitePurge.CONSENTEMENT_CGU_POST_CLOTURE).traites,
+    ).toBe(4);
+
+    const call = dataSource.query.mock.calls.find((c: any) =>
+      /UPDATE users\s+SET "cguAccepteesLe"/.test(c[0] as string),
+    );
+    const sql = call[0] as string;
+    expect(sql).toMatch(/"cguAccepteesLe" = NULL/);
+    expect(sql).toMatch(/"cguVersionAcceptee" = NULL/);
+    expect(sql).toMatch(/"cguAcceptationIp" = NULL/);
+    // UPDATE et non DELETE : dix ans d'écritures comptables s'adossent encore
+    // à cette ligne (barème ligne 6).
+    expect(sql).not.toMatch(/DELETE FROM users/);
+    // Point de départ : la clôture de la relation d'affaires.
+    expect(sql).toMatch(/"anonymiseLe" < \$1/);
+    // Sélection auto-extinctive : une ligne déjà vidée ne matche plus.
+    expect(sql).toMatch(/u\."cguAcceptationIp" IS NOT NULL/);
+    expect(sql).toContain('LIMIT');
+    // Seuil : 5 ans avant « maintenant ».
+    expect((call[1][0] as Date).toISOString()).toBe('2021-09-03T12:00:00.000Z');
+  });
+
+  it('réclamations : seules les CLOSES sont purgées, 5 ans après leur clôture', async () => {
+    reponses.push({ motif: /DELETE FROM reclamation/, resultat: [[], 2] });
+    const rapport = await service.purger(MAINTENANT);
+
+    expect(compteur(rapport, FinalitePurge.RECLAMATIONS).traites).toBe(2);
+    const call = dataSource.query.mock.calls.find((c: any) =>
+      (c[0] as string).includes('DELETE FROM reclamation'),
+    );
+    const sql = call[0] as string;
+    expect(sql).toMatch(/statut IN \('resolue','rejetee'\)/);
+    // Point de départ : la clôture, jamais la date de dépôt — une réclamation
+    // instruite pendant des mois ne se purge pas sur `createdAt`.
+    expect(sql).toMatch(/COALESCE\("reponduLe", "updatedAt"\) < \$1/);
+    expect(sql).not.toMatch(/"createdAt"/);
+    expect(sql).toContain('LIMIT');
+    expect((call[1][0] as Date).toISOString()).toBe('2021-09-03T12:00:00.000Z');
+  });
+
+  it('consultations de projet : purge à 13 mois (mesure d’audience nominative)', async () => {
+    reponses.push({ motif: /DELETE FROM project_view/, resultat: [[], 7] });
+    const rapport = await service.purger(MAINTENANT);
+
+    expect(compteur(rapport, FinalitePurge.CONSULTATIONS_PROJET).traites).toBe(
+      7,
+    );
+    const call = dataSource.query.mock.calls.find((c: any) =>
+      (c[0] as string).includes('DELETE FROM project_view'),
+    );
+    expect(call[0]).toContain('LIMIT');
+    // 13 mois avant le 3 septembre 2026 → 3 août 2025.
+    expect((call[1][0] as Date).toISOString()).toBe('2025-08-03T12:00:00.000Z');
+  });
+
+  it('liste de gel : rien tant que la mesure court, purge 5 ans après la levée', async () => {
+    reponses.push({ motif: /DELETE FROM personne_gelee/, resultat: [[], 1] });
+    const rapport = await service.purger(MAINTENANT);
+
+    expect(compteur(rapport, FinalitePurge.LISTE_GEL_LEVEE).traites).toBe(1);
+    const call = dataSource.query.mock.calls.find((c: any) =>
+      (c[0] as string).includes('DELETE FROM personne_gelee'),
+    );
+    const sql = call[0] as string;
+    // Une mesure en vigueur ne se purge pas : c'est une obligation légale
+    // (art. L. 562-4 CMF).
+    expect(sql).toMatch(/actif = false/);
+    // Le stock radié AVANT la pose de `desactiveLe` n'a pas de point de départ :
+    // il est laissé de côté plutôt que purgé sur une date inventée.
+    expect(sql).toMatch(/"desactiveLe" IS NOT NULL/);
+    expect(sql).toMatch(/"desactiveLe" < \$1/);
+    expect((call[1][0] as Date).toISOString()).toBe('2021-09-03T12:00:00.000Z');
+  });
+
+  /**
+   * Le commentaire promettait déjà cette reprise ; le code supprimait la ligne
+   * dans tous les cas — le fichier restait chez le sous-traitant, sans plus
+   * aucune référence pour le retrouver.
+   */
+  it('purge KYC : un fichier non détruit chez le sous-traitant CONSERVE sa ligne document', async () => {
+    stockage.delete.mockResolvedValue(false);
+    reponses.push({
+      motif: /"anonymiseLe" IS NOT NULL[\s\S]*ORDER BY/,
+      resultat: [{ userId: 42 }],
+    });
+    reponses.push({
+      motif: /SELECT id, path FROM document/,
+      resultat: [{ id: 'doc1', path: 'beown/kyc/id1' }],
+    });
+
+    await service.purger(MAINTENANT);
+
+    expect(stockage.delete).toHaveBeenCalledWith('beown/kyc/id1');
+    const docDeletes = dataSource.query.mock.calls.filter((c: any) =>
+      (c[0] as string).includes('DELETE FROM document'),
+    );
+    expect(docDeletes).toHaveLength(0);
+  });
+
+  it('purge KYC : l’évaluation d’adéquation part avec le dossier d’identité archivé', async () => {
+    reponses.push({
+      motif: /"anonymiseLe" IS NOT NULL[\s\S]*ORDER BY/,
+      resultat: [{ userId: 42 }],
+    });
+    await service.purger(MAINTENANT);
+
+    const txSql = manager.query.mock.calls.map((c: any) => c[0] as string);
+    expect(
+      txSql.some((s: string) =>
+        s.includes('DELETE FROM questionnaire_adequation'),
+      ),
+    ).toBe(true);
+    // Et les champs patrimoniaux recopiés sur le profil suivent.
+    const profil = txSql.find((s: string) =>
+      s.includes('UPDATE profil_personne_physique'),
+    );
+    expect(profil).toMatch(/"patrimoineNetCalcule" = NULL/);
+    expect(profil).toMatch(/"residenceFiscale" = NULL/);
   });
 
   it('IDEMPOTENCE de sélection : un second run sans nouvel éligible traite 0', async () => {

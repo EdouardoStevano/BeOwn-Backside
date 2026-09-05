@@ -5,6 +5,7 @@ import { UserEmailEntity } from 'src/iam/infrastructure/persistence/entities/use
 import { UserPreferencesEntity } from 'src/iam/infrastructure/persistence/entities/user-preferences.entity';
 import { ProfilPPEntity } from 'src/profiles/infrastructure/persistences/entities/profil-pp.entity';
 import { KycEntity } from 'src/profiles/infrastructure/persistences/entities/kyc.entity';
+import { QuestionnaireAdequationEntity } from 'src/profiles/infrastructure/persistences/entities/questionnaire-adequation.entity';
 import { InvestmentEntity } from 'src/investments/infrastructure/persistences/entities/investment.entity';
 import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/wallet.entity';
 import { TransactionEntity } from 'src/wallets/infrastructure/persistences/entities/transaction.entity';
@@ -77,10 +78,13 @@ describe('AnonymizeAccountService', () => {
     };
     dataSource = { transaction: jest.fn(async (cb: any) => cb(manager)) };
     const supprimes: string[] = [];
+    // Le port rend l'ISSUE de la destruction : `true` = le sous-traitant a
+    // accepté. C'est ce que compte le rapport d'accountability.
     stockage = {
       supprimes,
       delete: jest.fn(async (objectName: string) => {
         supprimes.push(objectName);
+        return true;
       }),
     };
 
@@ -261,6 +265,95 @@ describe('AnonymizeAccountService', () => {
       expect(rapport.documentsArchives).toBe(0);
       expect(updatesFor(DocumentEntity)).toHaveLength(0);
     });
+  });
+
+  /**
+   * Les données PATRIMONIALES DÉCLARÉES (revenus, portefeuille, actifs,
+   * engagements) sont les plus intrusives que porte le compte, et aucune des
+   * deux branches d'anonymisation ne les touchait — la table n'apparaissait
+   * nulle part dans le service.
+   */
+  describe("évaluation d'adéquation (données patrimoniales déclarées)", () => {
+    it('purge totale : la ligne entière part — aucune évaluation à justifier', async () => {
+      await service.anonymiser(USER_ID);
+      expect(manager.delete).toHaveBeenCalledWith(
+        QuestionnaireAdequationEntity,
+        { utilisateurId: USER_ID },
+      );
+      expect(updatesFor(QuestionnaireAdequationEntity)).toHaveLength(0);
+    });
+
+    it('archivage restreint : les MONTANTS sont effacés, le squelette de l’évaluation survit', async () => {
+      kycCount = 1;
+      await service.anonymiser(USER_ID);
+
+      const [update] = updatesFor(QuestionnaireAdequationEntity);
+      expect(update.criteria).toEqual({ utilisateurId: USER_ID });
+      expect(update.patch).toMatchObject({
+        revenuBrutAnnuel: null,
+        portefeuilleInstrumentsFinanciers: null,
+        fondsPropres: null,
+        chiffreAffairesNet: null,
+        totalBilan: null,
+        revenuAnnuel: null,
+        actifsTotaux: null,
+        engagementsFinanciers: null,
+        patrimoineNetCalcule: null,
+        capaciteDePerteSimulee: null,
+        seuilAvertissementCalcule: null,
+      });
+      // Ce qui PROUVE que l'évaluation de l'art. 21 a eu lieu tient sans un
+      // seul montant : catégorie, critères remplis, score du test, dates.
+      for (const champ of [
+        'resultCategorie',
+        'criteresRemplis',
+        'testConnaissancesScore',
+        'evalueeLe',
+      ]) {
+        expect(update.patch).not.toHaveProperty(champ);
+      }
+      // La ligne n'est PAS supprimée : le cron l'emportera avec le dossier
+      // d'identité archivé, à clôture + 5 ans.
+      expect(manager.delete).not.toHaveBeenCalledWith(
+        QuestionnaireAdequationEntity,
+        expect.anything(),
+      );
+    });
+
+    it('les montants recopiés sur le profil suivent, dans les DEUX régimes', async () => {
+      kycCount = 1;
+      await service.anonymiser(USER_ID);
+      const [profilUpdate] = updatesFor(ProfilPPEntity);
+      expect(profilUpdate.patch).toMatchObject({
+        patrimoineNetCalcule: null,
+        seuilAvertissementCalcule: null,
+        niveauRisque: null,
+      });
+    });
+  });
+
+  /**
+   * Le rapport annonçait « N fichier(s) distant(s) détruit(s) » en comptant les
+   * APPELS : un échec réseau chez le sous-traitant était journalisé en
+   * avertissement dans le service de stockage, et l'accountability affirmait
+   * quand même la destruction.
+   */
+  it('un échec de destruction chez le sous-traitant est compté à part, pas déclaré détruit', async () => {
+    documents = [
+      { id: 'a1', type: DocumentType.AUTRE, path: 'beown/docs/a1' },
+      { id: 'a2', type: DocumentType.AUTRE, path: 'beown/docs/a2' },
+    ];
+    stockage.delete
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(false);
+
+    const rapport = await service.anonymiser(USER_ID);
+
+    expect(rapport.fichiersDistantsSupprimes).toBe(1);
+    expect(rapport.fichiersDistantsEnEchec).toBe(1);
+    // La ligne `document` part dans les deux cas : la garder maintiendrait le
+    // lien applicatif qu'on cherche précisément à couper.
+    expect(rapport.documentsSupprimes).toBe(2);
   });
 
   it('un chemin http (pièce publique historique) n’est pas envoyé au port de stockage', async () => {

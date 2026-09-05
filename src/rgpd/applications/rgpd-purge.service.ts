@@ -110,6 +110,10 @@ export class RgpdPurgeService {
       await this.purgerKycEchusPostCloture(maintenant),
       await this.purgerNotifications(maintenant),
       await this.purgerJournauxAudit(maintenant),
+      await this.purgerConsentementCguPostCloture(maintenant),
+      await this.purgerReclamationsCloses(maintenant),
+      await this.purgerConsultationsProjet(maintenant),
+      await this.purgerListeGelLevee(maintenant),
       // Lot 4 — trois passes sur `demande_acces_porteur`, dans cet ordre :
       // le texte libre part à 2 ans, la ligne d'une demande close à 5 ans après
       // la fin de l'accès, la demande jamais instruite à 12 mois.
@@ -199,7 +203,7 @@ export class RgpdPurgeService {
     const traites = await this.parLots((limit) =>
       this.supprimerComptes(
         `SELECT u."userId" ${eligiblesSql}
-           AND NOT ${this.existeReclamationOuverte('u')}
+           AND NOT ${this.existeReclamation('u')}
            AND ${CLAUSE_AVOIRS_NON_GELES}
          ORDER BY u."userId" LIMIT $2`,
         [seuil, limit],
@@ -220,6 +224,15 @@ export class RgpdPurgeService {
     maintenant: Date,
   ): Promise<CompteurFinalite> {
     const seuil = seuilPurge(FinalitePurge.PROSPECT_INACTIF, maintenant);
+    // `COALESCE(lastLoginAt, createdAt)` : le barème compte à partir du DERNIER
+    // CONTACT ÉMANANT DU PROSPECT. `lastLoginAt` est désormais écrit à chaque
+    // sign-in, second facteur et rafraîchissement de session réussis
+    // (`UserRepository.touchLastLogin`) — jusque-là la colonne n'était jamais
+    // renseignée et le repli sur `createdAt` faisait tout le travail : un
+    // compte connecté la semaine dernière mais inscrit il y a plus de trois ans
+    // était supprimé. Le repli ne couvre plus que le STOCK antérieur, dont on
+    // ne sait rien.
+    //
     // « Purge si aucune donnée liée » (barème ligne 2) : les gardes NOT EXISTS
     // garantissent qu'il n'y a rien d'autre à anonymiser — la ligne peut donc
     // être supprimée. Un prospect portant la moindre donnée liée n'est pas un
@@ -243,7 +256,7 @@ export class RgpdPurgeService {
     const traites = await this.parLots((limit) =>
       this.supprimerComptes(
         `SELECT u."userId" ${eligiblesSql}
-           AND NOT ${this.existeReclamationOuverte('u')}
+           AND NOT ${this.existeReclamation('u')}
            AND ${CLAUSE_AVOIRS_NON_GELES}
          ORDER BY u."userId" LIMIT $2`,
         [seuil, limit],
@@ -281,6 +294,8 @@ export class RgpdPurgeService {
                  WHERE p."utilisateurId" = u."userId" AND p.nom <> '')
       OR EXISTS (SELECT 1 FROM beneficiaire_effectif b
                  WHERE b."profilPMId" = u."userId")
+      OR EXISTS (SELECT 1 FROM questionnaire_adequation q
+                 WHERE q."utilisateurId" = u."userId")
     )`;
     const eligiblesSql = `
       FROM users u
@@ -332,8 +347,22 @@ export class RgpdPurgeService {
         [userId],
       );
     for (const doc of docs) {
+      // La promesse du commentaire ci-dessus n'était pas tenue : la ligne
+      // `document` partait même quand la destruction distante avait échoué —
+      // le fichier restait chez le sous-traitant, sans plus aucune référence
+      // pour le retrouver, et le compte cessait d'être éligible. La ligne n'est
+      // désormais supprimée QUE si le fichier l'a été : le compte reste
+      // sélectionné au run suivant, et la reprise est automatique.
       if (doc.path && !doc.path.startsWith('http')) {
-        await this.stockage.delete(doc.path);
+        const detruit = await this.stockage.delete(doc.path);
+        if (!detruit) {
+          this.logger.warn(
+            `Purge KYC du compte #${userId} : fichier ${doc.path} non détruit ` +
+              `chez le fournisseur de stockage — ligne document conservée, ` +
+              `nouvelle tentative au prochain run.`,
+          );
+          continue;
+        }
       }
       await this.dataSource.query(`DELETE FROM document WHERE id = $1`, [
         doc.id,
@@ -351,12 +380,26 @@ export class RgpdPurgeService {
          SET civilite = NULL, prenom = '', nom = '', "nomNaissance" = NULL,
              "dateNaissance" = NULL, "lieuNaissance" = NULL,
              "paysNaissance" = NULL, nationalite = NULL, nif = NULL,
-             profession = NULL, "secteurActivite" = NULL
+             "residenceFiscale" = NULL,
+             profession = NULL, "secteurActivite" = NULL,
+             "patrimoineNetCalcule" = NULL,
+             "seuilAvertissementCalcule" = NULL, "niveauRisque" = NULL
          WHERE "utilisateurId" = $1`,
         [userId],
       );
       await manager.query(
         `DELETE FROM beneficiaire_effectif WHERE "profilPMId" = $1`,
+        [userId],
+      );
+      // Évaluation d'adéquation : la ligne entière part avec le dossier
+      // d'identité. À l'anonymisation, seules ses VALEURS patrimoniales
+      // déclarées avaient été effacées — le squelette (catégorie, critères
+      // remplis, score du test, dates) survivait pour prouver que l'évaluation
+      // de l'art. 21 avait eu lieu. Cinq ans après la clôture, plus rien ne le
+      // justifie : c'est la même échéance que le reste de la connaissance
+      // client (L. 561-12 CMF).
+      await manager.query(
+        `DELETE FROM questionnaire_adequation WHERE "utilisateurId" = $1`,
         [userId],
       );
       await manager.query(
@@ -404,6 +447,192 @@ export class RgpdPurgeService {
     });
     return {
       finalite: FinalitePurge.JOURNAUX_AUDIT,
+      traites,
+      suspendusLitige: 0,
+      suspendusGel: 0,
+    };
+  }
+
+  // ── Ligne 8 : preuve de consentement CGU (clôture + 5 ans) ────────────────
+
+  /**
+   * Efface la preuve de consentement CGU — horodatage, version ET **IP
+   * d'acceptation** — cinq ans après la clôture de la relation d'affaires.
+   *
+   * C'était la divergence la plus nette entre le code et le barème :
+   * `AnonymizeAccountService` conserve ces trois champs À DESSEIN (art. 7.1
+   * RGPD, charge de la preuve du consentement) et rien, ensuite, ne les
+   * effaçait — l'IP d'acceptation d'un compte clos en 2026 serait encore là
+   * en 2040.
+   *
+   * Point de départ : `users.anonymiseLe`, c'est-à-dire la clôture de la
+   * relation d'affaires (règle transverse n° 2 du barème) — la même date que
+   * la ligne 4, pour que les deux échéances tombent ensemble. Les comptes
+   * supprimés en dur (finalités des lignes 1 et 2) n'ont rien à purger ici :
+   * leur ligne `users` a disparu, IP comprise.
+   *
+   * UPDATE et non DELETE : la ligne `users` reste la clé technique à laquelle
+   * s'adossent dix ans d'écritures comptables (ligne 6 du barème).
+   *
+   * Sélection auto-extinctive : une ligne déjà vidée des trois champs ne
+   * matche plus, l'idempotence ne coûte aucune colonne supplémentaire.
+   */
+  private async purgerConsentementCguPostCloture(
+    maintenant: Date,
+  ): Promise<CompteurFinalite> {
+    const seuil = seuilPurge(
+      FinalitePurge.CONSENTEMENT_CGU_POST_CLOTURE,
+      maintenant,
+    );
+    const eligiblesSql = `
+      FROM users u
+      WHERE u."anonymiseLe" IS NOT NULL
+        AND u."anonymiseLe" < $1
+        AND (u."cguAccepteesLe" IS NOT NULL
+          OR u."cguVersionAcceptee" IS NOT NULL
+          OR u."cguAcceptationIp" IS NOT NULL)`;
+    const suspendusLitige = await this.compterSuspendusLitige(eligiblesSql, [
+      seuil,
+    ]);
+    const suspendusGel = await this.compterSuspendusGel(eligiblesSql, [seuil]);
+
+    const traites = await this.parLots(async (limit) => {
+      const resultat = await this.dataSource.query(
+        `UPDATE users
+            SET "cguAccepteesLe" = NULL,
+                "cguVersionAcceptee" = NULL,
+                "cguAcceptationIp" = NULL
+          WHERE "userId" IN (
+            SELECT u."userId" ${eligiblesSql}
+              AND NOT ${this.existeReclamationOuverte('u')}
+              AND ${CLAUSE_AVOIRS_NON_GELES}
+            ORDER BY u."userId" LIMIT $2)`,
+        [seuil, limit],
+      );
+      return lignesAffectees(resultat);
+    });
+
+    return {
+      finalite: FinalitePurge.CONSENTEMENT_CGU_POST_CLOTURE,
+      traites,
+      suspendusLitige,
+      suspendusGel,
+    };
+  }
+
+  // ── Ligne 15 : réclamations closes (clôture + 5 ans) ──────────────────────
+
+  /**
+   * Supprime les réclamations CLOSES cinq ans après leur clôture.
+   *
+   * Le barème déclarait la durée depuis le lot 2 ; aucune purge ne
+   * l'appliquait — objet, description en texte libre et réponse de
+   * l'assistance restaient indéfiniment.
+   *
+   * Point de départ : la clôture. La table ne porte pas de colonne dédiée ;
+   * `reponduLe` la donne quand une réponse motivée a été envoyée, `updatedAt`
+   * la donne sinon — pour une réclamation devenue terminale, la dernière
+   * écriture EST la clôture. `COALESCE` dans cet ordre, jamais `createdAt` :
+   * une réclamation instruite pendant des mois ne doit pas être purgée en
+   * fonction de sa date de dépôt.
+   *
+   * Statuts terminaux SEULEMENT (`resolue`, `rejetee`) : une réclamation
+   * encore ouverte a une finalité vivante, et le barème compte à partir de la
+   * clôture. C'est aussi la cohérence avec la règle transverse n° 3 — une
+   * réclamation ouverte suspend par ailleurs la purge du COMPTE concerné.
+   */
+  private async purgerReclamationsCloses(
+    maintenant: Date,
+  ): Promise<CompteurFinalite> {
+    const seuil = seuilPurge(FinalitePurge.RECLAMATIONS, maintenant);
+    const traites = await this.parLots(async (limit) => {
+      const resultat = await this.dataSource.query(
+        `DELETE FROM reclamation
+          WHERE id IN (
+            SELECT id FROM reclamation
+             WHERE statut IN ('resolue','rejetee')
+               AND COALESCE("reponduLe", "updatedAt") < $1
+             LIMIT $2)`,
+        [seuil, limit],
+      );
+      return lignesAffectees(resultat);
+    });
+    return {
+      finalite: FinalitePurge.RECLAMATIONS,
+      traites,
+      suspendusLitige: 0,
+      suspendusGel: 0,
+    };
+  }
+
+  // ── Traces de consultation de projet (13 mois) ────────────────────────────
+
+  /**
+   * Supprime les traces de consultation du détail d'un projet passé 13 mois.
+   *
+   * `project_view` est une mesure d'audience NOMINATIVE (un `userId`, un
+   * projet, une date) qui n'avait aucun terme. Sa finalité — repérer la
+   * seconde consultation d'un même projet pour déclencher un contact — s'éteint
+   * bien avant un an : la durée retenue est celle que la CNIL borne pour les
+   * traceurs de mesure d'audience (ligne 13 du barème).
+   */
+  private async purgerConsultationsProjet(
+    maintenant: Date,
+  ): Promise<CompteurFinalite> {
+    const seuil = seuilPurge(FinalitePurge.CONSULTATIONS_PROJET, maintenant);
+    const traites = await this.parLots(async (limit) => {
+      const resultat = await this.dataSource.query(
+        `DELETE FROM project_view
+          WHERE id IN (
+            SELECT id FROM project_view WHERE "createdAt" < $1 LIMIT $2)`,
+        [seuil, limit],
+      );
+      return lignesAffectees(resultat);
+    });
+    return {
+      finalite: FinalitePurge.CONSULTATIONS_PROJET,
+      traites,
+      suspendusLitige: 0,
+      suspendusGel: 0,
+    };
+  }
+
+  // ── Liste interne de gel : inscriptions levées (levée + 5 ans) ────────────
+
+  /**
+   * Supprime les inscriptions RADIÉES de la liste interne de gel, cinq ans
+   * après la levée de la mesure.
+   *
+   * Rien n'est purgé tant que `actif` est vrai : la mesure est en vigueur et
+   * sa mise en œuvre est une obligation légale (art. L. 562-4 CMF). La
+   * radiation est désormais horodatée (`desactiveLe`) — sans quoi il n'y avait
+   * aucun point de départ calculable, et c'est précisément pour ça que ces
+   * lignes n'avaient pas de durée.
+   *
+   * `desactiveLe IS NOT NULL` et non `actif = false` seul : le stock radié
+   * AVANT la pose de la colonne n'a pas de date de levée. Le purger sur une
+   * date inventée serait pire que de le laisser ; il est signalé au DPO par le
+   * compteur ci-dessous plutôt que traité au jugé.
+   */
+  private async purgerListeGelLevee(
+    maintenant: Date,
+  ): Promise<CompteurFinalite> {
+    const seuil = seuilPurge(FinalitePurge.LISTE_GEL_LEVEE, maintenant);
+    const traites = await this.parLots(async (limit) => {
+      const resultat = await this.dataSource.query(
+        `DELETE FROM personne_gelee
+          WHERE id IN (
+            SELECT id FROM personne_gelee
+             WHERE actif = false
+               AND "desactiveLe" IS NOT NULL
+               AND "desactiveLe" < $1
+             LIMIT $2)`,
+        [seuil, limit],
+      );
+      return lignesAffectees(resultat);
+    });
+    return {
+      finalite: FinalitePurge.LISTE_GEL_LEVEE,
       traites,
       suspendusLitige: 0,
       suspendusGel: 0,
@@ -552,6 +781,26 @@ export class RgpdPurgeService {
         AND r.statut IN ${RECLAMATION_OUVERTE})`;
   }
 
+  /**
+   * Clause « le compte a déposé une réclamation, quelle qu'elle soit ».
+   *
+   * Réservée aux deux finalités qui SUPPRIMENT la ligne `users` en dur
+   * (lignes 1 et 2 du barème) : la table `reclamation` n'a pas de clé étrangère
+   * vers `users`, un compte effacé y laisserait donc un fil nominatif orphelin.
+   * Or ce fil vit cinq ans après sa clôture (ligne 15) — il n'est pas question
+   * de l'emporter avec le compte, ni de laisser le compte partir sans lui. Le
+   * compte attend : la finalité `reclamations` purgera le fil à son échéance,
+   * après quoi le compte redeviendra éligible tout seul.
+   *
+   * Plus stricte que `existeReclamationOuverte`, qu'elle englobe : un compte
+   * sans aucune réclamation n'en a évidemment aucune d'ouverte. Le compteur
+   * `suspendusLitige` garde donc son sens exact (éligible + litige en cours).
+   */
+  private existeReclamation(alias: string): string {
+    return `EXISTS (SELECT 1 FROM reclamation r
+      WHERE r."utilisateurId" = ${alias}."userId")`;
+  }
+
   /** Compte les éligibles suspendus pour litige (journalisation, pas de traitement). */
   private async compterSuspendusLitige(
     eligiblesSql: string,
@@ -614,6 +863,20 @@ export class RgpdPurgeService {
         `DELETE FROM profil_personne_physique WHERE "utilisateurId" = ANY($1)`,
         [ids],
       );
+      // Deux tables sans clé étrangère vers `users` qu'un prospect peut
+      // pourtant alimenter sans jamais engager de KYC : l'évaluation
+      // d'adéquation (montants patrimoniaux déclarés) et les traces de
+      // consultation de projet. Les gardes `NOT EXISTS` de la sélection ne les
+      // couvrent pas — elles portent sur kyc/wallet/investissement/document —
+      // et les laisser derrière ferait de la « purge complète » un
+      // mensonge : deux lignes nominatives survivraient au compte.
+      await manager.query(
+        `DELETE FROM questionnaire_adequation WHERE "utilisateurId" = ANY($1)`,
+        [ids],
+      );
+      await manager.query(`DELETE FROM project_view WHERE "userId" = ANY($1)`, [
+        ids,
+      ]);
       // Demandes d'accès porteur (lot 4) : lignes enfants sans FK dure, mais
       // orphelines si le compte disparaît — et elles portent du texte libre
       // nominatif. Supprimées AVANT `users`, comme le reste.

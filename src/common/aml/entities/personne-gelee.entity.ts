@@ -38,6 +38,23 @@ export class PersonneGeleeEntity {
   @Column({ type: 'boolean', default: true })
   actif: boolean;
 
+  /**
+   * Date de la radiation, `null` tant que la mesure est en vigueur.
+   *
+   * Le drapeau `actif` seul ne disait pas QUAND la mesure avait été levée : ces
+   * lignes, qui décrivent des personnes potentiellement tierces à la
+   * plateforme, n'avaient donc aucune durée de conservation calculable. C'est
+   * le point de départ des 5 ans de la finalité `liste_gel_levee`
+   * (`src/rgpd/domains/retention-policy.ts`).
+   *
+   * Le stock radié avant la pose de la colonne reste à `null` — aucun backfill :
+   * une date de levée ne s'invente pas. Ces lignes ne sont pas purgées et
+   * attendent une reprise manuelle par la conformité.
+   * Colonne ajoutée via décorateur + SQL manuel (ADR migrations).
+   */
+  @Column({ type: 'timestamptz', nullable: true })
+  desactiveLe: Date | null;
+
   /** userId de l'admin compliance qui a saisi la ligne. */
   @Column({ type: 'integer' })
   creePar: number;

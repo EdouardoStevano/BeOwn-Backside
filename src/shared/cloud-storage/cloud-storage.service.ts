@@ -76,12 +76,31 @@ export class CloudStorageService implements OnModuleInit {
     });
   }
 
-  async delete(publicId: string): Promise<void> {
+  /**
+   * Détruit un objet chez Cloudinary. Best-effort par contrat : ne lève jamais,
+   * pour qu'un effacement RGPD ne soit pas mis en échec par une panne du
+   * sous-traitant.
+   *
+   * REND désormais l'issue (`true` = destruction demandée sans erreur) au lieu
+   * de `void`. L'appelant RGPD annonçait « N fichier(s) distant(s) détruit(s) »
+   * en comptant les appels, pas les succès : un échec réseau était journalisé
+   * ici en avertissement et le rapport d'accountability (art. 5.2 RGPD)
+   * affirmait quand même la destruction. Un rapport qui se trompe sur ce point
+   * est pire que pas de rapport.
+   *
+   * Les deux `resource_type` sont tentés parce que l'objet peut avoir été
+   * téléversé en `raw` (PDF) ou en `image` : seul l'un des deux appels vise le
+   * bon objet, l'autre est un no-op — un objet déjà absent reste un succès, ce
+   * qui rend l'opération rejouable.
+   */
+  async delete(publicId: string): Promise<boolean> {
     try {
       await cloudinary.uploader.destroy(publicId, { resource_type: 'raw' });
       await cloudinary.uploader.destroy(publicId, { resource_type: 'image' });
+      return true;
     } catch (err) {
       this.logger.warn(`Impossible de supprimer ${publicId}: ${err?.message}`);
+      return false;
     }
   }
 

@@ -210,7 +210,12 @@ export class AdminComplianceController {
     await this.assertAml(admin.userId);
     const personne = await this.personneGeleeRepo.findOne({ where: { id } });
     if (!personne) throw new NotFoundException('Inscription introuvable.');
+    // Radiation IDEMPOTENTE : une seconde désactivation ne repousse pas la date
+    // de levée de cinq ans. C'est cette date qui ouvre le compte à rebours de
+    // la finalité RGPD `liste_gel_levee` — la réécrire à chaque appel rendrait
+    // la ligne impurgeable pour qui rejoue l'endpoint.
     personne.actif = false;
+    personne.desactiveLe = personne.desactiveLe ?? new Date();
     return this.personneGeleeRepo.save(personne);
   }
 

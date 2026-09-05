@@ -7,6 +7,7 @@ import { UserPreferencesEntity } from 'src/iam/infrastructure/persistence/entiti
 import { MfaMethodEntity } from 'src/iam/infrastructure/persistence/entities/mfa-method.entity';
 import { ProfilPPEntity } from 'src/profiles/infrastructure/persistences/entities/profil-pp.entity';
 import { KycEntity } from 'src/profiles/infrastructure/persistences/entities/kyc.entity';
+import { QuestionnaireAdequationEntity } from 'src/profiles/infrastructure/persistences/entities/questionnaire-adequation.entity';
 import { KycStatus } from 'src/profiles/domains/enums/kyc-status.enum';
 import { InvestmentEntity } from 'src/investments/infrastructure/persistences/entities/investment.entity';
 import { WalletEntity } from 'src/wallets/infrastructure/persistences/entities/wallet.entity';
@@ -37,6 +38,17 @@ export interface RapportAnonymisation {
   documentsArchives: number;
   /** Fichiers effectivement détruits chez le fournisseur de stockage. */
   fichiersDistantsSupprimes: number;
+  /**
+   * Fichiers dont la destruction chez le sous-traitant a ÉCHOUÉ.
+   *
+   * La ligne `document` a été supprimée en base dans tous les cas : c'est elle
+   * qui rend le fichier atteignable depuis l'application, et la garder pour
+   * réessayer maintiendrait le lien qu'on cherche à couper. Le fichier
+   * subsiste alors chez Cloudinary sans référence — l'effacement est
+   * INCOMPLET et doit se voir, d'où ce compteur et l'avertissement associé,
+   * plutôt qu'un rapport qui annonce une destruction qui n'a pas eu lieu.
+   */
+  fichiersDistantsEnEchec: number;
 }
 
 const RAPPORT_VIDE = (
@@ -46,6 +58,7 @@ const RAPPORT_VIDE = (
   documentsSupprimes: 0,
   documentsArchives: 0,
   fichiersDistantsSupprimes: 0,
+  fichiersDistantsEnEchec: 0,
 });
 
 /**
@@ -78,6 +91,38 @@ const RAPPORT_VIDE = (
  * Les écritures BASE sont atomiques (une transaction) ; la destruction des
  * fichiers distants a lieu APRÈS commit (best-effort : le port ne lève pas,
  * un fichier déjà absent est un succès — rejouable).
+ *
+ * ── Propagation de l'effacement aux SOUS-TRAITANTS (art. 17.2, 28.3.g RGPD) ─
+ *
+ * Deux sous-traitants reçoivent des données personnelles ; ils ne suivent pas
+ * le même régime, et la différence est délibérée.
+ *
+ * **Cloudinary (stockage des pièces)** — l'effacement est PROPAGÉ : chaque
+ * fichier dont la ligne `document` est supprimée est détruit chez le
+ * fournisseur, via `StockageFichiersPort`, hors transaction et sans jamais
+ * lever. Les pièces KYC d'un compte sous obligations ne partent pas ici : elles
+ * sont marquées « conservation légale » et détruites par le cron à
+ * clôture + 5 ans (L. 561-12 CMF). Les échecs sont comptés et journalisés en
+ * avertissement — un rapport qui annoncerait une destruction non advenue serait
+ * un manquement à l'accountability (art. 5.2 RGPD), pas une approximation.
+ *
+ * **Stripe (paiements, Connect, Identity)** — AUCUN appel destructif, et c'est
+ * une décision, pas un oubli. Supprimer le `Customer`, le compte Connect ou les
+ * sessions de vérification effacerait les pièces justificatives des opérations
+ * chez celui qui les a exécutées : cela heurterait de front l'art. L. 123-22 C.
+ * com. (dix ans de pièces comptables), l'art. L. 561-12 CMF (cinq ans pour les
+ * documents relatifs aux opérations) et l'art. L. 102 B LPF (six ans), et
+ * rendrait tout contrôle ou toute réclamation ultérieure ininstruisable. Stripe
+ * est ici RESPONSABLE DE TRAITEMENT pour ses propres obligations légales et
+ * réglementaires, pas seulement sous-traitant : l'art. 17.3.b RGPD (exception au
+ * droit à l'effacement pour obligation légale) couvre cette conservation. Ce
+ * qui disparaît côté BeOwn, ce sont les identifiants directs de la table
+ * utilisateur — les références Stripe deviennent alors non résolubles vers une
+ * personne depuis la plateforme.
+ *
+ * À inscrire au registre des traitements : conservation Stripe sous obligations
+ * légales, base art. 6.1.c + 17.3.b RGPD, durée alignée sur la plus longue des
+ * trois ci-dessus (10 ans). Voir `docs/adr/ADR-rgpd-effacement-sous-traitants.md`.
  */
 @Injectable()
 export class AnonymizeAccountService {
@@ -209,7 +254,51 @@ export class AnonymizeAccountService {
         );
       }
 
+      // ── Questionnaire d'adéquation ───────────────────────────────────────
+      // Données PATRIMONIALES DÉCLARÉES (revenus, portefeuille, actifs,
+      // engagements, fonds propres) : aucun texte n'impose de les conserver, et
+      // ce sont les plus intrusives que porte le compte. Elles n'étaient
+      // pourtant touchées par aucune des deux branches d'anonymisation.
+      //
+      // Purge totale : la ligne part entièrement — sans relation d'affaires, il
+      // n'y a aucune évaluation à justifier.
+      //
+      // Archivage restreint : les VALEURS sont écrasées, le squelette de
+      // l'évaluation survit — catégorie retenue, critères remplis, score du
+      // test de connaissances, dates. C'est exactement le partage retenu pour
+      // `demande_acces_porteur` : ce qui prouve que l'examen imposé par
+      // l'art. 21 du règlement (UE) 2020/1503 a eu lieu tient sans un seul
+      // montant. Le cron supprime ensuite la ligne avec le dossier d'identité
+      // archivé (clôture + 5 ans).
+      if (purgeTotale) {
+        await manager.delete(QuestionnaireAdequationEntity, {
+          utilisateurId: userId,
+        });
+      } else {
+        await manager.update(
+          QuestionnaireAdequationEntity,
+          { utilisateurId: userId },
+          {
+            revenuBrutAnnuel: null,
+            portefeuilleInstrumentsFinanciers: null,
+            fondsPropres: null,
+            chiffreAffairesNet: null,
+            totalBilan: null,
+            revenuAnnuel: null,
+            actifsTotaux: null,
+            engagementsFinanciers: null,
+            patrimoineNetCalcule: null,
+            capaciteDePerteSimulee: null,
+            seuilAvertissementCalcule: null,
+          },
+        );
+      }
+
       // ── Profil personne physique ─────────────────────────────────────────
+      // Les trois champs patrimoniaux recopiés ici depuis l'évaluation
+      // (patrimoine net, seuil d'avertissement, niveau de risque) suivent le
+      // même régime que leur source : effacés dans les deux régimes, sinon
+      // vider le questionnaire n'aurait servi à rien.
       await manager.update(
         ProfilPPEntity,
         { utilisateurId: userId },
@@ -219,6 +308,9 @@ export class AnonymizeAccountService {
           adresseLigne2: null,
           codePostal: null,
           ville: null,
+          patrimoineNetCalcule: null,
+          seuilAvertissementCalcule: null,
+          niveauRisque: null,
           ...(purgeTotale
             ? {
                 civilite: null,
@@ -230,6 +322,7 @@ export class AnonymizeAccountService {
                 paysNaissance: null,
                 nationalite: null,
                 nif: null,
+                residenceFiscale: null,
                 profession: null,
                 secteurActivite: null,
               }
@@ -243,15 +336,24 @@ export class AnonymizeAccountService {
         documentsSupprimes,
         documentsArchives,
         fichiersDistantsSupprimes: 0,
+        fichiersDistantsEnEchec: 0,
       };
     });
 
     // ── Destruction des fichiers distants, hors transaction ────────────────
+    // PROPAGATION DE L'EFFACEMENT AU SOUS-TRAITANT DE STOCKAGE (art. 17.2 et
+    // 28.3.g RGPD) : l'effacement ne s'arrête pas à la base BeOwn, les objets
+    // partent aussi de chez Cloudinary. On compte désormais les SUCCÈS et les
+    // ÉCHECS séparément — le port ne lève jamais, mais il dit maintenant ce
+    // qu'il a fait.
     for (const objectName of fichiersASupprimer) {
-      await this.stockage.delete(objectName);
+      const detruit = await this.stockage.delete(objectName);
       rapport = {
         ...rapport,
-        fichiersDistantsSupprimes: rapport.fichiersDistantsSupprimes + 1,
+        fichiersDistantsSupprimes:
+          rapport.fichiersDistantsSupprimes + (detruit ? 1 : 0),
+        fichiersDistantsEnEchec:
+          rapport.fichiersDistantsEnEchec + (detruit ? 0 : 1),
       };
     }
 
@@ -262,6 +364,15 @@ export class AnonymizeAccountService {
           `${rapport.documentsSupprimes} document(s) supprimé(s), ` +
           `${rapport.fichiersDistantsSupprimes} fichier(s) distant(s) détruit(s).`,
       );
+      if (rapport.fichiersDistantsEnEchec > 0) {
+        // Avertissement et non simple info : un fichier resté chez le
+        // sous-traitant est un effacement incomplet, à reprendre à la main.
+        this.logger.warn(
+          `Anonymisation RGPD du compte #${userId} : ` +
+            `${rapport.fichiersDistantsEnEchec} fichier(s) NON détruit(s) chez le ` +
+            `fournisseur de stockage — effacement incomplet, reprise manuelle requise.`,
+        );
+      }
     }
     return rapport;
   }

@@ -17,6 +17,21 @@ import { DocumentType } from 'src/documents/domains/enums/document-type.enum';
  * - Logs applicatifs (ligne 10) : rotation gérée par l'infrastructure de
  *   journalisation (pino/stdout → collecteur), hors base de données.
  * - Cookies (ligne 13) : côté navigateur, gérés par le bandeau front.
+ * - Questionnaire d'adéquation (`questionnaire_adequation`) : PAS de finalité
+ *   propre, et ce n'est pas un oubli. La table est en upsert sur
+ *   `utilisateurId` (index unique) : il n'y a jamais qu'une évaluation par
+ *   compte, donc aucun historique à faire vieillir, et tant que le compte est
+ *   ouvert l'évaluation a une finalité vivante — elle conditionne l'accès à
+ *   l'investissement (art. 21 du règlement (UE) 2020/1503). Elle suit donc la
+ *   durée du COMPTE (ligne 3 du barème) : ses valeurs patrimoniales déclarées
+ *   sont effacées à l'anonymisation (`AnonymizeAccountService`), la ligne
+ *   entière part avec le dossier d'identité archivé à clôture + 5 ans
+ *   (`KYC_ECHEANCE_POST_CLOTURE`).
+ * - NIF et résidence fiscale (`profil_personne_physique`) : conservés, et
+ *   désormais UTILISÉS — voir `IfuPdfService`. Régime : ligne 14 du barème
+ *   (justificatifs fiscaux, 6 ans, art. L. 102 B LPF), absorbé en pratique par
+ *   les dix ans comptables ; effacés à l'anonymisation en purge totale et à
+ *   l'échéance du dossier archivé sinon.
  */
 
 /** Finalités purgées par le cron RGPD, journalisées une à une (art. 5.2 RGPD). */
@@ -37,6 +52,76 @@ export enum FinalitePurge {
   NOTIFICATIONS = 'notifications',
   /** Ligne 9 : journaux d'audit, 5 ans après l'événement. */
   JOURNAUX_AUDIT = 'journaux_audit',
+
+  // ─── Finalités ajoutées par la passe RGPD (divergences code/barème) ────────
+
+  /**
+   * Ligne 8 : preuve du consentement CGU — horodatage, version ET **IP
+   * d'acceptation** — conservée « durée du compte + 5 ans ».
+   *
+   * L'anonymisation CONSERVE délibérément ces trois champs (art. 7.1 RGPD :
+   * charge de la preuve du consentement) ; rien ne les effaçait ensuite. Le
+   * point de départ des cinq ans est la CLÔTURE DE LA RELATION D'AFFAIRES,
+   * matérialisée par `users.anonymiseLe` — la même date que la ligne 4, règle
+   * transverse n° 2 du barème. Les comptes purgés en dur (lignes 1 et 2) ne
+   * sont pas concernés : leur ligne `users` disparaît entièrement, IP comprise.
+   *
+   * Action : purge des colonnes (mise à NULL), pas de la ligne — les écritures
+   * comptables adossées au compte vivent dix ans (ligne 6).
+   */
+  CONSENTEMENT_CGU_POST_CLOTURE = 'consentement_cgu_post_cloture',
+
+  /**
+   * Ligne 15 : réclamations et échanges de support, 5 ans après la clôture de
+   * la réclamation.
+   *
+   * Le barème déclare la durée depuis le lot 2 ; aucune finalité ne
+   * l'appliquait. La ligne part ENTIÈREMENT à l'échéance : l'art. 26 du
+   * règlement (UE) 2020/1503 impose cinq ans de conservation des données
+   * relatives aux services fournis, pas davantage, et l'art. 2224 C. civ.
+   * ferme le même horizon probatoire.
+   *
+   * Pas de découpage texte libre / squelette comme pour
+   * `demande_acces_porteur` : là-bas, deux échéances distinctes (2 ans / 5 ans)
+   * justifiaient deux passes ; ici tout tombe à la même date, vider l'objet et
+   * la description pour garder une coquille sans finalité serait de la
+   * conservation sans motif. Aucune pièce jointe à traiter : la table
+   * `reclamation` n'en porte pas, et `document` n'a pas de clé vers elle.
+   */
+  RECLAMATIONS = 'reclamations',
+
+  /**
+   * Traces de consultation du détail d'un projet (`project_view`), 13 mois.
+   *
+   * Aucune ligne du barème ne les visait — elles s'accumulaient sans terme.
+   * Finalité réelle : détecter la seconde consultation d'un même projet pour
+   * déclencher un contact commercial (intérêt légitime, art. 6.1.f RGPD).
+   * C'est une mesure d'audience nominative : la durée retenue est celle que la
+   * CNIL borne pour les traceurs de mesure d'audience et les données qui en
+   * découlent (ligne 13 du barème, recommandation « cookies et autres
+   * traceurs » du 17 septembre 2020) — 13 mois, la plus courte des deux
+   * durées qu'elle cite, parce qu'une trace de plus d'un an ne dit plus rien
+   * d'une intention d'achat.
+   */
+  CONSULTATIONS_PROJET = 'consultations_projet',
+
+  /**
+   * Liste interne de gel des avoirs (`personne_gelee`), 5 ans après la LEVÉE
+   * de la mesure.
+   *
+   * Tant que l'inscription est active (`actif = true`), la mesure est en
+   * vigueur : la conserver est une obligation légale (art. L. 562-4 CMF, mise
+   * en œuvre sans délai des mesures de gel) et rien ne se purge. À la radiation
+   * (`actif = false`, horodatée par `desactiveLe`), la ligne ne sert plus qu'à
+   * prouver qu'on a appliqué puis levé la mesure : 5 ans, l'horizon de la
+   * ligne 9 du barème (journaux d'audit LCB-FT, art. L. 561-12 CMF et
+   * art. 2224 C. civ.).
+   *
+   * Ces lignes décrivent des personnes potentiellement TIERCES à la
+   * plateforme, qui n'ont aucun moyen d'en demander l'effacement : leur poser
+   * un terme n'est pas une commodité, c'est l'art. 5.1.e RGPD.
+   */
+  LISTE_GEL_LEVEE = 'liste_gel_levee',
 
   // ─── Demandes d'accès porteur (lot 4) ────────────────────────────────────
   // Trois finalités DISTINCTES sur la même table, parce que trois données de
@@ -87,6 +172,10 @@ export const DUREES_RETENTION: Readonly<
   [FinalitePurge.KYC_ECHEANCE_POST_CLOTURE]: Object.freeze({ annees: 5 }),
   [FinalitePurge.NOTIFICATIONS]: Object.freeze({ mois: 12 }),
   [FinalitePurge.JOURNAUX_AUDIT]: Object.freeze({ annees: 5 }),
+  [FinalitePurge.CONSENTEMENT_CGU_POST_CLOTURE]: Object.freeze({ annees: 5 }),
+  [FinalitePurge.RECLAMATIONS]: Object.freeze({ annees: 5 }),
+  [FinalitePurge.CONSULTATIONS_PROJET]: Object.freeze({ mois: 13 }),
+  [FinalitePurge.LISTE_GEL_LEVEE]: Object.freeze({ annees: 5 }),
   [FinalitePurge.DEMANDE_PORTEUR_TEXTE_LIBRE]: Object.freeze({ annees: 2 }),
   [FinalitePurge.DEMANDE_PORTEUR_DECISION]: Object.freeze({ annees: 5 }),
   [FinalitePurge.DEMANDE_PORTEUR_JAMAIS_INSTRUITE]: Object.freeze({ mois: 12 }),
@@ -219,6 +308,20 @@ const TYPES_SUPPRIMABLES: ReadonlyArray<DocumentType> = Object.freeze([
 ]);
 
 /**
+ * Une pièce du dossier KYC au sens L. 561-12 CMF — décision PURE, partagée
+ * entre le barème de conservation et le CONTRÔLE D'ACCÈS applicatif.
+ *
+ * Exportée parce que la liste ne doit exister qu'à un seul endroit : le
+ * contrôleur des documents s'en sert pour exiger `kyc:read_documents` sur les
+ * mêmes types que ceux que l'anonymisation archive. Une pièce ajoutée à
+ * `TYPES_KYC` devient du même geste archivable ET protégée en lecture ; deux
+ * listes parallèles auraient fini par diverger.
+ */
+export function estPieceKyc(type: DocumentType): boolean {
+  return TYPES_KYC.includes(type);
+}
+
+/**
  * Sort d'un document RATTACHÉ À L'UTILISATEUR à la suppression du compte.
  * Règle transverse n° 1 du barème : la durée la plus longue l'emporte — tout
  * type non listé comme supprimable est conservé par défaut (contrats,
@@ -226,7 +329,7 @@ const TYPES_SUPPRIMABLES: ReadonlyArray<DocumentType> = Object.freeze([
  * omission.
  */
 export function sortDocumentUtilisateur(type: DocumentType): SortDocument {
-  if (TYPES_KYC.includes(type)) {
+  if (estPieceKyc(type)) {
     return SortDocument.ARCHIVER_CONSERVATION_LEGALE;
   }
   if (TYPES_SUPPRIMABLES.includes(type)) {

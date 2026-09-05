@@ -199,3 +199,10 @@ Déclarées dans les entités (le `synchronize` du seed les pose en dev), à jou
   - **Non appliqué sur la base dev** au moment de l'écriture : la clause partielle est déclarée dans l'entité (`@Index('UQ_wallet_proprietaire_type', …)`), donc posée par le `synchronize` du seed au prochain `npm run schema:drop && npm run seed`. La contrainte `CHECK`, elle, n'est PAS exprimable en décorateur TypeORM dans ce dépôt : elle doit être posée à la main, y compris en dev.
 
 - 2026-09-05 — **Verrou distribué des tâches planifiées**. Aucun changement de schéma : `VerrouCronService` s'appuie sur `pg_try_advisory_lock`, un verrou consultatif de session, sans table ni colonne. Mentionné ici parce que c'est une dépendance PostgreSQL nouvelle du code applicatif. Rien à jouer, rien à défaire.
+
+- 2026-09-05 — **Passe RGPD : horodatage de la levée d'une mesure de gel**. Une seule colonne, sur `personne_gelee`. La liste interne de gel décrit des personnes potentiellement TIERCES à la plateforme : le drapeau `actif` disait qu'une inscription était radiée, jamais QUAND — il n'existait donc aucun point de départ calculable, et ces lignes n'avaient de ce fait aucune durée de conservation (art. 5.1.e RGPD). C'est le point de départ des 5 ans de la finalité `liste_gel_levee`. SQL, réversible :
+  ```sql
+  ALTER TABLE personne_gelee ADD COLUMN "desactiveLe" timestamptz NULL;
+  ```
+  Retour arrière : `ALTER TABLE personne_gelee DROP COLUMN "desactiveLe";`
+  Note : **aucun backfill** — une date de levée ne s'invente pas. Le stock radié avant la pose reste à `NULL` ; la purge l'exclut explicitement (`"desactiveLe" IS NOT NULL`) et il attend une reprise manuelle par la conformité. La radiation est idempotente côté contrôleur : rejouer `POST /admin/compliance/gel/personnes/:id/desactiver` ne repousse pas l'échéance.

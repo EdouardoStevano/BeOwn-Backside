@@ -19,7 +19,7 @@ describe('AdminComplianceController — gel des avoirs', () => {
     53: { userId: 53, role: UserRole.INVESTISSEUR },
   };
 
-  const makeController = () => {
+  const makeController = (inscription: any = null) => {
     const userRepo = {
       findOne: jest.fn(({ where }: any) =>
         Promise.resolve(comptes[where.userId] ?? null),
@@ -31,15 +31,22 @@ describe('AdminComplianceController — gel des avoirs', () => {
       degeler: jest.fn().mockResolvedValue({ gele: false }),
       listerComptesGeles: jest.fn().mockResolvedValue([]),
     };
+    const personneGeleeRepo = {
+      find: jest.fn(),
+      save: jest.fn((p: any) => Promise.resolve(p)),
+      create: jest.fn((p: any) => p),
+      findOne: jest.fn().mockResolvedValue(inscription),
+    };
     return {
       controller: new AdminComplianceController(
         userRepo as any,
         { create: jest.fn().mockResolvedValue({}) } as any,
-        { find: jest.fn(), save: jest.fn(), create: jest.fn(), findOne: jest.fn() } as any,
+        personneGeleeRepo as any,
         gelDesAvoirs as any,
         { rescanTous: jest.fn().mockResolvedValue({}) } as any,
       ),
       gelDesAvoirs,
+      personneGeleeRepo,
     };
   };
 
@@ -85,6 +92,44 @@ describe('AdminComplianceController — gel des avoirs', () => {
     await expect(
       controller.gelerAvoirs('abc', { motif: 'peu importe' }, compliance),
     ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  /**
+   * La liste interne de gel décrit des personnes potentiellement TIERCES à la
+   * plateforme, qui n'ont aucun moyen d'en demander l'effacement. Le drapeau
+   * `actif` ne disait pas QUAND la mesure avait été levée : ces lignes
+   * n'avaient donc aucune durée de conservation calculable, et aucune finalité
+   * de purge ne pouvait les viser (art. 5.1.e RGPD).
+   */
+  describe('radiation de la liste de gel : horodatage de la levée', () => {
+    it('pose la date de levée — point de départ des 5 ans de la purge RGPD', async () => {
+      const inscription = { id: 'p1', actif: true, desactiveLe: null };
+      const { controller } = makeController(inscription);
+
+      const radiee = await controller.desactiverPersonneGelee('p1', compliance);
+
+      expect(radiee.actif).toBe(false);
+      expect(radiee.desactiveLe).toBeInstanceOf(Date);
+    });
+
+    it('IDEMPOTENTE : rejouer la radiation ne repousse pas l’échéance de cinq ans', async () => {
+      const levee = new Date('2021-01-01T00:00:00.000Z');
+      const inscription = { id: 'p1', actif: false, desactiveLe: levee };
+      const { controller } = makeController(inscription);
+
+      const radiee = await controller.desactiverPersonneGelee('p1', compliance);
+
+      expect(radiee.desactiveLe).toBe(levee);
+    });
+
+    it('inscription introuvable : 404, aucune écriture', async () => {
+      const { controller, personneGeleeRepo } = makeController(null);
+
+      await expect(
+        controller.desactiverPersonneGelee('inconnue', compliance),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(personneGeleeRepo.save).not.toHaveBeenCalled();
+    });
   });
 
   describe('rôle relu en base', () => {
