@@ -387,11 +387,16 @@ describe('YouSignWebhookController — règlement marché secondaire', () => {
     const project: any = { id: 'proj-1', titre: 'Résidence Test' };
     const transactions: any[] = [];
 
+    // La résolution par ID est nécessaire depuis le verrouillage ordonné : les
+    // portefeuilles sont d'abord résolus par propriétaire, puis RE-LUS par
+    // identifiant dans l'ordre croissant pour prendre les verrous.
     const trouverWallet = (where: any) =>
       wallets.find((w) =>
-        where.proprietaireUserId !== undefined
-          ? w.proprietaireUserId === where.proprietaireUserId && w.type === where.type
-          : w.type === where.type,
+        where.id !== undefined
+          ? w.id === where.id
+          : where.proprietaireUserId !== undefined
+            ? w.proprietaireUserId === where.proprietaireUserId && w.type === where.type
+            : w.type === where.type,
       ) ?? null;
 
     const manager: any = {
@@ -415,12 +420,92 @@ describe('YouSignWebhookController — règlement marché secondaire', () => {
         return obj;
       }),
       update: jest.fn(async () => ({ affected: 1 })),
+      /**
+       * Constructeur de requêtes qui APPLIQUE réellement ce qu'on lui demande :
+       * la clause `WHERE` est évaluée, et les expressions relatives du `SET`
+       * (`solde - :x`, `"nbTitres" - :n`) sont calculées sur la ligne.
+       *
+       * Sans cela, un dépôt simulé qui rend toujours `affected: 1` accepterait
+       * une double-vente que la base refuse — et le test ne prouverait rien de
+       * ce que le correctif vise.
+       */
       createQueryBuilder: jest.fn(() => {
         const qb: any = {};
+        let entite: any = null;
+        let payload: any = null;
+        const params: Record<string, any> = {};
+        let clause = '';
+
+        // Ancien usage (agrégat de lecture), conservé tel quel.
         qb.select = () => qb;
-        qb.where = () => qb;
-        qb.andWhere = () => qb;
         qb.getRawOne = async () => ({ total: '0' });
+        qb.andWhere = () => qb;
+
+        qb.update = (E: any) => {
+          entite = E;
+          return qb;
+        };
+        qb.set = (p: any) => {
+          payload = p;
+          return qb;
+        };
+        qb.setParameter = (nom: string, valeur: any) => {
+          params[nom] = valeur;
+          return qb;
+        };
+        qb.setParameters = (p: Record<string, any>) => {
+          Object.assign(params, p);
+          return qb;
+        };
+        qb.where = (c: string, p?: Record<string, any>) => {
+          clause = c;
+          Object.assign(params, p ?? {});
+          return qb;
+        };
+
+        const lignesDe = (E: any): any[] =>
+          E === WalletEntity
+            ? wallets
+            : E === InvestmentEntity
+              ? investissements
+              : E === OrdreMarcheEntity
+                ? [ordre]
+                : [];
+
+        /** `col OP :param`, conjonctions séparées par AND. */
+        const clauseSatisfaite = (ligne: any): boolean =>
+          clause.split(/\s+AND\s+/i).every((cond) => {
+            const m = cond.match(/"?([A-Za-z]+)"?\s*(>=|<=|=|>|<)\s*:(\w+)/);
+            if (!m) return true;
+            const [, col, op, nom] = m;
+            const attendu = params[nom];
+            const actuel = ligne[col];
+            if (op === '=') return String(actuel) === String(attendu);
+            const a = Number(actuel);
+            const b = Number(attendu);
+            return op === '>=' ? a >= b : op === '<=' ? a <= b : op === '>' ? a > b : a < b;
+          });
+
+        qb.execute = async () => {
+          if (!entite) return { affected: 0 };
+          const ligne = lignesDe(entite).find((l) => l.id === params.id);
+          if (!ligne || !clauseSatisfaite(ligne)) return { affected: 0 };
+
+          for (const [col, valeur] of Object.entries(payload ?? {})) {
+            if (typeof valeur === 'function') {
+              const expr = String((valeur as () => string)());
+              const m = expr.match(/([+\-])\s*:(\w+)/);
+              if (!m) continue;
+              const delta = Number(params[m[2]]);
+              ligne[col] = arrondi(
+                Number(ligne[col]) + (m[1] === '-' ? -delta : delta),
+              );
+            } else {
+              ligne[col] = valeur;
+            }
+          }
+          return { affected: 1 };
+        };
         return qb;
       }),
     };
@@ -520,6 +605,81 @@ describe('YouSignWebhookController — règlement marché secondaire', () => {
       manager,
     };
   }
+
+  // ── B5 — concurrence : la double-vente est refusée PAR LE SQL ──────────────
+
+  /**
+   * Le règlement lisait la position du vendeur, calculait le restant EN
+   * MÉMOIRE et réécrivait la ligne entière (`Math.max(0, remaining)`). Deux
+   * règlements concurrents lisaient tous deux 10 fractions, écrivaient tous
+   * deux 0, et le vendeur livrait vingt fractions qu'il n'avait pas — le
+   * `Math.max` ne protégeait rien, il MASQUAIT le découvert en le ramenant à
+   * zéro.
+   *
+   * Les écritures sont désormais RELATIVES ET CONDITIONNELLES : c'est la base
+   * qui évalue `"nbTitres" >= :n` au moment de l'écriture. Le dépôt simulé de
+   * cette suite applique réellement la clause — sans quoi le test ne
+   * prouverait rien.
+   */
+  describe('double-vente des mêmes fractions', () => {
+    it('un second règlement sur une position épuisée est REFUSÉ', async () => {
+      const ctx = setupCession({ nbFractionsSignees: 10 });
+
+      await ctx.finalize.execute(REQ_ID);
+      expect(ctx.investissements[0].nbTitres).toBe(0);
+
+      // Second règlement : la signature est rejouée alors que la position est
+      // vide. L'acheteur est REPROVISIONNÉ pour que le refus ne puisse venir
+      // que de la garde qu'on veut éprouver — la position du vendeur — et non
+      // du contrôle de fonds situé plus haut.
+      ctx.buyerWallet.soldeBloque = ctx.montantCession;
+      ctx.signature.statut = SignatureStatus.PENDING;
+      await expect(ctx.finalize.execute(REQ_ID)).rejects.toThrow(
+        /Position vendeur .* insuffisante|Annonce .* déjà servie/,
+      );
+    });
+
+    it('la position du vendeur ne passe JAMAIS en négatif', async () => {
+      const ctx = setupCession({ nbFractionsSignees: 10 });
+
+      await ctx.finalize.execute(REQ_ID);
+      ctx.signature.statut = SignatureStatus.PENDING;
+      await ctx.finalize.execute(REQ_ID).catch(() => undefined);
+
+      expect(Number(ctx.investissements[0].nbTitres)).toBeGreaterThanOrEqual(0);
+    });
+
+    it('le portefeuille acheteur ne peut pas être débité deux fois', async () => {
+      const ctx = setupCession({ nbFractionsSignees: 10 });
+
+      await ctx.finalize.execute(REQ_ID);
+      const apresPremier = {
+        solde: ctx.buyerWallet.solde,
+        bloque: ctx.buyerWallet.soldeBloque,
+      };
+
+      ctx.signature.statut = SignatureStatus.PENDING;
+      await ctx.finalize.execute(REQ_ID).catch(() => undefined);
+
+      // Le second passage échoue AVANT ou PENDANT le débit ; dans les deux cas
+      // la position de l'acheteur est inchangée.
+      expect(ctx.buyerWallet.solde).toBe(apresPremier.solde);
+      expect(ctx.buyerWallet.soldeBloque).toBe(apresPremier.bloque);
+    });
+
+    it("une annonce déjà servie n'est pas réécrite", async () => {
+      const ctx = setupCession({ nbFractionsSignees: 10 });
+
+      await ctx.finalize.execute(REQ_ID);
+      expect(ctx.ordre.statut).toBe(OrdreMarcheStatus.EXECUTE);
+
+      ctx.signature.statut = SignatureStatus.PENDING;
+      await ctx.finalize.execute(REQ_ID).catch(() => undefined);
+
+      expect(ctx.ordre.statut).toBe(OrdreMarcheStatus.EXECUTE);
+      expect(ctx.ordre.acheteurId).toBe(ACHETEUR_ID);
+    });
+  });
 
   // ── Équilibre comptable ────────────────────────────────────────────────────
 

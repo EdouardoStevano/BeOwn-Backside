@@ -142,9 +142,15 @@ export class FinalizeSignedContractUseCase {
         }
 
         // ── Marché secondaire : rachat de fractions ───────────────────────────
+        // VERROU sur l'annonce : le verrou de signature ne sérialise que les
+        // livraisons du MÊME webhook. Deux signatures DISTINCTES ouvertes sur
+        // la même annonce (remplissages partiels successifs) se réglaient
+        // jusqu'ici en parallèle, chacune lisant l'annonce avant l'écriture de
+        // l'autre — les mêmes fractions pouvaient être vendues deux fois.
         const ordre = await em.findOne(OrdreMarcheEntity, {
           where: { id: signature.ordreId! },
           relations: ['investissement'],
+          lock: { mode: 'pessimistic_write' },
         });
         if (!ordre) throw new Error(`Ordre ${signature.ordreId} introuvable`);
 
@@ -176,10 +182,20 @@ export class FinalizeSignedContractUseCase {
         //    Les fonds ont normalement été RÉSERVÉS à l'acceptation du vendeur
         //    (CessionCompensationService) : ils se trouvent en `soldeBloque`.
         //    C'est donc la somme des deux poches qui doit couvrir la cession.
-        const buyerWallet = await em.findOne(WalletEntity, {
-          where: { proprietaireUserId: buyerUserId, type: WalletType.INVESTISSEUR },
-        });
-        if (!buyerWallet) throw new Error(`Wallet acheteur ${buyerUserId} introuvable`);
+        // Les DEUX portefeuilles sont verrouillés d'un coup, dans l'ordre
+        // croissant de leur identifiant. Les verrouiller l'un après l'autre
+        // dans l'ordre du code — acheteur puis vendeur — interbloquerait deux
+        // cessions croisées (A vend à B pendant que B vend à A) : chacune
+        // tiendrait le portefeuille que l'autre attend. Un ordre total, le
+        // même pour toutes les transactions, rend l'interblocage impossible.
+        const portefeuilles = await this.verrouillerWalletsOrdonnes(em, [
+          { userId: buyerUserId, absent: `Wallet acheteur ${buyerUserId} introuvable` },
+          {
+            userId: ordre.vendeurId,
+            absent: `Wallet vendeur ${ordre.vendeurId} introuvable : règlement impossible sans contrepartie créditée`,
+          },
+        ]);
+        const buyerWallet = portefeuilles.get(buyerUserId)!;
         const buyerBloque = Number(buyerWallet.soldeBloque ?? 0);
         const buyerDisponible = Number(buyerWallet.solde);
         if (round2(buyerBloque + buyerDisponible) < montantTotal) {
@@ -195,14 +211,7 @@ export class FinalizeSignedContractUseCase {
         //    sans portefeuille est une anomalie de données — elle doit annuler la
         //    transaction et laisser la signature PENDING (donc rejouable), pas
         //    produire une cession déséquilibrée.
-        const sellerWallet = await em.findOne(WalletEntity, {
-          where: { proprietaireUserId: ordre.vendeurId, type: WalletType.INVESTISSEUR },
-        });
-        if (!sellerWallet) {
-          throw new Error(
-            `Wallet vendeur ${ordre.vendeurId} introuvable : règlement impossible sans contrepartie créditée`,
-          );
-        }
+        const sellerWallet = portefeuilles.get(ordre.vendeurId)!;
 
         // 3. Cas A (investi) ou Cas B (nouvel investissement)
         let buyerInvest: InvestmentEntity;
@@ -211,10 +220,30 @@ export class FinalizeSignedContractUseCase {
           : null;
 
         if (existingInvest) {
-          existingInvest.nbTitres = (Number(existingInvest.nbTitres) ?? 0) + nbFractions;
-          existingInvest.montant = Number(existingInvest.montant) + montantTotal;
-          existingInvest.signatureId = signature.id;
-          buyerInvest = await em.save(InvestmentEntity, existingInvest);
+          // Écriture RELATIVE : `nbTitres = nbTitres + :n` est calculé par la
+          // base. La forme absolue (`lire, additionner en mémoire, réécrire`)
+          // perdait silencieusement toute écriture concurrente survenue entre
+          // la lecture et l'enregistrement — typiquement un second
+          // remplissage sur la même position d'acheteur.
+          const ajout = await em
+            .createQueryBuilder()
+            .update(InvestmentEntity)
+            .set({
+              nbTitres: () => '"nbTitres" + :n',
+              montant: () => 'montant + :m',
+              signatureId: signature.id,
+            })
+            .setParameters({ n: nbFractions, m: montantTotal })
+            .where('id = :id', { id: existingInvest.id })
+            .execute();
+          if (!ajout.affected) {
+            throw new Error(
+              `Position acheteur ${existingInvest.id} introuvable au moment du crédit`,
+            );
+          }
+          buyerInvest = (await em.findOne(InvestmentEntity, {
+            where: { id: existingInvest.id },
+          }))!;
         } else {
           const sellerInvest = ordre.investissement;
           const newInvest = em.create(InvestmentEntity, {
@@ -246,14 +275,45 @@ export class FinalizeSignedContractUseCase {
         //    l'assiette des frais sur gain (voir domains/cout-acquisition.ts).
         const sellerInvest = await em.findOne(InvestmentEntity, {
           where: { id: ordre.investissementId },
+          lock: { mode: 'pessimistic_write' },
         });
         if (sellerInvest && sellerInvest.nbTitres != null) {
           const remaining = Number(sellerInvest.nbTitres) - nbFractions;
-          sellerInvest.nbTitres = Math.max(0, remaining);
-          sellerInvest.montant = remaining > 0
-            ? Math.max(0, round2(Number(sellerInvest.montant) - coutAcquisition))
-            : 0;
-          await em.save(InvestmentEntity, sellerInvest);
+
+          // ÉCRITURE RELATIVE ET CONDITIONNELLE — c'est LA garde anti
+          // double-vente. `nbTitres >= :n` est évalué par la base au moment de
+          // l'écriture : si un règlement concurrent a déjà consommé les
+          // fractions, `affected` vaut 0 et TOUTE la transaction est annulée.
+          //
+          // La forme absolue précédente écrivait `Math.max(0, remaining)` à
+          // partir d'une lecture antérieure : deux règlements concurrents
+          // lisaient tous deux 10 fractions, écrivaient tous deux 0, et le
+          // vendeur livrait vingt fractions qu'il n'avait pas. Le `Math.max`
+          // ne protégeait pas — il MASQUAIT le découvert en le ramenant à zéro.
+          const retrait = await em
+            .createQueryBuilder()
+            .update(InvestmentEntity)
+            .set(
+              remaining > 0
+                ? {
+                    nbTitres: () => '"nbTitres" - :n',
+                    montant: () => 'montant - :cout',
+                  }
+                : { nbTitres: () => '"nbTitres" - :n', montant: 0 },
+            )
+            .setParameters({ n: nbFractions, cout: coutAcquisition })
+            .where('id = :id AND "nbTitres" >= :n', {
+              id: sellerInvest.id,
+              n: nbFractions,
+            })
+            .execute();
+
+          if (!retrait.affected) {
+            throw new Error(
+              `Position vendeur ${sellerInvest.id} insuffisante : ${nbFractions} fraction(s) ` +
+                'déjà cédées par un règlement concurrent — cession annulée.',
+            );
+          }
         }
 
         // 6. Mettre à jour l'ordre.
@@ -264,18 +324,48 @@ export class FinalizeSignedContractUseCase {
         //    qu'aucune annonce vivante ne les portait plus. On republie donc le
         //    reliquat et on purge la marque d'intérêt déjà servie, faute de quoi
         //    l'annonce reviendrait au carnet en portant encore son acheteur.
-        if (nbFractions >= ordre.nbFractions) {
-          ordre.acheteurId = buyerUserId;
-          ordre.statut = OrdreMarcheStatus.EXECUTE;
-        } else {
-          ordre.nbFractions = ordre.nbFractions - nbFractions;
-          ordre.montant = round2(Number(ordre.montant) - montantTotal);
-          ordre.statut = OrdreMarcheStatus.EN_CARNET;
-          ordre.acheteurId = null;
-          ordre.interetNbFractions = null;
-          ordre.interetExprimeLe = null;
+        //    Transition CONDITIONNELLE sur le statut lu sous verrou : une
+        //    annonce déjà servie, annulée ou expirée par un autre chemin n'est
+        //    jamais réécrite. La quantité restante est décrémentée par la BASE
+        //    (`nbFractions - :n`), jamais recalculée en mémoire.
+        const transition =
+          nbFractions >= ordre.nbFractions
+            ? em
+                .createQueryBuilder()
+                .update(OrdreMarcheEntity)
+                .set({
+                  acheteurId: buyerUserId,
+                  statut: OrdreMarcheStatus.EXECUTE,
+                })
+                .where('id = :id AND statut = :attendu AND "nbFractions" <= :n', {
+                  id: ordre.id,
+                  attendu: ordre.statut,
+                  n: nbFractions,
+                })
+            : em
+                .createQueryBuilder()
+                .update(OrdreMarcheEntity)
+                .set({
+                  nbFractions: () => '"nbFractions" - :n',
+                  montant: () => 'montant - :m',
+                  statut: OrdreMarcheStatus.EN_CARNET,
+                  acheteurId: null,
+                  interetNbFractions: null,
+                  interetExprimeLe: null,
+                })
+                .setParameters({ n: nbFractions, m: montantTotal })
+                .where('id = :id AND statut = :attendu AND "nbFractions" > :n', {
+                  id: ordre.id,
+                  attendu: ordre.statut,
+                  n: nbFractions,
+                });
+
+        const ordreMisAJour = await transition.execute();
+        if (!ordreMisAJour.affected) {
+          throw new Error(
+            `Annonce ${ordre.id} déjà servie ou modifiée par un règlement concurrent — cession annulée.`,
+          );
         }
-        await em.save(OrdreMarcheEntity, ordre);
 
         // 7. Consommer les fonds de l'acheteur.
         //    Priorité à `soldeBloque` : c'est la réservation posée à
@@ -291,13 +381,42 @@ export class FinalizeSignedContractUseCase {
               `(bloqué ${buyerBloque} < ${montantTotal}) — signature antérieure à la réservation des fonds`,
           );
         }
-        buyerWallet.soldeBloque = round2(buyerBloque - prisSurBloque);
-        buyerWallet.solde = round2(buyerDisponible - prisSurDisponible);
-        await em.save(WalletEntity, buyerWallet);
+        // Débit RELATIF ET CONDITIONNEL des deux poches. La forme absolue
+        // réécrivait le portefeuille à partir de valeurs lues plus haut : tout
+        // mouvement concurrent survenu entre-temps était écrasé sans bruit.
+        const debitAcheteur = await em
+          .createQueryBuilder()
+          .update(WalletEntity)
+          .set({
+            solde: () => 'solde - :dispo',
+            soldeBloque: () => '"soldeBloque" - :bloque',
+          })
+          .setParameters({ dispo: prisSurDisponible, bloque: prisSurBloque })
+          .where(
+            'id = :id AND solde >= :dispo AND "soldeBloque" >= :bloque',
+            { id: buyerWallet.id, dispo: prisSurDisponible, bloque: prisSurBloque },
+          )
+          .execute();
+        if (!debitAcheteur.affected) {
+          throw new Error(
+            `Fonds acheteur ${buyerUserId} insuffisants au moment du débit ` +
+              `(disponible ${prisSurDisponible} / bloqué ${prisSurBloque}) — cession annulée.`,
+          );
+        }
 
         // 8. Créditer wallet vendeur (net des frais vendeur)
-        sellerWallet.solde = round2(Number(sellerWallet.solde) + montantNetVendeur);
-        await em.save(WalletEntity, sellerWallet);
+        const creditVendeur = await em
+          .createQueryBuilder()
+          .update(WalletEntity)
+          .set({ solde: () => 'solde + :net' })
+          .setParameter('net', montantNetVendeur)
+          .where('id = :id', { id: sellerWallet.id })
+          .execute();
+        if (!creditVendeur.affected) {
+          throw new Error(
+            `Portefeuille vendeur ${sellerWallet.id} introuvable au moment du crédit`,
+          );
+        }
 
         // 9. Créditer wallet plateforme (frais de transaction + frais sur gain)
         // Wallet system-wide, créé à la volée si absent (parité avec SEQUESTRE_IR/CSG).
@@ -318,8 +437,13 @@ export class FinalizeSignedContractUseCase {
               }),
             );
           }
-          platformWallet.solde = Number(platformWallet.solde) + totalFrais;
-          await em.save(WalletEntity, platformWallet);
+          await em
+            .createQueryBuilder()
+            .update(WalletEntity)
+            .set({ solde: () => 'solde + :frais' })
+            .setParameter('frais', totalFrais)
+            .where('id = :id', { id: platformWallet.id })
+            .execute();
         }
 
         // 10. Transaction ledger acheteur
@@ -523,6 +647,56 @@ export class FinalizeSignedContractUseCase {
   // Exécuté DANS la transaction de execute (manager `em` partagé) :
   // débit du wallet, confirmation, écheances et transition FINANCE sont annulés
   // ensemble si une étape échoue — la signature reste alors PENDING.
+
+  /**
+   * Verrouille en écriture les portefeuilles INVESTISSEUR des comptes donnés,
+   * dans l'ordre CROISSANT de leur identifiant.
+   *
+   * L'ordre est le point important : verrouiller dans l'ordre d'apparition du
+   * code (acheteur puis vendeur) interbloque deux cessions croisées — A vend à
+   * B pendant que B vend à A, chacune tenant le portefeuille que l'autre
+   * attend. Un ordre total, identique pour toutes les transactions, rend
+   * l'interblocage structurellement impossible.
+   *
+   * Les identifiants sont d'abord résolus sans verrou (une lecture par
+   * compte), puis re-lus verrouillés dans le bon ordre : c'est la seule façon
+   * de connaître l'ordre avant de prendre les verrous.
+   */
+  private async verrouillerWalletsOrdonnes(
+    em: EntityManager,
+    comptes: ReadonlyArray<{ userId: number; absent: string }>,
+  ): Promise<Map<number, WalletEntity>> {
+    const resolus: Array<{ userId: number; id: string }> = [];
+    for (const compte of comptes) {
+      const wallet = await em.findOne(WalletEntity, {
+        where: {
+          proprietaireUserId: compte.userId,
+          type: WalletType.INVESTISSEUR,
+        },
+        select: ['id'],
+      });
+      if (!wallet) throw new Error(compte.absent);
+      resolus.push({ userId: compte.userId, id: wallet.id });
+    }
+
+    const parUtilisateur = new Map<number, WalletEntity>();
+    for (const { userId, id } of [...resolus].sort((a, b) =>
+      a.id < b.id ? -1 : a.id > b.id ? 1 : 0,
+    )) {
+      const verrouille = await em.findOne(WalletEntity, {
+        where: { id },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!verrouille) {
+        throw new Error(
+          comptes.find((c) => c.userId === userId)?.absent ??
+            `Wallet ${id} introuvable`,
+        );
+      }
+      parUtilisateur.set(userId, verrouille);
+    }
+    return parUtilisateur;
+  }
 
   private async executeInvestmentSignature(
     em: EntityManager,
