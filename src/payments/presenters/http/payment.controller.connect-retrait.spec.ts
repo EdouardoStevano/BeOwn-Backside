@@ -55,6 +55,8 @@ describe('PaymentController — retrait Stripe Connect (E3, sécurité argent)',
       }),
       createTransfer: jest.fn(),
       createPayoutOnConnectedAccount: jest.fn(),
+      // Sonde B6 : par défaut aucun transfert retrouvé chez le prestataire.
+      findTransferIdForRetrait: jest.fn().mockResolvedValue(null),
       reverseTransfer: jest.fn().mockResolvedValue(undefined),
       findUserByConnectAccountId: jest.fn(),
       syncAccountFromWebhook: jest.fn(),
@@ -193,7 +195,14 @@ describe('PaymentController — retrait Stripe Connect (E3, sécurité argent)',
       .mockImplementationOnce(async (cb: any) => cb(openManager))
       .mockImplementationOnce(async (cb: any) => cb(recreditManager));
 
-    stripeConnect.createTransfer.mockRejectedValue(new Error('insufficient funds'));
+    // Refus EXPLICITE du prestataire : la requête a été reçue et rejetée.
+    // Seule une erreur décisive autorise le recrédit (B6).
+    stripeConnect.createTransfer.mockRejectedValue(
+      Object.assign(new Error('insufficient funds'), {
+        type: 'StripeInvalidRequestError',
+        statusCode: 400,
+      }),
+    );
 
     const res = await controller.createRetrait(
       { walletId: 'w1', amount: 100, currency: 'EUR' } as any,
@@ -211,6 +220,118 @@ describe('PaymentController — retrait Stripe Connect (E3, sécurité argent)',
     expect(stripeConnect.createPayoutOnConnectedAccount).not.toHaveBeenCalled();
     // Investisseur notifié de l'échec.
     expect(notificationService.push).toHaveBeenCalled();
+  });
+
+  /**
+   * B6 — RECRÉDIT À L'AVEUGLE SUR ERREUR RÉSEAU.
+   *
+   * Le recrédit était INCONDITIONNEL : toute exception valait « l'argent n'est
+   * pas parti ». C'est vrai d'un refus explicite du prestataire ; c'est faux
+   * d'un délai dépassé ou d'une coupure, où l'ordre a pu être exécuté sans que
+   * la réponse revienne. Recréditer dans ce cas, c'est PAYER DEUX FOIS.
+   */
+  describe('B6 — issue incertaine du transfert', () => {
+    const prepareRetrait = () => {
+      const txRow: any = {
+        id: 'tx1',
+        type: TransactionType.RETRAIT,
+        statut: TransactionStatus.EN_COURS,
+        montant: 100,
+        walletSource: 'w1',
+        metadata: { userId: 42, method: 'stripe_connect', connectedAccountId: 'acct_1' },
+      };
+      const openManager: any = {
+        findOne: jest.fn(async () => ({ id: 'w1', solde: 500, devise: 'EUR' })),
+        createQueryBuilder: jest.fn(() => chainableQB({ affected: 1 })),
+        create: jest.fn((_e: any, o: any) => o),
+        save: jest.fn(async () => txRow),
+      };
+      const recreditManager: any = {
+        findOne: jest.fn(async () => txRow),
+        createQueryBuilder: jest.fn(() => chainableQB({ affected: 1 })),
+        save: jest.fn(async (x: any) => x),
+      };
+      dataSource.transaction
+        .mockImplementationOnce(async (cb: any) => cb(openManager))
+        .mockImplementationOnce(async (cb: any) => cb(recreditManager));
+      return { txRow, recreditManager };
+    };
+
+    const demander = () =>
+      controller.createRetrait(
+        { walletId: 'w1', amount: 100, currency: 'EUR' } as any,
+        user,
+      );
+
+    it.each([
+      ['délai dépassé', Object.assign(new Error('timeout'), { type: 'StripeConnectionError' })],
+      ['panne 5xx', Object.assign(new Error('api down'), { type: 'StripeAPIError', statusCode: 503 })],
+      ['erreur nue', new Error('socket hang up')],
+    ])('erreur INDÉCISE (%s) : AUCUN recrédit', async (_cas, erreur) => {
+      const { txRow, recreditManager } = prepareRetrait();
+      stripeConnect.createTransfer.mockRejectedValue(erreur);
+
+      const res = await demander();
+
+      expect(res).toEqual(
+        expect.objectContaining({ success: false, code: 'TRANSFER_UNCERTAIN' }),
+      );
+      // Le portefeuille N'EST PAS recrédité : c'est tout l'objet du correctif.
+      expect(recreditManager.createQueryBuilder).not.toHaveBeenCalled();
+      expect(txRow.metadata.recredited).toBeUndefined();
+    });
+
+    it("passe l'écriture EN_VERIFICATION et alerte l'équipe financière", async () => {
+      prepareRetrait();
+      stripeConnect.createTransfer.mockRejectedValue(new Error('socket hang up'));
+
+      await demander();
+
+      expect(txRepo.update).toHaveBeenCalledWith(
+        'tx1',
+        expect.objectContaining({ statut: TransactionStatus.EN_VERIFICATION }),
+      );
+      expect(notificationService.pushToAdmins).toHaveBeenCalled();
+    });
+
+    it('transfert RETROUVÉ chez le prestataire : aucun recrédit malgré une erreur décisive', async () => {
+      const { recreditManager } = prepareRetrait();
+      stripeConnect.findTransferIdForRetrait.mockResolvedValue('tr_existant');
+      stripeConnect.createTransfer.mockRejectedValue(
+        Object.assign(new Error('bad request'), {
+          type: 'StripeInvalidRequestError',
+          statusCode: 400,
+        }),
+      );
+
+      const res = await demander();
+
+      // Une réponse d'erreur reçue APRÈS exécution reste possible : la preuve
+      // qui compte est l'existence du transfert, pas le type de l'erreur.
+      expect(res).toEqual(
+        expect.objectContaining({ code: 'TRANSFER_UNCERTAIN' }),
+      );
+      expect(recreditManager.createQueryBuilder).not.toHaveBeenCalled();
+    });
+
+    it('CONTRE-ÉPREUVE : refus décisif ET aucun transfert → recrédit normal', async () => {
+      const { txRow, recreditManager } = prepareRetrait();
+      stripeConnect.findTransferIdForRetrait.mockResolvedValue(null);
+      stripeConnect.createTransfer.mockRejectedValue(
+        Object.assign(new Error('insufficient funds'), {
+          type: 'StripeInvalidRequestError',
+          statusCode: 400,
+        }),
+      );
+
+      const res = await demander();
+
+      expect(res).toEqual(
+        expect.objectContaining({ code: 'TRANSFER_FAILED' }),
+      );
+      expect(recreditManager.createQueryBuilder).toHaveBeenCalled();
+      expect(txRow.statut).toBe(TransactionStatus.ECHOUE);
+    });
   });
 
   it('recrédit IDEMPOTENT : un second déclencheur ne recrédite pas une 2e fois', async () => {

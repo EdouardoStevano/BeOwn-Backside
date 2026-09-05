@@ -80,6 +80,21 @@ export enum TransactionStatus {
   ANNULE = 'annule',
   REMBOURSE = 'rembourse',
   EXPIRE = 'expire',
+  /**
+   * Sortie d'argent dont l'ISSUE EST INCONNUE — l'appel au prestataire n'a pas
+   * rendu de réponse décisive (délai dépassé, coupure réseau, 5xx).
+   *
+   * Statut distinct d'`ECHOUE` À DESSEIN : « échoué » affirme que l'argent
+   * n'est pas parti, ce qui déclenche un recrédit. Or sur une erreur INDÉCISE,
+   * l'ordre a pu être exécuté chez le prestataire sans que la réponse nous
+   * parvienne : recréditer, c'est payer deux fois. Le portefeuille reste donc
+   * débité (le mouvement EST appliqué, cf. STATUTS_MOUVEMENT_APPLIQUE) et
+   * l'écriture attend une levée de doute humaine ou un webhook.
+   *
+   * Colonne `varchar` sans contrainte d'énumération en base : l'ajout de cette
+   * valeur ne demande aucune migration.
+   */
+  EN_VERIFICATION = 'en_verification',
 }
 
 /**
@@ -110,6 +125,13 @@ export const STATUTS_MOUVEMENT_APPLIQUE: readonly TransactionStatus[] = [
   TransactionStatus.REUSSI,
   TransactionStatus.EN_COURS,
   TransactionStatus.EN_ATTENTE_PAIEMENT,
+  // `EN_VERIFICATION` — retrait dont l'issue est inconnue. Le portefeuille a
+  // été débité à la DEMANDE, exactement comme pour un retrait EN_COURS, et il
+  // n'a PAS été recrédité (c'est tout l'objet de ce statut). Le mouvement est
+  // donc appliqué : l'omettre ferait apparaître un écart négatif sur le
+  // portefeuille concerné à chaque rapprochement, c'est-à-dire une fausse
+  // alerte sur le contrôle financier le plus critique.
+  TransactionStatus.EN_VERIFICATION,
 ] as const;
 
 /**

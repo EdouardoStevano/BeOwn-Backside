@@ -324,9 +324,39 @@ export class RequestRetraitUseCase {
         metadata: { retraitTxId: tx.id, userId: String(user.userId) },
       });
     } catch (err) {
-      // Aucun fonds n'a bougé → rollback intégral du débit wallet.
       this.logger.error(`Retrait Connect: transfer échoué tx=${tx.id}: ${err?.message}`);
       this.metrics.incrementCounter(METRIC.WITHDRAWAL_TRANSFER_FAILED_TOTAL);
+
+      // B6 — NE JAMAIS RECRÉDITER SUR UNE ERREUR INDÉCISE.
+      //
+      // Le recrédit était inconditionnel : toute exception valait « l'argent
+      // n'est pas parti ». C'est vrai d'un REFUS explicite du prestataire ;
+      // c'est faux d'un délai dépassé ou d'une coupure réseau, où l'ordre a pu
+      // être exécuté sans que la réponse nous parvienne. Recréditer dans ce
+      // cas, c'est PAYER DEUX FOIS : une fois vers la banque du client, une
+      // fois sur son solde.
+      //
+      // On ne devine pas : on va VOIR chez le prestataire si le transfert
+      // existe (même sonde que `RetraitSettlementService`), et on ne recrédite
+      // que si l'échec est décisif ET qu'aucun transfert n'a été retrouvé.
+      const doute = await this.transfertPeutExister(err, tx.id, connectedAccountId);
+      if (doute) {
+        await this.marquerEnVerification(tx, user.userId, dto, err, doute);
+        this.metrics.incrementCounter(METRIC.WITHDRAWAL_REQUESTS_TOTAL, {
+          method: metricMethod,
+          result: 'verification',
+        });
+        return {
+          success: false,
+          code: 'TRANSFER_UNCERTAIN',
+          message:
+            'Le statut de votre virement est en cours de vérification. ' +
+            'Votre solde reste inchangé le temps de la levée de doute ; ' +
+            'nos équipes reviennent vers vous.',
+        };
+      }
+
+      // Échec DÉCISIF et aucun transfert retrouvé → rollback intégral.
       const recreditOutcome = await this.recreditRetrait(
         tx.id,
         `Transfer Stripe échoué: ${err?.message ?? 'inconnu'}`,
@@ -575,6 +605,125 @@ export class RequestRetraitUseCase {
         titre: 'Retrait échoué — solde recrédité',
         message: `Votre retrait de ${formatEur(montant)} n'a pas pu être effectué. Le montant a été recrédité sur votre wallet.`,
         metadata: { transactionId: txId },
+      })
+      .catch(() => {});
+  }
+
+  /**
+   * L'échec du transfert laisse-t-il un DOUTE sur le fait que l'argent soit
+   * parti ? Rend `null` quand on peut affirmer que non.
+   *
+   * Deux familles d'erreurs, et une seule autorise le recrédit :
+   *  - DÉCISIVE — le prestataire a répondu et a REFUSÉ (requête invalide,
+   *    solde de plateforme insuffisant, compte inéligible). L'ordre n'existe
+   *    pas : le recrédit est légitime.
+   *  - INDÉCISE — délai dépassé, coupure réseau, 5xx. La requête a pu être
+   *    exécutée sans que la réponse revienne.
+   *
+   * Même sur une erreur décisive, on vérifie qu'aucun transfert ne porte notre
+   * identifiant : une réponse d'erreur reçue APRÈS exécution reste possible,
+   * et c'est la seule preuve qui compte. La sonde est celle du dénouement des
+   * webhooks (`RetraitSettlementService`).
+   */
+  private async transfertPeutExister(
+    err: any,
+    retraitTxId: string,
+    connectedAccountId: string | null,
+  ): Promise<{ raison: string; transferId?: string } | null> {
+    const transferId = await this.stripeConnect
+      .findTransferIdForRetrait({
+        retraitTxId,
+        destinationAccountId: connectedAccountId,
+      })
+      .catch(() => null);
+
+    if (transferId) {
+      return { raison: 'transfert retrouvé chez le prestataire', transferId };
+    }
+
+    if (this.echecDecisif(err)) return null;
+
+    // Erreur indécise ET transfert introuvable : le balayage est BORNÉ (cinq
+    // pages) et peut lui-même avoir échoué. On ne tranche pas — un doute non
+    // levé vaut mieux qu'un double paiement.
+    return {
+      raison: `réponse non décisive du prestataire (${err?.type ?? err?.code ?? 'inconnue'})`,
+    };
+  }
+
+  /** Le prestataire a-t-il explicitement REFUSÉ l'ordre ? */
+  private echecDecisif(err: any): boolean {
+    const type = String(err?.type ?? '');
+    // Types Stripe d'erreurs de REQUÊTE : la requête a été reçue, comprise et
+    // rejetée. Tout le reste (connexion, API 5xx, délai) est indécis.
+    const typesDecisifs = [
+      'StripeInvalidRequestError',
+      'StripeCardError',
+      'StripeAuthenticationError',
+      'StripePermissionError',
+      'StripeRateLimitError',
+    ];
+    if (typesDecisifs.includes(type)) return true;
+
+    // Statut HTTP 4xx (hors 408/429 qui n'excluent pas l'exécution).
+    const statut = Number(err?.statusCode ?? err?.raw?.statusCode ?? 0);
+    return statut >= 400 && statut < 500 && statut !== 408;
+  }
+
+  /**
+   * Retrait dont l'issue est inconnue : portefeuille NON recrédité, écriture
+   * mise en attente de levée de doute, alerte à l'équipe financière.
+   */
+  private async marquerEnVerification(
+    tx: TransactionEntity,
+    userId: number,
+    dto: { amount: number; currency: string },
+    err: any,
+    doute: { raison: string; transferId?: string },
+  ): Promise<void> {
+    const metadata = {
+      ...((tx.metadata ?? {}) as Record<string, unknown>),
+      verificationRequise: true,
+      verificationRaison: doute.raison,
+      verificationLe: new Date().toISOString(),
+      ...(doute.transferId ? { transferId: doute.transferId } : {}),
+    };
+
+    await this.txRepo
+      .update(tx.id, {
+        statut: TransactionStatus.EN_VERIFICATION,
+        motifEchec: `Issue inconnue : ${doute.raison}`,
+        metadata: metadata as any,
+        ...(doute.transferId ? { fournisseurRef: doute.transferId } : {}),
+      })
+      .catch((echec: any) =>
+        this.logger.error(
+          `Retrait ${tx.id} : passage en vérification NON écrit — ${echec?.message}`,
+        ),
+      );
+
+    this.logger.error(
+      `Retrait ${tx.id} EN VÉRIFICATION (aucun recrédit) : ${doute.raison}. ` +
+        `Erreur d'origine : ${err?.message ?? 'inconnue'}`,
+    );
+
+    this.notificationService
+      .pushToAdmins({
+        type: NotificationType.RETRAIT_TRAITE,
+        titre: 'Retrait à vérifier — issue inconnue',
+        message:
+          `Le retrait ${tx.id} (${formatEur(Number(dto.amount))}, utilisateur #${userId}) ` +
+          `n'a pas reçu de réponse décisive du prestataire : ${doute.raison}. ` +
+          'Le solde N\'A PAS été recrédité, pour ne pas risquer un double paiement. ' +
+          'Vérifier chez le prestataire, puis dénouer manuellement.',
+        roles: [UserRole.FINANCIER, UserRole.SUPER_ADMIN],
+        metadata: {
+          transactionId: tx.id,
+          userId,
+          montant: dto.amount,
+          raison: doute.raison,
+          transferId: doute.transferId ?? null,
+        },
       })
       .catch(() => {});
   }

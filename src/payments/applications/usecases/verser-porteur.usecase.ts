@@ -183,10 +183,65 @@ export class VerserPorteurUseCase {
         metadata: { retraitTxId: tx.id, projetId: projet.id, userId: String(porteurId) },
       });
     } catch (err: any) {
-      // Aucun euro n'a quitté la plateforme → rollback intégral du débit.
       this.logger.error(
         `Versement porteur : transfert échoué tx=${tx.id} projet=${projet.id}: ${err?.message}`,
       );
+
+      // B6 — même arbitrage que le retrait investisseur : une erreur INDÉCISE
+      // (délai dépassé, coupure, 5xx) ne prouve pas que l'argent est resté.
+      // Recréditer le portefeuille du projet alors que le transfert est parti,
+      // c'est verser deux fois au porteur. On va voir chez le prestataire, et
+      // à défaut de certitude on laisse le doute ouvert plutôt que de créer de
+      // l'argent.
+      const dejaParti = await this.stripeConnect
+        .findTransferIdForRetrait({
+          retraitTxId: tx.id,
+          destinationAccountId: connect.accountId,
+        })
+        .catch(() => null);
+
+      if (dejaParti) {
+        await this.txRepo
+          .update(tx.id, {
+            statut: TransactionStatus.EN_VERIFICATION,
+            fournisseurRef: dejaParti,
+            motifEchec:
+              'Transfert retrouvé chez le prestataire malgré une erreur : levée de doute requise.',
+            metadata: {
+              ...(tx.metadata as any),
+              transferId: dejaParti,
+              verificationRequise: true,
+            },
+          })
+          .catch(() => undefined);
+
+        this.notifications
+          .pushToAdmins({
+            type: NotificationType.RETRAIT_TRAITE,
+            titre: 'Versement porteur à vérifier — transfert retrouvé',
+            message:
+              `Le versement ${tx.id} (projet ${projet.id}) a levé une erreur, mais le ` +
+              `transfert ${dejaParti} existe chez le prestataire. Le portefeuille du ` +
+              "projet N'A PAS été recrédité, pour ne pas verser deux fois.",
+            roles: [UserRole.FINANCIER, UserRole.SUPER_ADMIN],
+            metadata: { transactionId: tx.id, projetId: projet.id, transferId: dejaParti },
+          })
+          .catch(() => {});
+
+        this.metrics.incrementCounter(METRIC.PORTEUR_VERSEMENT_TOTAL, {
+          canal: 'stripe_connect',
+          outcome: 'verification',
+        });
+        return {
+          success: false,
+          code: 'TRANSFER_UNCERTAIN',
+          message:
+            'Un transfert existe déjà chez le prestataire : vérification requise ' +
+            'avant tout nouveau versement.',
+        };
+      }
+
+      // Aucun transfert retrouvé → rollback intégral du débit.
       await this.requestRetrait.recreditRetrait(
         tx.id,
         `Transfert Stripe échoué : ${err?.message ?? 'inconnu'}`,

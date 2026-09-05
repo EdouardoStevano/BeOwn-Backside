@@ -23,6 +23,8 @@ function build(options: {
   insertJette?: Error;
   /** Statut du projet — seule une collecte ABOUTIE est versable (B8). */
   statutProjet?: ProjectStatus;
+  /** Transfert que la sonde B6 retrouve chez le prestataire. */
+  transfertRetrouve?: string | null;
 } = {}) {
   const solde = options.soldeProjet ?? WALLET_PROJET.solde;
   const savedTx: any[] = [];
@@ -94,6 +96,10 @@ function build(options: {
     createTransfer: options.transferJette
       ? jest.fn().mockRejectedValue(options.transferJette)
       : jest.fn().mockResolvedValue('tr_1'),
+    // Sonde B6 : par défaut aucun transfert retrouvé chez le prestataire.
+    findTransferIdForRetrait: jest
+      .fn()
+      .mockResolvedValue(options.transfertRetrouve ?? null),
     createPayoutOnConnectedAccount: options.payoutJette
       ? jest.fn().mockRejectedValue(options.payoutJette)
       : jest.fn().mockResolvedValue('po_1'),
@@ -302,6 +308,30 @@ describe('VerserPorteurUseCase', () => {
     );
     // Aucun euro n'a été acheminé par le perdant.
     expect(h.stripeConnect.createTransfer).not.toHaveBeenCalled();
+  });
+
+  /**
+   * B6 — un transfert retrouvé chez le prestataire interdit le recrédit :
+   * recréditer le portefeuille du projet alors que l'argent est parti, c'est
+   * verser deux fois au porteur.
+   */
+  it('transfert retrouvé chez le prestataire : AUCUN recrédit du projet', async () => {
+    const h = build({
+      transferJette: new Error('timeout'),
+      transfertRetrouve: 'tr_existant',
+    });
+
+    const res = await h.useCase.execute(INPUT);
+
+    expect(res).toEqual(
+      expect.objectContaining({ success: false, code: 'TRANSFER_UNCERTAIN' }),
+    );
+    expect(h.requestRetrait.recreditRetrait).not.toHaveBeenCalled();
+    expect(h.txRepo.update).toHaveBeenCalledWith(
+      'tx-versement',
+      expect.objectContaining({ statut: TransactionStatus.EN_VERIFICATION }),
+    );
+    expect(h.notifications.pushToAdmins).toHaveBeenCalled();
   });
 
   it('une panne d’insertion qui n’est PAS un doublon remonte telle quelle', async () => {
