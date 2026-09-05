@@ -3,11 +3,21 @@ import type { Response } from 'express';
 import PDFDocument = require('pdfkit');
 import { DocumentFiscal } from '../domains/document-fiscal';
 
-interface InvestorInfo {
+export interface InvestorInfo {
   userId: number;
   firstName?: string | null;
   lastName?: string | null;
   email?: string | null;
+  /**
+   * Code pays ISO-3166 alpha-2 de la résidence fiscale déclarée
+   * (`profil_personne_physique.residenceFiscale`), `null` si non renseignée.
+   */
+  residenceFiscale?: string | null;
+  /**
+   * Numéro d'identification fiscale déclaré
+   * (`profil_personne_physique.nif`), `null` si non renseigné.
+   */
+  nif?: string | null;
 }
 
 /**
@@ -16,6 +26,36 @@ interface InvestorInfo {
  *
  * Stream le PDF directement sur la Response Express — pas de stockage cloud
  * pour ce MVP. Phase 10 pourra ajouter l'upload + signature électronique.
+ *
+ * ── Résidence fiscale et NIF : pourquoi ils figurent ici ──────────────────
+ *
+ * Les deux champs étaient collectés au profil, validés, stockés, exportés…
+ * et lus par AUCUN calcul ni AUCUN document : une collecte sans finalité
+ * effective, c'est-à-dire un manquement à la minimisation (art. 5.1.c RGPD).
+ * Deux issues étaient possibles : cesser de les collecter, ou leur rendre
+ * l'usage qui les justifie. C'est la seconde qui a été retenue, parce que cet
+ * usage existe et qu'il est réglementaire :
+ *
+ *  - le récapitulatif fiscal est le document sur lequel le bénéficiaire
+ *    s'appuie pour déclarer ses revenus ; pour un bénéficiaire NON-RÉSIDENT,
+ *    le pays de résidence fiscale commande le régime applicable (convention
+ *    bilatérale, taux de retenue), et le NIF étranger est l'identifiant qui
+ *    permet de le rattacher — c'est précisément le couple que l'échange
+ *    automatique d'informations (art. 1649 AC CGI, directive 2014/107/UE dite
+ *    DAC2 / norme CRS) impose de tenir pour les comptes déclarables ;
+ *  - côté français, la déclaration des revenus de capitaux mobiliers
+ *    (art. 242 ter CGI, formulaire 2561) identifie le bénéficiaire, et le
+ *    numéro fiscal en fiabilise le rapprochement par l'administration.
+ *
+ * Régime de conservation : ligne 14 du barème (justificatifs fiscaux, 6 ans,
+ * art. L. 102 B LPF), absorbée en pratique par les dix ans comptables. Les
+ * deux champs sont effacés à l'anonymisation d'un compte sans obligation, et
+ * avec le dossier d'identité archivé à clôture + 5 ans sinon.
+ *
+ * Les deux lignes ne s'impriment QUE si la donnée est renseignée : elles ne
+ * sont obligatoires ni l'une ni l'autre au profil, et un IFU d'investisseur
+ * résident sans NIF reste parfaitement valide. Un champ vide ne produit pas
+ * une ligne vide — il ne produit rien.
  */
 @Injectable()
 export class IfuPdfService {
@@ -60,6 +100,12 @@ export class IfuPdfService {
       `User #${investor.userId}`;
     pdf.fontSize(10).fillColor('#0f172a').text(`Nom : ${fullName}`);
     if (investor.email) pdf.text(`Email : ${investor.email}`);
+    if (investor.residenceFiscale) {
+      pdf.text(`Résidence fiscale : ${investor.residenceFiscale}`);
+    }
+    if (investor.nif) {
+      pdf.text(`Numéro d'identification fiscale : ${investor.nif}`);
+    }
     pdf.text(`Identifiant interne : #${doc.userId}`);
     pdf.moveDown(1.2);
 

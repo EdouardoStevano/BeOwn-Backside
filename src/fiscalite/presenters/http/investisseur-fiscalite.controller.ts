@@ -25,6 +25,10 @@ import {
   USER_REPOSITORY,
   type UserRepository,
 } from 'src/iam/domains/ports/user.repository';
+import {
+  PROFIL_REPOSITORY,
+  type ProfilRepository,
+} from 'src/profiles/applications/ports/repositories/profil.repository';
 
 @ApiTags('Investisseur — Documents fiscaux')
 @ApiBearerAuth()
@@ -39,6 +43,11 @@ export class InvestisseurFiscaliteController {
     private readonly pdfService: IfuPdfService,
     @Inject(USER_REPOSITORY)
     private readonly userRepo: UserRepository,
+    // Identification fiscale du bénéficiaire (résidence fiscale, NIF) portée
+    // par le profil personne physique — voir la justification réglementaire
+    // dans `IfuPdfService`.
+    @Inject(PROFIL_REPOSITORY)
+    private readonly profilRepo: ProfilRepository,
   ) {}
 
   @Get()
@@ -72,7 +81,14 @@ export class InvestisseurFiscaliteController {
       );
     }
 
-    const userEntity = await this.userRepo.findById(user.userId);
+    // Deux lectures, jamais imbriquées dans le stream : le compte pour l'état
+    // civil, le profil pour l'identification fiscale. Le profil peut être
+    // absent (personne morale, onboarding inachevé) — le PDF s'imprime alors
+    // sans les deux lignes correspondantes, jamais avec des lignes vides.
+    const [userEntity, profil] = await Promise.all([
+      this.userRepo.findById(user.userId),
+      this.profilRepo.findProfilPPByUserId(user.userId),
+    ]);
     this.pdfService.streamToResponse(
       doc,
       {
@@ -80,6 +96,8 @@ export class InvestisseurFiscaliteController {
         firstName: userEntity?.firstname ?? null,
         lastName: userEntity?.lastname ?? null,
         email: userEntity?.email ?? null,
+        residenceFiscale: profil?.residenceFiscale ?? null,
+        nif: profil?.nif ?? null,
       },
       res,
     );
