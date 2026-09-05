@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { PeriodeDistribution } from '../../domains/periode-distribution';
 import { DistributionPart } from '../../domains/distribution-part';
+import { repartirAuPlusGrandReste } from '../../domains/repartition';
 import { StatutPeriodeDistribution } from '../../domains/enums/statut-periode-distribution.enum';
 import {
   PERIODE_DISTRIBUTION_REPOSITORY,
@@ -228,7 +229,31 @@ export class CalculateDistributionPeriodeUseCase {
       return { periode: savedPeriode, parts: [] };
     }
 
-    const parts: DistributionPart[] = eligibles.map((inv) => {
+    // Répartition AU CENTIME EXACT du revenu net entre les détenteurs.
+    //
+    // Le calcul précédent arrondissait chaque part indépendamment
+    // (`round2(revenuNet × pourcentage)`) : leur somme ne valait pas le total.
+    // Sur 100 € entre trois porteurs, 33,33 × 3 = 99,99 — un centime restait
+    // au projet à chaque période, sans que personne ne l'ait décidé ; dans
+    // l'autre sens, le projet payait un centime qu'il n'avait pas. La méthode
+    // du plus grand reste garantit `Σ parts === revenuNet`.
+    // ASSIETTE INCHANGÉE : le dénominateur reste `nbFractionsTotal`, et non la
+    // somme des fractions détenues par les éligibles. Les fractions NON
+    // souscrites (ou portées par des lignes non confirmées) ne donnent droit à
+    // rien, et leur quote-part de revenu reste au projet — c'est le
+    // comportement voulu, distinct de celui d'une SORTIE, où le prorata porte
+    // bien sur le seul collecté réel. Seule change la façon de découper la
+    // part revenant aux détenteurs : au centime, sans perte d'arrondi.
+    const fractionsDetenues = eligibles.reduce(
+      (total, inv) => total + Number(inv.nbTitres ?? 0),
+      0,
+    );
+    const bruts = repartirAuPlusGrandReste(
+      revenuNet * (fractionsDetenues / nbFractionsTotal),
+      eligibles.map((inv) => Number(inv.nbTitres ?? 0)),
+    );
+
+    const parts: DistributionPart[] = eligibles.map((inv, rang) => {
       const part = new DistributionPart();
       part.periodeDistributionId = savedPeriode.id;
       part.investissementId = inv.id;
@@ -244,7 +269,7 @@ export class CalculateDistributionPeriodeUseCase {
       // en créer.
       const pourcentage = Number(inv.nbTitres ?? 0) / nbFractionsTotal;
       part.pourcentageDetention = Math.round(pourcentage * 1e8) / 1e8;
-      part.montantBrut = round2(revenuNet * pourcentage);
+      part.montantBrut = bruts[rang];
       // Fiscalité seulement si revenu positif
       if (part.montantBrut > 0) {
         part.prelevementIR = round2(part.montantBrut * TAUX_IR);

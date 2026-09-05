@@ -253,6 +253,69 @@ describe('CalculateDistributionPeriodeUseCase', () => {
   // le droit aux loyers de l'acheteur avec le prix payé, et la somme des
   // détentions pouvait dépasser 100 % du revenu distribuable.
   // ══════════════════════════════════════════════════════════════════════════
+  /**
+   * « Toute somme distribuée est intégralement répartie, au centime. »
+   *
+   * Le calcul arrondissait chaque part indépendamment : leur somme ne valait
+   * pas le total. Sur 100 € entre trois porteurs, 33,33 × 3 = 99,99 € — un
+   * centime restait au projet à chaque période, sans que personne ne l'ait
+   * décidé. Assertions STRICTES : une tolérance masquerait exactement cela.
+   */
+  describe('répartition au centime EXACT', () => {
+    const projetFractions = (nbFractions: number) => ({
+      id: 'proj-1',
+      modeleEconomique: ModeleEconomique.EQUITY,
+      statut: ProjectStatus.FINANCE,
+      capitalCible: 10_000,
+      nbFractions,
+    });
+
+    const sommeBruts = (parts: any[]) =>
+      Math.round(parts.reduce((t, p) => t + p.montantBrut, 0) * 100) / 100;
+
+    it.each([
+      ['3 porteurs à parts égales', 3],
+      ['7 porteurs à parts égales', 7],
+      ['11 porteurs à parts égales', 11],
+    ])('%s : Σ parts === revenu net, à l’égalité stricte', async (_cas, n) => {
+      projectRepo.findProjectById.mockResolvedValue(projetFractions(n));
+      loyerRepo.findValidesParProjetEtPeriode.mockResolvedValue([
+        { montant: 1_000 },
+      ]);
+      investmentRepo.findByProjetId.mockResolvedValue(
+        Array.from({ length: n }, (_v, i) => ({
+          id: `inv-${i}`,
+          montant: 1_000,
+          nbTitres: 1,
+          statut: InvestmentStatus.CONFIRME,
+        })),
+      );
+
+      const r = await useCase.execute('proj-1', '2026-06');
+
+      expect(sommeBruts(r.parts)).toBe(r.periode.revenuNet);
+    });
+
+    it('un projet partiellement souscrit ne distribue que la quote-part détenue', async () => {
+      // 60 fractions détenues sur 100 : les 40 non souscrites ne donnent droit
+      // à rien et leur part de revenu reste au projet.
+      projectRepo.findProjectById.mockResolvedValue(projetFractions(100));
+      loyerRepo.findValidesParProjetEtPeriode.mockResolvedValue([
+        { montant: 1_000 },
+      ]);
+      investmentRepo.findByProjetId.mockResolvedValue([
+        { id: 'a', montant: 1, nbTitres: 30, statut: InvestmentStatus.CONFIRME },
+        { id: 'b', montant: 1, nbTitres: 30, statut: InvestmentStatus.CONFIRME },
+      ]);
+
+      const r = await useCase.execute('proj-1', '2026-06');
+
+      expect(sommeBruts(r.parts)).toBe(
+        Math.round(r.periode.revenuNet * 0.6 * 100) / 100,
+      );
+    });
+  });
+
   describe('quote-part = nbTitres / nbFractions (indépendante des montants)', () => {
     /** Projet à 100 fractions, pour lire les pourcentages à l'œil nu. */
     const projet100Fractions = {
