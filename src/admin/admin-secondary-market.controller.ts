@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Controller,
   Get,
   HttpCode,
@@ -13,7 +14,7 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, ILike, Repository } from 'typeorm';
+import { DataSource, EntityManager, ILike, Repository } from 'typeorm';
 import { SkipThrottle } from '@nestjs/throttler';
 import { JwtAuthGuard } from 'src/common/auth/jwt-auth.guard';
 import { RequirePermission } from 'src/common/auth/require-permission.decorator';
@@ -358,57 +359,142 @@ export class AdminSecondaryMarketController {
       // 1. Restaurer fractions vendeur sur son investissement source
       const sellerInvest = await em.findOne(InvestmentEntity, {
         where: { id: ordre.investissementId },
+        lock: { mode: 'pessimistic_write' },
       });
       if (sellerInvest) {
-        sellerInvest.nbTitres = (Number(sellerInvest.nbTitres) ?? 0) + nbFractions;
-        sellerInvest.montant = Number(sellerInvest.montant) + montantTotal;
-        if (sellerInvest.statut === InvestmentStatus.ANNULE) {
-          sellerInvest.statut = InvestmentStatus.CONFIRME;
-        }
-        await em.save(InvestmentEntity, sellerInvest);
+        // Écriture RELATIVE : la restitution est calculée par la base. La
+        // forme absolue repartait d'une lecture antérieure et écrasait tout
+        // mouvement concurrent sur la même position.
+        await em
+          .createQueryBuilder()
+          .update(InvestmentEntity)
+          .set({
+            nbTitres: () => '"nbTitres" + :n',
+            montant: () => 'montant + :m',
+            ...(sellerInvest.statut === InvestmentStatus.ANNULE
+              ? { statut: InvestmentStatus.CONFIRME }
+              : {}),
+          })
+          .setParameters({ n: nbFractions, m: montantTotal })
+          .where('id = :id', { id: sellerInvest.id })
+          .execute();
       }
 
       // 2. Retirer fractions sur investissement acheteur (fusionnel ou dédié)
       const buyerInvest = await em.findOne(InvestmentEntity, {
         where: { utilisateurId: buyerUserId, projetId, statut: InvestmentStatus.CONFIRME },
+        lock: { mode: 'pessimistic_write' },
       });
       if (buyerInvest) {
-        const newTitres = Math.max(0, (Number(buyerInvest.nbTitres) ?? 0) - nbFractions);
-        buyerInvest.nbTitres = newTitres;
-        buyerInvest.montant = Math.max(0, Number(buyerInvest.montant) - montantTotal);
-        if (newTitres === 0) buyerInvest.statut = InvestmentStatus.ANNULE;
-        await em.save(InvestmentEntity, buyerInvest);
+        // Le `Math.max(0, …)` a été RETIRÉ : il ne protégeait pas, il masquait.
+        // Retirer plus de fractions que l'acheteur n'en détient signale une
+        // incohérence de données — la ramener à zéro l'effaçait, et l'écart
+        // ressortait plus tard au rapprochement, sans cause identifiable.
+        // La clause `"nbTitres" >= :n` refuse l'opération et annule tout.
+        const retrait = await em
+          .createQueryBuilder()
+          .update(InvestmentEntity)
+          .set({
+            nbTitres: () => '"nbTitres" - :n',
+            montant: () => 'montant - :m',
+          })
+          .setParameters({ n: nbFractions, m: montantTotal })
+          .where('id = :id AND "nbTitres" >= :n AND montant >= :m', {
+            id: buyerInvest.id,
+            n: nbFractions,
+            m: montantTotal,
+          })
+          .execute();
+
+        if (!retrait.affected) {
+          throw new ConflictException(
+            `Position acheteur ${buyerInvest.id} incohérente : ${nbFractions} fraction(s) ` +
+              `et ${formatEur(montantTotal)} attendus, position insuffisante. ` +
+              'Annulation refusée — la donnée doit être instruite.',
+          );
+        }
+
+        if (Number(buyerInvest.nbTitres) - nbFractions === 0) {
+          await em.update(
+            InvestmentEntity,
+            { id: buyerInvest.id },
+            { statut: InvestmentStatus.ANNULE },
+          );
+        }
       }
 
       // 3. Wallets : rembourser acheteur (montant total), débiter vendeur
       // (du net qu'il avait reçu), rembourser la commission depuis le wallet
       // plateforme s'il y en avait une de prélevée.
-      const buyerWallet = await em.findOne(WalletEntity, {
-        where: { proprietaireUserId: buyerUserId, type: WalletType.INVESTISSEUR },
-      });
-      const sellerWallet = await em.findOne(WalletEntity, {
-        where: { proprietaireUserId: sellerUserId, type: WalletType.INVESTISSEUR },
-      });
+      // Portefeuilles verrouillés dans l'ordre CROISSANT de leur identifiant :
+      // même raison que dans le règlement nominal — verrouiller dans l'ordre
+      // du code interbloquerait deux annulations croisées.
+      const [buyerWallet, sellerWallet] = await this.verrouillerWallets(em, [
+        buyerUserId,
+        sellerUserId,
+      ]);
+
       if (buyerWallet) {
-        buyerWallet.solde = Number(buyerWallet.solde) + montantTotal;
-        await em.save(WalletEntity, buyerWallet);
+        // L'acheteur est remboursé du BRUT : c'est ce qu'il avait payé.
+        await em
+          .createQueryBuilder()
+          .update(WalletEntity)
+          .set({ solde: () => 'solde + :m' })
+          .setParameter('m', montantTotal)
+          .where('id = :id', { id: buyerWallet.id })
+          .execute();
       }
       if (sellerWallet) {
-        sellerWallet.solde = Math.max(0, Number(sellerWallet.solde) - montantNetVendeurInitial);
-        await em.save(WalletEntity, sellerWallet);
+        // Le vendeur rend le NET qu'il avait reçu — pas le brut. Le
+        // `Math.max(0, …)` a été RETIRÉ : il ramenait silencieusement à zéro
+        // un vendeur qui avait déjà dépensé son produit de cession, effaçant
+        // la créance de la plateforme sur lui au lieu de la faire remonter.
+        const debit = await em
+          .createQueryBuilder()
+          .update(WalletEntity)
+          .set({ solde: () => 'solde - :net' })
+          .setParameter('net', montantNetVendeurInitial)
+          .where('id = :id AND solde >= :net', {
+            id: sellerWallet.id,
+            net: montantNetVendeurInitial,
+          })
+          .execute();
+
+        if (!debit.affected) {
+          throw new ConflictException(
+            `Le vendeur ${sellerUserId} ne dispose plus de ${formatEur(montantNetVendeurInitial)} : ` +
+              'annulation refusée. Reprendre les fonds suppose une décision humaine — ' +
+              'forcer le débit creuserait un découvert masqué.',
+          );
+        }
       }
 
       let platformWallet: WalletEntity | null = null;
       if (commissionPrelevee > 0) {
         platformWallet = await em.findOne(WalletEntity, {
           where: { type: WalletType.FRAIS_PLATEFORME },
+          lock: { mode: 'pessimistic_write' },
         });
         if (platformWallet) {
-          platformWallet.solde = Math.max(
-            0,
-            Number(platformWallet.solde) - commissionPrelevee,
-          );
-          await em.save(WalletEntity, platformWallet);
+          // Idem : plus de `Math.max`. Un portefeuille de frais qui ne couvre
+          // pas la commission à rendre est une anomalie qui doit se voir.
+          const restitution = await em
+            .createQueryBuilder()
+            .update(WalletEntity)
+            .set({ solde: () => 'solde - :c' })
+            .setParameter('c', commissionPrelevee)
+            .where('id = :id AND solde >= :c', {
+              id: platformWallet.id,
+              c: commissionPrelevee,
+            })
+            .execute();
+
+          if (!restitution.affected) {
+            throw new ConflictException(
+              `Le portefeuille de frais ne couvre pas ${formatEur(commissionPrelevee)} ` +
+                'de commission à restituer : annulation refusée.',
+            );
+          }
         }
       }
 
@@ -430,8 +516,15 @@ export class AdminSecondaryMarketController {
 
       if (platformWallet && commissionPrelevee > 0) {
         await em.save(TransactionEntity, em.create(TransactionEntity, {
+          // Destination = le VENDEUR, jamais NULL. Le chemin nominal retient
+          // les frais SUR SON BRUT (vendeur → plateforme) : les défaire, c'est
+          // les lui rendre. Une destination nulle déclarait une sortie de la
+          // plateforme vers l'extérieur — l'argent des frais disparaissait du
+          // registre, et le vendeur, débité de son NET côté portefeuille,
+          // apparaissait au registre débité de son BRUT. L'écart valait la
+          // commission, à chaque annulation.
           walletSource: platformWallet.id,
-          walletDestination: null,
+          walletDestination: sellerWallet?.id ?? null,
           type: TransactionType.SOUSCRIPTION,
           montant: commissionPrelevee,
           devise: platformWallet.devise,
@@ -468,6 +561,41 @@ export class AdminSecondaryMarketController {
     }).catch(() => {});
 
     return { success: true, statut: OrdreMarcheStatus.ANNULE, reversed: true, montantRembourse: montantTotal };
+  }
+
+  /**
+   * Verrouille les portefeuilles INVESTISSEUR de plusieurs comptes, dans
+   * l'ordre CROISSANT de leur identifiant.
+   *
+   * Même raison que dans le règlement nominal : verrouiller dans l'ordre du
+   * code interbloquerait deux opérations croisées, chacune tenant le
+   * portefeuille que l'autre attend. Rend les portefeuilles dans l'ordre des
+   * comptes demandés — l'ordre d'acquisition est un détail interne.
+   */
+  private async verrouillerWallets(
+    em: EntityManager,
+    userIds: readonly number[],
+  ): Promise<Array<WalletEntity | null>> {
+    const resolus: Array<{ userId: number; id: string }> = [];
+    for (const userId of userIds) {
+      const wallet = await em.findOne(WalletEntity, {
+        where: { proprietaireUserId: userId, type: WalletType.INVESTISSEUR },
+        select: ['id'],
+      });
+      if (wallet) resolus.push({ userId, id: wallet.id });
+    }
+
+    const parUtilisateur = new Map<number, WalletEntity>();
+    for (const { userId, id } of [...resolus].sort((a, b) =>
+      a.id < b.id ? -1 : a.id > b.id ? 1 : 0,
+    )) {
+      const verrouille = await em.findOne(WalletEntity, {
+        where: { id },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (verrouille) parUtilisateur.set(userId, verrouille);
+    }
+    return userIds.map((userId) => parUtilisateur.get(userId) ?? null);
   }
 
   /**

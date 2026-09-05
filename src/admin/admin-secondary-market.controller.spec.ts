@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ConflictException } from '@nestjs/common';
 import { AdminSecondaryMarketController } from './admin-secondary-market.controller';
 import { OrdreMarcheEntity } from 'src/secondarymarket/infrastructure/persistences/entities/ordre-marche.entity';
 import { OrdreMarcheStatus } from 'src/secondarymarket/domains/ordre-marche';
@@ -46,6 +46,8 @@ describe('AdminSecondaryMarketController — cancelOrder Cas B (reverse)', () =>
   let sellerInvest: any;
   let buyerInvest: any;
   let ordreSaved: any;
+  /** Manager transactionnel, exposé pour lire les écritures produites. */
+  let em: any;
 
   const admin = { userId: 99 };
 
@@ -77,7 +79,77 @@ describe('AdminSecondaryMarketController — cancelOrder Cas B (reverse)', () =>
       getMany: jest.fn().mockImplementation(() => Promise.resolve(feeTxsList)),
     };
 
-    const em: any = {
+    const arrondi = (n: number) => Math.round(n * 100) / 100;
+    const lignes = () => [
+      sellerWallet,
+      buyerWallet,
+      platformWallet,
+      sellerInvest,
+      buyerInvest,
+    ];
+
+    /**
+     * Constructeur de requêtes qui APPLIQUE la clause `WHERE` et calcule les
+     * expressions relatives du `SET`. Un dépôt qui rendrait toujours
+     * `affected: 1` accepterait les débits que la base refuse — les gardes de
+     * couverture ne seraient alors testées nulle part.
+     */
+    const updateQB = () => {
+      const qb: any = {};
+      let valeurs: any = null;
+      const params: Record<string, any> = {};
+      let clause = '';
+
+      qb.update = () => qb;
+      qb.set = (v: any) => {
+        valeurs = v;
+        return qb;
+      };
+      qb.setParameter = (nom: string, valeur: any) => {
+        params[nom] = valeur;
+        return qb;
+      };
+      qb.setParameters = (p: Record<string, any>) => {
+        Object.assign(params, p);
+        return qb;
+      };
+      qb.where = (c: string, p?: Record<string, any>) => {
+        clause = c;
+        Object.assign(params, p ?? {});
+        return qb;
+      };
+      qb.execute = async () => {
+        const ligne = lignes().find((l: any) => l?.id === params.id);
+        if (!ligne) return { affected: 0 };
+        const satisfaite = clause.split(/\s+AND\s+/i).every((cond) => {
+          const m = cond.match(/"?([A-Za-z]+)"?\s*(>=|<=|=|>|<)\s*:(\w+)/);
+          if (!m) return true;
+          const [, col, op, nom] = m;
+          if (op === '=') return String((ligne as any)[col]) === String(params[nom]);
+          const a = Number((ligne as any)[col]);
+          const b = Number(params[nom]);
+          return op === '>=' ? a >= b : op === '<=' ? a <= b : op === '>' ? a > b : a < b;
+        });
+        if (!satisfaite) return { affected: 0 };
+        for (const [col, valeur] of Object.entries(valeurs ?? {})) {
+          if (typeof valeur === 'function') {
+            const expr = String((valeur as () => string)());
+            const m = expr.match(/([+\-])\s*:(\w+)/);
+            if (!m) continue;
+            const delta = Number(params[m[2]]);
+            (ligne as any)[col] = arrondi(
+              Number((ligne as any)[col]) + (m[1] === '-' ? -delta : delta),
+            );
+          } else {
+            (ligne as any)[col] = valeur;
+          }
+        }
+        return { affected: 1 };
+      };
+      return qb;
+    };
+
+    em = {
       findOne: jest.fn().mockImplementation((entity: any, opts: any) => {
         if (entity === TransactionEntity) {
           // legacy commission lookup — pas de tx legacy dans ces scénarios
@@ -92,13 +164,25 @@ describe('AdminSecondaryMarketController — cancelOrder Cas B (reverse)', () =>
           return Promise.resolve(null);
         }
         if (entity === WalletEntity) {
+          // Résolution par ID nécessaire depuis le verrouillage ordonné.
+          if (opts.where?.id)
+            return Promise.resolve(
+              [sellerWallet, buyerWallet, platformWallet].find(
+                (w: any) => w.id === opts.where.id,
+              ) ?? null,
+            );
           if (opts.where?.proprietaireUserId === 2) return Promise.resolve(buyerWallet);
           if (opts.where?.proprietaireUserId === 1) return Promise.resolve(sellerWallet);
           if (opts.where?.type === WalletType.FRAIS_PLATEFORME) return Promise.resolve(platformWallet);
         }
         return Promise.resolve(null);
       }),
-      createQueryBuilder: jest.fn().mockReturnValue(feeTxsQB),
+      // Le premier appel sert la recherche des frais (SELECT), les suivants
+      // les écritures relatives.
+      createQueryBuilder: jest.fn((...args: unknown[]) =>
+        args.length > 0 ? feeTxsQB : updateQB(),
+      ),
+      update: jest.fn(async () => ({ affected: 1 })),
       create: jest.fn().mockImplementation((_entity, obj) => obj),
       save: jest.fn().mockImplementation((entity: any, obj: any) => {
         if (entity === OrdreMarcheEntity) ordreSaved = obj;
@@ -138,6 +222,127 @@ describe('AdminSecondaryMarketController — cancelOrder Cas B (reverse)', () =>
     expect(buyerWallet.solde).toBe(0 + 400); // 400
     expect(platformWallet.solde).toBe(100 - 10); // 90
     expect(ordreSaved.statut).toBe(OrdreMarcheStatus.ANNULE);
+  });
+
+  /**
+   * F — LE REGISTRE DU REVERSE NE DISAIT PAS LA MÊME CHOSE QUE LES SOLDES.
+   *
+   * La commission restituée était écrite `walletDestination: null`, c'est-à-dire
+   * une SORTIE de la plateforme vers l'extérieur. Côté soldes, le vendeur
+   * n'était pourtant débité que de son NET. Au registre, il apparaissait
+   * débité de son BRUT et l'argent des frais quittait le système : l'écart
+   * valait la commission, à chaque annulation.
+   */
+  describe('ventilation du reverse au registre', () => {
+    const ecritures = () =>
+      em.save.mock.calls
+        .filter((appel: any[]) => appel[0] === TransactionEntity)
+        .map((appel: any[]) => appel[1]);
+
+    beforeEach(() => {
+      feeTxsList = [
+        { montant: 10, statut: TransactionStatus.REUSSI, metadata: { signatureId: 'sig-2', ordreId: 'ord-1', source: 'revente_transaction' } },
+      ];
+      ordreRepo.findOne.mockResolvedValue(buildOrdre());
+    });
+
+    it('la commission revient au VENDEUR, jamais vers l’extérieur', async () => {
+      await controller.cancelOrder('ord-1', admin as any);
+
+      const restitution = ecritures().find(
+        (e: any) => e.idempotencyKey === 'secmarket:commission-reverse:order:ord-1',
+      );
+      expect(restitution.walletSource).toBe('w-plat');
+      expect(restitution.walletDestination).toBe('w-seller');
+    });
+
+    it('AUCUNE écriture du reverse ne sort du système', async () => {
+      await controller.cancelOrder('ord-1', admin as any);
+
+      for (const e of ecritures()) {
+        expect(e.walletSource).toBeTruthy();
+        expect(e.walletDestination).toBeTruthy();
+      }
+    });
+
+    it('le registre s’accorde aux soldes : variation totale nulle', async () => {
+      const avant = {
+        seller: sellerWallet.solde,
+        buyer: buyerWallet.solde,
+        plat: platformWallet.solde,
+      };
+
+      await controller.cancelOrder('ord-1', admin as any);
+
+      const variationSoldes =
+        sellerWallet.solde - avant.seller +
+        (buyerWallet.solde - avant.buyer) +
+        (platformWallet.solde - avant.plat);
+      expect(variationSoldes).toBe(0);
+
+      // Et la même somme, reconstituée depuis les seules écritures.
+      const positions = new Map<string, number>();
+      for (const e of ecritures()) {
+        const m = Number(e.montant);
+        positions.set(e.walletDestination, (positions.get(e.walletDestination) ?? 0) + m);
+        positions.set(e.walletSource, (positions.get(e.walletSource) ?? 0) - m);
+      }
+      expect([...positions.values()].reduce((t, v) => t + v, 0)).toBe(0);
+
+      // Chaque portefeuille est rapproché de son registre.
+      expect(positions.get('w-buyer')).toBe(buyerWallet.solde - avant.buyer);
+      expect(positions.get('w-seller')).toBe(sellerWallet.solde - avant.seller);
+      expect(positions.get('w-plat')).toBe(platformWallet.solde - avant.plat);
+    });
+  });
+
+  /**
+   * Les `Math.max(0, …)` ne protégeaient pas : ils MASQUAIENT le découvert en
+   * le ramenant à zéro. Un vendeur ayant déjà dépensé son produit de cession
+   * voyait la créance de la plateforme s'effacer en silence.
+   */
+  describe('découverts refusés au lieu d’être masqués', () => {
+    beforeEach(() => {
+      feeTxsList = [
+        { montant: 10, statut: TransactionStatus.REUSSI, metadata: { signatureId: 'sig-2', ordreId: 'ord-1', source: 'revente_transaction' } },
+      ];
+      ordreRepo.findOne.mockResolvedValue(buildOrdre());
+    });
+
+    it('vendeur insuffisamment provisionné : annulation REFUSÉE', async () => {
+      sellerWallet.solde = 100; // il doit rendre 390
+
+      await expect(
+        controller.cancelOrder('ord-1', admin as any),
+      ).rejects.toBeInstanceOf(ConflictException);
+      expect(sellerWallet.solde).toBe(100);
+    });
+
+    it('position acheteur incohérente : annulation REFUSÉE', async () => {
+      buyerInvest.nbTitres = 1; // 40 fractions attendues
+
+      await expect(
+        controller.cancelOrder('ord-1', admin as any),
+      ).rejects.toBeInstanceOf(ConflictException);
+    });
+
+    it('portefeuille de frais insuffisant : annulation REFUSÉE', async () => {
+      platformWallet.solde = 1; // 10 de commission à restituer
+
+      await expect(
+        controller.cancelOrder('ord-1', admin as any),
+      ).rejects.toBeInstanceOf(ConflictException);
+    });
+
+    it('aucun solde ne passe en négatif après un refus', async () => {
+      sellerWallet.solde = 100;
+
+      await controller.cancelOrder('ord-1', admin as any).catch(() => undefined);
+
+      for (const w of [sellerWallet, buyerWallet, platformWallet]) {
+        expect(Number(w.solde)).toBeGreaterThanOrEqual(0);
+      }
+    });
   });
 
   it('multi-remplissages : ne reverse QUE les frais du DERNIER fill (signature la plus récente), pas la somme de tous les fills', async () => {
